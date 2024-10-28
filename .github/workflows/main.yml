@@ -52,6 +52,9 @@ jobs:
             - name: Upload coverage reports to Codecov with GitHub Action on Python 3.11
               uses: codecov/codecov-action@v4
               if: ${{ matrix.python-version == '3.11' }}
+              with:
+                  token: d46ed579-7fee-46f7-baff-4f6538f6591b
+              
 
     check-docs:
         runs-on: ubuntu-latest
