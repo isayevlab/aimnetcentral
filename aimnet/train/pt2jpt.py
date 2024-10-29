@@ -1,9 +1,9 @@
 import os
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import click
 import torch
-from torch import Tensor, nn
+from torch import nn
 
 from aimnet.config import build_module, load_yaml
 
@@ -35,12 +35,6 @@ def add_sae_to_shifts(model: nn.Module, sae_file: str) -> nn.Module:
     return model
 
 
-def fix_agh(state_dict: Dict[str, Tensor]) -> dict:
-    state_dict["conv_q.agh"] = state_dict["conv_q.agh"].permute(2, 1, 0).contiguous()
-    state_dict["conv_a.agh"] = state_dict["conv_a.agh"].permute(2, 1, 0).contiguous()
-    return state_dict
-
-
 def mask_not_implemented_species(model: nn.Module, species: List[int]) -> nn.Module:
     weight = model.afv.weight
     for i in range(1, weight.shape[0]):
@@ -58,9 +52,8 @@ _default_aimnet2_config = os.path.join(os.path.dirname(__file__), "..", "models"
 @click.option("--model", type=str, default=_default_aimnet2_config, help="Path to model definition YAML file")
 @click.option("--sae", type=str, default=None, help="Path to the energy shift YAML file.")
 @click.option("--species", type=str, default=None, help="Comma-separated list of parametrized atomic numbers.")
-@click.option("--fix-agh", is_flag=True, help="Fix the agh weights in the PyTorch model.")
 @click.option("--no-lr", is_flag=True, help="Do not add LR cutoff for model")
-def jitcompile(model, pt, jpt, sae, species, fix_agh, no_lr):  # type: ignore[no-untyped-def]
+def jitcompile(model: str, pt: str, jpt: str, sae=None, species=None, no_lr=False):  # type: ignore
     """Build model from YAML config, load weight from PT file and write JIT-compiled JPT file.
     Plus some modifications to work with aimnet2calc.
     """
@@ -69,8 +62,6 @@ def jitcompile(model, pt, jpt, sae, species, fix_agh, no_lr):  # type: ignore[no
     cutoff_lr = None if no_lr else float("inf")
     model = add_cutoff(model, cutoff_lr=cutoff_lr)
     sd = torch.load(pt, map_location="cpu", weights_only=True)
-    if fix_agh:
-        sd = fix_agh(sd)
     print(model.load_state_dict(sd, strict=False))
     if sae:
         model = add_sae_to_shifts(model, sae)

@@ -4,7 +4,7 @@ from typing import Any, ClassVar, Dict, Literal
 import torch
 from torch import Tensor, nn
 
-from .model_zoo import get_model_path
+from .model_registry import get_model_path
 from .nbmat import calc_nbmat
 
 

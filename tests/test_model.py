@@ -6,7 +6,7 @@ import pytest
 import torch
 from torch import nn
 
-from aimnet.calculators.model_zoo import get_model_path
+from aimnet.calculators.model_registry import get_model_path
 from aimnet.config import build_module
 from aimnet.modules.core import Forces
 

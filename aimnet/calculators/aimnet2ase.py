@@ -12,7 +12,7 @@ from .calculator import AIMNet2Calculator
 class AIMNet2ASE(Calculator):
     from typing import ClassVar
 
-    implemented_properties: ClassVar[list] = ["energy", "forces", "free_energy", "charges", "stress"]
+    implemented_properties: ClassVar[list[str]] = ["energy", "forces", "free_energy", "charges", "stress"]
 
     def __init__(self, base_calc: AIMNet2Calculator | str = "aimnet2", charge=0, mult=1):
         super().__init__()
