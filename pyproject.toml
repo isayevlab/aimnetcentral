@@ -13,10 +13,10 @@ packages = [
 [tool.poetry.scripts]
 aimnet2pysis = "aimnet.calculators.aimnet2pysis:main"
 aimnet = "aimnet.cli:cli"
-aimnet-clear-models = "aimnet.calculators.model_registry:clear_assets"
+aimnet-clear-models-cache = "aimnet.calculators.model_registry:clear_assets"
 
 [tool.poetry.dependencies]
-python = ">=3.9,<4.0"
+python = ">=3.10,<4.0"
 torch = "^2.5.0"
 pyyaml = "^6.0.2"
 numpy = "<2.0"

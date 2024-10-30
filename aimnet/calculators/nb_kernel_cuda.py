@@ -102,7 +102,7 @@ def _nbmat_pbc_dual_cuda(
         return
 
     maxnb1 = nbmat1.shape[1]
-    maxnb2 = nbmat2.shape[2]
+    maxnb2 = nbmat2.shape[1]
 
     shift_x = shifts[shift_idx, 0]
     shift_y = shifts[shift_idx, 1]
@@ -114,14 +114,9 @@ def _nbmat_pbc_dual_cuda(
     shift_y = numba.float32(shift_y)
     shift_z = numba.float32(shift_z)
 
-    if zero_shift:
-        coord_shifted_x = coord[atom_idx, 0]
-        coord_shifted_y = coord[atom_idx, 1]
-        coord_shifted_z = coord[atom_idx, 2]
-    else:
-        coord_shifted_x = coord[atom_idx, 0] + shift_x * cell[0, 0] + shift_y * cell[1, 0] + shift_z * cell[2, 0]
-        coord_shifted_y = coord[atom_idx, 1] + shift_x * cell[0, 1] + shift_y * cell[1, 1] + shift_z * cell[2, 1]
-        coord_shifted_z = coord[atom_idx, 2] + shift_x * cell[0, 2] + shift_y * cell[1, 2] + shift_z * cell[2, 2]
+    coord_shifted_x = coord[atom_idx, 0] + shift_x * cell[0, 0] + shift_y * cell[1, 0] + shift_z * cell[2, 0]
+    coord_shifted_y = coord[atom_idx, 1] + shift_x * cell[0, 1] + shift_y * cell[1, 1] + shift_z * cell[2, 1]
+    coord_shifted_z = coord[atom_idx, 2] + shift_x * cell[0, 2] + shift_y * cell[1, 2] + shift_z * cell[2, 2]
 
     for i in range(_n):
         if zero_shift and i >= atom_idx:
@@ -193,14 +188,9 @@ def _nbmat_pbc_cuda(
     shift_y = numba.float32(shift_y)
     shift_z = numba.float32(shift_z)
 
-    if zero_shift:
-        coord_shifted_x = coord[atom_idx, 0]
-        coord_shifted_y = coord[atom_idx, 1]
-        coord_shifted_z = coord[atom_idx, 2]
-    else:
-        coord_shifted_x = coord[atom_idx, 0] + shift_x * cell[0, 0] + shift_y * cell[1, 0] + shift_z * cell[2, 0]
-        coord_shifted_y = coord[atom_idx, 1] + shift_x * cell[0, 1] + shift_y * cell[1, 1] + shift_z * cell[2, 1]
-        coord_shifted_z = coord[atom_idx, 2] + shift_x * cell[0, 2] + shift_y * cell[1, 2] + shift_z * cell[2, 2]
+    coord_shifted_x = coord[atom_idx, 0] + shift_x * cell[0, 0] + shift_y * cell[1, 0] + shift_z * cell[2, 0]
+    coord_shifted_y = coord[atom_idx, 1] + shift_x * cell[0, 1] + shift_y * cell[1, 1] + shift_z * cell[2, 1]
+    coord_shifted_z = coord[atom_idx, 2] + shift_x * cell[0, 2] + shift_y * cell[1, 2] + shift_z * cell[2, 2]
 
     for i in range(_n):
         if zero_shift and i >= atom_idx:

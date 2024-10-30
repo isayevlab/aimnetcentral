@@ -5,6 +5,11 @@ from torch import Tensor
 
 from .nb_kernel_cpu import _expand_shifts
 
+
+class TooManyNeighborsError(Exception):
+    pass
+
+
 if torch.cuda.is_available():
     import numba.cuda
 
@@ -68,10 +73,13 @@ def calc_nbmat(
         cutoff = max(cutoffs) if _dual_cutoff else cutoffs[0]  # type: ignore
         nshift = torch.ceil(cutoff * cell_inv.norm(dim=-1)).to(torch.long).cpu().numpy()
         shifts = _expand_shifts(nshift)
+        S = shifts.shape[0]
         shifts = torch.from_numpy(shifts).to(device)
-        shifts1 = torch.full((N, maxnb[0], 3), -1, dtype=torch.long, device=device)
+        shifts1 = torch.zeros(N + 1, maxnb[0], 3, dtype=torch.long, device=device)
         if _dual_cutoff:
-            shifts2 = torch.full((N, maxnb[1], 3), -1, dtype=torch.long, device=device)  # type: ignore
+            shifts2 = torch.zeros(N + 1, maxnb[1], 3, dtype=torch.long, device=device)  # type: ignore
+    else:
+        S = 1
 
     # convert tensors and launch the kernel
     if _cuda:
@@ -90,7 +98,7 @@ def calc_nbmat(
             if _dual_cutoff:
                 _shifts2 = numba.cuda.as_cuda_array(shifts2)
         threads_per_block = 32
-        blocks_per_grid = (N + (threads_per_block - 1)) // threads_per_block
+        blocks_per_grid = (N * S + (threads_per_block - 1)) // threads_per_block
 
         if _pbc:
             if _dual_cutoff:
@@ -154,7 +162,9 @@ def calc_nbmat(
             _shifts = shifts.numpy()
 
         if _pbc:
+            _shifts1 = shifts1.numpy()
             if _dual_cutoff:
+                _shifts2 = shifts2.numpy()
                 _kernel_nbmat_pbc_dual(
                     _coord,
                     _cell,
@@ -165,9 +175,11 @@ def calc_nbmat(
                     _nnb2,
                     _nbmat1,
                     _nbmat2,
+                    _shifts1,  # type: ignore
+                    _shifts2,  # type: ignore
                 )  # type: ignore
             else:
-                _kernel_nbmat_pbc(_coord, _cell, cutoffs[0] ** 2, _mol_idx, _mol_end_idx, _nbmat1, _nnb1)
+                _kernel_nbmat_pbc(_coord, _cell, cutoffs[0] ** 2, _shifts, _nnb1, _nbmat1, _shifts1)  # type: ignore
         else:
             if _dual_cutoff:
                 _kernel_nbmat_dual(
@@ -190,17 +202,19 @@ def calc_nbmat(
 
     nnb1_max = nnb1.max().item()
     if nnb1_max > maxnb[0]:
-        raise ValueError(f"maxnb is too small: {nnb1_max=}, {maxnb=}")
+        raise TooManyNeighborsError(f"maxnb is too small: {nnb1_max=}, {maxnb=}")
     nbmat1 = nbmat1[:, :nnb1_max]  # type: ignore
     if _pbc:
         shifts1 = shifts1[:, :nnb1_max]  # type: ignore
     if _dual_cutoff:
         nnb2_max = nnb2.max().item()
         if nnb2_max > maxnb[1]:  # type: ignore
-            raise ValueError(f"maxnb is too small: {nnb1_max=}, {nnb2_max=}, {maxnb=}")
+            raise TooManyNeighborsError(f"maxnb is too small: {nnb1_max=}, {nnb2_max=}, {maxnb=}")
         nbmat2 = nbmat2[:, :nnb2_max]
         if _pbc:
             shifts2 = shifts2[:, :nnb2_max]  # type: ignore
     else:
         nbmat2 = None
+        if _pbc:
+            shifts2 = None
     return nbmat1, nbmat2, shifts1, shifts2

@@ -5,7 +5,7 @@ import torch
 from torch import Tensor, nn
 
 from .model_registry import get_model_path
-from .nbmat import calc_nbmat
+from .nbmat import TooManyNeighborsError, calc_nbmat
 
 
 class AIMNet2Calculator:
@@ -76,7 +76,7 @@ class AIMNet2Calculator:
                 mod.dsf_rc = cutoff  # type: ignore
             elif method == "ewald":
                 # current implementaion of Ewald does not use nb mat
-                self.cutoff_lr = None
+                self.cutoff_lr = cutoff
         self._coulomb_method = method
 
     def eval(self, data: Dict[str, Any], forces=False, stress=False, hessian=False) -> Dict[str, Tensor]:
@@ -178,8 +178,11 @@ class AIMNet2Calculator:
 
         while True:
             try:
-                maxnb1 = min(calc_max_nb(self.cutoff, self.max_density), self._max_mol_size)
-                maxnb2 = min(calc_max_nb(self.cutoff_lr, self.max_density), self._max_mol_size) if self.lr else None  # type: ignore
+                maxnb1 = calc_max_nb(self.cutoff, self.max_density)
+                maxnb2 = calc_max_nb(self.cutoff_lr, self.max_density) if self.lr else None  # type: ignore
+                if cell is None:
+                    maxnb1 = min(maxnb1, self._max_mol_size)
+                    maxnb2 = min(maxnb2, self._max_mol_size) if self.lr else None  # type: ignore
                 maxnb = (maxnb1, maxnb2)
                 nbmat1, nbmat2, shifts1, shifts2 = calc_nbmat(
                     data["coord"],
@@ -189,8 +192,9 @@ class AIMNet2Calculator:
                     data.get("mol_idx"),  # type: ignore
                 )
                 break
-            except ValueError:
+            except TooManyNeighborsError:
                 self.max_density *= 1.2
+                assert self.max_density <= 4, "Something went wrong in nbmat calculation"
         data["nbmat"] = nbmat1
         if self.lr:
             assert nbmat2 is not None
@@ -205,9 +209,10 @@ class AIMNet2Calculator:
 
     def pad_input(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
         N = data["nbmat"].shape[0]
-        data["coord"] = maybe_pad_dim0(data["coord"], N)
-        data["numbers"] = maybe_pad_dim0(data["numbers"], N)
         data["mol_idx"] = maybe_pad_dim0(data["mol_idx"], N, value=data["mol_idx"][-1].item())
+        for k in ("coord", "numbers"):
+            if k in data:
+                data[k] = maybe_pad_dim0(data[k], N)
         return data
 
     def unpad_output(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
