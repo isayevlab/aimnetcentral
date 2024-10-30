@@ -54,7 +54,6 @@ jobs:
               if: ${{ matrix.python-version == '3.11' }}
               with:
                   token: d46ed579-7fee-46f7-baff-4f6538f6591b
-              
 
     check-docs:
         runs-on: ubuntu-latest
