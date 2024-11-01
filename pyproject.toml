@@ -37,9 +37,6 @@ mypy = "^1.5.1"
 pre-commit = "^3.4.0"
 tox = "^4.11.1"
 
-[tool.poetry.group.test.dependencies]
-ase = "3.22.1"
-
 
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.4.2"
@@ -53,6 +50,7 @@ pytorch-ignite = "^0.5.1"
 omegaconf = "^2.3.0"
 tqdm = "^4.66.5"
 wandb = "^0.18.5"
+ase = "3.22.1"
 
 
 [tool.poetry.group.calc.dependencies]

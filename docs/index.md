@@ -1,3 +1,9 @@
+---
+title: AIMNet Machine-Learned Interatomic Potential
+nav:
+  - Training: train.md
+---
+
 # AIMNetCentral
 
 [![Release](https://img.shields.io/github/v/release/isayevlab/aimnetcentral)](https://img.shields.io/github/v/release/isayevlab/aimnetcentral)
@@ -5,4 +11,4 @@
 [![Commit activity](https://img.shields.io/github/commit-activity/m/isayevlab/aimnetcentral)](https://img.shields.io/github/commit-activity/m/isayevlab/aimnetcentral)
 [![License](https://img.shields.io/github/license/isayevlab/aimnetcentral)](https://img.shields.io/github/license/isayevlab/aimnetcentral)
 
-AIMNet Machine Learned Interatomic Potential
+# AIMNet Machine-Learned Interatomic Potential

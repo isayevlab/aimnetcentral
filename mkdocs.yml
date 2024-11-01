@@ -9,6 +9,7 @@ copyright: Maintained by <a href="https://isayevlab.com">Florian</a>.
 
 nav:
     - Home: index.md
+    - Train: train.md
     - Reference: reference.md
 plugins:
     - search
