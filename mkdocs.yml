@@ -21,8 +21,10 @@ plugins:
                       - sys.path.append('../')
 theme:
     name: material
-    feature:
-        tabs: true
+    # feature:
+    #     tabs: true
+    features:
+        - navigation.instant
     palette:
         - media: "(prefers-color-scheme: light)"
           scheme: default
