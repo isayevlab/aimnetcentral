@@ -78,6 +78,6 @@ def energy_loss_fn(
     """MSE loss normalized by the number of atoms."""
     x = y_true[key_true]
     y = y_pred[key_pred]
-    s = y_pred["_natom"].sqrt()
+    s = y_pred["_natom"]
     loss = ((x - y).pow(2) / s).mean() if y_pred["_natom"].numel() > 1 else torch.nn.functional.mse_loss(x, y) / s
     return loss

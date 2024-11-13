@@ -316,6 +316,17 @@ def build_engine(model, optimizer, scheduler, loss_fn, metrics, cfg, loader_val)
         logging.info(f"LR: {lr}")
 
     trainer.add_event_handler(Events.EPOCH_STARTED, log_lr)
+
+    # log loss weights
+    def log_loss_weights(engine):
+        s = []
+        for k, v in loss_fn.components.items():
+            s.append(f"{k}: {v[1]:.4f}")
+        s = " ".join(s)
+        logging.info(s)
+
+    trainer.add_event_handler(Events.EPOCH_STARTED, log_loss_weights)
+
     # write TQDM progress
     if idist.get_local_rank() == 0:
         pbar = ProgressBar()
@@ -329,13 +340,16 @@ def build_engine(model, optimizer, scheduler, loss_fn, metrics, cfg, loader_val)
 
     # scheduler
     if scheduler is not None:
+        validator.state.scheduler = scheduler
+        validator.state.optimizer = optimizer
+        validator.state.loss_fn = loss_fn
         validator.add_event_handler(Events.COMPLETED, scheduler)
         terminator = TerminateOnLowLR(optimizer, cfg.scheduler.terminate_on_low_lr)
         trainer.add_event_handler(Events.EPOCH_STARTED, terminator)
 
     # checkpoint after each epoch
     if cfg.checkpoint and idist.get_local_rank() == 0:
-        kwargs = OmegaConf.to_container(cfg.checkpoint.kwargs) if "kwargs" not in cfg.checkpoint else {}
+        kwargs = OmegaConf.to_container(cfg.checkpoint.kwargs) if "kwargs" in cfg.checkpoint else {}
         if not isinstance(kwargs, dict):
             raise TypeError("Checkpoint kwargs must be a dictionary.")
         kwargs["global_step_transform"] = global_step_from_engine(trainer)
@@ -379,6 +393,9 @@ def setup_wandb(cfg, model_cfg, model, trainer, validator, optimizer):
             params = {
                 f"{self.param_name}_{i}": float(g[self.param_name]) for i, g in enumerate(self.optimizer.param_groups)
             }
+            if hasattr(engine, "loss_fn") and hasattr(engine.state.loss_fn, "components"):  # type: ignore
+                for name, (_, w) in engine.state.loss_fn.components.items():  # type: ignore
+                    params[name] = w
             logger.log(params, step=global_step, sync=self.sync)
 
     wandb_logger.attach(trainer, log_handler=EpochLRLogger(optimizer), event_name=Events.EPOCH_STARTED)

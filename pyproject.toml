@@ -28,7 +28,6 @@ wandb = "^0.18.5"
 jinja2 = "^3.1.4"
 h5py = "^3.12.1"
 pytorch-ignite = "^0.5.1"
-tqdm = "^4.66.5"
 ase = "3.22.1"
 
 [tool.poetry.group.dev.dependencies]
@@ -108,6 +107,7 @@ lint.ignore = [
     "S101"
 ]
 
+
 [tool.ruff.format]
 preview = true
 
@@ -117,10 +117,6 @@ skip_empty = true
 [tool.coverage.run]
 branch = true
 source = ["aimnet"]
-
-
-[tool.ruff.per-file-ignores]
-"tests/*" = ["S101"]
 
 
 [tool.deptry.per_rule_ignores]

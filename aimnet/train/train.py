@@ -113,6 +113,8 @@ def run(local_rank, world_size, model_cfg, train_cfg, load, save):
         from ignite import distributed as idist
 
         model = idist.auto_model(model)  # type: ignore[attr-defined]
+    elif torch.cuda.is_available():
+        model = model.cuda()
 
     # load weights
     if load is not None:
