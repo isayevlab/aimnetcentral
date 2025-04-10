@@ -25,8 +25,7 @@ xyzfile = os.path.join(os.path.dirname(__file__), "taxol.xyz")
 atoms = ase.io.read(xyzfile, index=0)
 
 # create the calculator with default model
-# calc = AIMNet2ASE('aimnet2')
-calc = AIMNet2ASE("/home/roman/repo/aimnetcentral/compile/wb97m_gas_0.jpt")
+calc = AIMNet2ASE()
 
 # attach the calculator to the atoms object
 atoms.calc = calc  # type: ignore
