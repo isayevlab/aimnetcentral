@@ -114,7 +114,7 @@ def run(local_rank, world_size, model_cfg, train_cfg, load, save):
 
         model = idist.auto_model(model)  # type: ignore[attr-defined]
     elif torch.cuda.is_available():
-        model = model.cuda()
+        model = model.cuda()  # type: ignore
 
     # load weights
     if load is not None:
@@ -137,6 +137,7 @@ def run(local_rank, world_size, model_cfg, train_cfg, load, save):
         optimizer = idist.auto_optim(optimizer)  # type: ignore[attr-defined]
     scheduler = utils.get_scheduler(optimizer, train_cfg.scheduler) if train_cfg.scheduler is not None else None  # type: ignore[attr-defined]
     loss = utils.get_loss(train_cfg.loss)
+
     metrics = utils.get_metrics(train_cfg.metrics)
     metrics.attach_loss(loss)  # type: ignore[attr-defined]
 

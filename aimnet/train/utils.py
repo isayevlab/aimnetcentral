@@ -58,7 +58,7 @@ def apply_sae(ds: SizeGroupedDataset, cfg: omegaconf.DictConfig):
         if c is not None and k in cfg.y:
             sae = load_yaml(c.file)
             unique_numbers = set(np.unique(ds.concatenate("numbers").tolist()))
-            if not set(sae.keys()).issubset(unique_numbers):  # type: ignore[attr-defined]
+            if not unique_numbers.issubset(sae.keys()):  # type: ignore[attr-defined]
                 raise ValueError(f"Keys in SAE file {c.file} do not cover all the dataset atoms")
             if c.mode == "linreg":
                 ds.apply_peratom_shift(k, k, sap_dict=sae)
@@ -271,6 +271,7 @@ def default_trainer(
         loss.backward()
         torch.nn.utils.clip_grad_value_(model.parameters(), 0.4)
         optimizer.step()
+
         return loss.item()
 
     return Engine(_update)
@@ -324,6 +325,12 @@ def build_engine(model, optimizer, scheduler, loss_fn, metrics, cfg, loader_val)
             s.append(f"{k}: {v[1]:.4f}")
         s = " ".join(s)
         logging.info(s)
+        if loss_fn.weights is not None:
+            s = []
+            for k, v in loss_fn.weights.items():
+                s.append(f"{k}: {v:.4f}")
+            s = " ".join(s)
+            logging.info(s)
 
     trainer.add_event_handler(Events.EPOCH_STARTED, log_loss_weights)
 
@@ -338,11 +345,15 @@ def build_engine(model, optimizer, scheduler, loss_fn, metrics, cfg, loader_val)
     metrics.attach(validator, "multi")
     trainer.add_event_handler(Events.EPOCH_COMPLETED(every=1), validator.run, data=loader_val)
 
+    # attach optimizer and loss to engines
+    trainer.state.optimizer = optimizer
+    trainer.state.loss_fn = loss_fn
+    validator.state.optimizer = optimizer
+    validator.state.loss_fn = loss_fn
+
     # scheduler
     if scheduler is not None:
         validator.state.scheduler = scheduler
-        validator.state.optimizer = optimizer
-        validator.state.loss_fn = loss_fn
         validator.add_event_handler(Events.COMPLETED, scheduler)
         terminator = TerminateOnLowLR(optimizer, cfg.scheduler.terminate_on_low_lr)
         trainer.add_event_handler(Events.EPOCH_STARTED, terminator)
@@ -393,9 +404,9 @@ def setup_wandb(cfg, model_cfg, model, trainer, validator, optimizer):
             params = {
                 f"{self.param_name}_{i}": float(g[self.param_name]) for i, g in enumerate(self.optimizer.param_groups)
             }
-            if hasattr(engine, "loss_fn") and hasattr(engine.state.loss_fn, "components"):  # type: ignore
+            if hasattr(engine.state, "loss_fn") and hasattr(engine.state.loss_fn, "components"):  # type: ignore
                 for name, (_, w) in engine.state.loss_fn.components.items():  # type: ignore
-                    params[name] = w
+                    params[f"weight/{name}"] = w
             logger.log(params, step=global_step, sync=self.sync)
 
     wandb_logger.attach(trainer, log_handler=EpochLRLogger(optimizer), event_name=Events.EPOCH_STARTED)
