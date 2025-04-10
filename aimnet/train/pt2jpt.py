@@ -14,9 +14,7 @@ def set_eval(model: nn.Module) -> torch.nn.Module:
     return model.eval()
 
 
-def add_cutoff(
-    model: nn.Module, cutoff: Optional[float] = None, cutoff_lr: Optional[float] = float("inf")
-) -> nn.Module:
+def add_cutoff(model: nn.Module, cutoff: Optional[float] = 5.0, cutoff_lr: Optional[float] = float("inf")) -> nn.Module:
     if cutoff is None:
         cutoff = max(v.item() for k, v in model.state_dict().items() if k.endswith("aev.rc_s"))
     model.cutoff = cutoff  # type: ignore[assignment]
@@ -29,17 +27,17 @@ def add_sae_to_shifts(model: nn.Module, sae_file: str) -> nn.Module:
     sae = load_yaml(sae_file)
     if not isinstance(sae, dict):
         raise TypeError("SAE file must contain a dictionary.")
-    model.outputs.atomic_shift.double()
+    model.outputs.atomic_shift.double()  # type: ignore
     for k, v in sae.items():
-        model.outputs.atomic_shift.shifts.weight[k] += v
+        model.outputs.atomic_shift.shifts.weight[k] += v  # type: ignore
     return model
 
 
 def mask_not_implemented_species(model: nn.Module, species: List[int]) -> nn.Module:
-    weight = model.afv.weight
-    for i in range(1, weight.shape[0]):
+    weight = model.afv.weight  # type: ignore
+    for i in range(1, weight.shape[0]):  # type: ignore
         if i not in species:
-            weight[i, :] = torch.nan
+            weight[i, :] = torch.nan  # type: ignore
     return model
 
 
