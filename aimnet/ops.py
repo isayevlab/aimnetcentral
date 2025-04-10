@@ -70,7 +70,9 @@ def nse(
     epsilon: float = 1.0e-6,
 ) -> Tensor:
     # Q and q_u and f_u must have last dimension size 1 or 2
-    F_u = nbops.mol_sum(f_u, data) + epsilon
+    F_u = nbops.mol_sum(f_u, data)
+    if epsilon > 0:
+        F_u = F_u + epsilon
     Q_u = nbops.mol_sum(q_u, data)
     dQ = Q - Q_u
     # for loss
