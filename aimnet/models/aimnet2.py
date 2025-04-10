@@ -130,6 +130,7 @@ class AIMNet2(AIMNet2Base):
         # for loss
         data["_delta_Q"] = data["charge"] - nbops.mol_sum(_q, data)
         q = data["charges"] + _q if delta_q else _q
+        data["charges_pre"] = q if self.num_charge_channels == 2 else q.squeeze(-1)
         f = _f.pow(2)
         q = ops.nse(data["charge"], q, f, data, epsilon=1.0e-6)
         data["charges"] = q
