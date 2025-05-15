@@ -40,7 +40,7 @@ class AIMNet2Calculator:
 
         self.cutoff = self.model.cutoff
         self.lr = hasattr(self.model, "cutoff_lr")
-        self.cutoff_lr = getattr(self.model, "cutoff_lr", float("inf"))
+        self.cutoff_lr = getattr(self.model, "cutoff_lr", float("inf")) if self.lr else None
         self.max_density = 0.2
         self.nb_threshold = nb_threshold
 
@@ -146,7 +146,7 @@ class AIMNet2Calculator:
         elif ndim == 3:
             # batched input
             B, N = data["coord"].shape[:2]
-            if self.nb_threshold > N or self.device == "cpu":
+            if N > self.nb_threshold or self.device == "cpu":
                 self._batch = B
                 data["mol_idx"] = torch.repeat_interleave(
                     torch.arange(0, B, device=self.device), torch.full((B,), N, device=self.device)
