@@ -20,8 +20,9 @@ class AIMNet2ASE(Calculator):
             base_calc = AIMNet2Calculator(base_calc)
         self.base_calc = base_calc
         self.reset()
-        self.set_charge(charge)
-        self.set_mult(mult)
+        self.charge = charge
+        self.mult = mult
+        self.update_tensors()
         # list of implemented species
         if hasattr(base_calc, "implemented_species"):
             self.implemented_species = base_calc.implemented_species.cpu().numpy()  # type: ignore
@@ -53,7 +54,7 @@ class AIMNet2ASE(Calculator):
         self.update_tensors()
 
     def update_tensors(self):
-        if self._t_numbers is None:
+        if self._t_numbers is None and getattr(self, "atoms", None):
             self._t_numbers = torch.tensor(self.atoms.numbers, dtype=torch.int64, device=self.base_calc.device)
         if self._t_charge is None:
             self._t_charge = torch.tensor(self.charge, dtype=torch.float32, device=self.base_calc.device)
