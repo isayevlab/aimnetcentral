@@ -20,8 +20,8 @@ class AIMNet2ASE(Calculator):
             base_calc = AIMNet2Calculator(base_calc)
         self.base_calc = base_calc
         self.reset()
-        self.charge = charge
-        self.mult = mult        
+        self.set_charge(charge)
+        self.set_mult(mult)
         # list of implemented species
         if hasattr(base_calc, "implemented_species"):
             self.implemented_species = base_calc.implemented_species.cpu().numpy()  # type: ignore
