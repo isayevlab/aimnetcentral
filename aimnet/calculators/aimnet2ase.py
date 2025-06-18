@@ -34,8 +34,6 @@ class AIMNet2ASE(Calculator):
         self._t_numbers = None
         self._t_charge = None
         self._t_mult = None
-        self.charge = 0.0
-        self.mult = 1.0
 
     def set_atoms(self, atoms):
         if self.implemented_species is not None and not np.in1d(atoms.numbers, self.implemented_species).all():
