@@ -44,9 +44,9 @@ def test_aimnet2():
     model.load_state_dict(model_from_zoo.state_dict(), strict=False)
     model = Forces(model)
     atoms = ase.io.read(os.path.join(os.path.dirname(__file__), "data", "caffeine.xyz"))
-    ref_e = atoms.info["energy"]  # type: ignore
-    ref_f = atoms.arrays["forces"]  # type: ignore
-    ref_q = atoms.arrays["initial_charges"]  # type: ignore
+    ref_e = atoms.get_total_energy()  # type: ignore
+    ref_f = atoms.get_forces()  # type: ignore
+    ref_q = atoms.get_charges()  # type: ignore
     _in = {
         "coord": torch.as_tensor(atoms.get_positions()).unsqueeze(0),  # type: ignore
         "numbers": torch.as_tensor(atoms.get_atomic_numbers()).unsqueeze(0),  # type: ignore
