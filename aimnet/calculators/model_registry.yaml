@@ -24,6 +24,18 @@ models:
     aimnet2_b973c_d3_3:
         file: aimnet2_b973c_d3_3.jpt
         url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_b973c_d3_3.jpt
+    aimnet2_wb97m_0:
+        file: aimnet2_wb97m_0.jpt
+        url: https://storage.googleapis.com/aimnetcentral/AIMNet2NSE/aimnet2nse_wb97m_0.jpt
+    aimnet2_wb97m_1:
+        file: aimnet2_wb97m_1.jpt
+        url: https://storage.googleapis.com/aimnetcentral/AIMNet2NSE/aimnet2nse_wb97m_1.jpt
+    aimnet2_wb97m_2:
+        file: aimnet2_wb97m_2.jpt
+        url: https://storage.googleapis.com/aimnetcentral/AIMNet2NSE/aimnet2nse_wb97m_2.jpt
+    aimnet2_wb97m_3:
+        file: aimnet2_wb97m_3.jpt
+        url: https://storage.googleapis.com/aimnetcentral/AIMNet2NSE/aimnet2nse_wb97m_3.jpt
 
 # map model alias to file name
 aliases:
@@ -31,3 +43,4 @@ aliases:
     aimnet2_wb97m: aimnet2_wb97m_d3_0
     aimnet2_b973c: aimnet2_b973c_d3_0
     aimnet2_qr: aimnet2_qr_v0
+    aimnet2nse: aimnet2_wb97m_0
