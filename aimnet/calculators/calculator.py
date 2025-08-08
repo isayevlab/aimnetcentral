@@ -146,7 +146,7 @@ class AIMNet2Calculator:
         elif ndim == 3:
             # batched input
             B, N = data["coord"].shape[:2]
-            if N > self.nb_threshold or self.device == "cpu":
+            if self.nb_threshold < N or self.device == "cpu":
                 self._batch = B
                 data["mol_idx"] = torch.repeat_interleave(
                     torch.arange(0, B, device=self.device), torch.full((B,), N, device=self.device)
