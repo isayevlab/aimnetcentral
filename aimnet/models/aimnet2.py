@@ -89,6 +89,23 @@ class AIMNet2(AIMNet2Base):
             self.outputs = nn.ModuleDict(outputs)
         else:
             raise TypeError("`outputs` is not either list or dict")
+        
+        # flags for enableing compile and cudagraphs
+        self.compile_cudagraphs = False
+        self.nb_mode = -1 
+        
+
+    def setup_for_compile_cudagraphs(self):
+        # for cuda graphs and torch compile we need to make some changes:
+        # any data dependent control flow needs to be changed to "attribute dependent" control flow
+        # any ops that create dynamically shaped tensors need to be changed to make statically shaped tensors
+        
+        # only nb_mode = 0 is currently enabled
+        self.nb_mode = 0
+        self.aev.setup_compile_cudagraphs()
+        for m in self.outputs.children():
+            m.setup_compile_cudagraphs()
+        self.compile_cudagraphs = True
 
     def _preprocess_spin_polarized_charge(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
         if "mult" not in data:
@@ -105,7 +122,11 @@ class AIMNet2(AIMNet2Base):
         return data
 
     def _prepare_in_a(self, data: Dict[str, Tensor]) -> Tensor:
-        a_i, a_j = nbops.get_ij(data["a"], data)
+        if not self.compile_cudagraphs:
+            a_i, a_j = nbops.get_ij(data["a"], data)
+        else:
+            a_i, a_j = nbops.get_ij_compile_cudagraphs(data["a"], data, self.nb_mode)
+
         avf_a = self.conv_a(a_j, data["gs"], data["gv"])
         if self.d2features:
             a_i = a_i.flatten(-2, -1)
@@ -113,7 +134,11 @@ class AIMNet2(AIMNet2Base):
         return _in
 
     def _prepare_in_q(self, data: Dict[str, Tensor]) -> Tensor:
-        q_i, q_j = nbops.get_ij(data["charges"], data)
+        if not self.compile_cudagraphs:
+            q_i, q_j = nbops.get_ij(data["charges"], data)
+        else:
+            q_i, q_j = nbops.get_ij_compile_cudagraphs(data["charges"], data, self.nb_mode)
+
         avf_q = self.conv_q(q_j, data["gs"], data["gv"])
         _in = torch.cat([q_i.squeeze(-2), avf_q], dim=-1)
         return _in
@@ -128,11 +153,19 @@ class AIMNet2(AIMNet2Base):
             dim=-1,
         )
         # for loss
-        data["_delta_Q"] = data["charge"] - nbops.mol_sum(_q, data)
+        if not self.compile_cudagraphs:
+            data["_delta_Q"] = data["charge"] - nbops.mol_sum(_q, data)
+        else:
+            data["_delta_Q"] = data["charge"] - nbops.mol_sum_compile_cudagraphs(_q, data, self.nb_mode)
+
         q = data["charges"] + _q if delta_q else _q
         data["charges_pre"] = q if self.num_charge_channels == 2 else q.squeeze(-1)
         f = _f.pow(2)
-        q = ops.nse(data["charge"], q, f, data, epsilon=1.0e-6)
+        if not self.compile_cudagraphs:
+            q = ops.nse(data["charge"], q, f, data, epsilon=1.0e-6)
+        else:
+            q = ops.nse_compile_cudagraphs(data["charge"], q, f, data, self.nb_mode, epsilon=1.0e-6)
+
         data["charges"] = q
         data["a"] = data["a"] + delta_a.view_as(data["a"])
         return data
@@ -165,8 +198,9 @@ class AIMNet2(AIMNet2Base):
                 _in = torch.cat([self._prepare_in_a(data), self._prepare_in_q(data)], dim=-1)
 
             _out = mlp(_in)
-            if data["_input_padded"].item():
-                _out = nbops.mask_i_(_out, data, mask_value=0.0)
+            if not self.compile_cudagraphs:
+                if data["_input_padded"].item():
+                    _out = nbops.mask_i_(_out, data, mask_value=0.0)
 
             if ipass == 0:
                 data = self._update_q(data, _out, delta_q=False)

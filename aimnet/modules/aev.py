@@ -61,6 +61,12 @@ class AEVSV(nn.Module):
 
         self.dmat_fill = rc_s
 
+        # flag for enabling compile and cudagraphs
+        self.compile_cudagraphs=False
+
+    def setup_compile_cudagraphs(self):
+        self.compile_cudagraphs=True
+
     def _init_basis(self, rc, eta, nshifts, shifts, rmin, mod="_s"):
         self.register_parameter(
             "rc" + mod,
@@ -80,7 +86,11 @@ class AEVSV(nn.Module):
 
     def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
         # shapes (..., m) and (..., m, 3)
-        d_ij, r_ij = ops.calc_distances(data)
+        if not self.compile_cudagraphs:
+            d_ij, r_ij = ops.calc_distances(data)
+        else:
+            d_ij, r_ij = ops.calc_distances_compile_cudagraphs(data, nb_mode=0)
+
         data["d_ij"] = d_ij
         # shapes (..., nshifts, m) and (..., nshifts, 3, m)
         u_ij, gs, gv = self._calc_aev(r_ij, d_ij, data)  # pylint: disable=unused-variable

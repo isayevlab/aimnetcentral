@@ -94,6 +94,9 @@ class AtomicShift(nn.Module):
         self.key_out = key_out
         self.reduce_sum = reduce_sum
 
+    def setup_compile_cudagraphs(self):
+        pass
+
     def extra_repr(self) -> str:
         return f"key_in: {self.key_in}, key_out: {self.key_out}"
 
@@ -111,11 +114,24 @@ class AtomicSum(nn.Module):
         self.key_in = key_in
         self.key_out = key_out
 
+        # flags for compile and cudagraph functionality
+        self.compile_cuda_graphs = False
+        self.nb_mode = -1
+
+    def setup_compile_cudagraphs(self):
+        self.nb_mode = 0
+        self.compile_cuda_graphs = True
+
+
     def extra_repr(self) -> str:
         return f"key_in: {self.key_in}, key_out: {self.key_out}"
 
     def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
-        data[self.key_out] = nbops.mol_sum(data[self.key_in], data)
+        if not self.compile_cuda_graphs:
+            data[self.key_out] = nbops.mol_sum(data[self.key_in], data)
+        else:
+            data[self.key_out] = nbops.mol_sum_compile_cudagraphs(data[self.key_in], data, self.nb_mode)
+
         return data
 
 
@@ -128,13 +144,25 @@ class Output(nn.Module):
             mlp = MLP(n_in=n_in, n_out=n_out, **mlp)
         self.mlp = mlp
 
+        # flags for compile and cudagraph functionality
+        self.compile_cuda_graphs = False
+        self.nb_mode = -1
+
+    def setup_compile_cudagraphs(self):
+        self.nb_mode = 0
+        self.compile_cuda_graphs = True
+
     def extra_repr(self) -> str:
         return f"key_in: {self.key_in}, key_out: {self.key_out}"
 
     def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
         v = self.mlp(data[self.key_in]).squeeze(-1)
-        if data["_input_padded"].item():
-            v = nbops.mask_i_(v, data, mask_value=0.0)
+        if not self.compile_cuda_graphs:
+            if data["_input_padded"].item():
+                v = nbops.mask_i_(v, data, mask_value=0.0)
+        else:
+            #TODO:
+            pass
         data[self.key_out] = v
         return data
 

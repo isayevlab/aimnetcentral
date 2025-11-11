@@ -22,6 +22,23 @@ def get_nb_mode(data: Dict[str, Tensor]) -> int:
     """Get the neighbor model."""
     return int(data["_nb_mode"].item())
 
+def calc_masks_compile_cudagraphs(data: Dict[str, Tensor], nb_mode: int) -> Dict[str, Tensor]:
+    """Calculate neighbor masks"""
+    if nb_mode != 0:
+        raise NotImplementedError
+    
+    data["mask_i"] = data["numbers"] == 0
+    data["mask_ij"] = torch.eye(
+        data["numbers"].shape[1], device=data["numbers"].device, dtype=torch.bool
+    ).unsqueeze(0)
+    # data["_input_padded"] = False
+    data["_natom"] = torch.tensor(data["numbers"].shape[1], device=data["numbers"].device)
+    data["mol_sizes"] = torch.tensor(data["numbers"].shape[1], device=data["numbers"].device)
+    data["mask_ij_lr"] = data["mask_ij"]
+
+    return data
+    
+
 
 def calc_masks(data: Dict[str, Tensor]) -> Dict[str, Tensor]:
     """Calculate neighbor masks"""
@@ -127,6 +144,13 @@ def get_ij(x: Tensor, data: Dict[str, Tensor], suffix: str = "") -> Tuple[Tensor
         raise ValueError(f"Invalid neighbor mode: {nb_mode}")
     return x_i, x_j
 
+def get_ij_compile_cudagraphs(x: Tensor, data: Dict[str, Tensor], nb_mode: int, suffix: str = "") -> Tuple[Tensor, Tensor]:
+    if nb_mode == 0:
+        x_i = x.unsqueeze(2)
+        x_j = x.unsqueeze(1)
+    else:
+        raise NotADirectoryError
+    return x_i, x_j
 
 def mol_sum(x: Tensor, data: Dict[str, Tensor]) -> Tensor:
     nb_mode = get_nb_mode(data)
@@ -148,4 +172,12 @@ def mol_sum(x: Tensor, data: Dict[str, Tensor]) -> Tensor:
         res.scatter_add_(0, idx, x)
     else:
         raise ValueError(f"Invalid neighbor mode: {nb_mode}")
+    return res
+
+
+def mol_sum_compile_cudagraphs(x: Tensor, data: Dict[str, Tensor], nb_mode: int) -> Tensor:
+    if nb_mode in (0, 2):
+        res = x.sum(dim=1)
+    else:
+        raise NotImplementedError
     return res
