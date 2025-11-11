@@ -32,6 +32,17 @@ def calc_distances(data: Dict[str, Tensor], suffix: str = "", pad_value: float =
     d_ij = torch.norm(r_ij, p=2, dim=-1)
     return d_ij, r_ij
 
+def calc_distances_compile_cudagraphs(data: Dict[str, Tensor], nb_mode: int, suffix: str = "", pad_value: float = 1.0) -> Tuple[Tensor, Tensor]:
+    if nb_mode != 0:
+        raise NotImplementedError
+    # nb_mode 0 only :
+    coord_i, coord_j =  nbops.get_ij_compile_cudagraphs(data["coord"], data, nb_mode, suffix)
+    r_ij = coord_j - coord_i
+    r_ij = nbops.mask_ij_(r_ij, data, mask_value=pad_value, inplace=False, suffix=suffix)
+    d_ij = torch.norm(r_ij, p=2, dim=-1)
+    return d_ij, r_ij
+
+
 
 def center_coordinates(coord: Tensor, data: Dict[str, Tensor], masses: Optional[Tensor] = None) -> Tensor:
     if masses is not None:
@@ -46,9 +57,12 @@ def center_coordinates(coord: Tensor, data: Dict[str, Tensor], masses: Optional[
     return coord
 
 
-def cosine_cutoff(d_ij: Tensor, rc: float) -> Tensor:
-    fc = 0.5 * (torch.cos(d_ij.clamp(min=1e-6, max=rc) * (math.pi / rc)) + 1.0)
-    return fc
+# def cosine_cutoff(d_ij: Tensor, rc: float) -> Tensor:
+#     fc = 0.5 * (torch.cos(d_ij.clamp(min=1e-6, max=rc) * (math.pi / rc)) + 1.0)
+#     return fc
+
+def cosine_cutoff(d_ij: Tensor, rc: Tensor) -> Tensor:
+    return torch.where(d_ij < rc, 0.5 * (torch.cos(d_ij * (torch.pi / rc)) + 1), 0.0)
 
 
 def exp_cutoff(d: Tensor, rc: Tensor) -> Tensor:
@@ -83,6 +97,39 @@ def nse(
         F_u = F_u.unsqueeze(-2)
         dQ = dQ.unsqueeze(-2)
     elif nb_mode == 1:
+        data["mol_sizes"][-1] += 1
+        F_u = torch.repeat_interleave(F_u, data["mol_sizes"], dim=0)
+        dQ = torch.repeat_interleave(dQ, data["mol_sizes"], dim=0)
+        data["mol_sizes"][-1] -= 1
+    else:
+        raise ValueError(f"Invalid neighbor mode: {nb_mode}")
+    f = f_u / F_u
+    q = q_u + f * dQ
+    return q
+
+
+def nse_compile_cudagraphs(
+    Q: Tensor,
+    q_u: Tensor,
+    f_u: Tensor,
+    data: Dict[str, Tensor],
+    nb_mode: int,
+    epsilon: float = 1.0e-6,
+) -> Tensor:
+    # Q and q_u and f_u must have last dimension size 1 or 2
+    F_u = nbops.mol_sum_compile_cudagraphs(f_u, data, nb_mode)
+    if epsilon > 0:
+        F_u = F_u + epsilon
+    Q_u = nbops.mol_sum_compile_cudagraphs(q_u, data, nb_mode)
+    dQ = Q - Q_u
+    # for loss
+    data["_dQ"] = dQ
+
+    if nb_mode in (0, 2):
+        F_u = F_u.unsqueeze(-2)
+        dQ = dQ.unsqueeze(-2)
+    elif nb_mode == 1:
+        raise NotImplementedError
         data["mol_sizes"][-1] += 1
         F_u = torch.repeat_interleave(F_u, data["mol_sizes"], dim=0)
         dQ = torch.repeat_interleave(dQ, data["mol_sizes"], dim=0)

@@ -30,6 +30,9 @@ class AIMNet2Base(nn.Module):  # pylint: disable=abstract-method
     def __init__(self):
         super().__init__()
 
+        # flags for enableing compile and cudagraphs
+        self.compile_cudagraphs = False
+
     def _prepare_dtype(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
         for k, d in zip(self._required_keys, self._required_keys_dtype):
             assert k in data, f"Key {k} is required"
@@ -42,8 +45,16 @@ class AIMNet2Base(nn.Module):  # pylint: disable=abstract-method
     def prepare_input(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
         """Some sommon operations"""
         data = self._prepare_dtype(data)
-        data = nbops.set_nb_mode(data)
-        data = nbops.calc_masks(data)
+
+        if not self.compile_cudagraphs:
+            data = nbops.set_nb_mode(data)
+            data = nbops.calc_masks(data)
+        else:
+
+            
+            # check here we have one molecule
+            assert data["coord"].shape[0] == 1
+            data = nbops.calc_masks_compile_cudagraphs(data, nb_mode=0)
 
         assert data["charge"].ndim == 1, "Charge should be 1D tensor."
         if "mult" in data:

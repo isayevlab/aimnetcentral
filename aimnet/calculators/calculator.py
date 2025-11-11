@@ -1,4 +1,5 @@
 import warnings
+import os
 from typing import Any, ClassVar, Dict, Literal
 
 import torch
@@ -7,6 +8,19 @@ from torch import Tensor, nn
 from .model_registry import get_model_path
 from .nbmat import TooManyNeighborsError, calc_nbmat
 
+from aimnet.config import build_module
+
+
+
+def build_model(model_def):
+    """Build model from yaml
+
+    function copied from test/test_model.py
+    """
+    assert os.path.exists(model_def), f"Model definition file not found: {model_def}."
+    model = build_module(model_def)
+    assert isinstance(model, nn.Module), "The model is not an instance of AIMNet2."
+    return model
 
 class AIMNet2Calculator:
     """Genegic AIMNet2 calculator
@@ -28,7 +42,7 @@ class AIMNet2Calculator:
     keys_out: ClassVar[list[str]] = ["energy", "charges", "forces", "hessian", "stress"]
     atom_feature_keys: ClassVar[list[str]] = ["coord", "numbers", "charges", "forces"]
 
-    def __init__(self, model: str | nn.Module = "aimnet2", nb_threshold: int = 320):
+    def __init__(self, model: str | nn.Module = "aimnet2", nb_threshold: int = 320, compile_cuda_graphs: bool=False):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         if isinstance(model, str):
             p = get_model_path(model)
@@ -37,7 +51,24 @@ class AIMNet2Calculator:
             self.model = model.to(self.device)
         else:
             raise TypeError("Invalid model type/name.")
+        
+        if compile_cuda_graphs:
+            self.compile_cuda_graphs = True
+            # to torch compile we need to un-jit
 
+            # build the model using the yaml
+            aimnet2_d3_def = os.path.join(os.path.dirname(__file__), "..", "models", "aimnet2_dftd3_wb97m.yaml")
+            python_model = build_model(aimnet2_d3_def)
+            # copy weights from the torchscript model loaded above
+            python_model.load_state_dict(self.model.state_dict(), strict=False)
+            for p in python_model.parameters():
+                p.requires_grad_(False)
+            python_model = python_model.eval()
+        else:
+            self.compile_cuda_graphs = False
+
+        
+        # setup things as usual from the torchscipt one
         self.cutoff = self.model.cutoff
         self.lr = hasattr(self.model, "cutoff_lr")
         self.cutoff_lr = getattr(self.model, "cutoff_lr", float("inf")) if self.lr else None
@@ -57,6 +88,13 @@ class AIMNet2Calculator:
             self._coulomb_method = coul_methods.pop()
         else:
             self._coulomb_method = None
+        
+        #  now we stup and replace
+        if self.compile_cuda_graphs:
+            python_model.setup_for_compile_cudagraphs()
+            self.model = python_model.to(self.device)
+            # now we can compile with cuda-graphs enabled
+            self.model = torch.compile(self.model, fullgraph=True, options={'triton.cudagraphs':True})
 
     def __call__(self, *args, **kwargs):
         return self.eval(*args, **kwargs)
@@ -84,22 +122,33 @@ class AIMNet2Calculator:
         if hessian and "mol_idx" in data and data["mol_idx"][-1] > 0:
             raise NotImplementedError("Hessian calculation is not supported for multiple molecules")
         data = self.set_grad_tensors(data, forces=forces, stress=stress, hessian=hessian)
+        
         with torch.jit.optimized_execution(False):  # type: ignore
             data = self.model(data)
+
         data = self.get_derivatives(data, forces=forces, stress=stress, hessian=hessian)
         data = self.process_output(data)
         return data
 
     def prepare_input(self, data: Dict[str, Any]) -> Dict[str, Tensor]:
+
         data = self.to_input_tensors(data)
         data = self.mol_flatten(data)
         if data.get("cell") is not None:
+            if self.compile_cuda_graphs:
+                #TODO:
+                raise NotImplementedError
             if data["mol_idx"][-1] > 0:
                 raise NotImplementedError("PBC with multiple molecules is not implemented yet.")
             if self._coulomb_method == "simple":
                 warnings.warn("Switching to DSF Coulomb for PBC", stacklevel=1)
                 self.set_lrcoulomb_method("dsf")
+
         if data["coord"].ndim == 2:
+            if self.compile_cuda_graphs:
+                # TODO:
+                raise NotImplementedError
+        
             data = self.make_nbmat(data)
             data = self.pad_input(data)
         return data
@@ -246,6 +295,7 @@ class AIMNet2Calculator:
         training = getattr(self.model, "training", False)
         _create_graph = hessian or training
         x = []
+
         if hessian:
             forces = True
         if forces and ("forces" not in data or (_create_graph and not data["forces"].requires_grad)):

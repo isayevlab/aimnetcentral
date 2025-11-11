@@ -27,18 +27,39 @@ class LRCoulomb(nn.Module):
             self.method = method
         else:
             raise ValueError(f"Unknown method {method}")
+        self.compile_cudagraphs = False
+        
+    def setup_compile_cudagraphs(self):
+        self.compile_cudagraphs = True
 
     def coul_simple(self, data: Dict[str, Tensor]) -> Tensor:
-        data = ops.lazy_calc_dij_lr(data)
+        if not self.compile_cudagraphs:
+            data = ops.lazy_calc_dij_lr(data)
+        else:
+            # nb_mode 0  only
+            data["d_ij_lr"] = data["d_ij"]
+
         d_ij = data["d_ij_lr"]
         q = data[self.key_in]
-        q_i, q_j = nbops.get_ij(q, data, suffix="_lr")
+
+        if not self.compile_cudagraphs:
+            q_i, q_j = nbops.get_ij(q, data, suffix="_lr")
+        else: 
+            # nb_mode 0  only
+            q_i, q_j = nbops.get_ij_compile_cudagraphs(q, data, 0, suffix="_lr")
+
+
         q_ij = q_i * q_j
         fc = 1.0 - ops.exp_cutoff(d_ij, self.rc)
         e_ij = fc * q_ij / d_ij
         e_ij = nbops.mask_ij_(e_ij, data, 0.0, suffix="_lr")
         e_i = e_ij.sum(-1)
-        e = self._factor * nbops.mol_sum(e_i, data)
+        if not self.compile_cudagraphs:
+            e = self._factor * nbops.mol_sum(e_i, data)
+        else:
+            # nb_mode 0  only
+            e = self._factor * nbops.mol_sum_compile_cudagraphs(e_i, data, 0)
+
         return e
 
     def coul_simple_sr(self, data: Dict[str, Tensor]) -> Tensor:
@@ -194,26 +215,46 @@ class DFTD3(nn.Module):
         self.register_buffer("cnmax", torch.zeros(95))
         sd = constants.get_dftd3_param()
         self.load_state_dict(sd)
+        self.compile_cudagraphs = False
+
+    def setup_compile_cudagraphs(self):
+        self.compile_cudagraphs = True
 
     def _calc_c6ij(self, data: Dict[str, Tensor]) -> Tensor:
         # CN part
         # short range for CN
         # d_ij = data["d_ij"] * constants.Bohr_inv
-        data = ops.lazy_calc_dij_lr(data)
+        if not self.compile_cudagraphs:
+            data = ops.lazy_calc_dij_lr(data)
+        else:
+            # nb mode 0 only
+            data["d_ij_lr"] = data["d_ij"]
+                                   
         d_ij = data["d_ij_lr"] * constants.Bohr_inv
 
         numbers = data["numbers"]
-        numbers_i, numbers_j = nbops.get_ij(numbers, data, suffix="_lr")
-        rcov_i, rcov_j = nbops.get_ij(self.rcov[numbers], data, suffix="_lr")
+
+        if not self.compile_cudagraphs:
+            numbers_i, numbers_j = nbops.get_ij(numbers, data, suffix="_lr")
+            rcov_i, rcov_j = nbops.get_ij(self.rcov[numbers], data, suffix="_lr")
+        else:
+            numbers_i, numbers_j = nbops.get_ij_compile_cudagraphs(numbers, data, 0, suffix="_lr")
+            rcov_i, rcov_j = nbops.get_ij_compile_cudagraphs(self.rcov[numbers], data, 0, suffix="_lr")
+        
         rcov_ij = rcov_i + rcov_j
         cn_ij = 1.0 / (1.0 + torch.exp(self.k1 * (rcov_ij / d_ij - 1.0)))
-        cn_ij = nbops.mask_ij_(cn_ij, data, 0.0, suffix="_lr")
+        cn_ij = nbops.mask_ij_(cn_ij, data, 0.0, inplace=False, suffix="_lr")
         cn = cn_ij.sum(-1)
         cn = torch.clamp(cn, max=self.cnmax[numbers]).unsqueeze(-1).unsqueeze(-1)
-        cn_i, cn_j = nbops.get_ij(cn, data, suffix="_lr")
+
+        if not self.compile_cudagraphs:
+            cn_i, cn_j = nbops.get_ij(cn, data, suffix="_lr")
+        else:
+            cn_i, cn_j = nbops.get_ij_compile_cudagraphs(cn, data, 0, suffix="_lr")
+
         c6ab = self.c6ab[numbers_i, numbers_j]
         c6ref, cnref_i, cnref_j = torch.unbind(c6ab, dim=-1)
-        c6ref = nbops.mask_ij_(c6ref, data, 0.0, suffix="_lr")
+        c6ref = nbops.mask_ij_(c6ref, data, 0.0, inplace=False, suffix="_lr")
         l_ij = torch.exp(self.k3 * ((cn_i - cnref_i).pow(2) + (cn_j - cnref_j).pow(2)))
         w = l_ij.flatten(-2, -1).sum(-1)
         z = torch.einsum("...ij,...ij->...", c6ref, l_ij)
@@ -226,15 +267,27 @@ class DFTD3(nn.Module):
         c6ij = self._calc_c6ij(data)
 
         rr = self.r4r2[data["numbers"]]
-        rr_i, rr_j = nbops.get_ij(rr, data, suffix="_lr")
+
+        if not self.compile_cudagraphs:
+            rr_i, rr_j = nbops.get_ij(rr, data, suffix="_lr")
+        else:
+            rr_i, rr_j = nbops.get_ij_compile_cudagraphs(rr, data, 0, suffix="_lr")
+
         rrij = 3 * rr_i * rr_j
         rrij = nbops.mask_ij_(rrij, data, 1.0, suffix="_lr")
         r0ij = self.a1 * rrij.sqrt() + self.a2
 
-        ops.lazy_calc_dij_lr(data)
+        if not self.compile_cudagraphs:
+            ops.lazy_calc_dij_lr(data)
+        
         d_ij = data["d_ij_lr"] * constants.Bohr_inv
         e_ij = c6ij * (self.s6 / (d_ij.pow(6) + r0ij.pow(6)) + self.s8 * rrij / (d_ij.pow(8) + r0ij.pow(8)))
-        e = -constants.half_Hartree * nbops.mol_sum(e_ij.sum(-1), data)
+        
+        if not self.compile_cudagraphs:
+            e = -constants.half_Hartree * nbops.mol_sum(e_ij.sum(-1), data)
+        else:
+            e = -constants.half_Hartree * nbops.mol_sum_compile_cudagraphs(e_ij.sum(-1), data, 0)
+
 
         if self.key_out in data:
             data[self.key_out] = data[self.key_out] + e

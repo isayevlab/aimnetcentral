@@ -14,10 +14,10 @@ class AIMNet2ASE(Calculator):
 
     implemented_properties: ClassVar[list[str]] = ["energy", "forces", "free_energy", "charges", "stress", "dipole_moment"]
 
-    def __init__(self, base_calc: AIMNet2Calculator | str = "aimnet2", charge=0, mult=1):
+    def __init__(self, base_calc: AIMNet2Calculator | str = "aimnet2", charge=0, mult=1, compile_cuda_graphs: bool=False):
         super().__init__()
         if isinstance(base_calc, str):
-            base_calc = AIMNet2Calculator(base_calc)
+            base_calc = AIMNet2Calculator(base_calc, compile_cuda_graphs=compile_cuda_graphs)
         self.base_calc = base_calc
         self.reset()
         self.charge = charge
