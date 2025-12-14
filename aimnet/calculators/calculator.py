@@ -1,5 +1,5 @@
 import warnings
-from typing import Any, ClassVar, Dict, Literal
+from typing import Any, ClassVar, Literal
 
 import torch
 from torch import Tensor, nn
@@ -13,8 +13,8 @@ class AIMNet2Calculator:
     A helper class to load AIMNet2 models and perform inference.
     """
 
-    keys_in: ClassVar[Dict[str, torch.dtype]] = {"coord": torch.float, "numbers": torch.int, "charge": torch.float}
-    keys_in_optional: ClassVar[Dict[str, torch.dtype]] = {
+    keys_in: ClassVar[dict[str, torch.dtype]] = {"coord": torch.float, "numbers": torch.int, "charge": torch.float}
+    keys_in_optional: ClassVar[dict[str, torch.dtype]] = {
         "mult": torch.float,
         "mol_idx": torch.int,
         "nbmat": torch.int,
@@ -75,11 +75,11 @@ class AIMNet2Calculator:
                 mod.dsf_alpha = dsf_alpha  # type: ignore
                 mod.dsf_rc = cutoff  # type: ignore
             elif method == "ewald":
-                # current implementaion of Ewald does not use nb mat
+                # current implementation of Ewald does not use nb mat
                 self.cutoff_lr = cutoff
         self._coulomb_method = method
 
-    def eval(self, data: Dict[str, Any], forces=False, stress=False, hessian=False) -> Dict[str, Tensor]:
+    def eval(self, data: dict[str, Any], forces=False, stress=False, hessian=False) -> dict[str, Tensor]:
         data = self.prepare_input(data)
         if hessian and "mol_idx" in data and data["mol_idx"][-1] > 0:
             raise NotImplementedError("Hessian calculation is not supported for multiple molecules")
@@ -90,7 +90,7 @@ class AIMNet2Calculator:
         data = self.process_output(data)
         return data
 
-    def prepare_input(self, data: Dict[str, Any]) -> Dict[str, Tensor]:
+    def prepare_input(self, data: dict[str, Any]) -> dict[str, Tensor]:
         data = self.to_input_tensors(data)
         data = self.mol_flatten(data)
         if data.get("cell") is not None:
@@ -104,14 +104,14 @@ class AIMNet2Calculator:
             data = self.pad_input(data)
         return data
 
-    def process_output(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def process_output(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         if data["coord"].ndim == 2:
             data = self.unpad_output(data)
         data = self.mol_unflatten(data)
         data = self.keep_only(data)
         return data
 
-    def to_input_tensors(self, data: Dict[str, Any]) -> Dict[str, Tensor]:
+    def to_input_tensors(self, data: dict[str, Any]) -> dict[str, Tensor]:
         ret = {}
         for k in self.keys_in:
             if k not in data:
@@ -127,7 +127,7 @@ class AIMNet2Calculator:
                 ret[k] = v.unsqueeze(0)
         return ret
 
-    def mol_flatten(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def mol_flatten(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         """Flatten the input data for multiple molecules.
         Will not flatten for batched input and molecule size below threshold.
         """
@@ -146,7 +146,7 @@ class AIMNet2Calculator:
         elif ndim == 3:
             # batched input
             B, N = data["coord"].shape[:2]
-            if N > self.nb_threshold or self.device == "cpu":
+            if self.nb_threshold < N or self.device == "cpu":
                 self._batch = B
                 data["mol_idx"] = torch.repeat_interleave(
                     torch.arange(0, B, device=self.device), torch.full((B,), N, device=self.device)
@@ -159,7 +159,7 @@ class AIMNet2Calculator:
             self._max_mol_size = N
         return data
 
-    def mol_unflatten(self, data: Dict[str, Tensor], batch=None) -> Dict[str, Tensor]:
+    def mol_unflatten(self, data: dict[str, Tensor], batch=None) -> dict[str, Tensor]:
         batch = batch if batch is not None else self._batch
         if batch is not None:
             for k, v in data.items():
@@ -167,7 +167,7 @@ class AIMNet2Calculator:
                     data[k] = v.view(batch, -1, *v.shape[1:])
         return data
 
-    def make_nbmat(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def make_nbmat(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         assert self._max_mol_size > 0, "Molecule size is not set"
 
         if "cell" in data and data["cell"] is not None:
@@ -207,7 +207,7 @@ class AIMNet2Calculator:
                 data["shifts_lr"] = shifts2
         return data
 
-    def pad_input(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def pad_input(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         N = data["nbmat"].shape[0]
         data["mol_idx"] = maybe_pad_dim0(data["mol_idx"], N, value=data["mol_idx"][-1].item())
         for k in ("coord", "numbers"):
@@ -215,14 +215,14 @@ class AIMNet2Calculator:
                 data[k] = maybe_pad_dim0(data[k], N)
         return data
 
-    def unpad_output(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def unpad_output(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         N = data["nbmat"].shape[0] - 1
         for k, v in data.items():
             if k in self.atom_feature_keys:
                 data[k] = maybe_unpad_dim0(v, N)
         return data
 
-    def set_grad_tensors(self, data: Dict[str, Tensor], forces=False, stress=False, hessian=False) -> Dict[str, Tensor]:
+    def set_grad_tensors(self, data: dict[str, Tensor], forces=False, stress=False, hessian=False) -> dict[str, Tensor]:
         self._saved_for_grad = {}
         if forces or hessian:
             data["coord"].requires_grad_(True)
@@ -235,14 +235,14 @@ class AIMNet2Calculator:
             self._saved_for_grad["scaling"] = scaling
         return data
 
-    def keep_only(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def keep_only(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         ret = {}
         for k, v in data.items():
             if k in self.keys_out or (k.endswith("_std") and k[:-4] in self.keys_out):
                 ret[k] = v
         return ret
 
-    def get_derivatives(self, data: Dict[str, Tensor], forces=False, stress=False, hessian=False) -> Dict[str, Tensor]:
+    def get_derivatives(self, data: dict[str, Tensor], forces=False, stress=False, hessian=False) -> dict[str, Tensor]:
         training = getattr(self.model, "training", False)
         _create_graph = hessian or training
         x = []

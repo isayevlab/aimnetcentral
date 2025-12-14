@@ -5,53 +5,40 @@ site_description: AIMNet Machine Learned Interatomic Potential
 site_author: Roman Zubatyuk
 edit_uri: edit/main/docs/
 repo_name: isayevlab/aimnetcentral
-copyright: Maintained by <a href="https://isayevlab.com">Florian</a>.
 
 nav:
     - Home: index.md
     - Train: train.md
     - Reference: reference.md
+    - API Reference:
+          - Overview: api/index.md
+          - Calculators: api/calculators.md
+          - Modules: api/modules.md
+          - Data: api/data.md
+          - Config: api/config.md
+
 plugins:
     - search
     - mkdocstrings:
+          default_handler: python
           handlers:
               python:
-                  setup_commands:
-                      - import sys
-                      - sys.path.append('../')
+                  paths: [.]
+                  options:
+                      show_source: true
+                      show_root_heading: true
+                      show_root_full_path: false
+                      docstring_style: google
+                      merge_init_into_class: true
+
 theme:
     name: material
-    # feature:
-    #     tabs: true
-    features:
-        - navigation.instant
     palette:
-        - media: "(prefers-color-scheme: light)"
-          scheme: default
-          primary: white
-          accent: deep orange
-          toggle:
-              icon: material/brightness-7
-              name: Switch to dark mode
-        - media: "(prefers-color-scheme: dark)"
-          scheme: slate
-          primary: black
-          accent: deep orange
-          toggle:
-              icon: material/brightness-4
-              name: Switch to light mode
+        primary: indigo
+        accent: indigo
     icon:
         repo: fontawesome/brands/github
-
-extra:
-    social:
-        - icon: fontawesome/brands/github
-          link: https://github.com/isayevlab/aimnetcentral
-        - icon: fontawesome/brands/python
-          link: https://pypi.org/project/aimnetcentral
 
 markdown_extensions:
     - toc:
           permalink: true
-    - pymdownx.arithmatex:
-          generic: true

@@ -1,4 +1,5 @@
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 import torch
 from torch import Tensor, nn
@@ -10,9 +11,9 @@ from aimnet.config import get_init_module, get_module
 def MLP(
     n_in: int,
     n_out: int,
-    hidden: Optional[List[int]] = None,
+    hidden: list[int] | None = None,
     activation_fn: Callable | str = "torch.nn.GELU",
-    activation_kwargs: Optional[Dict[str, Any]] = None,
+    activation_kwargs: dict[str, Any] | None = None,
     weight_init_fn: Callable | str = "torch.nn.init.xavier_normal_",
     bias: bool = True,
     last_linear: bool = True,
@@ -44,7 +45,7 @@ def MLP(
 
 
 class Embedding(nn.Embedding):
-    def __init__(self, init: Optional[Dict[int, Any]] = None, **kwargs):
+    def __init__(self, init: dict[int, Any] | None = None, **kwargs):
         super().__init__(**kwargs)
         with torch.no_grad():
             if init is not None:
@@ -70,7 +71,7 @@ class DSequential(nn.Module):
         super().__init__()
         self.module = nn.ModuleList(modules)
 
-    def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         for m in self.module:
             data = m(data)
         return data
@@ -97,7 +98,7 @@ class AtomicShift(nn.Module):
     def extra_repr(self) -> str:
         return f"key_in: {self.key_in}, key_out: {self.key_out}"
 
-    def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         shifts = self.shifts(data["numbers"]).squeeze(-1)
         if self.reduce_sum:
             shifts = nbops.mol_sum(shifts, data)
@@ -114,13 +115,13 @@ class AtomicSum(nn.Module):
     def extra_repr(self) -> str:
         return f"key_in: {self.key_in}, key_out: {self.key_out}"
 
-    def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         data[self.key_out] = nbops.mol_sum(data[self.key_in], data)
         return data
 
 
 class Output(nn.Module):
-    def __init__(self, mlp: Dict | nn.Module, n_in: int, n_out: int, key_in: str, key_out: str):
+    def __init__(self, mlp: dict | nn.Module, n_in: int, n_out: int, key_in: str, key_out: str):
         super().__init__()
         self.key_in = key_in
         self.key_out = key_out
@@ -131,7 +132,7 @@ class Output(nn.Module):
     def extra_repr(self) -> str:
         return f"key_in: {self.key_in}, key_out: {self.key_out}"
 
-    def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         v = self.mlp(data[self.key_in]).squeeze(-1)
         if data["_input_padded"].item():
             v = nbops.mask_i_(v, data, mask_value=0.0)
@@ -147,7 +148,7 @@ class Forces(nn.Module):
         self.y = y
         self.key_out = key_out
 
-    def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         prev = torch.is_grad_enabled()
         torch.set_grad_enabled(True)
         data[self.x].requires_grad_(True)
@@ -171,7 +172,7 @@ class Dipole(nn.Module):
     def extra_repr(self) -> str:
         return f"key_in: {self.key_in}, key_out: {self.key_out}, center_coord: {self.center_coord}"
 
-    def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         q = data[self.key_in]
         r = data["coord"]
         if self.center_coord:
@@ -184,7 +185,7 @@ class Quadrupole(Dipole):
     def __init__(self, key_in: str = "charges", key_out: str = "quadrupole", center_coord: bool = False):
         super().__init__(key_in=key_in, key_out=key_out, center_coord=center_coord)
 
-    def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         q = data[self.key_in]
         r = data["coord"]
         if self.center_coord:
@@ -215,7 +216,7 @@ class SRRep(nn.Module):
         self.params = nn.Embedding(87, 2, padding_idx=0, _weight=weight)
         self.params.weight.requires_grad_(False)
 
-    def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         p = self.params(data["numbers"])
         p_i, p_j = nbops.get_ij(p, data)
         p_ij = p_i * p_j

@@ -70,7 +70,7 @@ def train(config, model, load=None, save=None, args=None, no_default_config=Fals
     logging.info(train_cfg)
     logging.info("--- END train.yaml ---")
 
-    # try load model and pring its configuration
+    # try load model and print its configuration
     logging.info("Building model")
     model = utils.build_model(model_cfg)
     logging.info(model)

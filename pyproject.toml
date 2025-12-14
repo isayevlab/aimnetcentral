@@ -1,67 +1,126 @@
-[tool.poetry]
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
 name = "aimnet"
-version = "0.0.1"
+authors = [
+    { name="Roman Zubatyuk", email="zubatyuk@gmail.com" },
+]
 description = "AIMNet Machine Learned Interatomic Potential"
-authors = ["Roman Zubatyuk <zubatyuk@gmail.com>"]
-repository = "https://github.com/isayevlab/aimnetcentral"
-documentation = "https://isayevlab.github.io/aimnetcentral/"
 readme = "README.md"
-packages = [
-  {include = "aimnet"}
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+keywords = [
+    "machine learning",
+    "interatomic potential",
+    "molecular dynamics",
+    "computational chemistry",
+    "deep learning",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dynamic = ["version"]
+
+# Minimal core dependencies for inference
+dependencies = [
+    "torch>=2.4",
+    "numpy<2.0",
+    "numba>=0.60.0",
+    "requests>=2.32.3",
+    "click>=8.1.7",
+    "pyyaml>=6.0.2",
+    "jinja2>=3.1.4",
+    "h5py>=3.12.1",
 ]
 
-[tool.poetry.scripts]
-aimnet2pysis = "aimnet.calculators.aimnet2pysis:run_pysis"
+[project.optional-dependencies]
+# ASE calculator integration
+ase = [
+    "ase==3.22.1",
+]
+
+# PySisyphus calculator integration
+pysis = [
+    "pysisyphus",
+]
+
+# Training dependencies
+train = [
+    "omegaconf>=2.3.0",
+    "wandb>=0.18.5",
+    "pytorch-ignite>=0.5.1",
+]
+
+[project.scripts]
 aimnet = "aimnet.cli:cli"
+aimnet2pysis = "aimnet.calculators.aimnet2pysis:run_pysis"
 
-[tool.poetry.dependencies]
-python = ">=3.10,<4.0"
-torch = ">=2.4"
-pyyaml = "^6.0.2"
-numpy = "<2.0"
-numba = "^0.60.0"
-requests = "^2.32.3"
-click = "^8.1.7"
-omegaconf = "^2.3.0"
-wandb = "^0.18.5"
-jinja2 = "^3.1.4"
-h5py = "^3.12.1"
-pytorch-ignite = "^0.5.1"
-ase = "3.22.1"
+[project.urls]
+Homepage = "https://github.com/isayevlab/aimnetcentral"
+Documentation = "https://isayevlab.github.io/aimnetcentral/"
+Repository = "https://github.com/isayevlab/aimnetcentral"
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^7.2.0"
-pytest-cov = "^4.0.0"
-deptry = "^0.16.2"
-mypy = "^1.5.1"
-pre-commit = "^3.4.0"
-tox = "^4.11.1"
+[tool.hatch.build.targets.wheel]
+packages = ["aimnet"]
 
-[tool.poetry.group.docs.dependencies]
-mkdocs = "^1.4.2"
-mkdocs-material = "^9.2.7"
-mkdocstrings = {extras = ["python"], version = "^0.26.1"}
+[tool.hatch.version]
+source = "vcs"
+raw-options = { version_scheme = "no-guess-dev" }
 
+[tool.hatch.build.targets.sdist]
+include = [
+    "aimnet/**/*.py",
+    "aimnet/**/*.yaml",
+    "aimnet/**/*.pt",
+]
 
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+[tool.hatch.build.targets.wheel.force-include]
+"aimnet/dftd3_data.pt" = "aimnet/dftd3_data.pt"
+"aimnet/calculators/model_registry.yaml" = "aimnet/calculators/model_registry.yaml"
+"aimnet/models/aimnet2.yaml" = "aimnet/models/aimnet2.yaml"
+"aimnet/models/aimnet2_dftd3_wb97m.yaml" = "aimnet/models/aimnet2_dftd3_wb97m.yaml"
+"aimnet/train/default_train.yaml" = "aimnet/train/default_train.yaml"
 
-[tool.mypy]
-files = ["aimnet"]
-check_untyped_defs = false  # Optional: don't check untyped function definitions
-ignore_missing_imports = true  # Optional: ignore external imports
-strict = false  # Ensure no strict type checking
-disable_error_code = ["import-untyped"]
+# UV configuration
+[tool.uv]
+managed = true
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
+# Dependency groups for development (uv-style)
+[dependency-groups]
+dev = [
+    "pre-commit",
+    "pytest>=7.2.0",
+    "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.5.0",
+    "pytest-randomly>=3.15.0",
+    "ruff>=0.11.0",
+    "deptry>=0.16.2",
+    "mypy>=1.5.1",
+    {include-group="docs"},
+]
+docs = [
+    "mkdocs>=1.4.2",
+    "mkdocs-material>=9.2.7",
+    "mkdocstrings[python]>=0.26.1",
+]
 
+# Ruff configuration
 [tool.ruff]
-target-version = "py39"
+target-version = "py311"
 line-length = 120
 fix = true
-lint.select = [
+
+[tool.ruff.lint]
+select = [
     # flake8-2020
     "YTT",
     # flake8-bandit
@@ -93,32 +152,65 @@ lint.select = [
     # tryceratops
     "TRY",
 ]
-lint.ignore = [
+ignore = [
     # LineTooLong
     "E501",
     # DoNotAssignLambda
     "E731",
-    #
-    "UP006", "UP035",
+    # Deprecated/slow isinstance union syntax
+    "UP006", "UP035", "UP038",
+    # Use ternary operator - prefer readability with comments
+    "SIM108",
     "TRY003",
     "C901",
     "PGH003",
     "S101"
 ]
 
-
 [tool.ruff.format]
 preview = true
 
-[tool.coverage.report]
-skip_empty = true
+[tool.ruff.lint.isort]
+known-first-party = ["aimnet"]
 
+# MyPy configuration
+[tool.mypy]
+files = ["aimnet"]
+check_untyped_defs = false
+ignore_missing_imports = true
+strict = false
+disable_error_code = ["import-untyped"]
+
+# Pytest configuration
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "ase: marks tests that require ASE (deselect with: -m 'not ase')",
+    "gpu: marks tests that require GPU/CUDA (deselect with: -m 'not gpu')",
+    "pysis: marks tests that require PySisyphus (deselect with: -m 'not pysis')",
+    "train: marks tests that require training dependencies (deselect with: -m 'not train')",
+]
+
+# Coverage configuration
 [tool.coverage.run]
 branch = true
 source = ["aimnet"]
 
+[tool.coverage.report]
+skip_empty = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]
+
+# Deptry configuration
+[tool.deptry]
+# Map package names to their import names
+package_module_name_map = { "pytorch-ignite" = "ignite" }
 
 [tool.deptry.per_rule_ignores]
-DEP001 = ["ase", "pysisyphus"]
+# Optional dependencies (ase, pysisyphus, ignite) are only available with extras
+DEP001 = ["ase", "pysisyphus", "ignite"]
 DEP003 = ["ase", "pysisyphus"]
 DEP004 = ["ase", "pysisyphus"]

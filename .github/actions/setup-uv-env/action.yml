@@ -1,0 +1,57 @@
+name: "setup-uv-env"
+description: "Composite action to setup the Python and uv environment."
+
+inputs:
+    python-version:
+        required: false
+        description: "The python version to use"
+        default: "3.11"
+    extras:
+        required: false
+        description: "Comma-separated list of extras to install (e.g. 'ase,train'). Use empty for none."
+        default: ""
+    groups:
+        required: false
+        description: "Comma-separated list of dependency groups to install (e.g. 'dev' or 'dev,docs')."
+        default: "dev"
+
+runs:
+    using: "composite"
+    steps:
+        - name: Set up python
+          uses: actions/setup-python@v5
+          with:
+              python-version: ${{ inputs.python-version }}
+
+        - name: Install uv
+          uses: astral-sh/setup-uv@v5
+          with:
+              enable-cache: true
+
+        - name: Install dependencies
+          env:
+              INPUT_GROUPS: ${{ inputs.groups }}
+              INPUT_EXTRAS: ${{ inputs.extras }}
+          run: |
+              set -e
+
+              # Build uv sync command
+              CMD="uv sync"
+
+              # Add groups
+              if [ -n "$INPUT_GROUPS" ]; then
+                for g in $(echo "$INPUT_GROUPS" | tr ',' ' '); do
+                  CMD="$CMD --group $g"
+                done
+              fi
+
+              # Add extras
+              if [ -n "$INPUT_EXTRAS" ]; then
+                for e in $(echo "$INPUT_EXTRAS" | tr ',' ' '); do
+                  CMD="$CMD --extra $e"
+                done
+              fi
+
+              echo "Running: $CMD"
+              $CMD
+          shell: bash

@@ -1,6 +1,5 @@
 import os
 
-import ase.io
 import numpy as np
 import pytest
 import torch
@@ -37,7 +36,11 @@ def test_model_compile(model_def):
     jit_compile(model)
 
 
+@pytest.mark.ase
 def test_aimnet2():
+    pytest.importorskip("ase", reason="ASE not installed. Install with: pip install aimnet[ase]")
+    import ase.io
+
     model = build_model(aimnet2_d3_def)
     model.outputs.atomic_shift.shifts.double()
     model_from_zoo = torch.jit.load(get_model_path("aimnet2"))

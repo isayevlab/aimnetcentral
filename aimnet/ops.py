@@ -1,5 +1,4 @@
 import math
-from typing import Dict, Optional, Tuple
 
 import torch
 from torch import Tensor
@@ -7,7 +6,7 @@ from torch import Tensor
 from aimnet import nbops
 
 
-def lazy_calc_dij_lr(data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+def lazy_calc_dij_lr(data: dict[str, Tensor]) -> dict[str, Tensor]:
     if "d_ij_lr" not in data:
         nb_mode = nbops.get_nb_mode(data)
         if nb_mode == 0:
@@ -17,7 +16,7 @@ def lazy_calc_dij_lr(data: Dict[str, Tensor]) -> Dict[str, Tensor]:
     return data
 
 
-def calc_distances(data: Dict[str, Tensor], suffix: str = "", pad_value: float = 1.0) -> Tuple[Tensor, Tensor]:
+def calc_distances(data: dict[str, Tensor], suffix: str = "", pad_value: float = 1.0) -> tuple[Tensor, Tensor]:
     coord_i, coord_j = nbops.get_ij(data["coord"], data, suffix)
     if f"shifts{suffix}" in data:
         assert "cell" in data, "cell is required if shifts are provided"
@@ -33,7 +32,7 @@ def calc_distances(data: Dict[str, Tensor], suffix: str = "", pad_value: float =
     return d_ij, r_ij
 
 
-def center_coordinates(coord: Tensor, data: Dict[str, Tensor], masses: Optional[Tensor] = None) -> Tensor:
+def center_coordinates(coord: Tensor, data: dict[str, Tensor], masses: Tensor | None = None) -> Tensor:
     if masses is not None:
         masses = masses.unsqueeze(-1)
         center = nbops.mol_sum(coord * masses, data) / nbops.mol_sum(masses, data) / data["mol_sizes"].unsqueeze(-1)
@@ -61,12 +60,11 @@ def exp_expand(d_ij: Tensor, shifts: Tensor, eta: float) -> Tensor:
     return torch.exp(-eta * (d_ij.unsqueeze(-1) - shifts) ** 2)
 
 
-# pylint: disable=invalid-name
 def nse(
     Q: Tensor,
     q_u: Tensor,
     f_u: Tensor,
-    data: Dict[str, Tensor],
+    data: dict[str, Tensor],
     epsilon: float = 1.0e-6,
 ) -> Tensor:
     # Q and q_u and f_u must have last dimension size 1 or 2
@@ -94,7 +92,7 @@ def nse(
     return q
 
 
-def coulomb_matrix_dsf(d_ij: Tensor, Rc: float, alpha: float, data: Dict[str, Tensor]) -> Tensor:
+def coulomb_matrix_dsf(d_ij: Tensor, Rc: float, alpha: float, data: dict[str, Tensor]) -> Tensor:
     _c1 = (alpha * d_ij).erfc() / d_ij
     _c2 = math.erfc(alpha * Rc) / Rc
     _c3 = _c2 / Rc
@@ -106,7 +104,7 @@ def coulomb_matrix_dsf(d_ij: Tensor, Rc: float, alpha: float, data: Dict[str, Te
     return J
 
 
-def coulomb_matrix_sf(q_j: Tensor, d_ij: Tensor, Rc: float, data: Dict[str, Tensor]) -> Tensor:
+def coulomb_matrix_sf(q_j: Tensor, d_ij: Tensor, Rc: float, data: dict[str, Tensor]) -> Tensor:
     _c1 = 1.0 / d_ij
     _c2 = 1.0 / Rc
     _c3 = _c2 / Rc

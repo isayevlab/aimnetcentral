@@ -1,6 +1,5 @@
 import logging
 import os
-from typing import Dict, Optional
 
 import click
 import requests
@@ -9,7 +8,7 @@ import yaml
 logging.basicConfig(level=logging.INFO)
 
 
-def load_model_registry(registry_file: Optional[str] = None) -> Dict[str, str]:
+def load_model_registry(registry_file: str | None = None) -> dict[str, str]:
     registry_file = registry_file or os.path.join(os.path.dirname(__file__), "model_registry.yaml")
     with open(os.path.join(os.path.dirname(__file__), "model_registry.yaml")) as f:
         return yaml.load(f, Loader=yaml.SafeLoader)

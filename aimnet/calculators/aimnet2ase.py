@@ -12,7 +12,14 @@ from .calculator import AIMNet2Calculator
 class AIMNet2ASE(Calculator):
     from typing import ClassVar
 
-    implemented_properties: ClassVar[list[str]] = ["energy", "forces", "free_energy", "charges", "stress", "dipole_moment"]
+    implemented_properties: ClassVar[list[str]] = [
+        "energy",
+        "forces",
+        "free_energy",
+        "charges",
+        "stress",
+        "dipole_moment",
+    ]
 
     def __init__(self, base_calc: AIMNet2Calculator | str = "aimnet2", charge=0, mult=1):
         super().__init__()
@@ -59,11 +66,10 @@ class AIMNet2ASE(Calculator):
         if self._t_mult is None:
             self._t_mult = torch.tensor(self.mult, dtype=torch.float32, device=self.base_calc.device)
 
-    def get_dipole_moment(self,atoms):
+    def get_dipole_moment(self, atoms):
         charges = self.get_charges()[:, np.newaxis]
         positions = atoms.get_positions()
         return np.sum(charges * positions, axis=0)
-
 
     def calculate(self, atoms=None, properties=None, system_changes=all_changes):
         if properties is None:
@@ -97,7 +103,7 @@ class AIMNet2ASE(Calculator):
 
         self.results["energy"] = results["energy"].item()
         self.results["charges"] = results["charges"]
-        self.results['dipole_moment'] = self.get_dipole_moment(self.atoms)
+        self.results["dipole_moment"] = self.get_dipole_moment(self.atoms)
 
         if "forces" in properties:
             self.results["forces"] = results["forces"]

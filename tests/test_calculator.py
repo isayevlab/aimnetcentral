@@ -1,23 +1,26 @@
 import os
 
-import ase.io
+import pytest
 
 from aimnet.calculators import AIMNet2Calculator
 
 file = os.path.join(os.path.dirname(__file__), "data", "caffeine.xyz")
 
 
-def load_mol(file):
-    atoms = ase.io.read(file)
-    data = {
-        "coord": atoms.get_positions(),  # type: ignore
-        "numbers": atoms.get_atomic_numbers(),  # type: ignore
-        "charge": 0.0,
-    }
-    return data
-
-
+@pytest.mark.ase
 def test_from_zoo():
+    pytest.importorskip("ase", reason="ASE not installed. Install with: pip install aimnet[ase]")
+    import ase.io
+
+    def load_mol(filepath):
+        atoms = ase.io.read(filepath)
+        data = {
+            "coord": atoms.get_positions(),  # type: ignore
+            "numbers": atoms.get_atomic_numbers(),  # type: ignore
+            "charge": 0.0,
+        }
+        return data
+
     calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
     data = load_mol(file)
     res = calc(data)

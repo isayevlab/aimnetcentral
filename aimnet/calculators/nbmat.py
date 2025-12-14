@@ -1,5 +1,3 @@
-from typing import Optional, Tuple
-
 import torch
 from torch import Tensor
 
@@ -34,10 +32,10 @@ else:
 
 def calc_nbmat(
     coord: Tensor,
-    cutoffs: Tuple[float, Optional[float]],
-    maxnb: Tuple[int, Optional[int]],
-    cell: Optional[Tensor] = None,
-    mol_idx: Optional[Tensor] = None,
+    cutoffs: tuple[float, float | None],
+    maxnb: tuple[int, int | None],
+    cell: Tensor | None = None,
+    mol_idx: Tensor | None = None,
 ):
     device = coord.device
     N = coord.shape[0]

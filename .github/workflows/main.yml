@@ -20,16 +20,18 @@ jobs:
                   key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
 
             - name: Set up the environment
-              uses: ./.github/actions/setup-poetry-env
+              uses: ./.github/actions/setup-uv-env
+              with:
+                  groups: dev
 
             - name: Run checks
               run: make check
 
-    tests-and-type-check:
+    tests-core:
         runs-on: ubuntu-latest
         strategy:
             matrix:
-                python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+                python-version: ["3.11", "3.12"]
             fail-fast: false
         defaults:
             run:
@@ -39,21 +41,100 @@ jobs:
               uses: actions/checkout@v4
 
             - name: Set up the environment
-              uses: ./.github/actions/setup-poetry-env
+              uses: ./.github/actions/setup-uv-env
               with:
                   python-version: ${{ matrix.python-version }}
+                  groups: dev
 
             - name: Run tests
-              run: poetry run pytest tests --cov --cov-config=pyproject.toml --cov-report=xml
-
-            # - name: Check typing
-            #   run: poetry run mypy
+              run: uv run pytest tests -m "not ase and not pysis and not train" --cov --cov-config=pyproject.toml --cov-report=xml
 
             - name: Upload coverage reports to Codecov with GitHub Action on Python 3.11
               uses: codecov/codecov-action@v4
               if: ${{ matrix.python-version == '3.11' }}
+
+    tests-ase:
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                python-version: ["3.11"]
+            fail-fast: false
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - name: Check out
+              uses: actions/checkout@v4
+
+            - name: Set up the environment
+              uses: ./.github/actions/setup-uv-env
               with:
-                  token: d46ed579-7fee-46f7-baff-4f6538f6591b
+                  python-version: ${{ matrix.python-version }}
+                  groups: dev
+                  extras: ase
+
+            - name: Run ASE tests
+              run: uv run pytest tests -m ase
+
+    tests-train:
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                python-version: ["3.11"]
+            fail-fast: false
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - name: Check out
+              uses: actions/checkout@v4
+
+            - name: Set up the environment
+              uses: ./.github/actions/setup-uv-env
+              with:
+                  python-version: ${{ matrix.python-version }}
+                  groups: dev
+                  extras: train
+
+            - name: Run train-marked tests (allow empty)
+              run: |
+                  set -e
+                  uv run pytest tests -m train || rc=$?
+                  if [ "${rc:-0}" -eq 5 ]; then
+                    echo "No train-marked tests collected; treating as success."
+                    exit 0
+                  fi
+                  exit "${rc:-0}"
+
+    tests-pysis:
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                python-version: ["3.11"]
+            fail-fast: false
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - name: Check out
+              uses: actions/checkout@v4
+
+            - name: Set up the environment
+              uses: ./.github/actions/setup-uv-env
+              with:
+                  python-version: ${{ matrix.python-version }}
+                  groups: dev
+                  extras: pysis
+
+            - name: Run pysis-marked tests (allow empty)
+              run: |
+                  set -e
+                  uv run pytest tests -m pysis || rc=$?
+                  if [ "${rc:-0}" -eq 5 ]; then
+                    echo "No pysis-marked tests collected; treating as success."
+                    exit 0
+                  fi
+                  exit "${rc:-0}"
 
     check-docs:
         runs-on: ubuntu-latest
@@ -62,7 +143,9 @@ jobs:
               uses: actions/checkout@v4
 
             - name: Set up the environment
-              uses: ./.github/actions/setup-poetry-env
+              uses: ./.github/actions/setup-uv-env
+              with:
+                  groups: docs
 
             - name: Check if documentation can be built
-              run: poetry run mkdocs build -s
+              run: uv run mkdocs build -s
