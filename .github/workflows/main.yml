@@ -50,7 +50,7 @@ jobs:
               run: uv run pytest tests -m "not ase and not pysis and not train" --cov --cov-config=pyproject.toml --cov-report=xml
 
             - name: Upload coverage reports to Codecov with GitHub Action on Python 3.11
-              uses: codecov/codecov-action@v4
+              uses: codecov/codecov-action@v5
               if: ${{ matrix.python-version == '3.11' }}
 
     tests-ase:
