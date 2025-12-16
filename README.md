@@ -13,7 +13,18 @@
 
 - Accurate and Versatile: AIMNet2 excels at modeling neutral, charged, organic, and elemental-organic systems.
 - Flexible Interfaces: Use AIMNet2 through convenient calculators for popular simulation packages like ASE and PySisyphus.
-- Flexible Long-Range Interactions: Optionally employ the Dumped-Shifted Force (DSF) or Ewald summation Coulomb models for accurate calculations in large or periodic systems.
+- Flexible Long-Range Interactions: Optionally employ the Damped-Shifted Force (DSF) or Ewald summation Coulomb models for accurate calculations in large or periodic systems.
+
+## Available Models
+
+| Model                | Alias           | Elements                                      | Description                  |
+| -------------------- | --------------- | --------------------------------------------- | ---------------------------- |
+| `aimnet2_wb97m_d3_X` | `aimnet2`       | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | wB97M-D3 (default)           |
+| `aimnet2_b973c_d3_X` | `aimnet2_b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c functional            |
+| `aimnet2nse_X`       | `aimnet2nse`    | H, C, N, O, F, S, Cl                          | Open-shell chemistry         |
+| `aimnet2-pd_X`       | `aimnet2pd`     | H, C, N, O, F, P, S, Cl, Pd                   | Palladium-containing systems |
+
+_X = 0-3 for ensemble members. Ensemble averaging recommended for production use._
 
 ## Installation
 
@@ -88,6 +99,20 @@ results = calc(data, forces=True)
 print(results["energy"], results["forces"])
 ```
 
+### Output Data
+
+The calculator returns a dictionary with the following keys:
+
+| Key       | Shape                   | Description                          |
+| --------- | ----------------------- | ------------------------------------ |
+| `energy`  | `(,)` or `(B,)`         | Total energy in eV                   |
+| `charges` | `(N,)` or `(B, N)`      | Atomic partial charges in e          |
+| `forces`  | `(N, 3)` or `(B, N, 3)` | Atomic forces in eV/A (if requested) |
+| `hessian` | `(N, 3, N, 3)`          | Second derivatives (if requested)    |
+| `stress`  | `(3, 3)`                | Stress tensor for PBC (if requested) |
+
+_B = batch size, N = number of atoms_
+
 ### ASE Integration
 
 With `aimnet[ase]` installed:
@@ -102,6 +127,46 @@ atoms.calc = AIMNet2ASE("aimnet2")
 energy = atoms.get_potential_energy()
 forces = atoms.get_forces()
 ```
+
+### Periodic Boundary Conditions
+
+For periodic systems, provide a unit cell:
+
+```python
+data = {
+    "coord": coordinates,
+    "numbers": atomic_numbers,
+    "charge": 0.0,
+    "cell": cell_vectors,  # 3x3 array in Angstrom
+}
+results = calc(data, forces=True, stress=True)
+```
+
+### Long-Range Coulomb Methods
+
+Configure electrostatic interactions for large or periodic systems:
+
+```python
+# Damped-Shifted Force (DSF) - recommended for periodic systems
+calc.set_lrcoulomb_method("dsf", cutoff=15.0, dsf_alpha=0.2)
+
+# Ewald summation - for accurate periodic electrostatics
+calc.set_lrcoulomb_method("ewald", cutoff=15.0)
+```
+
+### Performance Optimization
+
+For molecular dynamics simulations, use `compile_mode` for ~5x speedup:
+
+```python
+calc = AIMNet2Calculator("aimnet2", compile_mode=True)
+```
+
+Requirements:
+
+- CUDA GPU required
+- Not compatible with periodic boundary conditions
+- Best for repeated inference on similar-sized systems
 
 ### Training
 
@@ -124,16 +189,25 @@ make build       # Build distribution packages
 
 ## Citation
 
-If you use AIMNet2 in your research, please cite:
+If you use AIMNet2 in your research, please cite the appropriate paper:
+
+**AIMNet2 (main model):**
 
 ```bibtex
 @article{aimnet2,
   title={AIMNet2: A Neural Network Potential to Meet Your Neutral, Charged, Organic, and Elemental-Organic Needs},
-  author={Zubatyuk, Roman and Smith, Justin S and Nebgen, Benjamin and Tretiak, Sergei and Isayev, Olexandr},
-  journal={},
-  year={2024}
+  author={Anstine, Dylan M and Zubatyuk, Roman and Isayev, Olexandr},
+  journal={Chemical Science},
+  volume={16},
+  pages={10228--10244},
+  year={2025},
+  doi={10.1039/D4SC08572H}
 }
 ```
+
+**AIMNet2-NSE:** [ChemRxiv preprint](https://chemrxiv.org/engage/chemrxiv/article-details/692d304c65a54c2d4a7ab3c7)
+
+**AIMNet2-Pd:** [ChemRxiv preprint](https://chemrxiv.org/engage/chemrxiv/article-details/67d7b7f7fa469535b97c021a)
 
 ## License
 
