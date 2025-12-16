@@ -34,6 +34,32 @@ def load_mol(filepath):
     return data
 
 
+def create_cpu_calculator():
+    """Create a CPU-only calculator instance for comparison tests.
+
+    Uses __new__ to bypass __init__ which auto-selects CUDA when available.
+    This approach directly initializes attributes to force CPU execution.
+    """
+    from aimnet.calculators.model_registry import get_model_path
+
+    calc = AIMNet2Calculator.__new__(AIMNet2Calculator)
+    calc.device = "cpu"
+
+    p = get_model_path("aimnet2")
+    calc.model = torch.jit.load(p, map_location="cpu")
+    calc.cutoff = calc.model.cutoff
+    calc.lr = hasattr(calc.model, "cutoff_lr")
+    calc.cutoff_lr = getattr(calc.model, "cutoff_lr", float("inf")) if calc.lr else None
+    calc.max_density = 0.2
+    calc.nb_threshold = 0
+    calc._batch = None
+    calc._max_mol_size = 0
+    calc._saved_for_grad = {}
+    calc._coulomb_method = "simple"
+
+    return calc
+
+
 class TestGPUBasics:
     """Basic GPU functionality tests."""
 
@@ -76,26 +102,10 @@ class TestGPUvsCPUConsistency:
         res_gpu = calc_gpu(data)
         energy_gpu = res_gpu["energy"].cpu()
 
-        # Force CPU calculation
-        with torch.device("cpu"):
-            calc_cpu = AIMNet2Calculator.__new__(AIMNet2Calculator)
-            calc_cpu.device = "cpu"
-            from aimnet.calculators.model_registry import get_model_path
-
-            p = get_model_path("aimnet2")
-            calc_cpu.model = torch.jit.load(p, map_location="cpu")
-            calc_cpu.cutoff = calc_cpu.model.cutoff
-            calc_cpu.lr = hasattr(calc_cpu.model, "cutoff_lr")
-            calc_cpu.cutoff_lr = getattr(calc_cpu.model, "cutoff_lr", float("inf")) if calc_cpu.lr else None
-            calc_cpu.max_density = 0.2
-            calc_cpu.nb_threshold = 0
-            calc_cpu._batch = None
-            calc_cpu._max_mol_size = 0
-            calc_cpu._saved_for_grad = {}
-            calc_cpu._coulomb_method = "simple"
-
-            res_cpu = calc_cpu(data)
-            energy_cpu = res_cpu["energy"]
+        # CPU calculation
+        calc_cpu = create_cpu_calculator()
+        res_cpu = calc_cpu(data)
+        energy_cpu = res_cpu["energy"]
 
         # Energies should match closely
         assert torch.allclose(energy_gpu, energy_cpu, rtol=1e-5, atol=1e-6)
@@ -109,26 +119,10 @@ class TestGPUvsCPUConsistency:
         res_gpu = calc_gpu(data, forces=True)
         forces_gpu = res_gpu["forces"].cpu()
 
-        # Force CPU calculation
-        with torch.device("cpu"):
-            calc_cpu = AIMNet2Calculator.__new__(AIMNet2Calculator)
-            calc_cpu.device = "cpu"
-            from aimnet.calculators.model_registry import get_model_path
-
-            p = get_model_path("aimnet2")
-            calc_cpu.model = torch.jit.load(p, map_location="cpu")
-            calc_cpu.cutoff = calc_cpu.model.cutoff
-            calc_cpu.lr = hasattr(calc_cpu.model, "cutoff_lr")
-            calc_cpu.cutoff_lr = getattr(calc_cpu.model, "cutoff_lr", float("inf")) if calc_cpu.lr else None
-            calc_cpu.max_density = 0.2
-            calc_cpu.nb_threshold = 0
-            calc_cpu._batch = None
-            calc_cpu._max_mol_size = 0
-            calc_cpu._saved_for_grad = {}
-            calc_cpu._coulomb_method = "simple"
-
-            res_cpu = calc_cpu(data, forces=True)
-            forces_cpu = res_cpu["forces"]
+        # CPU calculation
+        calc_cpu = create_cpu_calculator()
+        res_cpu = calc_cpu(data, forces=True)
+        forces_cpu = res_cpu["forces"]
 
         # Forces should match closely
         assert torch.allclose(forces_gpu, forces_cpu, rtol=1e-4, atol=1e-5)
