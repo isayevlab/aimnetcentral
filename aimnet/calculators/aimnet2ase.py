@@ -21,10 +21,10 @@ class AIMNet2ASE(Calculator):
         "dipole_moment",
     ]
 
-    def __init__(self, base_calc: AIMNet2Calculator | str = "aimnet2", charge=0, mult=1):
+    def __init__(self, base_calc: AIMNet2Calculator | str = "aimnet2", charge=0, mult=1, compile_mode: bool = False):
         super().__init__()
         if isinstance(base_calc, str):
-            base_calc = AIMNet2Calculator(base_calc)
+            base_calc = AIMNet2Calculator(base_calc, compile_mode=compile_mode)
         self.base_calc = base_calc
         self.reset()
         self.charge = charge
@@ -86,13 +86,15 @@ class AIMNet2ASE(Calculator):
             "mult": self._t_mult,
         }
 
+        # In compile mode, calculator handles batching internally
         _unsqueezed = False
-        if cell is not None:
-            _in["cell"] = cell
-        else:
-            for k, v in _in.items():
-                _in[k] = v.unsqueeze(0)
-            _unsqueezed = True
+        if not self.base_calc._compile_mode:
+            if cell is not None:
+                _in["cell"] = cell
+            else:
+                for k, v in _in.items():
+                    _in[k] = v.unsqueeze(0)
+                _unsqueezed = True
 
         results = self.base_calc(_in, forces="forces" in properties, stress="stress" in properties)
 

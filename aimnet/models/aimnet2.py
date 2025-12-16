@@ -104,7 +104,8 @@ class AIMNet2(AIMNet2Base):
         return data
 
     def _prepare_in_a(self, data: dict[str, Tensor]) -> Tensor:
-        a_i, a_j = nbops.get_ij(data["a"], data)
+        compile_nb = self._compile_nb_mode if self._compile_mode else -1
+        a_i, a_j = nbops.get_ij(data["a"], data, compile_nb_mode=compile_nb)
         avf_a = self.conv_a(a_j, data["gs"], data["gv"])
         if self.d2features:
             a_i = a_i.flatten(-2, -1)
@@ -112,12 +113,14 @@ class AIMNet2(AIMNet2Base):
         return _in
 
     def _prepare_in_q(self, data: dict[str, Tensor]) -> Tensor:
-        q_i, q_j = nbops.get_ij(data["charges"], data)
+        compile_nb = self._compile_nb_mode if self._compile_mode else -1
+        q_i, q_j = nbops.get_ij(data["charges"], data, compile_nb_mode=compile_nb)
         avf_q = self.conv_q(q_j, data["gs"], data["gv"])
         _in = torch.cat([q_i.squeeze(-2), avf_q], dim=-1)
         return _in
 
     def _update_q(self, data: dict[str, Tensor], x: Tensor, delta_q: bool = True) -> dict[str, Tensor]:
+        compile_nb = self._compile_nb_mode if self._compile_mode else -1
         _q, _f, delta_a = x.split(
             [
                 self.num_charge_channels,
@@ -127,11 +130,11 @@ class AIMNet2(AIMNet2Base):
             dim=-1,
         )
         # for loss
-        data["_delta_Q"] = data["charge"] - nbops.mol_sum(_q, data)
+        data["_delta_Q"] = data["charge"] - nbops.mol_sum(_q, data, compile_nb_mode=compile_nb)
         q = data["charges"] + _q if delta_q else _q
         data["charges_pre"] = q if self.num_charge_channels == 2 else q.squeeze(-1)
         f = _f.pow(2)
-        q = ops.nse(data["charge"], q, f, data, epsilon=1.0e-6)
+        q = ops.nse(data["charge"], q, f, data, epsilon=1.0e-6, compile_nb_mode=compile_nb)
         data["charges"] = q
         data["a"] = data["a"] + delta_a.view_as(data["a"])
         return data
@@ -164,7 +167,8 @@ class AIMNet2(AIMNet2Base):
                 _in = torch.cat([self._prepare_in_a(data), self._prepare_in_q(data)], dim=-1)
 
             _out = mlp(_in)
-            if data["_input_padded"].item():
+            # In compile mode, skip the .item() check - padding is handled at setup
+            if not self._compile_mode and data["_input_padded"].item():
                 _out = nbops.mask_i_(_out, data, mask_value=0.0)
 
             if ipass == 0:

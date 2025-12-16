@@ -6,21 +6,23 @@ from torch import Tensor
 from aimnet import nbops
 
 
-def lazy_calc_dij_lr(data: dict[str, Tensor]) -> dict[str, Tensor]:
+def lazy_calc_dij_lr(data: dict[str, Tensor], compile_nb_mode: int = -1) -> dict[str, Tensor]:
     if "d_ij_lr" not in data:
-        nb_mode = nbops.get_nb_mode(data)
+        nb_mode = compile_nb_mode if compile_nb_mode >= 0 else nbops.get_nb_mode(data)
         if nb_mode == 0:
             data["d_ij_lr"] = data["d_ij"]
         else:
-            data["d_ij_lr"] = calc_distances(data, suffix="_lr")[0]
+            data["d_ij_lr"] = calc_distances(data, suffix="_lr", compile_nb_mode=compile_nb_mode)[0]
     return data
 
 
-def calc_distances(data: dict[str, Tensor], suffix: str = "", pad_value: float = 1.0) -> tuple[Tensor, Tensor]:
-    coord_i, coord_j = nbops.get_ij(data["coord"], data, suffix)
+def calc_distances(
+    data: dict[str, Tensor], suffix: str = "", pad_value: float = 1.0, compile_nb_mode: int = -1
+) -> tuple[Tensor, Tensor]:
+    coord_i, coord_j = nbops.get_ij(data["coord"], data, suffix, compile_nb_mode=compile_nb_mode)
     if f"shifts{suffix}" in data:
         assert "cell" in data, "cell is required if shifts are provided"
-        nb_mode = nbops.get_nb_mode(data)
+        nb_mode = compile_nb_mode if compile_nb_mode >= 0 else nbops.get_nb_mode(data)
         if nb_mode == 2:
             shifts = torch.einsum("bnmd,bdh->bnmh", data[f"shifts{suffix}"], data["cell"])
         else:
@@ -50,6 +52,23 @@ def cosine_cutoff(d_ij: Tensor, rc: float) -> Tensor:
     return fc
 
 
+def cosine_cutoff_tensor(d_ij: Tensor, rc: Tensor) -> Tensor:
+    """Cosine cutoff function with tensor cutoff (for CUDA graphs compatibility).
+
+    Unlike cosine_cutoff(), this version accepts a tensor cutoff value,
+    which is necessary for torch.compile with CUDA graphs since control
+    flow based on tensor values breaks graph capture.
+
+    Args:
+        d_ij: Distance tensor
+        rc: Cutoff radius as Tensor
+
+    Returns:
+        Cutoff values with 0 for distances >= rc
+    """
+    return torch.where(d_ij < rc, 0.5 * (torch.cos(d_ij * (torch.pi / rc)) + 1.0), torch.zeros_like(d_ij))
+
+
 def exp_cutoff(d: Tensor, rc: Tensor) -> Tensor:
     fc = torch.exp(-1.0 / (1.0 - (d / rc).clamp(0, 1.0 - 1e-6).pow(2))) / 0.36787944117144233
     return fc
@@ -66,17 +85,18 @@ def nse(
     f_u: Tensor,
     data: dict[str, Tensor],
     epsilon: float = 1.0e-6,
+    compile_nb_mode: int = -1,
 ) -> Tensor:
     # Q and q_u and f_u must have last dimension size 1 or 2
-    F_u = nbops.mol_sum(f_u, data)
+    F_u = nbops.mol_sum(f_u, data, compile_nb_mode=compile_nb_mode)
     if epsilon > 0:
         F_u = F_u + epsilon
-    Q_u = nbops.mol_sum(q_u, data)
+    Q_u = nbops.mol_sum(q_u, data, compile_nb_mode=compile_nb_mode)
     dQ = Q - Q_u
     # for loss
     data["_dQ"] = dQ
 
-    nb_mode = nbops.get_nb_mode(data)
+    nb_mode = compile_nb_mode if compile_nb_mode >= 0 else nbops.get_nb_mode(data)
     if nb_mode in (0, 2):
         F_u = F_u.unsqueeze(-2)
         dQ = dQ.unsqueeze(-2)

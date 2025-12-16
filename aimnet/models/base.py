@@ -29,6 +29,33 @@ class AIMNet2Base(nn.Module):
 
     def __init__(self):
         super().__init__()
+        # Compile mode attributes
+        self._compile_mode: bool = False
+        self._compile_nb_mode: int = -1  # -1 = dynamic, 0/1/2 = fixed
+
+    def enable_compile_mode(self, nb_mode: int = 0) -> None:
+        """Enable compile mode with fixed nb_mode for CUDA graphs compatibility.
+
+        This sets up the model to use compile-time constant control flow,
+        avoiding .item() calls that break CUDA graph capture.
+
+        Args:
+            nb_mode: Fixed neighbor mode (0=dense, 1=sparse, 2=batched).
+                     Currently only 0 is supported.
+        """
+        if nb_mode not in (0, 1, 2):
+            raise ValueError(f"nb_mode must be 0, 1, or 2, got {nb_mode}")
+        if nb_mode != 0:
+            raise NotImplementedError(f"Compile mode only supports nb_mode=0 currently, got {nb_mode}")
+
+        self._compile_mode = True
+        self._compile_nb_mode = nb_mode
+
+        # Propagate to all submodules
+        for module in self.modules():
+            if hasattr(module, "_compile_mode"):
+                module._compile_mode = True
+                module._compile_nb_mode = nb_mode
 
     def _prepare_dtype(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         for k, d in zip(self._required_keys, self._required_keys_dtype, strict=False):
@@ -42,8 +69,15 @@ class AIMNet2Base(nn.Module):
     def prepare_input(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         """Some sommon operations"""
         data = self._prepare_dtype(data)
-        data = nbops.set_nb_mode(data)
-        data = nbops.calc_masks(data)
+
+        if self._compile_mode:
+            # In compile mode, use fixed nb_mode - no data-dependent branching
+            data["_nb_mode"] = torch.tensor(self._compile_nb_mode)
+            data = nbops.calc_masks_fixed_nb_mode(data, self._compile_nb_mode)
+        else:
+            # Dynamic mode - detect nb_mode from data
+            data = nbops.set_nb_mode(data)
+            data = nbops.calc_masks(data)
 
         assert data["charge"].ndim == 1, "Charge should be 1D tensor."
         if "mult" in data:
