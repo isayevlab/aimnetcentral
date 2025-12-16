@@ -44,6 +44,9 @@ class AEVSV(nn.Module):
         shifts_v: list[float] | None = None,
     ):
         super().__init__()
+        # Compile mode attributes
+        self._compile_mode: bool = False
+        self._compile_nb_mode: int = -1
 
         self._init_basis(rc_s, eta_s, nshifts_s, shifts_s, rmin, mod="_s")
         if rc_v is not None:
@@ -79,7 +82,8 @@ class AEVSV(nn.Module):
 
     def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         # shapes (..., m) and (..., m, 3)
-        d_ij, r_ij = ops.calc_distances(data)
+        compile_nb = self._compile_nb_mode if self._compile_mode else -1
+        d_ij, r_ij = ops.calc_distances(data, compile_nb_mode=compile_nb)
         data["d_ij"] = d_ij
         # shapes (..., nshifts, m) and (..., nshifts, 3, m)
         u_ij, gs, gv = self._calc_aev(r_ij, d_ij, data)
@@ -88,14 +92,21 @@ class AEVSV(nn.Module):
         return data
 
     def _calc_aev(self, r_ij: Tensor, d_ij: Tensor, data: dict[str, Tensor]) -> tuple[Tensor, Tensor, Tensor]:
-        fc_ij = ops.cosine_cutoff(d_ij, self.rc_s)  # (..., m)
+        # In compile mode, use tensor version of cosine_cutoff for CUDA graph compatibility
+        if self._compile_mode:
+            fc_ij = ops.cosine_cutoff_tensor(d_ij, self.rc_s)
+        else:
+            fc_ij = ops.cosine_cutoff(d_ij, self.rc_s.item())
         fc_ij = nbops.mask_ij_(fc_ij, data, 0.0)
         gs = ops.exp_expand(d_ij, self.shifts_s, self.eta_s) * fc_ij.unsqueeze(
             -1
         )  # (..., m, nshifts) * (..., m, 1) -> (..., m, shitfs)
         u_ij = r_ij / d_ij.unsqueeze(-1)  # (..., m, 3) / (..., m, 1) -> (..., m, 3)
         if self._dual_basis:
-            fc_ij = ops.cosine_cutoff(d_ij, self.rc_v)
+            if self._compile_mode:
+                fc_ij = ops.cosine_cutoff_tensor(d_ij, self.rc_v)
+            else:
+                fc_ij = ops.cosine_cutoff(d_ij, self.rc_v.item())
             gsv = ops.exp_expand(d_ij, self.shifts_v, self.eta_v) * fc_ij.unsqueeze(-1)
             gv = gsv.unsqueeze(-2) * u_ij.unsqueeze(-1)
         else:

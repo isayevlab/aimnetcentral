@@ -4,7 +4,9 @@ from typing import Any, ClassVar, Literal
 import torch
 from torch import Tensor, nn
 
-from .model_registry import get_model_path
+from aimnet.config import build_module
+
+from .model_registry import get_model_definition_path, get_model_path
 from .nbmat import TooManyNeighborsError, calc_nbmat
 
 
@@ -28,11 +30,27 @@ class AIMNet2Calculator:
     keys_out: ClassVar[list[str]] = ["energy", "charges", "forces", "hessian", "stress"]
     atom_feature_keys: ClassVar[list[str]] = ["coord", "numbers", "charges", "forces"]
 
-    def __init__(self, model: str | nn.Module = "aimnet2", nb_threshold: int = 320):
+    def __init__(self, model: str | nn.Module = "aimnet2", nb_threshold: int = 320, compile_mode: bool = False):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self._compile_mode = compile_mode
+        self._model_name: str | None = None
+
+        if compile_mode:
+            if not torch.cuda.is_available():
+                raise ValueError("compile_mode requires CUDA")
+            if not isinstance(model, str):
+                raise ValueError("compile_mode requires model name (str), not nn.Module")
+
         if isinstance(model, str):
+            self._model_name = model
             p = get_model_path(model)
-            self.model = torch.jit.load(p, map_location=self.device)
+            jit_model = torch.jit.load(p, map_location=self.device)
+
+            if compile_mode:
+                # Build native PyTorch model for torch.compile
+                self.model = self._build_compiled_model(model, jit_model)
+            else:
+                self.model = jit_model
         elif isinstance(model, nn.Module):
             self.model = model.to(self.device)
         else:
@@ -57,6 +75,44 @@ class AIMNet2Calculator:
             self._coulomb_method = coul_methods.pop()
         else:
             self._coulomb_method = None
+
+    def _build_compiled_model(self, model_name: str, jit_model: nn.Module) -> nn.Module:
+        """Build a native PyTorch model for torch.compile.
+
+        This loads the YAML definition, builds a native model, copies weights
+        from the JIT model, enables compile mode, and applies torch.compile.
+
+        Args:
+            model_name: Name of the model
+            jit_model: The loaded JIT model to copy weights from
+
+        Returns:
+            Compiled native PyTorch model
+        """
+        # Get YAML definition path
+        yaml_path = get_model_definition_path(model_name)
+
+        # Build native model from YAML
+        native_model: nn.Module = build_module(yaml_path)  # type: ignore[assignment]
+        native_model = native_model.to(self.device)
+
+        # Copy weights from JIT model to native model
+        jit_state = jit_model.state_dict()
+        native_model.load_state_dict(jit_state)
+
+        # Enable compile mode (fixed nb_mode=0)
+        if hasattr(native_model, "enable_compile_mode"):
+            native_model.enable_compile_mode(nb_mode=0)
+
+        # Apply torch.compile with CUDA graphs
+        native_model.eval()
+        compiled_model = torch.compile(
+            native_model,
+            fullgraph=True,
+            options={"triton.cudagraphs": True},
+        )
+
+        return compiled_model
 
     def __call__(self, *args, **kwargs):
         return self.eval(*args, **kwargs)
@@ -84,14 +140,32 @@ class AIMNet2Calculator:
         if hessian and "mol_idx" in data and data["mol_idx"][-1] > 0:
             raise NotImplementedError("Hessian calculation is not supported for multiple molecules")
         data = self.set_grad_tensors(data, forces=forces, stress=stress, hessian=hessian)
-        with torch.jit.optimized_execution(False):  # type: ignore
+        if self._compile_mode:
+            # For compiled model, run directly
             data = self.model(data)
+        else:
+            with torch.jit.optimized_execution(False):  # type: ignore
+                data = self.model(data)
         data = self.get_derivatives(data, forces=forces, stress=stress, hessian=hessian)
         data = self.process_output(data)
         return data
 
     def prepare_input(self, data: dict[str, Any]) -> dict[str, Tensor]:
         data = self.to_input_tensors(data)
+
+        if self._compile_mode:
+            # Compile mode requires batch dim and nb_mode=0 (dense)
+            if data.get("cell") is not None:
+                raise NotImplementedError("PBC is not supported in compile mode")
+            # Ensure batch dimension for compile mode
+            if data["coord"].ndim == 2:
+                for k in ("coord", "numbers"):
+                    data[k] = data[k].unsqueeze(0)
+                data["charge"] = data["charge"].reshape(1)
+                if "mult" in data:
+                    data["mult"] = data["mult"].reshape(1)
+            return data
+
         data = self.mol_flatten(data)
         if data.get("cell") is not None:
             if data["mol_idx"][-1] > 0:
@@ -105,6 +179,15 @@ class AIMNet2Calculator:
         return data
 
     def process_output(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+        if self._compile_mode:
+            # In compile mode, remove batch dim if we added it
+            if data["coord"].ndim == 3 and data["coord"].shape[0] == 1:
+                for k in self.atom_feature_keys:
+                    if k in data:
+                        data[k] = data[k].squeeze(0)
+            data = self.keep_only(data)
+            return data
+
         if data["coord"].ndim == 2:
             data = self.unpad_output(data)
         data = self.mol_unflatten(data)

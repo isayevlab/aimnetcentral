@@ -49,6 +49,42 @@ def get_model_path(s: str) -> str:
     return s
 
 
+def get_model_definition_path(model_name: str) -> str:
+    """Get the YAML definition file path for a model name.
+
+    This maps model names to their architecture definition YAML files,
+    which are needed for torch.compile (requires un-jitted model).
+
+    Args:
+        model_name: Model name or alias from the registry
+
+    Returns:
+        Path to the YAML model definition file
+    """
+    model_registry = load_model_registry()
+
+    # Resolve alias first
+    if model_name in model_registry.get("aliases", {}):
+        model_name = model_registry["aliases"][model_name]
+
+    # Determine which YAML definition to use based on model name
+    # Models with D3 dispersion use aimnet2_dftd3_wb97m.yaml
+    # Models without D3 (like NSE) use aimnet2.yaml
+    models_dir = os.path.join(os.path.dirname(__file__), "..", "models")
+
+    if "nse" in model_name.lower():
+        # NSE models don't have D3
+        yaml_file = "aimnet2.yaml"
+    elif "d3" in model_name.lower() or "pd" in model_name.lower():
+        # D3 and Pd models include DFTD3
+        yaml_file = "aimnet2_dftd3_wb97m.yaml"
+    else:
+        # Default to D3 version for standard aimnet2 models
+        yaml_file = "aimnet2_dftd3_wb97m.yaml"
+
+    return os.path.join(models_dir, yaml_file)
+
+
 @click.command(short_help="Clear assets directory.")
 def clear_assets():
     from glob import glob

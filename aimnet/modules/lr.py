@@ -15,6 +15,10 @@ class LRCoulomb(nn.Module):
         dsf_rc: float = 15.0,
     ):
         super().__init__()
+        # Compile mode attributes
+        self._compile_mode: bool = False
+        self._compile_nb_mode: int = -1
+
         self.key_in = key_in
         self.key_out = key_out
         self._factor = constants.half_Hartree * constants.Bohr
@@ -27,38 +31,41 @@ class LRCoulomb(nn.Module):
             raise ValueError(f"Unknown method {method}")
 
     def coul_simple(self, data: dict[str, Tensor]) -> Tensor:
-        data = ops.lazy_calc_dij_lr(data)
+        compile_nb = self._compile_nb_mode if self._compile_mode else -1
+        data = ops.lazy_calc_dij_lr(data, compile_nb_mode=compile_nb)
         d_ij = data["d_ij_lr"]
         q = data[self.key_in]
-        q_i, q_j = nbops.get_ij(q, data, suffix="_lr")
+        q_i, q_j = nbops.get_ij(q, data, suffix="_lr", compile_nb_mode=compile_nb)
         q_ij = q_i * q_j
         fc = 1.0 - ops.exp_cutoff(d_ij, self.rc)
         e_ij = fc * q_ij / d_ij
         e_ij = nbops.mask_ij_(e_ij, data, 0.0, suffix="_lr")
         e_i = e_ij.sum(-1)
-        e = self._factor * nbops.mol_sum(e_i, data)
+        e = self._factor * nbops.mol_sum(e_i, data, compile_nb_mode=compile_nb)
         return e
 
     def coul_simple_sr(self, data: dict[str, Tensor]) -> Tensor:
+        compile_nb = self._compile_nb_mode if self._compile_mode else -1
         d_ij = data["d_ij"]
         q = data[self.key_in]
-        q_i, q_j = nbops.get_ij(q, data)
+        q_i, q_j = nbops.get_ij(q, data, compile_nb_mode=compile_nb)
         q_ij = q_i * q_j
         fc = ops.exp_cutoff(d_ij, self.rc)
         e_ij = fc * q_ij / d_ij
         e_ij = nbops.mask_ij_(e_ij, data, 0.0)
         e_i = e_ij.sum(-1)
-        e = self._factor * nbops.mol_sum(e_i, data)
+        e = self._factor * nbops.mol_sum(e_i, data, compile_nb_mode=compile_nb)
         return e
 
     def coul_dsf(self, data: dict[str, Tensor]) -> Tensor:
-        data = ops.lazy_calc_dij_lr(data)
+        compile_nb = self._compile_nb_mode if self._compile_mode else -1
+        data = ops.lazy_calc_dij_lr(data, compile_nb_mode=compile_nb)
         d_ij = data["d_ij_lr"]
         q = data[self.key_in]
-        q_i, q_j = nbops.get_ij(q, data, suffix="_lr")
+        q_i, q_j = nbops.get_ij(q, data, suffix="_lr", compile_nb_mode=compile_nb)
         J = ops.coulomb_matrix_dsf(d_ij, self.dsf_rc, self.dsf_alpha, data)
         e = (q_i * q_j * J).sum(-1)
-        e = self._factor * nbops.mol_sum(e, data)
+        e = self._factor * nbops.mol_sum(e, data, compile_nb_mode=compile_nb)
         e = e - self.coul_simple_sr(data)
         return e
 
@@ -128,6 +135,10 @@ class D3TS(nn.Module):
 
     def __init__(self, a1: float, a2: float, s8: float, s6: float = 1.0, key_in="disp_param", key_out="energy"):
         super().__init__()
+        # Compile mode attributes
+        self._compile_mode: bool = False
+        self._compile_nb_mode: int = -1
+
         self.register_buffer("r4r2", constants.get_r4r2())
         self.a1 = a1
         self.a2 = a2
@@ -137,8 +148,9 @@ class D3TS(nn.Module):
         self.key_out = key_out
 
     def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+        compile_nb = self._compile_nb_mode if self._compile_mode else -1
         disp_param = data[self.key_in]
-        disp_param_i, disp_param_j = nbops.get_ij(disp_param, data, suffix="_lr")
+        disp_param_i, disp_param_j = nbops.get_ij(disp_param, data, suffix="_lr", compile_nb_mode=compile_nb)
         c6_i, alpha_i = disp_param_i.unbind(dim=-1)
         c6_j, alpha_j = disp_param_j.unbind(dim=-1)
 
@@ -146,15 +158,15 @@ class D3TS(nn.Module):
         c6ij = 2 * c6_i * c6_j / (c6_i * alpha_j / alpha_i + c6_j * alpha_i / alpha_j).clamp(min=1e-4)
 
         rr = self.r4r2[data["numbers"]]
-        rr_i, rr_j = nbops.get_ij(rr, data, suffix="_lr")
+        rr_i, rr_j = nbops.get_ij(rr, data, suffix="_lr", compile_nb_mode=compile_nb)
         rrij = 3 * rr_i * rr_j
         rrij = nbops.mask_ij_(rrij, data, 1.0, suffix="_lr")
         r0ij = self.a1 * rrij.sqrt() + self.a2
 
-        ops.lazy_calc_dij_lr(data)
+        ops.lazy_calc_dij_lr(data, compile_nb_mode=compile_nb)
         d_ij = data["d_ij_lr"] * constants.Bohr_inv
         e_ij = c6ij * (self.s6 / (d_ij.pow(6) + r0ij.pow(6)) + self.s8 * rrij / (d_ij.pow(8) + r0ij.pow(8)))
-        e = -constants.half_Hartree * nbops.mol_sum(e_ij.sum(-1), data)
+        e = -constants.half_Hartree * nbops.mol_sum(e_ij.sum(-1), data, compile_nb_mode=compile_nb)
 
         if self.key_out in data:
             data[self.key_out] = data[self.key_out] + e
@@ -171,6 +183,10 @@ class DFTD3(nn.Module):
 
     def __init__(self, s8: float, a1: float, a2: float, s6: float = 1.0, key_out="energy"):
         super().__init__()
+        # Compile mode attributes
+        self._compile_mode: bool = False
+        self._compile_nb_mode: int = -1
+
         self.key_out = key_out
         # BJ damping parameters
         self.s6 = s6
@@ -191,21 +207,22 @@ class DFTD3(nn.Module):
         self.load_state_dict(sd)
 
     def _calc_c6ij(self, data: dict[str, Tensor]) -> Tensor:
+        compile_nb = self._compile_nb_mode if self._compile_mode else -1
         # CN part
         # short range for CN
         # d_ij = data["d_ij"] * constants.Bohr_inv
-        data = ops.lazy_calc_dij_lr(data)
+        data = ops.lazy_calc_dij_lr(data, compile_nb_mode=compile_nb)
         d_ij = data["d_ij_lr"] * constants.Bohr_inv
 
         numbers = data["numbers"]
-        numbers_i, numbers_j = nbops.get_ij(numbers, data, suffix="_lr")
-        rcov_i, rcov_j = nbops.get_ij(self.rcov[numbers], data, suffix="_lr")
+        numbers_i, numbers_j = nbops.get_ij(numbers, data, suffix="_lr", compile_nb_mode=compile_nb)
+        rcov_i, rcov_j = nbops.get_ij(self.rcov[numbers], data, suffix="_lr", compile_nb_mode=compile_nb)
         rcov_ij = rcov_i + rcov_j
         cn_ij = 1.0 / (1.0 + torch.exp(self.k1 * (rcov_ij / d_ij - 1.0)))
         cn_ij = nbops.mask_ij_(cn_ij, data, 0.0, suffix="_lr")
         cn = cn_ij.sum(-1)
         cn = torch.clamp(cn, max=self.cnmax[numbers]).unsqueeze(-1).unsqueeze(-1)
-        cn_i, cn_j = nbops.get_ij(cn, data, suffix="_lr")
+        cn_i, cn_j = nbops.get_ij(cn, data, suffix="_lr", compile_nb_mode=compile_nb)
         c6ab = self.c6ab[numbers_i, numbers_j]
         c6ref, cnref_i, cnref_j = torch.unbind(c6ab, dim=-1)
         c6ref = nbops.mask_ij_(c6ref, data, 0.0, suffix="_lr")
@@ -218,18 +235,19 @@ class DFTD3(nn.Module):
         return c6_ij
 
     def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+        compile_nb = self._compile_nb_mode if self._compile_mode else -1
         c6ij = self._calc_c6ij(data)
 
         rr = self.r4r2[data["numbers"]]
-        rr_i, rr_j = nbops.get_ij(rr, data, suffix="_lr")
+        rr_i, rr_j = nbops.get_ij(rr, data, suffix="_lr", compile_nb_mode=compile_nb)
         rrij = 3 * rr_i * rr_j
         rrij = nbops.mask_ij_(rrij, data, 1.0, suffix="_lr")
         r0ij = self.a1 * rrij.sqrt() + self.a2
 
-        ops.lazy_calc_dij_lr(data)
+        ops.lazy_calc_dij_lr(data, compile_nb_mode=compile_nb)
         d_ij = data["d_ij_lr"] * constants.Bohr_inv
         e_ij = c6ij * (self.s6 / (d_ij.pow(6) + r0ij.pow(6)) + self.s8 * rrij / (d_ij.pow(8) + r0ij.pow(8)))
-        e = -constants.half_Hartree * nbops.mol_sum(e_ij.sum(-1), data)
+        e = -constants.half_Hartree * nbops.mol_sum(e_ij.sum(-1), data, compile_nb_mode=compile_nb)
 
         if self.key_out in data:
             data[self.key_out] = data[self.key_out] + e
