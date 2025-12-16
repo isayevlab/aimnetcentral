@@ -24,4 +24,3 @@ The main entry points for using AIMNet2:
 ```bash
 aimnet --help
 ```
-

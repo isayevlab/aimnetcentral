@@ -13,4 +13,3 @@ Neural network modules and model components.
 ## Base Classes
 
 ::: aimnet.models.base
-

@@ -13,7 +13,7 @@ The core calculator for running AIMNet2 inference.
 ASE calculator interface for AIMNet2.
 
 !!! note
-    Requires the `ase` extra: `pip install aimnet[ase]`
+Requires the `ase` extra: `pip install aimnet[ase]`
 
 ::: aimnet.calculators.aimnet2ase.AIMNet2ASE
 
@@ -22,7 +22,7 @@ ASE calculator interface for AIMNet2.
 PySisyphus calculator interface for AIMNet2.
 
 !!! note
-    Requires the `pysis` extra: `pip install aimnet[pysis]`
+Requires the `pysis` extra: `pip install aimnet[pysis]`
 
 ::: aimnet.calculators.aimnet2pysis.AIMNet2Pysis
 
@@ -31,4 +31,3 @@ PySisyphus calculator interface for AIMNet2.
 Utilities for loading pre-trained models.
 
 ::: aimnet.calculators.model_registry
-
