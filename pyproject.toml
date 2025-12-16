@@ -33,7 +33,7 @@ dynamic = ["version"]
 # Minimal core dependencies for inference
 dependencies = [
     "torch>=2.4",
-    "numpy<2.0",
+    "numpy<3.0",
     "numba>=0.60.0",
     "requests>=2.32.3",
     "click>=8.1.7",
