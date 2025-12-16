@@ -1,6 +1,7 @@
 import os
+from collections.abc import Callable, Sequence
 from glob import glob
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 import h5py
 import numpy as np
@@ -23,12 +24,12 @@ class DataGroup:
 
     def __init__(
         self,
-        data: Optional[str | Dict[str, np.ndarray] | h5py.Group] = None,
-        keys: Optional[List[str]] = None,
-        shard: Optional[Tuple[int, int]] = None,
+        data: str | dict[str, np.ndarray] | h5py.Group | None = None,
+        keys: list[str] | None = None,
+        shard: tuple[int, int] | None = None,
     ):
         # main container for data
-        self._data: Dict[str, np.ndarray] = {}
+        self._data: dict[str, np.ndarray] = {}
 
         if data is None:
             data = {}
@@ -184,13 +185,13 @@ class DataGroup:
 class SizeGroupedDataset:
     def __init__(
         self,
-        data: Optional[str | List[str] | Dict[int, Dict[str, np.ndarray]] | Dict[int, DataGroup]] = None,
-        keys: Optional[List[str]] = None,
-        shard: Optional[Tuple[int, int]] = None,
+        data: str | list[str] | dict[int, dict[str, np.ndarray]] | dict[int, DataGroup] | None = None,
+        keys: list[str] | None = None,
+        shard: tuple[int, int] | None = None,
     ):
         # main containers
-        self._data: Dict[int, DataGroup] = {}
-        self._meta: Dict[str, str] = {}
+        self._data: dict[int, DataGroup] = {}
+        self._meta: dict[str, str] = {}
 
         # load data
         if isinstance(data, str):
@@ -203,17 +204,17 @@ class SizeGroupedDataset:
         elif isinstance(data, dict):
             self.load_dict(data)
         self.loader_mode = False
-        self.x: List[str] = []
-        self.y: List[str] = []
+        self.x: list[str] = []
+        self.y: list[str] = []
 
-    def load_datadir(self, path, keys=None, shard: Optional[Tuple[int, int]] = None):
+    def load_datadir(self, path, keys=None, shard: tuple[int, int] | None = None):
         if not os.path.isdir(path):
             raise FileNotFoundError(f"{path} does not exist or not a directory.")
         for f in glob(os.path.join(path, "???.npz")):
             k = int(os.path.basename(f)[:3])
             self[k] = DataGroup(f, keys=keys, shard=shard)
 
-    def load_files(self, files, keys=None, shard: Optional[Tuple[int, int]] = None):
+    def load_files(self, files, keys=None, shard: tuple[int, int] | None = None):
         for fil in files:
             if not os.path.isfile(fil):
                 raise FileNotFoundError(f"{fil} does not exist or not a file.")
@@ -224,27 +225,27 @@ class SizeGroupedDataset:
         for k, v in data.items():
             self[k] = DataGroup(v, keys=keys)
 
-    def load_h5(self, data, keys=None, shard: Optional[Tuple[int, int]] = None):
+    def load_h5(self, data, keys=None, shard: tuple[int, int] | None = None):
         with h5py.File(data, "r") as f:
             for k, g in f.items():
                 k = int(k)
                 self[k] = DataGroup(g, keys=keys, shard=shard)
             self._meta = dict(f.attrs)  # type: ignore[attr-defined]
 
-    def keys(self) -> List[int]:
+    def keys(self) -> list[int]:
         return sorted(self._data.keys())
 
-    def values(self) -> List:
+    def values(self) -> list:
         return [self[k] for k in self.keys()]
 
-    def items(self) -> List[Tuple[int, Any]]:
+    def items(self) -> list[tuple[int, Any]]:
         return [(k, self[k]) for k in self.keys()]
 
     def datakeys(self):
         return next(iter(self._data.values())).keys() if self._data else set()
 
     @property
-    def groups(self) -> List[DataGroup]:
+    def groups(self) -> list[DataGroup]:
         return self.values()
 
     def __len__(self):
@@ -259,7 +260,7 @@ class SizeGroupedDataset:
             raise ValueError("Wrong set of data keys.")
         self._data[key] = value
 
-    def __getitem__(self, item: int | Tuple[int, Sequence]) -> Dict | Tuple[Dict, Dict]:
+    def __getitem__(self, item: int | tuple[int, Sequence]) -> dict | tuple[dict, dict]:
         if isinstance(item, int):
             ret = self._data[item]
         else:
@@ -332,7 +333,7 @@ class SizeGroupedDataset:
         for v in self.values():
             v.shuffle(seed)
 
-    def save(self, dirname, namemap_fn: Optional[Callable] = None, compress: bool = False):
+    def save(self, dirname, namemap_fn: Callable | None = None, compress: bool = False):
         os.makedirs(dirname, exist_ok=True)
         if namemap_fn is None:
             namemap_fn = lambda x: f"{x:03d}.npz"
@@ -441,7 +442,7 @@ class SizeGroupedDataset:
         for g in self.values():
             yield from g.iter_batched(batch_size, keys)
 
-    def get_loader(self, sampler, x: List[str], y: Optional[List[str]] = None, **loader_kwargs):
+    def get_loader(self, sampler, x: list[str], y: list[str] | None = None, **loader_kwargs):
         self.loader_mode = True
         self.x = x
         self.y = y or []

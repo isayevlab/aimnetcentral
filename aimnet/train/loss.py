@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any, Dict
+from typing import Any
 
 import torch
 from torch import Tensor
@@ -30,7 +30,7 @@ class MTLoss:
                 Dict[str, Tensor]: total loss under key 'loss' and values for individual components.
     """
 
-    def __init__(self, components: Dict[str, Any]):
+    def __init__(self, components: dict[str, Any]):
         w_sum = sum(c["weight"] for c in components.values())
         self.components = {}
         for name, c in components.items():
@@ -38,7 +38,7 @@ class MTLoss:
             fn = partial(get_module(c["fn"]), **kwargs)
             self.components[name] = (fn, c["weight"] / w_sum)
 
-    def __call__(self, y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def __call__(self, y_pred: dict[str, Tensor], y_true: dict[str, Tensor]) -> dict[str, Tensor]:
         loss = {}
         for name, (fn, w) in self.components.items():
             _l = fn(y_pred=y_pred, y_true=y_true)
@@ -48,7 +48,7 @@ class MTLoss:
         return loss
 
 
-def mse_loss_fn(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor], key_pred: str, key_true: str) -> Tensor:
+def mse_loss_fn(y_pred: dict[str, Tensor], y_true: dict[str, Tensor], key_pred: str, key_true: str) -> Tensor:
     """General MSE loss function"""
     x = y_true[key_true]
     y = y_pred[key_pred]
@@ -56,7 +56,7 @@ def mse_loss_fn(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor], key_pred: 
     return loss
 
 
-def peratom_loss_fn(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor], key_pred: str, key_true: str) -> Tensor:
+def peratom_loss_fn(y_pred: dict[str, Tensor], y_true: dict[str, Tensor], key_pred: str, key_true: str) -> Tensor:
     """MSE loss function with per-atom normalization correction.
     Suitable when some of the values are zero both in y_pred and y_true due to padding of inputs.
     """
@@ -73,7 +73,7 @@ def peratom_loss_fn(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor], key_pr
 
 
 def energy_loss_fn(
-    y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor], key_pred: str = "energy", key_true: str = "energy"
+    y_pred: dict[str, Tensor], y_true: dict[str, Tensor], key_pred: str = "energy", key_true: str = "energy"
 ) -> Tensor:
     """MSE loss normalized by the number of atoms."""
     x = y_true[key_true]

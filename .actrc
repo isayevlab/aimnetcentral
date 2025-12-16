@@ -1,0 +1,4 @@
+--container-options --network=host
+-P self-hosted=catthehacker/ubuntu:act-latest
+-P gpu=catthehacker/ubuntu:act-latest
+-P ubuntu-latest=catthehacker/ubuntu:act-latest

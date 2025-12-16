@@ -1,6 +1,7 @@
 import os
+from collections.abc import Callable, Iterator
 from importlib import import_module
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any
 
 import yaml
 from jinja2 import Template
@@ -27,7 +28,7 @@ def get_module(name: str) -> Callable:
     return func  # type: ignore[no-any-return]
 
 
-def get_init_module(name: str, args: Optional[List] = None, kwargs: Optional[Dict] = None) -> Callable:
+def get_init_module(name: str, args: list | None = None, kwargs: dict | None = None) -> Callable:
     """
     Get the initialized module based on the given name, arguments, and keyword arguments.
 
@@ -46,8 +47,8 @@ def get_init_module(name: str, args: Optional[List] = None, kwargs: Optional[Dic
 
 
 def load_yaml(
-    config: Dict[str, Any] | List | str, hyperpar: Optional[Dict[str, Any] | str] = None
-) -> Dict[str, Any] | List:
+    config: dict[str, Any] | list | str, hyperpar: dict[str, Any] | str | None = None
+) -> dict[str, Any] | list:
     """
     Load a YAML configuration file and apply optional hyperparameters.
 
@@ -88,8 +89,8 @@ def load_yaml(
 
 
 def _iter_rec_bottomup(
-    d: Dict[str, Any] | List,
-) -> Iterator[Tuple[Dict[str, Any] | List, str | int, Any]]:
+    d: dict[str, Any] | list,
+) -> Iterator[tuple[dict[str, Any] | list, str | int, Any]]:
     if isinstance(d, list):
         it = enumerate(d)
     elif isinstance(d, dict):
@@ -102,9 +103,7 @@ def _iter_rec_bottomup(
         yield d, k, v
 
 
-def build_module(
-    config: Union[str, Dict, List], hyperpar: Union[str, Dict, None] = None
-) -> Union[List, Dict, Callable]:
+def build_module(config: str | dict | list, hyperpar: str | dict | None = None) -> list | dict | Callable:
     """
     Build a module based on the provided configuration.
     Every (possibly nested) dictionary with a 'class' key will be replaced by an instance initialized with

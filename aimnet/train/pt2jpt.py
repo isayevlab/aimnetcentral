@@ -1,5 +1,4 @@
 import os
-from typing import List, Optional
 
 import click
 import torch
@@ -14,7 +13,7 @@ def set_eval(model: nn.Module) -> torch.nn.Module:
     return model.eval()
 
 
-def add_cutoff(model: nn.Module, cutoff: Optional[float] = 5.0, cutoff_lr: Optional[float] = float("inf")) -> nn.Module:
+def add_cutoff(model: nn.Module, cutoff: float | None = 5.0, cutoff_lr: float | None = float("inf")) -> nn.Module:
     if cutoff is None:
         cutoff = max(v.item() for k, v in model.state_dict().items() if k.endswith("aev.rc_s"))
     model.cutoff = cutoff  # type: ignore[assignment]
@@ -33,7 +32,7 @@ def add_sae_to_shifts(model: nn.Module, sae_file: str) -> nn.Module:
     return model
 
 
-def mask_not_implemented_species(model: nn.Module, species: List[int]) -> nn.Module:
+def mask_not_implemented_species(model: nn.Module, species: list[int]) -> nn.Module:
     weight = model.afv.weight  # type: ignore
     for i in range(1, weight.shape[0]):  # type: ignore
         if i not in species:

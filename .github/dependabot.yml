@@ -1,0 +1,25 @@
+# Dependabot configuration for automated dependency updates
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+version: 2
+updates:
+    # Python dependencies (pip ecosystem)
+    - package-ecosystem: "pip"
+      directory: "/"
+      schedule:
+          interval: "weekly"
+          day: "monday"
+      open-pull-requests-limit: 5
+      labels:
+          - "dependencies"
+          - "python"
+
+    # GitHub Actions versions
+    - package-ecosystem: "github-actions"
+      directory: "/"
+      schedule:
+          interval: "monthly"
+      open-pull-requests-limit: 3
+      labels:
+          - "dependencies"
+          - "ci"
+

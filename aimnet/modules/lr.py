@@ -1,5 +1,3 @@
-from typing import Dict, Optional
-
 import torch
 from torch import Tensor, nn
 
@@ -28,7 +26,7 @@ class LRCoulomb(nn.Module):
         else:
             raise ValueError(f"Unknown method {method}")
 
-    def coul_simple(self, data: Dict[str, Tensor]) -> Tensor:
+    def coul_simple(self, data: dict[str, Tensor]) -> Tensor:
         data = ops.lazy_calc_dij_lr(data)
         d_ij = data["d_ij_lr"]
         q = data[self.key_in]
@@ -41,7 +39,7 @@ class LRCoulomb(nn.Module):
         e = self._factor * nbops.mol_sum(e_i, data)
         return e
 
-    def coul_simple_sr(self, data: Dict[str, Tensor]) -> Tensor:
+    def coul_simple_sr(self, data: dict[str, Tensor]) -> Tensor:
         d_ij = data["d_ij"]
         q = data[self.key_in]
         q_i, q_j = nbops.get_ij(q, data)
@@ -53,7 +51,7 @@ class LRCoulomb(nn.Module):
         e = self._factor * nbops.mol_sum(e_i, data)
         return e
 
-    def coul_dsf(self, data: Dict[str, Tensor]) -> Tensor:
+    def coul_dsf(self, data: dict[str, Tensor]) -> Tensor:
         data = ops.lazy_calc_dij_lr(data)
         d_ij = data["d_ij_lr"]
         q = data[self.key_in]
@@ -64,14 +62,14 @@ class LRCoulomb(nn.Module):
         e = e - self.coul_simple_sr(data)
         return e
 
-    def coul_ewald(self, data: Dict[str, Tensor]) -> Tensor:
+    def coul_ewald(self, data: dict[str, Tensor]) -> Tensor:
         J = ops.coulomb_matrix_ewald(data["coord"], data["cell"])
         q_i, q_j = data["charges"].unsqueeze(-1), data["charges"].unsqueeze(-2)
         e = self._factor * (q_i * q_j * J).flatten(-2, -1).sum(-1)
         e = e - self.coul_simple_sr(data)
         return e
 
-    def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         if self.method == "simple":
             e = self.coul_simple(data)
         elif self.method == "dsf":
@@ -90,18 +88,15 @@ class LRCoulomb(nn.Module):
 class DispParam(nn.Module):
     def __init__(
         self,
-        ref_c6: Optional[Dict[int, Tensor] | Tensor] = None,
-        ref_alpha: Optional[Dict[int, Tensor] | Tensor] = None,
-        ptfile: Optional[str] = None,
+        ref_c6: dict[int, Tensor] | Tensor | None = None,
+        ref_alpha: dict[int, Tensor] | Tensor | None = None,
+        ptfile: str | None = None,
         key_in: str = "disp_param",
         key_out: str = "disp_param",
     ):
         super().__init__()
-        if (
-            ptfile is None
-            and (ref_c6 is None or ref_alpha is None)
-            or ptfile is not None
-            and (ref_c6 is not None or ref_alpha is not None)
+        if (ptfile is None and (ref_c6 is None or ref_alpha is None)) or (
+            ptfile is not None and (ref_c6 is not None or ref_alpha is not None)
         ):
             raise ValueError("Either ptfile or ref_c6 and ref_alpha should be supplied.")
         # load data
@@ -120,7 +115,7 @@ class DispParam(nn.Module):
         self.key_in = key_in
         self.key_out = key_out
 
-    def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         disp_param_mult = data[self.key_in].clamp(min=-4, max=4).exp()
         disp_param = self.disp_param0[data["numbers"]]
         vals = disp_param * disp_param_mult
@@ -141,7 +136,7 @@ class D3TS(nn.Module):
         self.key_in = key_in
         self.key_out = key_out
 
-    def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         disp_param = data[self.key_in]
         disp_param_i, disp_param_j = nbops.get_ij(disp_param, data, suffix="_lr")
         c6_i, alpha_i = disp_param_i.unbind(dim=-1)
@@ -195,7 +190,7 @@ class DFTD3(nn.Module):
         sd = constants.get_dftd3_param()
         self.load_state_dict(sd)
 
-    def _calc_c6ij(self, data: Dict[str, Tensor]) -> Tensor:
+    def _calc_c6ij(self, data: dict[str, Tensor]) -> Tensor:
         # CN part
         # short range for CN
         # d_ij = data["d_ij"] * constants.Bohr_inv
@@ -222,7 +217,7 @@ class DFTD3(nn.Module):
         c6_ij = z / w.clamp(min=1e-5)
         return c6_ij
 
-    def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         c6ij = self._calc_c6ij(data)
 
         rr = self.r4r2[data["numbers"]]

@@ -1,22 +1,59 @@
 repos:
     - repo: https://github.com/pre-commit/pre-commit-hooks
-      rev: "v4.4.0"
+      rev: v4.5.0
       hooks:
+          - id: check-added-large-files
+            args: [--maxkb=10000]
           - id: check-case-conflict
+          - id: check-json
           - id: check-merge-conflict
           - id: check-toml
           - id: check-yaml
+          - id: debug-statements
           - id: end-of-file-fixer
           - id: trailing-whitespace
 
-    - repo: https://github.com/astral-sh/ruff-pre-commit
-      rev: "v0.5.2"
+    - repo: https://github.com/codespell-project/codespell
+      rev: v2.2.6
       hooks:
-          - id: ruff
-            args: [--exit-non-zero-on-fix]
+          - id: codespell
+            args: [--skip, "*.lock,*.yaml,*.pt,*.cif"]
+            exclude: ^(uv\.lock|examples/)$
+
+    - repo: https://github.com/asottile/pyupgrade
+      rev: v3.15.2
+      hooks:
+          - id: pyupgrade
+            args: [--py311-plus]
+
+    - repo: https://github.com/astral-sh/ruff-pre-commit
+      rev: v0.11.13
+      hooks:
+          - id: ruff-check
+            args: [--fix]
+            types_or: [python, pyi]
           - id: ruff-format
+            types_or: [python, pyi]
+
+    - repo: https://github.com/igorshubovych/markdownlint-cli
+      rev: v0.35.0
+      hooks:
+          - id: markdownlint
+            args:
+                - --disable=MD013 # Line length
+                - --disable=MD024 # Multiple headers with same content
+                - --disable=MD025 # Multiple top-level headings
+                - --disable=MD026 # Trailing punctuation in heading
+                - --disable=MD029 # Ordered list item prefix
+                - --disable=MD031 # Blanks around fences
+                - --disable=MD032 # Blanks around lists
+                - --disable=MD034 # Bare URL
+                - --disable=MD036 # Emphasis as heading
+                - --disable=MD040 # Fenced code language
+                - --disable=MD041 # First line heading
+                - --disable=MD014 # Dollar sign before commands
 
     - repo: https://github.com/pre-commit/mirrors-prettier
-      rev: "v3.0.3"
+      rev: v3.0.3
       hooks:
           - id: prettier

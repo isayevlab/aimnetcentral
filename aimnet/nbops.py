@@ -1,10 +1,8 @@
-from typing import Dict, Tuple
-
 import torch
 from torch import Tensor
 
 
-def set_nb_mode(data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+def set_nb_mode(data: dict[str, Tensor]) -> dict[str, Tensor]:
     """Logic to guess and set the neighbor model."""
     if "nbmat" in data:
         if data["nbmat"].ndim == 2:
@@ -18,12 +16,12 @@ def set_nb_mode(data: Dict[str, Tensor]) -> Dict[str, Tensor]:
     return data
 
 
-def get_nb_mode(data: Dict[str, Tensor]) -> int:
+def get_nb_mode(data: dict[str, Tensor]) -> int:
     """Get the neighbor model."""
     return int(data["_nb_mode"].item())
 
 
-def calc_masks(data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+def calc_masks(data: dict[str, Tensor]) -> dict[str, Tensor]:
     """Calculate neighbor masks"""
     nb_mode = get_nb_mode(data)
     if nb_mode == 0:
@@ -69,7 +67,7 @@ def calc_masks(data: Dict[str, Tensor]) -> Dict[str, Tensor]:
 
 def mask_ij_(
     x: Tensor,
-    data: Dict[str, Tensor],
+    data: dict[str, Tensor],
     mask_value: float = 0.0,
     inplace: bool = True,
     suffix: str = "",
@@ -84,7 +82,7 @@ def mask_ij_(
     return x
 
 
-def mask_i_(x: Tensor, data: Dict[str, Tensor], mask_value: float = 0.0, inplace: bool = True) -> Tensor:
+def mask_i_(x: Tensor, data: dict[str, Tensor], mask_value: float = 0.0, inplace: bool = True) -> Tensor:
     nb_mode = get_nb_mode(data)
     if nb_mode == 0:
         if data["_input_padded"].item():
@@ -110,7 +108,7 @@ def mask_i_(x: Tensor, data: Dict[str, Tensor], mask_value: float = 0.0, inplace
     return x
 
 
-def get_ij(x: Tensor, data: Dict[str, Tensor], suffix: str = "") -> Tuple[Tensor, Tensor]:
+def get_ij(x: Tensor, data: dict[str, Tensor], suffix: str = "") -> tuple[Tensor, Tensor]:
     nb_mode = get_nb_mode(data)
     if nb_mode == 0:
         x_i = x.unsqueeze(2)
@@ -128,7 +126,7 @@ def get_ij(x: Tensor, data: Dict[str, Tensor], suffix: str = "") -> Tuple[Tensor
     return x_i, x_j
 
 
-def mol_sum(x: Tensor, data: Dict[str, Tensor]) -> Tensor:
+def mol_sum(x: Tensor, data: dict[str, Tensor]) -> Tensor:
     nb_mode = get_nb_mode(data)
     if nb_mode in (0, 2):
         res = x.sum(dim=1)

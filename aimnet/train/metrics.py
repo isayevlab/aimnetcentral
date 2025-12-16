@@ -1,6 +1,5 @@
 import logging
 from collections import defaultdict
-from typing import Dict, List, Tuple
 
 import ignite.distributed as idist
 import numpy as np
@@ -11,7 +10,7 @@ from ignite.metrics.metric import reinit__is_reduced
 from torch import Tensor
 
 
-def regression_stats(pred: Tensor, true: Tensor) -> Dict[str, Tensor]:
+def regression_stats(pred: Tensor, true: Tensor) -> dict[str, Tensor]:
     diff = true - pred
     diff2 = diff.pow(2)
     mae = diff.abs().mean(-1)
@@ -23,7 +22,7 @@ def regression_stats(pred: Tensor, true: Tensor) -> Dict[str, Tensor]:
     return {"mae": mae, "rmse": rmse, "r2": r2}
 
 
-def cat_flatten(y_pred: Tensor, y_true: Tensor) -> Tuple[Tensor, Tensor]:
+def cat_flatten(y_pred: Tensor, y_true: Tensor) -> tuple[Tensor, Tensor]:
     if isinstance(y_true, (list, tuple)):
         y_true = torch.cat([x.view(-1) for x in y_true])
     if isinstance(y_pred, (list, tuple)):
@@ -69,7 +68,7 @@ def calculate_metrics(result, histogram=False, corrplot=False):
         y_pred, y_true = cat_flatten(y_pred, y_true)
         stats = regression_stats(y_pred, y_true)
         npass = stats["mae"].numel()
-        if k.split(".")[-1] in ("energy", "forces"):  # noqa: SIM108
+        if k.split(".")[-1] in ("energy", "forces"):
             f = 23.06  # eV to kcal/mol
         else:
             f = 1.0
@@ -86,7 +85,7 @@ def calculate_metrics(result, histogram=False, corrplot=False):
 
 
 class RegMultiMetric(Metric):
-    def __init__(self, cfg: List[Dict], loss_fn=None):
+    def __init__(self, cfg: list[dict], loss_fn=None):
         super().__init__()
         self.cfg = cfg
         self.loss_fn = loss_fn
@@ -139,7 +138,7 @@ class RegMultiMetric(Metric):
                         loss = loss.item()
                     self.loss[k] += loss * b
 
-    def compute(self) -> Dict[str, float]:
+    def compute(self) -> dict[str, float]:
         if self.samples == 0:
             raise NotComputableError
         # Use custom reduction

@@ -1,7 +1,8 @@
 import logging
 import os
 import re
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from collections.abc import Callable, Sequence
+from typing import Any
 
 import numpy as np
 import omegaconf
@@ -177,7 +178,7 @@ def get_loss(cfg: omegaconf.DictConfig):
     return loss
 
 
-def set_trainable_parameters(model: nn.Module, force_train: List[str], force_no_train: List[str]) -> nn.Module:
+def set_trainable_parameters(model: nn.Module, force_train: list[str], force_no_train: list[str]) -> nn.Module:
     for n, p in model.named_parameters():
         if any(re.search(x, n) for x in force_no_train):
             p.requires_grad_(False)
@@ -214,7 +215,7 @@ def get_metrics(cfg: omegaconf.DictConfig):
     return metrics
 
 
-def train_step(engine: Engine, batch: Sequence[torch.Tensor]) -> Union[Any, Tuple[torch.Tensor]]:
+def train_step(engine: Engine, batch: Sequence[torch.Tensor]) -> Any | tuple[torch.Tensor]:
     global model
     global optimizer
     global prepare_batch
@@ -232,7 +233,7 @@ def train_step(engine: Engine, batch: Sequence[torch.Tensor]) -> Union[Any, Tupl
     return loss.item()
 
 
-def val_step(engine: Engine, batch: Sequence[torch.Tensor]) -> Union[Any, Tuple[torch.Tensor]]:
+def val_step(engine: Engine, batch: Sequence[torch.Tensor]) -> Any | tuple[torch.Tensor]:
     global model
     global optimizer
     global prepare_batch
@@ -248,7 +249,7 @@ def val_step(engine: Engine, batch: Sequence[torch.Tensor]) -> Union[Any, Tuple[
     return y_pred, y
 
 
-def prepare_batch(batch: Dict[str, Tensor], device="cuda", non_blocking=True) -> Dict[str, Tensor]:  # noqa: F811
+def prepare_batch(batch: dict[str, Tensor], device="cuda", non_blocking=True) -> dict[str, Tensor]:  # noqa: F811
     for k, v in batch.items():
         batch[k] = v.to(device, non_blocking=non_blocking)
     return batch
@@ -257,11 +258,11 @@ def prepare_batch(batch: Dict[str, Tensor], device="cuda", non_blocking=True) ->
 def default_trainer(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
-    loss_fn: Union[Callable, torch.nn.Module],
-    device: Optional[Union[str, torch.device]] = None,
+    loss_fn: Callable | torch.nn.Module,
+    device: str | torch.device | None = None,
     non_blocking: bool = True,
 ) -> Engine:
-    def _update(engine: Engine, batch: Tuple[Dict[str, Tensor], Dict[str, Tensor]]) -> float:
+    def _update(engine: Engine, batch: tuple[dict[str, Tensor], dict[str, Tensor]]) -> float:
         model.train()
         optimizer.zero_grad()
         x = prepare_batch(batch[0], device=device, non_blocking=non_blocking)  # type: ignore
@@ -278,11 +279,11 @@ def default_trainer(
 
 
 def default_evaluator(
-    model: torch.nn.Module, device: Optional[Union[str, torch.device]] = None, non_blocking: bool = True
+    model: torch.nn.Module, device: str | torch.device | None = None, non_blocking: bool = True
 ) -> Engine:
     def _inference(
-        engine: Engine, batch: Tuple[Dict[str, Tensor], Dict[str, Tensor]]
-    ) -> Tuple[Dict[str, Tensor], Dict[str, Tensor]]:
+        engine: Engine, batch: tuple[dict[str, Tensor], dict[str, Tensor]]
+    ) -> tuple[dict[str, Tensor], dict[str, Tensor]]:
         model.eval()
         x = prepare_batch(batch[0], device=device, non_blocking=non_blocking)  # type: ignore
         y = prepare_batch(batch[1], device=device, non_blocking=non_blocking)  # type: ignore

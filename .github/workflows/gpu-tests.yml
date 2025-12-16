@@ -1,0 +1,39 @@
+name: GPU Tests
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+    workflow_dispatch:
+
+jobs:
+    tests-gpu:
+        runs-on: [self-hosted, gpu]
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - name: Check out
+              uses: actions/checkout@v4
+
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v5
+              with:
+                  enable-cache: true
+
+            - name: Install dependencies
+              run: uv sync --group dev --all-extras
+
+            - name: Verify CUDA availability
+              run: |
+                  uv run python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')"
+
+            - name: Run GPU tests
+              run: uv run pytest tests -m gpu -v
+

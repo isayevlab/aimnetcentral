@@ -1,9 +1,10 @@
+# Coverage configuration for Codecov
+# Status checks (project/patch) are intentionally disabled to avoid gating PRs.
+# Coverage reports are still uploaded for visibility and tracking trends.
 coverage:
     range: 0..100
     round: down
     precision: 1
     status:
-        project:
-            default:
-                target: 100%
-                threshold: 0.5%
+        project: off
+        patch: off

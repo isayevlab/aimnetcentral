@@ -1,5 +1,4 @@
 import math
-from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
@@ -37,12 +36,12 @@ class AEVSV(nn.Module):
         rmin: float = 0.8,
         rc_s: float = 5.0,
         nshifts_s: int = 16,
-        eta_s: Optional[float] = None,
-        rc_v: Optional[float] = None,
-        nshifts_v: Optional[int] = None,
-        eta_v: Optional[float] = None,
-        shifts_s: Optional[List[float]] = None,
-        shifts_v: Optional[List[float]] = None,
+        eta_s: float | None = None,
+        rc_v: float | None = None,
+        nshifts_v: int | None = None,
+        eta_v: float | None = None,
+        shifts_s: list[float] | None = None,
+        shifts_v: list[float] | None = None,
     ):
         super().__init__()
 
@@ -78,17 +77,17 @@ class AEVSV(nn.Module):
             shifts = torch.as_tensor(shifts, dtype=torch.float)
         self.register_parameter("shifts" + mod, nn.Parameter(shifts, requires_grad=False))
 
-    def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         # shapes (..., m) and (..., m, 3)
         d_ij, r_ij = ops.calc_distances(data)
         data["d_ij"] = d_ij
         # shapes (..., nshifts, m) and (..., nshifts, 3, m)
-        u_ij, gs, gv = self._calc_aev(r_ij, d_ij, data)  # pylint: disable=unused-variable
+        u_ij, gs, gv = self._calc_aev(r_ij, d_ij, data)
         # for now, do not save u_ij
         data["gs"], data["gv"] = gs, gv
         return data
 
-    def _calc_aev(self, r_ij: Tensor, d_ij: Tensor, data: Dict[str, Tensor]) -> Tuple[Tensor, Tensor, Tensor]:
+    def _calc_aev(self, r_ij: Tensor, d_ij: Tensor, data: dict[str, Tensor]) -> tuple[Tensor, Tensor, Tensor]:
         fc_ij = ops.cosine_cutoff(d_ij, self.rc_s)  # (..., m)
         fc_ij = nbops.mask_ij_(fc_ij, data, 0.0)
         gs = ops.exp_expand(d_ij, self.shifts_s, self.eta_s) * fc_ij.unsqueeze(
@@ -130,8 +129,8 @@ class ConvSV(nn.Module):
         nchannel: int,
         d2features: bool = False,
         do_vector: bool = True,
-        nshifts_v: Optional[int] = None,
-        ncomb_v: Optional[int] = None,
+        nshifts_v: int | None = None,
+        ncomb_v: int | None = None,
     ):
         super().__init__()
         nshifts_v = nshifts_v or nshifts_s
@@ -151,7 +150,7 @@ class ConvSV(nn.Module):
             n += self.nchannel * self.ncomb_v
         return n
 
-    def forward(self, a: Tensor, gs: Tensor, gv: Optional[Tensor] = None) -> Tensor:
+    def forward(self, a: Tensor, gs: Tensor, gv: Tensor | None = None) -> Tensor:
         avf = []
         if self.d2features:
             avf_s = torch.einsum("...mag,...mg->...ag", a, gs)
@@ -192,7 +191,7 @@ def _init_ahg_one(m: int, n: int):
     ret[0] = y[i]
     mask[i] = False
 
-    # simple maxmin impementation
+    # simple maxmin implementation
     for j in range(1, n):
         mindist, _ = torch.cdist(ret[:j], y).min(dim=0)
         maxidx = torch.argsort(mindist)[mask][-1]

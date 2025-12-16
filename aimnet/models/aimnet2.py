@@ -1,4 +1,4 @@
-from typing import Dict, List, Mapping, Sequence, Tuple, Union
+from collections.abc import Mapping, Sequence
 
 import torch
 from torch import Tensor, nn
@@ -8,17 +8,16 @@ from aimnet.models.base import AIMNet2Base
 from aimnet.modules import AEVSV, MLP, ConvSV, Embedding
 
 
-# pylint: disable=too-many-arguments, too-many-instance-attributes
 class AIMNet2(AIMNet2Base):
     def __init__(
         self,
-        aev: Dict,
+        aev: dict,
         nfeature: int,
         d2features: bool,
         ncomb_v: int,
-        hidden: Tuple[List[int]],
+        hidden: tuple[list[int]],
         aim_size: int,
-        outputs: Union[List[nn.Module], Dict[str, nn.Module]],
+        outputs: list[nn.Module] | dict[str, nn.Module],
         num_charge_channels: int = 1,
     ):
         super().__init__()
@@ -90,7 +89,7 @@ class AIMNet2(AIMNet2Base):
         else:
             raise TypeError("`outputs` is not either list or dict")
 
-    def _preprocess_spin_polarized_charge(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def _preprocess_spin_polarized_charge(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         if "mult" not in data:
             raise ValueError("mult key is required for NSE if two channels for charge are not provided")
         _half_spin = 0.5 * (data["mult"] - 1.0)
@@ -98,13 +97,13 @@ class AIMNet2(AIMNet2Base):
         data["charge"] = torch.stack([_half_q + _half_spin, _half_q - _half_spin], dim=-1)
         return data
 
-    def _postprocess_spin_polarized_charge(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def _postprocess_spin_polarized_charge(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         data["spin_charges"] = data["charges"][..., 0] - data["charges"][..., 1]
         data["charges"] = data["charges"].sum(dim=-1)
         data["charge"] = data["charge"].sum(dim=-1)
         return data
 
-    def _prepare_in_a(self, data: Dict[str, Tensor]) -> Tensor:
+    def _prepare_in_a(self, data: dict[str, Tensor]) -> Tensor:
         a_i, a_j = nbops.get_ij(data["a"], data)
         avf_a = self.conv_a(a_j, data["gs"], data["gv"])
         if self.d2features:
@@ -112,13 +111,13 @@ class AIMNet2(AIMNet2Base):
         _in = torch.cat([a_i.squeeze(-2), avf_a], dim=-1)
         return _in
 
-    def _prepare_in_q(self, data: Dict[str, Tensor]) -> Tensor:
+    def _prepare_in_q(self, data: dict[str, Tensor]) -> Tensor:
         q_i, q_j = nbops.get_ij(data["charges"], data)
         avf_q = self.conv_q(q_j, data["gs"], data["gv"])
         _in = torch.cat([q_i.squeeze(-2), avf_q], dim=-1)
         return _in
 
-    def _update_q(self, data: Dict[str, Tensor], x: Tensor, delta_q: bool = True) -> Dict[str, Tensor]:
+    def _update_q(self, data: dict[str, Tensor], x: Tensor, delta_q: bool = True) -> dict[str, Tensor]:
         _q, _f, delta_a = x.split(
             [
                 self.num_charge_channels,
@@ -137,7 +136,7 @@ class AIMNet2(AIMNet2Base):
         data["a"] = data["a"] + delta_a.view_as(data["a"])
         return data
 
-    def forward(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         data = self.prepare_input(data)
 
         # initial features

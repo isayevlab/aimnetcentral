@@ -1,4 +1,4 @@
-from typing import ClassVar, Dict, Final
+from typing import ClassVar, Final
 
 import torch
 from torch import Tensor, nn
@@ -6,7 +6,7 @@ from torch import Tensor, nn
 from aimnet import nbops
 
 
-class AIMNet2Base(nn.Module):  # pylint: disable=abstract-method
+class AIMNet2Base(nn.Module):
     """Base class for AIMNet2 models. Implements pre-processing data:
     converting to right dtype and device, setting nb mode, calculating masks.
     """
@@ -30,16 +30,16 @@ class AIMNet2Base(nn.Module):  # pylint: disable=abstract-method
     def __init__(self):
         super().__init__()
 
-    def _prepare_dtype(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
-        for k, d in zip(self._required_keys, self._required_keys_dtype):
+    def _prepare_dtype(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+        for k, d in zip(self._required_keys, self._required_keys_dtype, strict=False):
             assert k in data, f"Key {k} is required"
             data[k] = data[k].to(d)
-        for k, d in zip(self._optional_keys, self._optional_keys_dtype):
+        for k, d in zip(self._optional_keys, self._optional_keys_dtype, strict=False):
             if k in data:
                 data[k] = data[k].to(d)
         return data
 
-    def prepare_input(self, data: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def prepare_input(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         """Some sommon operations"""
         data = self._prepare_dtype(data)
         data = nbops.set_nb_mode(data)
