@@ -15,6 +15,25 @@
 - Flexible Interfaces: Use AIMNet2 through convenient calculators for popular simulation packages like ASE and PySisyphus.
 - Flexible Long-Range Interactions: Optionally employ the Damped-Shifted Force (DSF) or Ewald summation Coulomb models for accurate calculations in large or periodic systems.
 
+## Requirements
+
+### Python Version
+
+AIMNet2 requires **Python 3.11 or 3.12**.
+
+### GPU Support (Optional)
+
+AIMNet2 works on CPU out of the box. For GPU acceleration:
+
+- **CUDA GPU**: Install PyTorch with CUDA support from [pytorch.org](https://pytorch.org/get-started/locally/)
+- **compile_mode**: Requires CUDA for ~5x MD speedup (see Performance Optimization)
+
+Example PyTorch installation with CUDA 12.4:
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cu124
+```
+
 ## Available Models
 
 | Model                | Alias           | Elements                                      | Description                  |
@@ -35,8 +54,6 @@ Install from GitHub:
 ```bash
 pip install git+https://github.com/isayevlab/aimnetcentral.git
 ```
-
-For non-default pytorch installation (e.g. CUDA on Windows), install pytorch first, see [pytorch.org](https://pytorch.org/).
 
 ### Optional Features
 
