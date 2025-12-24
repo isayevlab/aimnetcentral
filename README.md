@@ -40,6 +40,7 @@ pip install torch --index-url https://download.pytorch.org/whl/cu124
 | -------------------- | --------------- | --------------------------------------------- | ---------------------------- |
 | `aimnet2_wb97m_d3_X` | `aimnet2`       | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | wB97M-D3 (default)           |
 | `aimnet2_b973c_d3_X` | `aimnet2_b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c functional            |
+| `aimnet2_2025_b973c_d3_X` | `aimnet2_b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c + improved intermolecular interactions            |
 | `aimnet2nse_X`       | `aimnet2nse`    | H, C, N, O, F, S, Cl                          | Open-shell chemistry         |
 | `aimnet2-pd_X`       | `aimnet2pd`     | H, C, N, O, F, P, S, Cl, Pd                   | Palladium-containing systems |
 
