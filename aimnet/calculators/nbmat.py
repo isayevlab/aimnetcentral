@@ -9,17 +9,26 @@ class TooManyNeighborsError(Exception):
 
 
 if torch.cuda.is_available():
-    import numba.cuda
+    if torch.version.cuda is None:
+        _numba_cuda_available = False
+        from .nb_kernel_rocm import _nbmat_dual_pbc_rocm, _nbmat_dual_rocm, _nbmat_pbc_rocm, _nbmat_rocm
 
-    if not numba.cuda.is_available():
-        raise ImportError("PyTorch CUDA is available, but Numba CUDA is not available.")
-    _numba_cuda_available = True
-    from .nb_kernel_cuda import _nbmat_cuda, _nbmat_dual_cuda, _nbmat_pbc_cuda, _nbmat_pbc_dual_cuda
+        _kernel_nbmat = _nbmat_rocm
+        _kernel_nbmat_dual = _nbmat_dual_rocm
+        _kernel_nbmat_pbc = _nbmat_pbc_rocm
+        _kernel_nbmat_pbc_dual = _nbmat_dual_pbc_rocm
+    else:
+        import numba.cuda
 
-    _kernel_nbmat = _nbmat_cuda
-    _kernel_nbmat_dual = _nbmat_dual_cuda
-    _kernel_nbmat_pbc = _nbmat_pbc_cuda
-    _kernel_nbmat_pbc_dual = _nbmat_pbc_dual_cuda
+        if not numba.cuda.is_available():
+            raise ImportError("PyTorch CUDA is available, but Numba CUDA is not available.")
+        _numba_cuda_available = True
+        from .nb_kernel_cuda import _nbmat_cuda, _nbmat_dual_cuda, _nbmat_pbc_cuda, _nbmat_pbc_dual_cuda
+
+        _kernel_nbmat = _nbmat_cuda
+        _kernel_nbmat_dual = _nbmat_dual_cuda
+        _kernel_nbmat_pbc = _nbmat_pbc_cuda
+        _kernel_nbmat_pbc_dual = _nbmat_pbc_dual_cuda
 else:
     _numba_cuda_available = False
     from .nb_kernel_cpu import _nbmat_cpu, _nbmat_dual_cpu, _nbmat_dual_pbc_cpu, _nbmat_pbc_cpu
@@ -55,6 +64,8 @@ def calc_nbmat(
         raise ValueError("Numba CUDA is available, but the input tensors are not on CUDA.")
 
     _cuda = device.type == "cuda" and _numba_cuda_available
+    _rocm = device.type == "cuda" and not _numba_cuda_available
+
     _dual_cutoff = cutoffs[1] is not None
     if _dual_cutoff and maxnb[1] is None:
         raise ValueError("maxnb[1] must be specified for dual cutoff.")
@@ -145,6 +156,79 @@ def calc_nbmat(
                     _nbmat1,
                     _nnb1,
                 )
+    elif _rocm:
+        coord = coord.cpu()
+        mol_idx = mol_idx.cpu()
+        mol_end_idx = mol_end_idx.cpu()
+        nnb1 = nnb1.cpu()
+        nbmat1 = nbmat1.cpu()
+        _coord = coord.numpy()
+        _mol_idx = mol_idx.numpy()
+        _mol_end_idx = mol_end_idx.numpy()
+        _nnb1 = nnb1.numpy()
+        _nbmat1 = nbmat1.numpy()
+        if _dual_cutoff:
+            nnb2 = nnb2.cpu()
+            nbmat2 = nbmat2.cpu()
+            _nnb2 = nnb2.numpy()
+            _nbmat2 = nbmat2.numpy()
+        if _pbc:
+            cell = cell.cpu()
+            _cell = cell.numpy()  # type: ignore[union-attr]
+            shifts = shifts.cpu()
+            _shifts = shifts.numpy()
+
+        if _pbc:
+            shifts1 = shifts1.cpu()
+            _shifts1 = shifts1.numpy()
+            if _dual_cutoff:
+                shifts2 = shifts2.cpu()
+                _shifts2 = shifts2.numpy()
+                _kernel_nbmat_pbc_dual(
+                    _coord,
+                    _cell,
+                    cutoffs[0] ** 2,
+                    cutoffs[1] ** 2,  # type: ignore
+                    _shifts,
+                    _nnb1,
+                    _nnb2,
+                    _nbmat1,
+                    _nbmat2,
+                    _shifts1,  # type: ignore
+                    _shifts2,  # type: ignore
+                )  # type: ignore
+            else:
+                _kernel_nbmat_pbc(_coord, _cell, cutoffs[0] ** 2, _shifts, _nnb1, _nbmat1, _shifts1)  # type: ignore
+        else:
+            if _dual_cutoff:
+                _kernel_nbmat_dual(
+                    _coord,
+                    cutoffs[0] ** 2,
+                    cutoffs[1] ** 2,  # type: ignore
+                    _mol_idx,
+                    _mol_end_idx,
+                    _nbmat1,
+                    _nbmat2,
+                    _nnb1,
+                    _nnb2,
+                )  # type: ignore
+            else:
+                _kernel_nbmat(_coord, cutoffs[0] ** 2, _mol_idx, _mol_end_idx, _nbmat1, _nnb1)
+
+        coord = coord.cuda()
+        mol_idx = mol_idx.cuda()
+        mol_end_idx = mol_end_idx.cuda()
+        nnb1 = nnb1.cuda()
+        nbmat1 = nbmat1.cuda()
+        if _dual_cutoff:
+            nnb2 = nnb2.cuda()
+            nbmat2 = nbmat2.cuda()
+        if _pbc:
+            cell = cell.cuda()
+            shifts = shifts.cuda()
+            shifts1 = shifts1.cuda()
+            if _dual_cutoff:
+                shifts2 = shifts2.cuda()
 
     else:
         _coord = coord.numpy()
