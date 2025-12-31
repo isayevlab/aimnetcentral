@@ -36,4 +36,3 @@ jobs:
 
             - name: Run GPU tests
               run: uv run pytest tests -m gpu -v
-
