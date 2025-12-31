@@ -8,6 +8,9 @@ class TooManyNeighborsError(Exception):
     pass
 
 
+# Always import CPU kernels
+from .nb_kernel_cpu import _nbmat_cpu, _nbmat_dual_cpu, _nbmat_dual_pbc_cpu, _nbmat_pbc_cpu
+
 if torch.cuda.is_available():
     import numba.cuda
 
@@ -15,19 +18,8 @@ if torch.cuda.is_available():
         raise ImportError("PyTorch CUDA is available, but Numba CUDA is not available.")
     _numba_cuda_available = True
     from .nb_kernel_cuda import _nbmat_cuda, _nbmat_dual_cuda, _nbmat_pbc_cuda, _nbmat_pbc_dual_cuda
-
-    _kernel_nbmat = _nbmat_cuda
-    _kernel_nbmat_dual = _nbmat_dual_cuda
-    _kernel_nbmat_pbc = _nbmat_pbc_cuda
-    _kernel_nbmat_pbc_dual = _nbmat_pbc_dual_cuda
 else:
     _numba_cuda_available = False
-    from .nb_kernel_cpu import _nbmat_cpu, _nbmat_dual_cpu, _nbmat_dual_pbc_cpu, _nbmat_pbc_cpu
-
-    _kernel_nbmat = _nbmat_cpu
-    _kernel_nbmat_dual = _nbmat_dual_cpu
-    _kernel_nbmat_pbc = _nbmat_pbc_cpu
-    _kernel_nbmat_pbc_dual = _nbmat_dual_pbc_cpu
 
 
 def calc_nbmat(
@@ -51,10 +43,20 @@ def calc_nbmat(
         _, mol_size = torch.unique(mol_idx, return_counts=True)
         mol_end_idx = mol_size.cumsum(0)
 
-    if _numba_cuda_available and device.type != "cuda":
-        raise ValueError("Numba CUDA is available, but the input tensors are not on CUDA.")
-
     _cuda = device.type == "cuda" and _numba_cuda_available
+
+    # Select appropriate kernels based on device
+    if _cuda:
+        _kernel_nbmat = _nbmat_cuda
+        _kernel_nbmat_dual = _nbmat_dual_cuda
+        _kernel_nbmat_pbc = _nbmat_pbc_cuda
+        _kernel_nbmat_pbc_dual = _nbmat_pbc_dual_cuda
+    else:
+        _kernel_nbmat = _nbmat_cpu
+        _kernel_nbmat_dual = _nbmat_dual_cpu
+        _kernel_nbmat_pbc = _nbmat_pbc_cpu
+        _kernel_nbmat_pbc_dual = _nbmat_dual_pbc_cpu
+
     _dual_cutoff = cutoffs[1] is not None
     if _dual_cutoff and maxnb[1] is None:
         raise ValueError("maxnb[1] must be specified for dual cutoff.")
