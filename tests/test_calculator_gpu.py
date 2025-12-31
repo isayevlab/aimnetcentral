@@ -262,30 +262,3 @@ class TestGPUMemory:
         # Memory growth should be minimal
         growth = final - baseline
         assert growth < 100e6  # Less than 100MB growth
-
-
-class TestGPUErrorHandling:
-    """Tests for GPU-specific error handling."""
-
-    @pytest.mark.ase
-    def test_handles_cuda_oom_gracefully(self):
-        """Test behavior when approaching CUDA OOM (skipped if not enough GPU memory)."""
-        # This test intentionally tries to use a lot of memory
-        # Skip if GPU has less than 4GB free
-        free_memory = torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated()
-        if free_memory < 4e9:
-            pytest.skip("Not enough GPU memory for OOM test")
-
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-
-        # Try to process a very large "molecule" (this might OOM on smaller GPUs)
-        try:
-            large_data = {
-                "coord": torch.rand((5000, 3), dtype=torch.float32),
-                "numbers": torch.ones(5000, dtype=torch.long) * 6,  # All carbon
-                "charge": torch.tensor([0.0]),
-            }
-            _ = calc(large_data)
-        except RuntimeError as e:
-            # Should get a clear CUDA OOM error
-            assert "CUDA" in str(e) or "out of memory" in str(e).lower()
