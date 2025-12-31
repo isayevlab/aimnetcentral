@@ -69,7 +69,7 @@ def jitcompile(model: str, pt: str, jpt: str, sae=None, species=None, no_lr=Fals
         numbers = list(load_yaml(sae).keys())  # type: ignore[union-attr]
     if numbers:
         model = mask_not_implemented_species(model, numbers)  # type: ignore[call-arg]
-        model.register_buffer("impemented_species", torch.tensor(numbers, dtype=torch.int64))
+        model.register_buffer("implemented_species", torch.tensor(numbers, dtype=torch.int64))
     model_jit = torch.jit.script(model)
     model_jit.save(jpt)
 
