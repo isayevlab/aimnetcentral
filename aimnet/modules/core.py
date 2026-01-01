@@ -88,6 +88,10 @@ class AtomicShift(nn.Module):
         reduce_sum=False,
     ):
         super().__init__()
+        # Compile mode attributes
+        self._compile_mode: bool = False
+        self._compile_nb_mode: int = -1
+
         shifts = nn.Embedding(num_types, 1, padding_idx=0, dtype=dtype)
         shifts.weight.requires_grad_(requires_grad)
         self.shifts = shifts
@@ -101,7 +105,8 @@ class AtomicShift(nn.Module):
     def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         shifts = self.shifts(data["numbers"]).squeeze(-1)
         if self.reduce_sum:
-            shifts = nbops.mol_sum(shifts, data)
+            compile_nb = self._compile_nb_mode if self._compile_mode else -1
+            shifts = nbops.mol_sum(shifts, data, compile_nb_mode=compile_nb)
         data[self.key_out] = data[self.key_in] + shifts
         return data
 
@@ -109,6 +114,10 @@ class AtomicShift(nn.Module):
 class AtomicSum(nn.Module):
     def __init__(self, key_in: str, key_out: str):
         super().__init__()
+        # Compile mode attributes
+        self._compile_mode: bool = False
+        self._compile_nb_mode: int = -1
+
         self.key_in = key_in
         self.key_out = key_out
 
@@ -116,13 +125,18 @@ class AtomicSum(nn.Module):
         return f"key_in: {self.key_in}, key_out: {self.key_out}"
 
     def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
-        data[self.key_out] = nbops.mol_sum(data[self.key_in], data)
+        compile_nb = self._compile_nb_mode if self._compile_mode else -1
+        data[self.key_out] = nbops.mol_sum(data[self.key_in], data, compile_nb_mode=compile_nb)
         return data
 
 
 class Output(nn.Module):
     def __init__(self, mlp: dict | nn.Module, n_in: int, n_out: int, key_in: str, key_out: str):
         super().__init__()
+        # Compile mode attributes
+        self._compile_mode: bool = False
+        self._compile_nb_mode: int = -1
+
         self.key_in = key_in
         self.key_out = key_out
         if not isinstance(mlp, nn.Module):
@@ -134,7 +148,8 @@ class Output(nn.Module):
 
     def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         v = self.mlp(data[self.key_in]).squeeze(-1)
-        if data["_input_padded"].item():
+        # In compile mode, skip the .item() check - padding is handled at setup
+        if not self._compile_mode and data["_input_padded"].item():
             v = nbops.mask_i_(v, data, mask_value=0.0)
         data[self.key_out] = v
         return data
