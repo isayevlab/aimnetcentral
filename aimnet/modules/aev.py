@@ -5,14 +5,7 @@ from torch import Tensor, nn
 
 from aimnet import nbops, ops
 
-# Try to import warp kernels - gracefully handle if not available
-try:
-    from aimnet.kernels import conv_sv_2d_sp, is_warp_available
-
-    _WARP_AVAILABLE = is_warp_available()
-except ImportError:
-    conv_sv_2d_sp = None
-    _WARP_AVAILABLE = False
+from aimnet.kernels import conv_sv_2d_sp
 
 
 class AEVSV(nn.Module):
@@ -146,8 +139,6 @@ class ConvSV(nn.Module):
         self.nshifts_s = nshifts_s
         self.nshifts_v = nshifts_v
         self.ncomb_v = ncomb_v
-        # Store warp availability as buffer for TorchScript compatibility
-        self.register_buffer("_use_warp", torch.tensor(_WARP_AVAILABLE), persistent=False)
 
     def output_size(self):
         n = self.nchannel * self.nshifts_s
@@ -159,7 +150,7 @@ class ConvSV(nn.Module):
         g_sv = data["g_sv"]
         mode = nbops.get_nb_mode(data)
         if self.d2features:
-            if mode > 0 and a.device.type == "cuda" and self._use_warp:
+            if mode > 0 and a.device.type == "cuda":
                 avf_sv = conv_sv_2d_sp(a, data["nbmat"], g_sv)  # type: ignore[misc]
             else:
                 avf_sv = torch.einsum("...mag,...mgd->...agd", a.unsqueeze(1), g_sv)

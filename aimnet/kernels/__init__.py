@@ -22,15 +22,7 @@
 
 import torch
 
-# Track warp availability
-_warp_available = False
-
-try:
-    from .conv_sv_2d_sp_wp import conv_sv_2d_sp
-
-    _warp_available = True
-except ImportError:
-    conv_sv_2d_sp = None  # type: ignore
+from .conv_sv_2d_sp_wp import conv_sv_2d_sp
 
 
 def load_ops():
@@ -46,18 +38,10 @@ def load_ops():
     Returns:
         list: Available ops that were registered.
     """
-    global _warp_available
-
     available_ops = []
 
     # Import warp kernels to trigger registration
-    try:
-        from . import conv_sv_2d_sp_wp  # noqa: F401
-
-        _warp_available = True
-    except ImportError as e:
-        print(f"Failed to load warp kernels: {e}")
-        _warp_available = False
+    from . import conv_sv_2d_sp_wp  # noqa: F401
 
     # Verify ops are available
     if hasattr(torch.ops, "aimnet"):
@@ -73,13 +57,7 @@ def load_ops():
     return available_ops
 
 
-def is_warp_available() -> bool:
-    """Check if warp kernels are available."""
-    return _warp_available
-
-
 __all__ = [
     "conv_sv_2d_sp",
-    "is_warp_available",
     "load_ops",
 ]
