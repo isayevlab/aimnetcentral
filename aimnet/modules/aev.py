@@ -5,6 +5,14 @@ from torch import Tensor, nn
 
 from aimnet import nbops, ops
 
+# Try to import warp kernels - gracefully handle if not available
+try:
+    from aimnet.kernels import conv_sv_2d_sp, is_warp_available
+    _WARP_AVAILABLE = is_warp_available()
+except ImportError:
+    conv_sv_2d_sp = None
+    _WARP_AVAILABLE = False
+
 
 class AEVSV(nn.Module):
     """AEV module to expand distances and vectors toneighbors over shifted Gaussian basis functions.
@@ -81,27 +89,21 @@ class AEVSV(nn.Module):
         # shapes (..., m) and (..., m, 3)
         d_ij, r_ij = ops.calc_distances(data)
         data["d_ij"] = d_ij
-        # shapes (..., nshifts, m) and (..., nshifts, 3, m)
-        u_ij, gs, gv = self._calc_aev(r_ij, d_ij, data)
-        # for now, do not save u_ij
-        data["gs"], data["gv"] = gs, gv
+        # shapes (..., m, g, 4) where 4 = 1 scalar + 3 vector
+        g_sv = self._calc_aev(r_ij, d_ij, data)
+        data["g_sv"] = g_sv
         return data
 
-    def _calc_aev(self, r_ij: Tensor, d_ij: Tensor, data: dict[str, Tensor]) -> tuple[Tensor, Tensor, Tensor]:
+    def _calc_aev(self, r_ij: Tensor, d_ij: Tensor, data: dict[str, Tensor]) -> Tensor:
         fc_ij = ops.cosine_cutoff(d_ij, self.rc_s)  # (..., m)
         fc_ij = nbops.mask_ij_(fc_ij, data, 0.0)
-        gs = ops.exp_expand(d_ij, self.shifts_s, self.eta_s) * fc_ij.unsqueeze(
-            -1
-        )  # (..., m, nshifts) * (..., m, 1) -> (..., m, shitfs)
+        # (..., m, nshifts) * (..., m, 1) -> (..., m, shitfs)
+        gs = ops.exp_expand(d_ij, self.shifts_s, self.eta_s) * fc_ij.unsqueeze(-1)
         u_ij = r_ij / d_ij.unsqueeze(-1)  # (..., m, 3) / (..., m, 1) -> (..., m, 3)
-        if self._dual_basis:
-            fc_ij = ops.cosine_cutoff(d_ij, self.rc_v)
-            gsv = ops.exp_expand(d_ij, self.shifts_v, self.eta_v) * fc_ij.unsqueeze(-1)
-            gv = gsv.unsqueeze(-2) * u_ij.unsqueeze(-1)
-        else:
-            # (..., m, 1,  shifts), (..., m, 3, 1) -> (..., m, 3, shifts)
-            gv = gs.unsqueeze(-2) * u_ij.unsqueeze(-1)
-        return u_ij, gs, gv
+        # (..., m, 1, shifts), (..., m, 3, 1) -> (..., m, shifts, 3)
+        gv = gs.unsqueeze(-1) * u_ij.unsqueeze(-2)
+        g_sv = torch.cat([gs.unsqueeze(-1), gv], dim=-1)
+        return g_sv
 
 
 class ConvSV(nn.Module):
@@ -137,7 +139,7 @@ class ConvSV(nn.Module):
         ncomb_v = ncomb_v or nshifts_v
         agh = _init_ahg(nchannel, nshifts_v, ncomb_v)
         self.register_parameter("agh", nn.Parameter(agh, requires_grad=True))
-        self.do_vector = do_vector
+        self.do_vector = True
         self.nchannel = nchannel
         self.d2features = d2features
         self.nshifts_s = nshifts_s
@@ -150,22 +152,23 @@ class ConvSV(nn.Module):
             n += self.nchannel * self.ncomb_v
         return n
 
-    def forward(self, a: Tensor, gs: Tensor, gv: Tensor | None = None) -> Tensor:
-        avf = []
+    def forward(self, data: dict[str, Tensor], a: Tensor) -> Tensor:
+        g_sv = data["g_sv"]
+        mode = nbops.get_nb_mode(data)
         if self.d2features:
-            avf_s = torch.einsum("...mag,...mg->...ag", a, gs)
-        else:
-            avf_s = torch.einsum("...mg,...ma->...ag", gs, a)
-        avf.append(avf_s.flatten(-2, -1))
-        if self.do_vector:
-            assert gv is not None
-            agh = self.agh
-            if self.d2features:
-                avf_v = torch.einsum("...mag,...mdg,agh->...ahd", a, gv, agh)
+            if mode > 0 and a.device.type == "cuda" and _WARP_AVAILABLE:
+                avf_sv = conv_sv_2d_sp(a, data["nbmat"], g_sv)  # type: ignore[misc]
             else:
-                avf_v = torch.einsum("...ma,...mdg,agh->...ahd", a, gv, agh)
-            avf.append(avf_v.pow(2).sum(-1).flatten(-2, -1))
-        return torch.cat(avf, dim=-1)
+                avf_sv = torch.einsum("...mag,...mgd->...agd", a.unsqueeze(1), g_sv)
+        else:
+            if mode > 0:
+                a_j = a.index_select(0, data["nbmat"].flatten()).unflatten(0, data["nbmat"].shape)
+                avf_sv = torch.einsum("...ma,...mgd->...agd", a_j, g_sv)
+            else:
+                avf_sv = torch.einsum("...ma,...mgd->...agd", a.unsqueeze(1), g_sv)
+        avf_s, avf_v = avf_sv.split([1, 3], dim=-1)
+        avf_v = torch.einsum("agh,...agd->...ahd", self.agh, avf_v).pow(2).sum(-1)
+        return torch.cat([avf_s.squeeze(-1).flatten(-2, -1), avf_v.flatten(-2, -1)], dim=-1)
 
 
 def _init_ahg(b: int, m: int, n: int):

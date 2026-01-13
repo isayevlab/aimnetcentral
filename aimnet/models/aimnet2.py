@@ -105,7 +105,7 @@ class AIMNet2(AIMNet2Base):
 
     def _prepare_in_a(self, data: dict[str, Tensor]) -> Tensor:
         a_i, a_j = nbops.get_ij(data["a"], data)
-        avf_a = self.conv_a(a_j, data["gs"], data["gv"])
+        avf_a = self.conv_a(data, data["a"])
         if self.d2features:
             a_i = a_i.flatten(-2, -1)
         _in = torch.cat([a_i.squeeze(-2), avf_a], dim=-1)
@@ -113,7 +113,7 @@ class AIMNet2(AIMNet2Base):
 
     def _prepare_in_q(self, data: dict[str, Tensor]) -> Tensor:
         q_i, q_j = nbops.get_ij(data["charges"], data)
-        avf_q = self.conv_q(q_j, data["gs"], data["gv"])
+        avf_q = self.conv_q(data, data["charges"])
         _in = torch.cat([q_i.squeeze(-2), avf_q], dim=-1)
         return _in
 

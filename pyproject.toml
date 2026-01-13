@@ -34,6 +34,7 @@ dynamic = ["version"]
 dependencies = [
     "torch>=2.4",
     "numpy<3.0",
+    "warp-lang>=1.11",
     "numba>=0.61.0",
     "requests>=2.32.3",
     "click>=8.1.7",
