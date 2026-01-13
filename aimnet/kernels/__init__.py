@@ -18,7 +18,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
-"""AIMNet Kernels Package - GPU-accelerated operations using NVIDIA Warp."""
+"""AIMNet Kernels Package - GPU-accelerated custom operations."""
 
 import torch
 
@@ -34,9 +34,9 @@ except ImportError:
 
 def load_ops():
     """
-    Load and register all custom ops for warp kernels.
+    Load and register all custom ops.
     
-    This function ensures that all warp-based custom operations are properly
+    This function ensures that all custom operations are properly
     registered with PyTorch's operator registry.
     
     Should be called before using any of the custom kernels to ensure
@@ -51,12 +51,11 @@ def load_ops():
     
     # Import warp kernels to trigger registration
     try:
-        from . import conv_sv_2d_sp_wp
+        from . import conv_sv_2d_sp_wp  # noqa: F401
         _warp_available = True
     except ImportError as e:
         print(f"Failed to load warp kernels: {e}")
         _warp_available = False
-        return available_ops
     
     # Verify ops are available
     if hasattr(torch.ops, 'aimnet'):
@@ -66,6 +65,8 @@ def load_ops():
             available_ops.append('aimnet::conv_sv_2d_sp_bwd')
         if hasattr(torch.ops.aimnet, 'conv_sv_2d_sp_bwd_bwd'):
             available_ops.append('aimnet::conv_sv_2d_sp_bwd_bwd')
+        if hasattr(torch.ops.aimnet, 'dftd3_fwd'):
+            available_ops.append('aimnet::dftd3_fwd')
     
     return available_ops
 
