@@ -37,7 +37,6 @@ import torch
 from aimnet import nbops
 from aimnet.modules.lr import DFTD3
 
-
 # =============================================================================
 # Test Data Fixtures
 # =============================================================================
@@ -62,7 +61,7 @@ def setup_dftd3_data_mode_1(device, n_atoms=5):
     torch.manual_seed(42)
     coord = torch.rand((n_atoms + 1, 3), device=device) * 5  # +1 for padding
     # Use common organic elements, padding atom has number 0
-    numbers = torch.tensor([6, 1, 1, 7, 8, 0], device=device)[:n_atoms + 1]
+    numbers = torch.tensor([6, 1, 1, 7, 8, 0], device=device)[: n_atoms + 1]
     mol_idx = torch.cat([torch.zeros(n_atoms, dtype=torch.long, device=device), torch.tensor([0], device=device)])
 
     # Create neighbor matrix (all atoms see each other)
@@ -104,8 +103,8 @@ class TestDFTD3OpRegistration:
         """Test that dftd3_fwd op is registered."""
         from aimnet.modules import ops  # noqa: F401
 
-        assert hasattr(torch.ops, 'aimnet'), "aimnet namespace not found in torch.ops"
-        assert hasattr(torch.ops.aimnet, 'dftd3_fwd'), "dftd3_fwd op not registered"
+        assert hasattr(torch.ops, "aimnet"), "aimnet namespace not found in torch.ops"
+        assert hasattr(torch.ops.aimnet, "dftd3_fwd"), "dftd3_fwd op not registered"
 
     def test_load_ops_includes_dftd3(self, device):
         """Test that load_ops() returns dftd3_fwd."""
@@ -113,7 +112,7 @@ class TestDFTD3OpRegistration:
         from aimnet.modules import ops  # noqa: F401
 
         available_ops = load_ops()
-        assert 'aimnet::dftd3_fwd' in available_ops
+        assert "aimnet::dftd3_fwd" in available_ops
 
 
 # =============================================================================
@@ -368,10 +367,14 @@ class TestDFTD3Batching:
         module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, compute_forces=True).to(device)
 
         # Batch of 2 molecules, 3 atoms each
-        coord = torch.tensor([
-            [[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]],
-            [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
-        ], device=device, requires_grad=True)
+        coord = torch.tensor(
+            [
+                [[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]],
+                [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
+            ],
+            device=device,
+            requires_grad=True,
+        )
         numbers = torch.tensor([[6, 1, 1], [6, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
@@ -399,7 +402,9 @@ class TestDFTD3Autograd:
         """Test that energy computation preserves gradient tracking."""
         module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
 
-        coord = torch.tensor([[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]], device=device, requires_grad=True)
+        coord = torch.tensor(
+            [[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]], device=device, requires_grad=True
+        )
         numbers = torch.tensor([[8, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
@@ -415,7 +420,9 @@ class TestDFTD3Autograd:
         """Test that coord gradients are finite after backward."""
         module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
 
-        coord = torch.tensor([[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]], device=device, requires_grad=True)
+        coord = torch.tensor(
+            [[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]], device=device, requires_grad=True
+        )
         numbers = torch.tensor([[8, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
@@ -478,10 +485,14 @@ class TestDFTD3Autograd:
         """Test gradients work correctly with batched input."""
         module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
 
-        coord = torch.tensor([
-            [[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]],
-            [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
-        ], device=device, requires_grad=True)
+        coord = torch.tensor(
+            [
+                [[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]],
+                [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
+            ],
+            device=device,
+            requires_grad=True,
+        )
         numbers = torch.tensor([[6, 1, 1], [6, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
@@ -499,10 +510,14 @@ class TestDFTD3Autograd:
         """Test gradient when backward is called on single energy."""
         module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
 
-        coord = torch.tensor([
-            [[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]],
-            [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
-        ], device=device, requires_grad=True)
+        coord = torch.tensor(
+            [
+                [[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]],
+                [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
+            ],
+            device=device,
+            requires_grad=True,
+        )
         numbers = torch.tensor([[6, 1, 1], [6, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}

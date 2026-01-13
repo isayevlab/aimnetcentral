@@ -539,12 +539,10 @@ class TestBatchedCells:
         )
 
         # Batched cells (2, 3, 3) - different cell sizes
-        cell = torch.stack(
-            [
-                torch.eye(3, device=device) * 10.0,
-                torch.eye(3, device=device) * 20.0,
-            ]
-        )
+        cell = torch.stack([
+            torch.eye(3, device=device) * 10.0,
+            torch.eye(3, device=device) * 20.0,
+        ])
 
         mol_idx = torch.tensor([0, 0, 0, 1, 1, 1, 1], device=device)
 
@@ -609,12 +607,10 @@ class TestBatchedCells:
         )
 
         # Batched cells (B, 3, 3)
-        cell = torch.stack(
-            [
-                torch.eye(3, device=device) * 10.0,
-                torch.eye(3, device=device) * 20.0,
-            ]
-        )
+        cell = torch.stack([
+            torch.eye(3, device=device) * 10.0,
+            torch.eye(3, device=device) * 20.0,
+        ])
 
         # Create neighbor matrix (B, N, M)
         # Note: In mode 2, nbmat indices are GLOBAL into flattened (B*N) array

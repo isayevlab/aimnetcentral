@@ -559,12 +559,10 @@ class TestMoveCoordToCell:
             dtype=torch.float32,
         )
         # Batched cells (B=2, 3, 3) with different sizes
-        cell = torch.stack(
-            [
-                torch.eye(3) * 10.0,
-                torch.eye(3) * 20.0,
-            ]
-        )
+        cell = torch.stack([
+            torch.eye(3) * 10.0,
+            torch.eye(3) * 20.0,
+        ])
 
         wrapped = move_coord_to_cell(coord, cell)
 
@@ -588,12 +586,10 @@ class TestMoveCoordToCell:
             dtype=torch.float32,
         )
         # Batched cells (B=2, 3, 3) with different sizes
-        cell = torch.stack(
-            [
-                torch.eye(3) * 10.0,
-                torch.eye(3) * 20.0,
-            ]
-        )
+        cell = torch.stack([
+            torch.eye(3) * 10.0,
+            torch.eye(3) * 20.0,
+        ])
         mol_idx = torch.tensor([0, 0, 1, 1])
 
         wrapped = move_coord_to_cell(coord, cell, mol_idx)

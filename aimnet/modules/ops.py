@@ -36,13 +36,11 @@ which enables proper serialization with TorchScript.
 from typing import Any
 
 import torch
+from nvalchemiops.interactions.dispersion.dftd3 import dftd3
 from torch import Tensor
 from torch.autograd import Function
 
-from nvalchemiops.interactions.dispersion.dftd3 import dftd3
-
 from aimnet import constants
-
 
 # =============================================================================
 # Autograd Function Classes
@@ -52,12 +50,12 @@ from aimnet import constants
 class _DFTD3Function(Function):
     """
     Autograd Function for DFT-D3 dispersion energy computation.
-    
+
     This class wraps the nvalchemiops dftd3 implementation with proper
     autograd support, enabling both gradient computation and TorchScript
     serialization.
     """
-    
+
     @staticmethod
     def forward(
         ctx: Any,
@@ -447,9 +445,7 @@ def dftd3_energy(
     """
     # Prepare tensors - custom op requires non-None tensors
     cell_tensor = cell if cell is not None else torch.empty(0, device=coord.device)
-    shifts_tensor = (
-        shifts if shifts is not None else torch.empty(0, device=coord.device, dtype=torch.int32)
-    )
+    shifts_tensor = shifts if shifts is not None else torch.empty(0, device=coord.device, dtype=torch.int32)
 
     has_cell = cell is not None
     has_shifts = shifts is not None

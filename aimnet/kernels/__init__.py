@@ -27,6 +27,7 @@ _warp_available = False
 
 try:
     from .conv_sv_2d_sp_wp import conv_sv_2d_sp
+
     _warp_available = True
 except ImportError:
     conv_sv_2d_sp = None  # type: ignore
@@ -35,39 +36,40 @@ except ImportError:
 def load_ops():
     """
     Load and register all custom ops.
-    
+
     This function ensures that all custom operations are properly
     registered with PyTorch's operator registry.
-    
+
     Should be called before using any of the custom kernels to ensure
     proper registration with the PyTorch dispatcher.
-    
+
     Returns:
         list: Available ops that were registered.
     """
     global _warp_available
-    
+
     available_ops = []
-    
+
     # Import warp kernels to trigger registration
     try:
         from . import conv_sv_2d_sp_wp  # noqa: F401
+
         _warp_available = True
     except ImportError as e:
         print(f"Failed to load warp kernels: {e}")
         _warp_available = False
-    
+
     # Verify ops are available
-    if hasattr(torch.ops, 'aimnet'):
-        if hasattr(torch.ops.aimnet, 'conv_sv_2d_sp_fwd'):
-            available_ops.append('aimnet::conv_sv_2d_sp_fwd')
-        if hasattr(torch.ops.aimnet, 'conv_sv_2d_sp_bwd'):
-            available_ops.append('aimnet::conv_sv_2d_sp_bwd')
-        if hasattr(torch.ops.aimnet, 'conv_sv_2d_sp_bwd_bwd'):
-            available_ops.append('aimnet::conv_sv_2d_sp_bwd_bwd')
-        if hasattr(torch.ops.aimnet, 'dftd3_fwd'):
-            available_ops.append('aimnet::dftd3_fwd')
-    
+    if hasattr(torch.ops, "aimnet"):
+        if hasattr(torch.ops.aimnet, "conv_sv_2d_sp_fwd"):
+            available_ops.append("aimnet::conv_sv_2d_sp_fwd")
+        if hasattr(torch.ops.aimnet, "conv_sv_2d_sp_bwd"):
+            available_ops.append("aimnet::conv_sv_2d_sp_bwd")
+        if hasattr(torch.ops.aimnet, "conv_sv_2d_sp_bwd_bwd"):
+            available_ops.append("aimnet::conv_sv_2d_sp_bwd_bwd")
+        if hasattr(torch.ops.aimnet, "dftd3_fwd"):
+            available_ops.append("aimnet::dftd3_fwd")
+
     return available_ops
 
 
@@ -77,7 +79,7 @@ def is_warp_available() -> bool:
 
 
 __all__ = [
-    'conv_sv_2d_sp',
-    'load_ops',
-    'is_warp_available',
+    "conv_sv_2d_sp",
+    "is_warp_available",
+    "load_ops",
 ]

@@ -254,8 +254,7 @@ class DFTD3(nn.Module):
             state_dict[cn_ref_key] = c6ab_packed[..., 1].contiguous()
 
         # Remove cnmax if present (not used in new format)
-        if cnmax_key in state_dict:
-            del state_dict[cnmax_key]
+        state_dict.pop(cnmax_key, None)
 
         super()._load_from_state_dict(
             state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
@@ -365,8 +364,14 @@ class DFTD3(nn.Module):
 
         # Compute energy using autograd function
         energy_ev = self._compute_energy_autograd(
-            coord_flat, cell_for_autograd, numbers_flat, batch_idx,
-            neighbor_matrix, neighbor_matrix_shifts, num_systems, fill_value
+            coord_flat,
+            cell_for_autograd,
+            numbers_flat,
+            batch_idx,
+            neighbor_matrix,
+            neighbor_matrix_shifts,
+            num_systems,
+            fill_value,
         )
 
         # Add dispersion energy to output
@@ -376,27 +381,26 @@ class DFTD3(nn.Module):
             data[self.key_out] = energy_ev
 
         # Optionally compute and add forces to data dict
-        if self.compute_forces and not torch.jit.is_scripting():
-            # Compute forces via autograd (will use saved forces from DFTD3Function)
-            if coord_flat.requires_grad:
-                # Forces are -grad of energy
-                forces_flat = torch.autograd.grad(
-                    energy_ev.sum(),
-                    coord_flat,
-                    create_graph=self.training,
-                    retain_graph=True,
-                )[0]
-                forces = -forces_flat
+        # Compute forces via autograd (will use saved forces from DFTD3Function)
+        if self.compute_forces and not torch.jit.is_scripting() and coord_flat.requires_grad:
+            # Forces are -grad of energy
+            forces_flat = torch.autograd.grad(
+                energy_ev.sum(),
+                coord_flat,
+                create_graph=self.training,
+                retain_graph=True,
+            )[0]
+            forces = -forces_flat
 
-                # Reshape if needed
-                if nb_mode == 0 or nb_mode == 2:
-                    B, N = coord.shape[:2]
-                    forces = forces.view(B, N, 3)
+            # Reshape if needed
+            if nb_mode == 0 or nb_mode == 2:
+                B, N = coord.shape[:2]
+                forces = forces.view(B, N, 3)
 
-                if "forces" in data:
-                    data["forces"] = data["forces"] + forces
-                else:
-                    data["forces"] = forces
+            if "forces" in data:
+                data["forces"] = data["forces"] + forces
+            else:
+                data["forces"] = forces
 
         return data
 
@@ -431,4 +435,3 @@ class DFTD3(nn.Module):
             fill_value=fill_value,
             compute_virial=self.compute_virial,
         )
-

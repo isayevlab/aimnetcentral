@@ -2,10 +2,9 @@ import warnings
 from typing import Any, ClassVar, Literal
 
 import torch
-from torch import Tensor, nn
-
 from nvalchemiops.neighborlist import neighbor_list
 from nvalchemiops.neighborlist.neighbor_utils import NeighborOverflowError
+from torch import Tensor, nn
 
 from .model_registry import get_model_path
 

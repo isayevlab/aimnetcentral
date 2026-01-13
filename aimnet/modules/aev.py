@@ -8,6 +8,7 @@ from aimnet import nbops, ops
 # Try to import warp kernels - gracefully handle if not available
 try:
     from aimnet.kernels import conv_sv_2d_sp, is_warp_available
+
     _WARP_AVAILABLE = is_warp_available()
 except ImportError:
     conv_sv_2d_sp = None
