@@ -133,21 +133,33 @@ class TestCUDANeighborList:
 
     def test_nbmat_cuda_vs_cpu(self):
         """Test that CUDA and CPU neighbor lists produce same results."""
-        from aimnet.calculators.nbmat import calc_nbmat
+        from nvalchemiops.neighborlist import neighbor_list
 
         torch.manual_seed(42)
         N = 50
         coord_cpu = torch.rand((N, 3)) * 5
         coord_gpu = coord_cpu.cuda()
 
-        cutoff = (3.0, None)
-        maxnb = (100, None)
+        cutoff = 3.0
+        max_neighbors = 100
 
         # CPU computation
-        nbmat_cpu, _, _, _ = calc_nbmat(coord_cpu, cutoff, maxnb)
+        nbmat_cpu, num_nb_cpu = neighbor_list(
+            positions=coord_cpu,
+            cutoff=cutoff,
+            max_neighbors=max_neighbors,
+            half_fill=False,
+            fill_value=N,
+        )
 
         # GPU computation
-        nbmat_gpu, _, _, _ = calc_nbmat(coord_gpu, cutoff, maxnb)
+        nbmat_gpu, num_nb_gpu = neighbor_list(
+            positions=coord_gpu,
+            cutoff=cutoff,
+            max_neighbors=max_neighbors,
+            half_fill=False,
+            fill_value=N,
+        )
 
         # Move to same device for comparison
         nbmat_gpu_cpu = nbmat_gpu.cpu()
@@ -262,3 +274,131 @@ class TestGPUMemory:
         # Memory growth should be minimal
         growth = final - baseline
         assert growth < 100e6  # Less than 100MB growth
+
+
+class TestCPUGPUConsistency:
+    """Cross-validation tests between CPU and GPU implementations."""
+
+    @pytest.mark.ase
+    def test_energy_cpu_vs_gpu_single_molecule(self):
+        """Verify energy is identical on CPU and GPU."""
+        data = load_mol(file)
+
+        # CPU calculation
+        calc_cpu = create_cpu_calculator()
+        res_cpu = calc_cpu(data)
+        e_cpu = res_cpu["energy"].item()
+
+        # GPU calculation
+        calc_gpu = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        res_gpu = calc_gpu(data)
+        e_gpu = res_gpu["energy"].cpu().item()
+
+        assert abs(e_cpu - e_gpu) < 1e-5, f"Energy mismatch: CPU={e_cpu}, GPU={e_gpu}"
+
+    @pytest.mark.ase
+    def test_forces_cpu_vs_gpu_single_molecule(self):
+        """Verify forces are identical on CPU and GPU."""
+        data = load_mol(file)
+
+        # CPU calculation
+        calc_cpu = create_cpu_calculator()
+        res_cpu = calc_cpu(data, forces=True)
+        f_cpu = res_cpu["forces"].detach().numpy()
+
+        # GPU calculation
+        calc_gpu = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        res_gpu = calc_gpu(data, forces=True)
+        f_gpu = res_gpu["forces"].cpu().detach().numpy()
+
+        import numpy as np
+
+        np.testing.assert_allclose(f_cpu, f_gpu, atol=1e-5, rtol=1e-4)
+
+    @pytest.mark.ase
+    def test_energy_cpu_vs_gpu_batch(self):
+        """Verify batched inference gives consistent results on CPU and GPU."""
+        # Create batch of molecules
+        data = {
+            "coord": torch.tensor(
+                [
+                    [0.0, 0.0, 0.0],
+                    [0.96, 0.0, 0.0],
+                    [-0.24, 0.93, 0.0],
+                    [10.0, 0.0, 0.0],
+                    [10.96, 0.0, 0.0],
+                    [9.76, 0.93, 0.0],
+                ],
+                dtype=torch.float32,
+            ),
+            "numbers": torch.tensor([8, 1, 1, 8, 1, 1]),
+            "mol_idx": torch.tensor([0, 0, 0, 1, 1, 1]),
+            "charge": torch.tensor([0.0, 0.0]),
+        }
+
+        # CPU calculation
+        calc_cpu = create_cpu_calculator()
+        res_cpu = calc_cpu(data)
+        e_cpu = res_cpu["energy"].detach().numpy()
+
+        # GPU calculation
+        calc_gpu = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        res_gpu = calc_gpu(data)
+        e_gpu = res_gpu["energy"].cpu().detach().numpy()
+
+        import numpy as np
+
+        np.testing.assert_allclose(e_cpu, e_gpu, atol=1e-5)
+
+    def test_neighborlist_cpu_vs_gpu_with_pbc(self):
+        """Verify PBC neighborlist and shifts match between devices."""
+        from nvalchemiops.neighborlist import neighbor_list
+
+        torch.manual_seed(123)
+        N = 20
+        coord_cpu = torch.rand((N, 3)) * 8.0
+        coord_gpu = coord_cpu.cuda()
+
+        # Define a cubic cell
+        cell_cpu = torch.eye(3, dtype=torch.float32) * 10.0
+        cell_gpu = cell_cpu.cuda()
+        pbc = torch.tensor([True, True, True])
+
+        cutoff = 4.0
+        max_neighbors = 50
+
+        # CPU computation with PBC
+        nbmat_cpu, num_nb_cpu, shifts_cpu = neighbor_list(
+            positions=coord_cpu,
+            cutoff=cutoff,
+            cell=cell_cpu.unsqueeze(0),
+            pbc=pbc.unsqueeze(0),
+            max_neighbors=max_neighbors,
+            half_fill=False,
+            fill_value=N,
+        )
+
+        # GPU computation with PBC
+        nbmat_gpu, num_nb_gpu, shifts_gpu = neighbor_list(
+            positions=coord_gpu,
+            cutoff=cutoff,
+            cell=cell_gpu.unsqueeze(0),
+            pbc=pbc.cuda().unsqueeze(0),
+            max_neighbors=max_neighbors,
+            half_fill=False,
+            fill_value=N,
+        )
+
+        # Move to CPU for comparison
+        nbmat_gpu_cpu = nbmat_gpu.cpu()
+        shifts_gpu_cpu = shifts_gpu.cpu()
+
+        # Shapes should match
+        assert nbmat_cpu.shape == nbmat_gpu_cpu.shape
+        assert shifts_cpu.shape == shifts_gpu_cpu.shape
+
+        # Check neighbors match for each atom
+        for i in range(N):
+            nb_cpu = set(nbmat_cpu[i][nbmat_cpu[i] < N].tolist())
+            nb_gpu = set(nbmat_gpu_cpu[i][nbmat_gpu_cpu[i] < N].tolist())
+            assert nb_cpu == nb_gpu, f"PBC neighbors differ for atom {i}"

@@ -21,10 +21,26 @@ def calc_distances(data: dict[str, Tensor], suffix: str = "", pad_value: float =
     if f"shifts{suffix}" in data:
         assert "cell" in data, "cell is required if shifts are provided"
         nb_mode = nbops.get_nb_mode(data)
+        cell = data["cell"]
         if nb_mode == 2:
-            shifts = torch.einsum("bnmd,bdh->bnmh", data[f"shifts{suffix}"], data["cell"])
+            # Batched format: shifts (B, N, M, 3), cell (B, 3, 3) or (3, 3)
+            if cell.ndim == 2:
+                shifts = torch.einsum("bnmd,dh->bnmh", data[f"shifts{suffix}"], cell)
+            else:
+                shifts = torch.einsum("bnmd,bdh->bnmh", data[f"shifts{suffix}"], cell)
+        elif nb_mode == 1:
+            # Flat format: shifts (N_total, M, 3), cell (3, 3) or (B, 3, 3)
+            if cell.ndim == 2:
+                shifts = data[f"shifts{suffix}"] @ cell
+            else:
+                # Batched cells - need mol_idx to select correct cell for each atom
+                mol_idx = data["mol_idx"]
+                atom_cell = cell[mol_idx]  # (N_total, 3, 3)
+                # shifts: (N_total, M, 3), atom_cell: (N_total, 3, 3)
+                shifts = torch.einsum("nmd,ndh->nmh", data[f"shifts{suffix}"], atom_cell)
         else:
-            shifts = data[f"shifts{suffix}"] @ data["cell"]
+            # nb_mode == 0: no neighbor matrix, shouldn't have shifts
+            shifts = data[f"shifts{suffix}"] @ cell
         coord_j = coord_j + shifts
     r_ij = coord_j - coord_i
     r_ij = nbops.mask_ij_(r_ij, data, mask_value=pad_value, inplace=False, suffix=suffix)
@@ -115,7 +131,12 @@ def coulomb_matrix_sf(q_j: Tensor, d_ij: Tensor, Rc: float, data: dict[str, Tens
 
 
 def get_shifts_within_cutoff(cell: Tensor, cutoff: Tensor) -> Tensor:
-    assert cell.shape == (3, 3), "Batch cell is not supported"
+    """Get all lattice shift vectors within cutoff distance.
+
+    Note: Batched cells are not supported - this function is only used by Ewald summation
+    which is a single-molecule calculation.
+    """
+    assert cell.ndim == 2 and cell.shape == (3, 3), "Batched cells not supported for Ewald summation"
     cell_inv = torch.inverse(cell).mT
     inv_distances = cell_inv.norm(p=2, dim=-1)
     num_repeats = torch.ceil(cutoff * inv_distances).to(torch.long)

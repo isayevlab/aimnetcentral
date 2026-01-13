@@ -4,8 +4,10 @@ from typing import Any, ClassVar, Literal
 import torch
 from torch import Tensor, nn
 
+from nvalchemiops.neighborlist import neighbor_list
+from nvalchemiops.neighborlist.neighbor_utils import NeighborOverflowError
+
 from .model_registry import get_model_path
-from .nbmat import TooManyNeighborsError, calc_nbmat
 
 
 class AIMNet2Calculator:
@@ -170,41 +172,136 @@ class AIMNet2Calculator:
     def make_nbmat(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         assert self._max_mol_size > 0, "Molecule size is not set"
 
+        # Prepare batch_idx from mol_idx
+        mol_idx = data.get("mol_idx")
+
         if "cell" in data and data["cell"] is not None:
-            data["coord"] = move_coord_to_cell(data["coord"], data["cell"])
+            data["coord"] = move_coord_to_cell(data["coord"], data["cell"], mol_idx)
             cell = data["cell"]
         else:
             cell = None
 
+        N = data["coord"].shape[0]
+        _pbc = cell is not None
+        batch_idx = mol_idx.to(torch.int32) if mol_idx is not None else None
+
+        # Prepare cell and pbc tensors for nvalchemiops
+        if _pbc:
+            if cell.ndim == 2:
+                cell_batched = cell.unsqueeze(0)  # (1, 3, 3)
+            else:
+                cell_batched = cell  # (num_systems, 3, 3)
+            num_systems = cell_batched.shape[0]
+            pbc = torch.tensor([[True, True, True]] * num_systems, dtype=torch.bool, device=cell.device)
+        else:
+            cell_batched = None
+            pbc = None
+
         while True:
             try:
                 maxnb1 = calc_max_nb(self.cutoff, self.max_density)
-                maxnb2 = calc_max_nb(self.cutoff_lr, self.max_density) if self.lr else None  # type: ignore
                 if cell is None:
                     maxnb1 = min(maxnb1, self._max_mol_size)
-                    maxnb2 = min(maxnb2, self._max_mol_size) if self.lr else None  # type: ignore
-                maxnb = (maxnb1, maxnb2)
-                nbmat1, nbmat2, shifts1, shifts2 = calc_nbmat(
-                    data["coord"],
-                    (self.cutoff, self.cutoff_lr),
-                    maxnb,  # type: ignore
-                    cell,
-                    data.get("mol_idx"),  # type: ignore
-                )
+
+                # Determine if we need dual cutoff
+                # When cutoff_lr is finite, use dual cutoff mode
+                # When cutoff_lr is infinite, use the short-range cutoff for LR too (for simple Coulomb)
+                _use_dual_cutoff = self.lr and self.cutoff_lr is not None and self.cutoff_lr < float("inf")
+
+                if _use_dual_cutoff:
+                    maxnb2 = calc_max_nb(self.cutoff_lr, self.max_density)
+                    if cell is None:
+                        maxnb2 = min(maxnb2, self._max_mol_size)
+
+                # Call nvalchemiops neighbor_list directly
+                if _use_dual_cutoff:
+                    # Dual cutoff case (finite cutoff_lr)
+                    # Note: use max_neighbors1/max_neighbors2 for dual cutoff functions
+                    if _pbc:
+                        result = neighbor_list(
+                            positions=data["coord"],
+                            cutoff=self.cutoff,
+                            cutoff2=self.cutoff_lr,
+                            cell=cell_batched,
+                            pbc=pbc,
+                            batch_idx=batch_idx,
+                            max_neighbors1=maxnb1,
+                            max_neighbors2=maxnb2,
+                            half_fill=False,
+                            fill_value=N,
+                        )
+                        nbmat1, num_nb1, shifts1, nbmat2, num_nb2, shifts2 = result
+                    else:
+                        result = neighbor_list(
+                            positions=data["coord"],
+                            cutoff=self.cutoff,
+                            cutoff2=self.cutoff_lr,
+                            batch_idx=batch_idx,
+                            max_neighbors1=maxnb1,
+                            max_neighbors2=maxnb2,
+                            half_fill=False,
+                            fill_value=N,
+                        )
+                        nbmat1, num_nb1, nbmat2, num_nb2 = result
+                        shifts1 = None
+                        shifts2 = None
+                else:
+                    # Single cutoff case
+                    if _pbc:
+                        result = neighbor_list(
+                            positions=data["coord"],
+                            cutoff=self.cutoff,
+                            cell=cell_batched,
+                            pbc=pbc,
+                            batch_idx=batch_idx,
+                            max_neighbors=maxnb1,
+                            half_fill=False,
+                            fill_value=N,
+                        )
+                        nbmat1, num_nb1, shifts1 = result
+                    else:
+                        result = neighbor_list(
+                            positions=data["coord"],
+                            cutoff=self.cutoff,
+                            batch_idx=batch_idx,
+                            max_neighbors=maxnb1,
+                            half_fill=False,
+                            fill_value=N,
+                        )
+                        nbmat1, num_nb1 = result
+                        shifts1 = None
+                    # For simple Coulomb method (cutoff_lr = inf), reuse nbmat1 as nbmat_lr
+                    nbmat2 = None
+                    num_nb2 = None
+                    shifts2 = None
+
+                # Process results: trim and add padding row
+                nbmat1, shifts1 = process_neighbor_result(nbmat1, num_nb1, shifts1, maxnb1, N)
+                if nbmat2 is not None:
+                    nbmat2, shifts2 = process_neighbor_result(nbmat2, num_nb2, shifts2, maxnb2, N)
+
                 break
-            except TooManyNeighborsError:
+            except NeighborOverflowError:
                 self.max_density *= 1.2
                 assert self.max_density <= 4, "Something went wrong in nbmat calculation"
+
         data["nbmat"] = nbmat1
         if self.lr:
-            assert nbmat2 is not None
-            data["nbmat_lr"] = nbmat2
+            if nbmat2 is not None:
+                data["nbmat_lr"] = nbmat2
+            else:
+                # For simple Coulomb method (cutoff_lr = inf), reuse nbmat1 as nbmat_lr
+                # All short-range neighbors are within infinite long-range cutoff
+                data["nbmat_lr"] = nbmat1
         if cell is not None:
             assert shifts1 is not None
             data["shifts"] = shifts1
             if self.lr:
-                assert shifts2 is not None
-                data["shifts_lr"] = shifts2
+                if shifts2 is not None:
+                    data["shifts_lr"] = shifts2
+                else:
+                    # Reuse shifts1 for the infinite cutoff case
+                    data["shifts_lr"] = shifts1
         return data
 
     def pad_input(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
@@ -260,7 +357,14 @@ class AIMNet2Calculator:
                 data["forces"] = -deriv[0]
             if stress:
                 dedc = deriv[0] if not forces else deriv[1]
-                data["stress"] = dedc / data["cell"].detach().det().abs()
+                cell = data["cell"].detach()
+                if cell.ndim == 2:
+                    # Single cell (3, 3)
+                    volume = cell.det().abs()
+                else:
+                    # Batched cells (B, 3, 3) - compute volume for each cell
+                    volume = torch.linalg.det(cell).abs().unsqueeze(-1).unsqueeze(-1)  # (B, 1, 1)
+                data["stress"] = dedc / volume
         if hessian:
             data["hessian"] = self.calculate_hessian(data["forces"], self._saved_for_grad["coord"])
         return data
@@ -273,6 +377,47 @@ class AIMNet2Calculator:
             torch.autograd.grad(_f, coord, retain_graph=True)[0] for _f in forces.flatten().unbind()
         ]).view(-1, 3, coord.shape[0], 3)[:-1, :, :-1, :]
         return hessian
+
+
+def process_neighbor_result(
+    nbmat: Tensor,
+    num_neighbors: Tensor,
+    shifts: Tensor | None,
+    maxnb: int,
+    N: int,
+) -> tuple[Tensor, Tensor | None]:
+    """Trim neighbor matrix to actual max neighbors and add padding row.
+
+    Args:
+        nbmat: Neighbor matrix from nvalchemiops, shape (N, max_neighbors)
+        num_neighbors: Number of neighbors per atom, shape (N,)
+        shifts: Shift vectors for PBC or None, shape (N, max_neighbors, 3)
+        maxnb: Maximum allowed neighbors
+        N: Number of atoms (used as fill value for padding row)
+
+    Returns:
+        Tuple of (nbmat, shifts) with padding row added, shapes (N+1, nnb_max) and (N+1, nnb_max, 3)
+    """
+    nnb_max = num_neighbors.max().item()
+    if nnb_max > maxnb:
+        raise NeighborOverflowError(maxnb, nnb_max)
+
+    # Trim to actual max neighbors
+    nbmat = nbmat[:, :nnb_max]
+    if shifts is not None:
+        shifts = shifts[:, :nnb_max]
+
+    # Add padding row
+    device = nbmat.device
+    dtype = nbmat.dtype
+    padding_row = torch.full((1, nnb_max), N, dtype=dtype, device=device)
+    nbmat = torch.cat([nbmat, padding_row], dim=0)
+
+    if shifts is not None:
+        shifts_padding = torch.zeros((1, nnb_max, 3), dtype=shifts.dtype, device=device)
+        shifts = torch.cat([shifts, shifts_padding], dim=0)
+
+    return nbmat, shifts
 
 
 def maybe_pad_dim0(a: Tensor, N: int, value=0.0) -> Tensor:
@@ -297,10 +442,41 @@ def maybe_unpad_dim0(a: Tensor, N: int) -> Tensor:
     return a
 
 
-def move_coord_to_cell(coord, cell):
-    coord_f = coord @ cell.inverse()
-    coord_f = coord_f % 1
-    return coord_f @ cell
+def move_coord_to_cell(coord: Tensor, cell: Tensor, mol_idx: Tensor | None = None) -> Tensor:
+    """Move coordinates into the periodic cell.
+
+    Args:
+        coord: Coordinates tensor, shape (N, 3) or (B, N, 3)
+        cell: Cell tensor, shape (3, 3) or (B, 3, 3)
+        mol_idx: Molecule index for each atom, shape (N,), required for batched cells with flat coords
+
+    Returns:
+        Coordinates wrapped into the cell
+    """
+    if cell.ndim == 2:
+        # Single cell (3, 3)
+        cell_inv = torch.linalg.inv(cell)
+        coord_f = coord @ cell_inv
+        coord_f = coord_f % 1
+        return coord_f @ cell
+    else:
+        # Batched cells (B, 3, 3)
+        if coord.ndim == 3:
+            # Batched coords (B, N, 3) with batched cells (B, 3, 3)
+            cell_inv = torch.linalg.inv(cell)  # (B, 3, 3)
+            coord_f = torch.bmm(coord, cell_inv)  # (B, N, 3)
+            coord_f = coord_f % 1
+            return torch.bmm(coord_f, cell)
+        else:
+            # Flat coords (N_total, 3) with batched cells (B, 3, 3) - need mol_idx
+            assert mol_idx is not None, "mol_idx required for batched cells with flat coordinates"
+            cell_inv = torch.linalg.inv(cell)  # (B, 3, 3)
+            # Get cell and cell_inv for each atom
+            atom_cell = cell[mol_idx]  # (N_total, 3, 3)
+            atom_cell_inv = cell_inv[mol_idx]  # (N_total, 3, 3)
+            coord_f = torch.bmm(coord.unsqueeze(1), atom_cell_inv).squeeze(1)  # (N_total, 3)
+            coord_f = coord_f % 1
+            return torch.bmm(coord_f.unsqueeze(1), atom_cell).squeeze(1)
 
 
 def _named_children_rec(module):
