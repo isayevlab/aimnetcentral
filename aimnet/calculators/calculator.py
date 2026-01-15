@@ -1,3 +1,4 @@
+import math
 import warnings
 from typing import Any, ClassVar, Literal
 
@@ -7,6 +8,126 @@ from nvalchemiops.neighborlist.neighbor_utils import NeighborOverflowError
 from torch import Tensor, nn
 
 from .model_registry import get_model_path
+
+
+class AdaptiveNeighborList:
+    """Adaptive neighbor list with automatic buffer sizing.
+
+    Wraps nvalchemiops.neighborlist.neighbor_list with automatic max_neighbors adjustment.
+    Maintains ~75% utilization to balance memory and recomputation.
+
+    Parameters
+    ----------
+    cutoff : float
+        Cutoff distance for neighbor detection in Angstroms.
+    density : float, optional
+        Initial atomic density estimate for allocation sizing.
+        Used to compute initial max_neighbors as density * (4/3 * pi * cutoff^3).
+        Default is 0.2.
+    target_utilization : float, optional
+        Target ratio of actual neighbors to allocated max_neighbors.
+        Default is 0.75 (75% utilization).
+    """
+
+    def __init__(
+        self,
+        cutoff: float,
+        density: float = 0.2,
+        target_utilization: float = 0.75,
+    ) -> None:
+        self.cutoff = cutoff
+        self.target_utilization = target_utilization
+        sphere_volume = 4 / 3 * math.pi * cutoff**3
+        self.max_neighbors = self._round_to_16(int(density * sphere_volume))
+
+    @staticmethod
+    def _round_to_16(n: int) -> int:
+        """Round up to the next multiple of 16 for memory alignment."""
+        return ((n + 15) // 16) * 16
+
+    def __call__(
+        self,
+        positions: Tensor,
+        cell: Tensor | None = None,
+        pbc: Tensor | None = None,
+        batch_idx: Tensor | None = None,
+        fill_value: int | None = None,
+    ) -> tuple[Tensor, Tensor, Tensor | None]:
+        """Compute neighbor list with automatic buffer adjustment.
+
+        Parameters
+        ----------
+        positions : Tensor
+            Atomic coordinates, shape (N, 3).
+        cell : Tensor | None
+            Unit cell vectors, shape (num_systems, 3, 3). None for non-periodic.
+        pbc : Tensor | None
+            Periodic boundary conditions, shape (num_systems, 3). None for non-periodic.
+        batch_idx : Tensor | None
+            Batch index for each atom, shape (N,). None for single system.
+        fill_value : int | None
+            Fill value for padding. Default is N (number of atoms).
+
+        Returns
+        -------
+        nbmat : Tensor
+            Neighbor indices, shape (N, actual_max_neighbors).
+        num_neighbors : Tensor
+            Number of neighbors per atom, shape (N,).
+        shifts : Tensor | None
+            Integer unit cell shifts for PBC, shape (N, actual_max_neighbors, 3).
+            None for non-periodic systems.
+        """
+        N = positions.shape[0]
+        if fill_value is None:
+            fill_value = N
+        _pbc = cell is not None
+
+        while True:
+            try:
+                if _pbc:
+                    nbmat, num_neighbors, shifts = neighbor_list(
+                        positions=positions,
+                        cutoff=self.cutoff,
+                        cell=cell,
+                        pbc=pbc,
+                        batch_idx=batch_idx,
+                        max_neighbors=self.max_neighbors,
+                        half_fill=False,
+                        fill_value=fill_value,
+                    )
+                else:
+                    nbmat, num_neighbors = neighbor_list(
+                        positions=positions,
+                        cutoff=self.cutoff,
+                        batch_idx=batch_idx,
+                        max_neighbors=self.max_neighbors,
+                        half_fill=False,
+                        fill_value=fill_value,
+                    )
+                    shifts = None
+            except NeighborOverflowError:
+                # Increase buffer by 1.5x and retry
+                self.max_neighbors = self._round_to_16(int(self.max_neighbors * 1.5))
+                continue
+
+            # Get actual max neighbors from result
+            actual_max = int(num_neighbors.max().item())
+
+            # Adjust buffer if under-utilized (<50%) or over-utilized (>100%)
+            if actual_max < 0.5 * self.max_neighbors or actual_max > self.max_neighbors:
+                new_max = self._round_to_16(int(actual_max / self.target_utilization))
+                self.max_neighbors = max(new_max, 16)  # Ensure minimum of 16
+                if actual_max > self.max_neighbors:
+                    continue
+
+            # Trim to actual max neighbors
+            nnb_max = max(1, actual_max)
+            nbmat = nbmat[:, :nnb_max]
+            if shifts is not None:
+                shifts = shifts[:, :nnb_max]
+
+            return nbmat, num_neighbors, shifts
 
 
 class AIMNet2Calculator:
@@ -42,8 +163,15 @@ class AIMNet2Calculator:
         self.cutoff = self.model.cutoff
         self.lr = hasattr(self.model, "cutoff_lr")
         self.cutoff_lr = getattr(self.model, "cutoff_lr", float("inf")) if self.lr else None
-        self.max_density = 0.2
         self.nb_threshold = nb_threshold
+
+        # Create adaptive neighbor list instances
+        self._nblist = AdaptiveNeighborList(cutoff=self.cutoff)
+        # Create long-range neighbor list only if LR modules present AND finite cutoff
+        if self.lr and self.cutoff_lr is not None and self.cutoff_lr < float("inf"):
+            self._nblist_lr = AdaptiveNeighborList(cutoff=self.cutoff_lr)
+        else:
+            self._nblist_lr = None
 
         # indicator if input was flattened
         self._batch = None
@@ -63,21 +191,38 @@ class AIMNet2Calculator:
         return self.eval(*args, **kwargs)
 
     def set_lrcoulomb_method(
-        self, method: Literal["simple", "dsf", "ewald"], cutoff: float = 15.0, dsf_alpha: float = 0.2
+        self,
+        method: Literal["simple", "dsf", "ewald"],
+        cutoff: float = 15.0,
+        dsf_alpha: float = 0.2,
     ):
+        """Set the long-range Coulomb method.
+
+        Parameters
+        ----------
+        method : str
+            One of "simple", "dsf", or "ewald".
+        cutoff : float
+            Cutoff distance for neighbor list. Default is 15.0.
+        dsf_alpha : float
+            Alpha parameter for DSF method. Default is 0.2.
+        """
         if method not in ("simple", "dsf", "ewald"):
             raise ValueError(f"Invalid method: {method}")
         for mod in iter_lrcoulomb_mods(self.model):
             mod.method = method  # type: ignore
             if method == "simple":
                 self.cutoff_lr = float("inf")
+                self._nblist_lr = None  # No separate LR nblist needed
             elif method == "dsf":
                 self.cutoff_lr = cutoff
                 mod.dsf_alpha = dsf_alpha  # type: ignore
                 mod.dsf_rc = cutoff  # type: ignore
+                self._nblist_lr = AdaptiveNeighborList(cutoff=cutoff)  # New instance
             elif method == "ewald":
                 # current implementation of Ewald does not use nb mat
                 self.cutoff_lr = cutoff
+                self._nblist_lr = None  # Ewald doesn't use nbmat
         self._coulomb_method = method
 
     def eval(self, data: dict[str, Any], forces=False, stress=False, hessian=False) -> dict[str, Tensor]:
@@ -101,7 +246,9 @@ class AIMNet2Calculator:
                 warnings.warn("Switching to DSF Coulomb for PBC", stacklevel=1)
                 self.set_lrcoulomb_method("dsf")
         if data["coord"].ndim == 2:
-            data = self.make_nbmat(data)
+            # Skip neighbor list calculation if already provided
+            if "nbmat" not in data:
+                data = self.make_nbmat(data)
             data = self.pad_input(data)
         return data
 
@@ -196,93 +343,33 @@ class AIMNet2Calculator:
             cell_batched = None
             pbc = None
 
-        while True:
-            try:
-                maxnb1 = calc_max_nb(self.cutoff, self.max_density)
-                if cell is None:
-                    maxnb1 = min(maxnb1, self._max_mol_size)
+        # Short-range neighbors (always)
+        nbmat1, num_nb1, shifts1 = self._nblist(
+            positions=data["coord"],
+            cell=cell_batched,
+            pbc=pbc,
+            batch_idx=batch_idx,
+            fill_value=N,
+        )
 
-                # Determine if we need dual cutoff
-                # When cutoff_lr is finite, use dual cutoff mode
-                # When cutoff_lr is infinite, use the short-range cutoff for LR too (for simple Coulomb)
-                _use_dual_cutoff = self.lr and self.cutoff_lr is not None and self.cutoff_lr < float("inf")
+        # Long-range neighbors (only if _nblist_lr exists)
+        if self._nblist_lr is not None:
+            nbmat2, num_nb2, shifts2 = self._nblist_lr(
+                positions=data["coord"],
+                cell=cell_batched,
+                pbc=pbc,
+                batch_idx=batch_idx,
+                fill_value=N,
+            )
+        else:
+            nbmat2, shifts2 = None, None
 
-                if _use_dual_cutoff:
-                    maxnb2 = calc_max_nb(self.cutoff_lr, self.max_density)
-                    if cell is None:
-                        maxnb2 = min(maxnb2, self._max_mol_size)
+        # Add padding row to short-range nbmat
+        nbmat1, shifts1 = _add_padding_row(nbmat1, shifts1, N)
 
-                # Call nvalchemiops neighbor_list directly
-                if _use_dual_cutoff:
-                    # Dual cutoff case (finite cutoff_lr)
-                    # Note: use max_neighbors1/max_neighbors2 for dual cutoff functions
-                    if _pbc:
-                        result = neighbor_list(
-                            positions=data["coord"],
-                            cutoff=self.cutoff,
-                            cutoff2=self.cutoff_lr,
-                            cell=cell_batched,
-                            pbc=pbc,
-                            batch_idx=batch_idx,
-                            max_neighbors1=maxnb1,
-                            max_neighbors2=maxnb2,
-                            half_fill=False,
-                            fill_value=N,
-                        )
-                        nbmat1, num_nb1, shifts1, nbmat2, num_nb2, shifts2 = result
-                    else:
-                        result = neighbor_list(
-                            positions=data["coord"],
-                            cutoff=self.cutoff,
-                            cutoff2=self.cutoff_lr,
-                            batch_idx=batch_idx,
-                            max_neighbors1=maxnb1,
-                            max_neighbors2=maxnb2,
-                            half_fill=False,
-                            fill_value=N,
-                        )
-                        nbmat1, num_nb1, nbmat2, num_nb2 = result
-                        shifts1 = None
-                        shifts2 = None
-                else:
-                    # Single cutoff case
-                    if _pbc:
-                        result = neighbor_list(
-                            positions=data["coord"],
-                            cutoff=self.cutoff,
-                            cell=cell_batched,
-                            pbc=pbc,
-                            batch_idx=batch_idx,
-                            max_neighbors=maxnb1,
-                            half_fill=False,
-                            fill_value=N,
-                        )
-                        nbmat1, num_nb1, shifts1 = result
-                    else:
-                        result = neighbor_list(
-                            positions=data["coord"],
-                            cutoff=self.cutoff,
-                            batch_idx=batch_idx,
-                            max_neighbors=maxnb1,
-                            half_fill=False,
-                            fill_value=N,
-                        )
-                        nbmat1, num_nb1 = result
-                        shifts1 = None
-                    # For simple Coulomb method (cutoff_lr = inf), reuse nbmat1 as nbmat_lr
-                    nbmat2 = None
-                    num_nb2 = None
-                    shifts2 = None
-
-                # Process results: trim and add padding row
-                nbmat1, shifts1 = process_neighbor_result(nbmat1, num_nb1, shifts1, maxnb1, N)
-                if nbmat2 is not None:
-                    nbmat2, shifts2 = process_neighbor_result(nbmat2, num_nb2, shifts2, maxnb2, N)
-
-                break
-            except NeighborOverflowError:
-                self.max_density *= 1.2
-                assert self.max_density <= 4, "Something went wrong in nbmat calculation"
+        # Add padding row to long-range nbmat if it exists
+        if nbmat2 is not None:
+            nbmat2, shifts2 = _add_padding_row(nbmat2, shifts2, N)
 
         data["nbmat"] = nbmat1
         if self.lr:
@@ -378,37 +465,24 @@ class AIMNet2Calculator:
         return hessian
 
 
-def process_neighbor_result(
+def _add_padding_row(
     nbmat: Tensor,
-    num_neighbors: Tensor,
     shifts: Tensor | None,
-    maxnb: int,
     N: int,
 ) -> tuple[Tensor, Tensor | None]:
-    """Trim neighbor matrix to actual max neighbors and add padding row.
+    """Add padding row to neighbor matrix and shifts.
 
     Args:
-        nbmat: Neighbor matrix from nvalchemiops, shape (N, max_neighbors)
-        num_neighbors: Number of neighbors per atom, shape (N,)
+        nbmat: Neighbor matrix, shape (N, max_neighbors)
         shifts: Shift vectors for PBC or None, shape (N, max_neighbors, 3)
-        maxnb: Maximum allowed neighbors
         N: Number of atoms (used as fill value for padding row)
 
     Returns:
-        Tuple of (nbmat, shifts) with padding row added, shapes (N+1, nnb_max) and (N+1, nnb_max, 3)
+        Tuple of (nbmat, shifts) with padding row added
     """
-    nnb_max = num_neighbors.max().item()
-    if nnb_max > maxnb:
-        raise NeighborOverflowError(maxnb, nnb_max)
-
-    # Trim to actual max neighbors
-    nbmat = nbmat[:, :nnb_max]
-    if shifts is not None:
-        shifts = shifts[:, :nnb_max]
-
-    # Add padding row
     device = nbmat.device
     dtype = nbmat.dtype
+    nnb_max = nbmat.shape[1]
     padding_row = torch.full((1, nnb_max), N, dtype=dtype, device=device)
     nbmat = torch.cat([nbmat, padding_row], dim=0)
 
@@ -489,7 +563,3 @@ def iter_lrcoulomb_mods(model):
     for name, module in _named_children_rec(model):
         if name == "lrcoulomb":
             yield module
-
-
-def calc_max_nb(cutoff: float, density: float = 0.2) -> int | float:
-    return int(density * 4 / 3 * 3.14159 * cutoff**3) if cutoff < float("inf") else float("inf")

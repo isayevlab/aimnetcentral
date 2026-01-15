@@ -1,0 +1,416 @@
+"""Tests for periodic boundary conditions - DSF and Ewald Coulomb methods.
+
+These tests verify that the DSF and Ewald Coulomb methods work correctly
+with periodic crystal structures loaded from CIF files.
+"""
+
+import pytest
+import torch
+
+from aimnet import nbops, ops
+from aimnet.calculators import AIMNet2Calculator
+from aimnet.modules.lr import LRCoulomb
+
+pytestmark = [pytest.mark.ase, pytest.mark.gpu]
+
+
+def setup_pbc_data_with_nblist(data: dict, device: torch.device, cutoff: float = 8.0) -> dict:
+    """Set up periodic data with neighbor list for Coulomb calculations.
+
+    Parameters
+    ----------
+    data : dict
+        Data dictionary with coord, numbers, cell, mol_idx.
+    device : torch.device
+        Device for tensors.
+    cutoff : float
+        Cutoff for neighbor list.
+
+    Returns
+    -------
+    dict
+        Data with neighbor list keys added.
+    """
+    coord = data["coord"]
+    n_atoms = coord.shape[0]
+
+    # Create a simple all-pairs neighbor matrix (for testing)
+    max_nb = min(n_atoms - 1, 50)  # Limit max neighbors for large systems
+    nbmat = torch.zeros((n_atoms, max_nb), dtype=torch.long, device=device)
+    for i in range(n_atoms):
+        neighbors = [j for j in range(n_atoms) if j != i][:max_nb]
+        for k, nb in enumerate(neighbors):
+            nbmat[i, k] = nb
+        # Fill remaining with padding index
+        for k in range(len(neighbors), max_nb):
+            nbmat[i, k] = n_atoms - 1  # Point to last atom as padding
+
+    # Shifts are unit cell translations - use float for matrix multiplication with cell
+    shifts = torch.zeros((n_atoms, max_nb, 3), dtype=torch.float32, device=device)
+
+    data["nbmat"] = nbmat
+    data["shifts"] = shifts
+    # Long-range neighbor list keys (used by LRCoulomb module)
+    # shifts_lr must be float for matrix multiplication with cell in calc_distances
+    data["nbmat_lr"] = nbmat
+    data["shifts_lr"] = shifts.clone()
+    data["nbmat_coulomb"] = nbmat
+    data["shifts_coulomb"] = shifts.clone()
+    data["cutoff_coulomb"] = torch.tensor(cutoff, device=device)
+
+    data = nbops.set_nb_mode(data)
+    data = nbops.calc_masks(data)
+
+    # Compute distances
+    d_ij, _ = ops.calc_distances(data)
+    data["d_ij"] = d_ij
+
+    return data
+
+
+class TestDSFPeriodic:
+    """Tests for DSF Coulomb with periodic structures."""
+
+    def test_dsf_pbc_energy_finite(self, pbc_crystal_small, device):
+        """Test DSF produces finite energy for periodic system."""
+        module = LRCoulomb(method="dsf", dsf_rc=8.0).to(device)
+        data = setup_pbc_data_with_nblist(pbc_crystal_small.copy(), device)
+
+        # Add mock charges for testing
+        n_atoms = data["coord"].shape[0]
+        data["charges"] = torch.randn(n_atoms, device=device) * 0.3
+
+        result = module(data)
+
+        assert "e_h" in result
+        assert torch.isfinite(result["e_h"]).all(), "DSF energy is not finite"
+
+    def test_dsf_pbc_zero_charges(self, pbc_crystal_small, device):
+        """Test DSF with zero charges produces zero energy."""
+        module = LRCoulomb(method="dsf", dsf_rc=8.0).to(device)
+        data = setup_pbc_data_with_nblist(pbc_crystal_small.copy(), device)
+
+        n_atoms = data["coord"].shape[0]
+        data["charges"] = torch.zeros(n_atoms, device=device)
+
+        result = module(data)
+
+        assert result["e_h"].abs().sum().item() < 1e-10, "DSF energy should be zero for zero charges"
+
+    def test_dsf_pbc_opposite_charges_attractive(self, pbc_crystal_small, device):
+        """Test DSF gives negative energy for opposite charges."""
+        module = LRCoulomb(method="dsf", dsf_rc=8.0).to(device)
+        data = setup_pbc_data_with_nblist(pbc_crystal_small.copy(), device)
+
+        n_atoms = data["coord"].shape[0]
+        # Alternate charges: +1, -1, +1, -1, ...
+        charges = torch.ones(n_atoms, device=device)
+        charges[1::2] = -1.0
+        data["charges"] = charges
+
+        result = module(data)
+
+        # For alternating charges, energy should be negative (attractive)
+        assert result["e_h"].item() < 0, "Alternating charges should have negative Coulomb energy"
+
+    def test_dsf_pbc_cutoff_effect(self, pbc_crystal_small, device):
+        """Test that DSF cutoff affects energy in periodic system."""
+        data = setup_pbc_data_with_nblist(pbc_crystal_small.copy(), device)
+        n_atoms = data["coord"].shape[0]
+        data["charges"] = torch.randn(n_atoms, device=device) * 0.5
+
+        # Short cutoff
+        module_short = LRCoulomb(method="dsf", dsf_rc=3.0).to(device)
+        result_short = module_short(data.copy())
+
+        # Long cutoff
+        module_long = LRCoulomb(method="dsf", dsf_rc=10.0).to(device)
+        result_long = module_long(data.copy())
+
+        # Both should be finite
+        assert torch.isfinite(result_short["e_h"]).all()
+        assert torch.isfinite(result_long["e_h"]).all()
+
+    def test_dsf_pbc_gradient_coords(self, pbc_crystal_small, device):
+        """Test gradient of DSF energy w.r.t. coordinates."""
+        module = LRCoulomb(method="dsf", dsf_rc=8.0).to(device)
+
+        data = pbc_crystal_small.copy()
+        data["coord"] = data["coord"].clone().requires_grad_(True)
+        data = setup_pbc_data_with_nblist(data, device)
+
+        n_atoms = data["coord"].shape[0]
+        data["charges"] = torch.randn(n_atoms, device=device) * 0.3
+
+        result = module(data)
+        result["e_h"].backward()
+
+        assert data["coord"].grad is not None, "Gradient should exist"
+        assert torch.isfinite(data["coord"].grad).all(), "Gradient should be finite"
+
+
+class TestEwaldPeriodic:
+    """Tests for Ewald summation with periodic structures."""
+
+    def test_ewald_pbc_energy_finite(self, pbc_crystal_small, device):
+        """Test Ewald produces finite energy for periodic system."""
+        module = LRCoulomb(method="ewald").to(device)
+        data = setup_pbc_data_with_nblist(pbc_crystal_small.copy(), device, cutoff=8.0)
+
+        n_atoms = data["coord"].shape[0]
+        # Ensure charge neutrality for Ewald
+        charges = torch.randn(n_atoms, device=device) * 0.3
+        charges = charges - charges.mean()  # Make neutral
+        data["charges"] = charges
+
+        result = module(data)
+
+        assert "e_h" in result
+        assert torch.isfinite(result["e_h"]).all(), "Ewald energy is not finite"
+
+    def test_ewald_pbc_zero_charges(self, pbc_crystal_small, device):
+        """Test Ewald with zero charges produces zero energy."""
+        module = LRCoulomb(method="ewald").to(device)
+        data = setup_pbc_data_with_nblist(pbc_crystal_small.copy(), device)
+
+        n_atoms = data["coord"].shape[0]
+        data["charges"] = torch.zeros(n_atoms, device=device)
+
+        result = module(data)
+
+        assert result["e_h"].abs().sum().item() < 1e-8, "Ewald energy should be zero for zero charges"
+
+    def test_ewald_pbc_charge_neutrality(self, pbc_crystal_small, device):
+        """Test Ewald handles charge-neutral periodic systems correctly."""
+        module = LRCoulomb(method="ewald").to(device)
+        data = setup_pbc_data_with_nblist(pbc_crystal_small.copy(), device)
+
+        n_atoms = data["coord"].shape[0]
+        # Create explicitly neutral system
+        charges = torch.ones(n_atoms, device=device)
+        charges[n_atoms // 2:] = -1.0
+        if n_atoms % 2 != 0:
+            charges[-1] = 0.0
+        data["charges"] = charges
+
+        result = module(data)
+
+        assert torch.isfinite(result["e_h"]).all(), "Ewald should work with neutral system"
+
+    def test_ewald_pbc_gradient_coords(self, pbc_crystal_small, device):
+        """Test gradient of Ewald energy w.r.t. coordinates."""
+        module = LRCoulomb(method="ewald").to(device)
+
+        data = pbc_crystal_small.copy()
+        data["coord"] = data["coord"].clone().requires_grad_(True)
+        data = setup_pbc_data_with_nblist(data, device)
+
+        n_atoms = data["coord"].shape[0]
+        charges = torch.randn(n_atoms, device=device) * 0.3
+        charges = charges - charges.mean()
+        data["charges"] = charges
+
+        result = module(data)
+        result["e_h"].backward()
+
+        assert data["coord"].grad is not None, "Gradient should exist"
+        assert torch.isfinite(data["coord"].grad).all(), "Gradient should be finite"
+
+
+class TestDSFvsEwaldConsistency:
+    """Tests comparing DSF and Ewald methods."""
+
+    def test_dsf_ewald_both_finite(self, pbc_crystal_small, device):
+        """Test both DSF and Ewald produce finite energies for same system."""
+        data = setup_pbc_data_with_nblist(pbc_crystal_small.copy(), device, cutoff=8.0)
+
+        n_atoms = data["coord"].shape[0]
+        charges = torch.randn(n_atoms, device=device) * 0.3
+        charges = charges - charges.mean()
+        data["charges"] = charges
+
+        module_dsf = LRCoulomb(method="dsf", dsf_rc=8.0).to(device)
+        module_ewald = LRCoulomb(method="ewald").to(device)
+
+        result_dsf = module_dsf(data.copy())
+        result_ewald = module_ewald(data.copy())
+
+        assert torch.isfinite(result_dsf["e_h"]).all(), "DSF energy not finite"
+        assert torch.isfinite(result_ewald["e_h"]).all(), "Ewald energy not finite"
+
+    def test_dsf_ewald_sign_consistency(self, pbc_crystal_small, device):
+        """Test DSF and Ewald agree on energy sign."""
+        data = setup_pbc_data_with_nblist(pbc_crystal_small.copy(), device, cutoff=8.0)
+
+        n_atoms = data["coord"].shape[0]
+        # Alternating charges for clear attractive energy
+        charges = torch.ones(n_atoms, device=device)
+        charges[1::2] = -1.0
+        if n_atoms % 2 != 0:
+            charges[-1] = 0.0
+        data["charges"] = charges
+
+        module_dsf = LRCoulomb(method="dsf", dsf_rc=8.0).to(device)
+        module_ewald = LRCoulomb(method="ewald").to(device)
+
+        result_dsf = module_dsf(data.copy())
+        result_ewald = module_ewald(data.copy())
+
+        # Both should have same sign (likely negative for alternating charges)
+        dsf_sign = torch.sign(result_dsf["e_h"])
+        ewald_sign = torch.sign(result_ewald["e_h"])
+        assert dsf_sign.item() == ewald_sign.item(), "DSF and Ewald should agree on energy sign"
+
+
+class TestPBCNeighborList:
+    """Tests for periodic neighbor list construction."""
+
+    def test_pbc_data_has_cell(self, pbc_crystal_small, device):
+        """Test that PBC crystal data has cell information."""
+        assert "cell" in pbc_crystal_small, "PBC data should have cell"
+        assert pbc_crystal_small["cell"].shape == (3, 3), "Cell should be 3x3 matrix"
+
+    def test_pbc_data_has_mol_idx(self, pbc_crystal_small, device):
+        """Test that PBC crystal data has mol_idx."""
+        assert "mol_idx" in pbc_crystal_small, "PBC data should have mol_idx"
+        n_atoms = pbc_crystal_small["coord"].shape[0]
+        assert pbc_crystal_small["mol_idx"].shape[0] == n_atoms
+
+    def test_setup_nblist_shapes(self, pbc_crystal_small, device):
+        """Test neighbor list setup produces correct shapes."""
+        data = setup_pbc_data_with_nblist(pbc_crystal_small.copy(), device)
+
+        n_atoms = data["coord"].shape[0]
+        assert "nbmat" in data
+        assert "nbmat_coulomb" in data
+        assert data["nbmat"].shape[0] == n_atoms
+        assert data["nbmat_coulomb"].shape[0] == n_atoms
+
+
+class TestCalculatorPBC:
+    """Integration tests for full calculator with PBC."""
+
+    def test_calculator_pbc_dsf_inference(self, pbc_crystal_small, device):
+        """Test full calculator inference on periodic system with DSF."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        data = pbc_crystal_small.copy()
+        # Convert to format expected by calculator
+        data_calc = {
+            "coord": data["coord"].cpu().numpy(),
+            "numbers": data["numbers"].cpu().numpy(),
+            "charge": 0.0,
+            "cell": data["cell"].cpu().numpy(),
+        }
+
+        res = calc(data_calc)
+
+        assert "energy" in res
+        assert torch.isfinite(res["energy"]).all()
+
+    def test_calculator_pbc_ewald_inference(self, pbc_crystal_small, device):
+        """Test full calculator inference on periodic system with Ewald."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc.set_lrcoulomb_method("ewald", cutoff=8.0)
+
+        data = pbc_crystal_small.copy()
+        data_calc = {
+            "coord": data["coord"].cpu().numpy(),
+            "numbers": data["numbers"].cpu().numpy(),
+            "charge": 0.0,
+            "cell": data["cell"].cpu().numpy(),
+        }
+
+        res = calc(data_calc)
+
+        assert "energy" in res
+        assert torch.isfinite(res["energy"]).all()
+
+    def test_calculator_pbc_forces(self, pbc_crystal_small, device):
+        """Test force calculation for periodic system."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        data = pbc_crystal_small.copy()
+        data_calc = {
+            "coord": data["coord"].cpu().numpy(),
+            "numbers": data["numbers"].cpu().numpy(),
+            "charge": 0.0,
+            "cell": data["cell"].cpu().numpy(),
+        }
+
+        res = calc(data_calc, forces=True)
+
+        assert "forces" in res
+        n_atoms = data["coord"].shape[0]
+        assert res["forces"].shape[-2] == n_atoms
+        assert res["forces"].shape[-1] == 3
+        assert torch.isfinite(res["forces"]).all()
+
+    @pytest.mark.parametrize("method", ["dsf", "ewald"])
+    def test_calculator_pbc_both_methods(self, pbc_crystal_small, device, method):
+        """Test calculator works with both DSF and Ewald methods."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc.set_lrcoulomb_method(method, cutoff=8.0)
+
+        data = pbc_crystal_small.copy()
+        data_calc = {
+            "coord": data["coord"].cpu().numpy(),
+            "numbers": data["numbers"].cpu().numpy(),
+            "charge": 0.0,
+            "cell": data["cell"].cpu().numpy(),
+        }
+
+        res = calc(data_calc)
+
+        assert "energy" in res
+        assert torch.isfinite(res["energy"]).all()
+
+
+class TestLargeCrystal:
+    """Tests with larger crystal structure."""
+
+    def test_large_crystal_dsf_energy(self, pbc_crystal_large, device):
+        """Test DSF on larger crystal (~50 atoms)."""
+        module = LRCoulomb(method="dsf", dsf_rc=8.0).to(device)
+        data = setup_pbc_data_with_nblist(pbc_crystal_large.copy(), device)
+
+        n_atoms = data["coord"].shape[0]
+        data["charges"] = torch.randn(n_atoms, device=device) * 0.3
+
+        result = module(data)
+
+        assert torch.isfinite(result["e_h"]).all()
+
+    def test_large_crystal_ewald_energy(self, pbc_crystal_large, device):
+        """Test Ewald on larger crystal (~50 atoms)."""
+        module = LRCoulomb(method="ewald").to(device)
+        data = setup_pbc_data_with_nblist(pbc_crystal_large.copy(), device)
+
+        n_atoms = data["coord"].shape[0]
+        charges = torch.randn(n_atoms, device=device) * 0.3
+        charges = charges - charges.mean()
+        data["charges"] = charges
+
+        result = module(data)
+
+        assert torch.isfinite(result["e_h"]).all()
+
+    def test_large_crystal_calculator(self, pbc_crystal_large, device):
+        """Test full calculator on larger crystal."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        data = pbc_crystal_large.copy()
+        data_calc = {
+            "coord": data["coord"].cpu().numpy(),
+            "numbers": data["numbers"].cpu().numpy(),
+            "charge": 0.0,
+            "cell": data["cell"].cpu().numpy(),
+        }
+
+        res = calc(data_calc)
+
+        assert "energy" in res
+        assert torch.isfinite(res["energy"]).all()

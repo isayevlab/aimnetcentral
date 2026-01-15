@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pytest
 import torch
+from conftest import add_dftd3_keys
 from torch import nn
 
 from aimnet.calculators.model_registry import get_model_path
@@ -55,6 +56,7 @@ def test_aimnet2():
         "numbers": torch.as_tensor(atoms.get_atomic_numbers()).unsqueeze(0),  # type: ignore
         "charge": torch.tensor([0.0]),
     }
+    _in = add_dftd3_keys(_in)
     _out = model(_in)
     e = _out["energy"].item()
     f = _out["forces"].squeeze(0).detach().cpu().numpy()
@@ -87,6 +89,7 @@ class TestTorchScript:
             "numbers": torch.tensor([[8, 1, 1]]),
             "charge": torch.tensor([0.0]),
         }
+        _in = add_dftd3_keys(_in)
 
         # Run both models
         with torch.no_grad():
@@ -117,6 +120,7 @@ class TestTorchScript:
             "numbers": torch.tensor([[8, 1, 1]]),
             "charge": torch.tensor([0.0]),
         }
+        _in = add_dftd3_keys(_in)
 
         with torch.no_grad():
             original_out = scripted(_in.copy())

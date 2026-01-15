@@ -114,8 +114,8 @@ def coulomb_matrix_dsf(d_ij: Tensor, Rc: float, alpha: float, data: dict[str, Te
     _c3 = _c2 / Rc
     _c4 = 2 * alpha * math.exp(-((alpha * Rc) ** 2)) / (Rc * math.pi**0.5)
     J = _c1 - _c2 + (d_ij - Rc) * (_c3 + _c4)
-    # mask for d_ij > Rc
-    mask = data["mask_ij_lr"] & (d_ij > Rc)
+    # Zero invalid pairs: padding/diagonal (mask_ij_lr) OR beyond cutoff
+    mask = data["mask_ij_lr"] | (d_ij > Rc)
     J.masked_fill_(mask, 0.0)
     return J
 
@@ -125,7 +125,8 @@ def coulomb_matrix_sf(q_j: Tensor, d_ij: Tensor, Rc: float, data: dict[str, Tens
     _c2 = 1.0 / Rc
     _c3 = _c2 / Rc
     J = _c1 - _c2 + (d_ij - Rc) * _c3
-    mask = data["mask_ij_lr"] & (d_ij > Rc)
+    # Zero invalid pairs: padding/diagonal (mask_ij_lr) OR beyond cutoff
+    mask = data["mask_ij_lr"] | (d_ij > Rc)
     J.masked_fill_(mask, 0.0)
     return J
 

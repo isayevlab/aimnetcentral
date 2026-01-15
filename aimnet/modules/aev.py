@@ -4,7 +4,6 @@ import torch
 from torch import Tensor, nn
 
 from aimnet import nbops, ops
-
 from aimnet.kernels import conv_sv_2d_sp
 
 

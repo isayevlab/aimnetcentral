@@ -28,6 +28,9 @@ to enable testing on both CPU and CUDA devices.
 import pytest
 import torch
 
+# All tests in this module require GPU
+pytestmark = pytest.mark.gpu
+
 # Skip all tests if warp is not available
 try:
     from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp
@@ -91,7 +94,6 @@ class TestConvSV2dSP:
 
         return a, idx, g
 
-    @pytest.mark.gpu
     def test_forward_accuracy(self, test_data_cuda):
         """Test forward pass accuracy against einsum reference."""
         a, idx, g = test_data_cuda
@@ -107,7 +109,6 @@ class TestConvSV2dSP:
             f"Forward pass accuracy failed. Max diff: {torch.max(torch.abs(output_warp - output_ref))}"
         )
 
-    @pytest.mark.gpu
     def test_backward_accuracy(self, test_data_cuda):
         """Test backward pass accuracy against PyTorch autograd."""
         a, idx, g = test_data_cuda
@@ -140,7 +141,6 @@ class TestConvSV2dSP:
             f"Gradient w.r.t. 'g' accuracy failed. Max diff: {torch.max(torch.abs(g_warp.grad - g_ref.grad))}"
         )
 
-    @pytest.mark.gpu
     def test_double_backward_accuracy(self, test_data_small_cuda):
         """Test double backward pass accuracy."""
         a, idx, g = test_data_small_cuda
@@ -202,7 +202,6 @@ class TestConvSV2dSP:
             f"Second-order gradient d²/dgda failed. Max diff: {torch.max(torch.abs(grad2_g_a_warp - grad2_g_a_ref))}"
         )
 
-    @pytest.mark.gpu
     def test_different_shapes(self, test_data_cuda):
         """Test with various tensor shapes."""
         # Test with different batch sizes
@@ -222,7 +221,6 @@ class TestConvSV2dSP:
                     f"Shape test failed for B={B}, M={M}. Max diff: {torch.max(torch.abs(output_warp - output_ref))}"
                 )
 
-    @pytest.mark.gpu
     def test_op_registration(self, test_data_cuda):
         """Test that PyTorch ops are properly registered."""
         a, idx, g = test_data_cuda

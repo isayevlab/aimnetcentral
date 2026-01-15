@@ -4,10 +4,9 @@ All tests in this module require CUDA and are marked with @pytest.mark.gpu.
 Run with: pytest -m gpu
 """
 
-import os
-
 import pytest
 import torch
+from conftest import CAFFEINE_FILE, load_mol
 
 from aimnet.calculators import AIMNet2Calculator
 
@@ -17,22 +16,6 @@ pytestmark = pytest.mark.gpu
 if not torch.cuda.is_available():
     pytest.skip("CUDA not available", allow_module_level=True)
 
-file = os.path.join(os.path.dirname(__file__), "data", "caffeine.xyz")
-
-
-def load_mol(filepath):
-    """Helper to load molecule from xyz file."""
-    pytest.importorskip("ase", reason="ASE not installed")
-    import ase.io
-
-    atoms = ase.io.read(filepath)
-    data = {
-        "coord": atoms.get_positions(),
-        "numbers": atoms.get_atomic_numbers(),
-        "charge": 0.0,
-    }
-    return data
-
 
 def create_cpu_calculator():
     """Create a CPU-only calculator instance for comparison tests.
@@ -40,6 +23,7 @@ def create_cpu_calculator():
     Uses __new__ to bypass __init__ which auto-selects CUDA when available.
     This approach directly initializes attributes to force CPU execution.
     """
+    from aimnet.calculators.calculator import AdaptiveNeighborList
     from aimnet.calculators.model_registry import get_model_path
 
     calc = AIMNet2Calculator.__new__(AIMNet2Calculator)
@@ -50,12 +34,18 @@ def create_cpu_calculator():
     calc.cutoff = calc.model.cutoff
     calc.lr = hasattr(calc.model, "cutoff_lr")
     calc.cutoff_lr = getattr(calc.model, "cutoff_lr", float("inf")) if calc.lr else None
-    calc.max_density = 0.2
     calc.nb_threshold = 0
     calc._batch = None
     calc._max_mol_size = 0
     calc._saved_for_grad = {}
     calc._coulomb_method = "simple"
+
+    # Create adaptive neighbor list instances
+    calc._nblist = AdaptiveNeighborList(cutoff=calc.cutoff)
+    if calc.lr and calc.cutoff_lr is not None and calc.cutoff_lr < float("inf"):
+        calc._nblist_lr = AdaptiveNeighborList(cutoff=calc.cutoff_lr)
+    else:
+        calc._nblist_lr = None
 
     return calc
 
@@ -73,7 +63,7 @@ class TestGPUBasics:
     def test_inference_on_cuda(self):
         """Test basic inference on CUDA."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        data = load_mol(file)
+        data = load_mol(CAFFEINE_FILE)
         res = calc(data)
 
         assert "energy" in res
@@ -83,7 +73,7 @@ class TestGPUBasics:
     def test_forces_on_cuda(self):
         """Test force calculation on CUDA."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        data = load_mol(file)
+        data = load_mol(CAFFEINE_FILE)
         res = calc(data, forces=True)
 
         assert "forces" in res
@@ -98,7 +88,7 @@ class TestGPUvsCPUConsistency:
         """Test that GPU and CPU produce the same energy."""
         # GPU calculation
         calc_gpu = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        data = load_mol(file)
+        data = load_mol(CAFFEINE_FILE)
         res_gpu = calc_gpu(data)
         energy_gpu = res_gpu["energy"].cpu()
 
@@ -115,7 +105,7 @@ class TestGPUvsCPUConsistency:
         """Test that GPU and CPU produce the same forces."""
         # GPU calculation
         calc_gpu = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        data = load_mol(file)
+        data = load_mol(CAFFEINE_FILE)
         res_gpu = calc_gpu(data, forces=True)
         forces_gpu = res_gpu["forces"].cpu()
 
@@ -182,7 +172,7 @@ class TestGPUBatching:
     def test_large_batch_on_gpu(self):
         """Test large batch processing on GPU."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=500)  # Force batched mode
-        data = load_mol(file)
+        data = load_mol(CAFFEINE_FILE)
 
         # Create batch of 10 copies
         import numpy as np
@@ -205,7 +195,7 @@ class TestGPUBatching:
     @pytest.mark.ase
     def test_nb_threshold_behavior(self):
         """Test that nb_threshold controls batching behavior."""
-        data = load_mol(file)
+        data = load_mol(CAFFEINE_FILE)
         n_atoms = len(data["numbers"])
 
         # With high threshold, should use batched mode
@@ -227,7 +217,7 @@ class TestGPUMemory:
     def test_memory_cleanup_after_inference(self):
         """Test that GPU memory is properly cleaned up after inference."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        data = load_mol(file)
+        data = load_mol(CAFFEINE_FILE)
 
         # Run inference multiple times
         for _ in range(5):
@@ -253,7 +243,7 @@ class TestGPUMemory:
     def test_no_memory_leak_in_forces(self):
         """Test that force calculation doesn't leak memory."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        data = load_mol(file)
+        data = load_mol(CAFFEINE_FILE)
 
         # Warm up
         _ = calc(data, forces=True)
@@ -282,7 +272,7 @@ class TestCPUGPUConsistency:
     @pytest.mark.ase
     def test_energy_cpu_vs_gpu_single_molecule(self):
         """Verify energy is identical on CPU and GPU."""
-        data = load_mol(file)
+        data = load_mol(CAFFEINE_FILE)
 
         # CPU calculation
         calc_cpu = create_cpu_calculator()
@@ -299,7 +289,7 @@ class TestCPUGPUConsistency:
     @pytest.mark.ase
     def test_forces_cpu_vs_gpu_single_molecule(self):
         """Verify forces are identical on CPU and GPU."""
-        data = load_mol(file)
+        data = load_mol(CAFFEINE_FILE)
 
         # CPU calculation
         calc_cpu = create_cpu_calculator()

@@ -33,6 +33,7 @@ import tempfile
 
 import pytest
 import torch
+from conftest import add_dftd3_keys
 
 from aimnet import nbops
 from aimnet.modules.lr import DFTD3
@@ -49,7 +50,20 @@ def setup_dftd3_data_mode_0(device, n_atoms=5):
     # Use common organic elements (H, C, N, O)
     numbers = torch.tensor([[6, 1, 1, 7, 8]], device=device)[:, :n_atoms]
 
-    data = {"coord": coord, "numbers": numbers}
+    # Create neighbor matrix for DFTD3
+    max_nb = n_atoms - 1
+    nbmat_dftd3 = torch.zeros((1, n_atoms, max_nb), dtype=torch.long, device=device)
+    for i in range(n_atoms):
+        neighbors = [j for j in range(n_atoms) if j != i]
+        for k, nb in enumerate(neighbors[:max_nb]):
+            nbmat_dftd3[0, i, k] = nb
+
+    data = {
+        "coord": coord,
+        "numbers": numbers,
+        "nbmat_dftd3": nbmat_dftd3,
+        "cutoff_dftd3": torch.tensor(15.0),
+    }
     data = nbops.set_nb_mode(data)
     data = nbops.calc_masks(data)
 
@@ -68,14 +82,17 @@ def setup_dftd3_data_mode_1(device, n_atoms=5):
     max_nb = n_atoms
     nbmat = torch.zeros((n_atoms + 1, max_nb), dtype=torch.long, device=device)
     nbmat_lr = torch.zeros((n_atoms + 1, max_nb), dtype=torch.long, device=device)
+    nbmat_dftd3 = torch.zeros((n_atoms + 1, max_nb), dtype=torch.long, device=device)
     for i in range(n_atoms):
         neighbors = [j for j in range(n_atoms + 1) if j != i][:max_nb]
         for k, nb in enumerate(neighbors):
             nbmat[i, k] = nb
             nbmat_lr[i, k] = nb
+            nbmat_dftd3[i, k] = nb
     # Padding row points to padding atom
     nbmat[-1] = n_atoms
     nbmat_lr[-1] = n_atoms
+    nbmat_dftd3[-1] = n_atoms
 
     data = {
         "coord": coord,
@@ -83,6 +100,8 @@ def setup_dftd3_data_mode_1(device, n_atoms=5):
         "mol_idx": mol_idx,
         "nbmat": nbmat,
         "nbmat_lr": nbmat_lr,
+        "nbmat_dftd3": nbmat_dftd3,
+        "cutoff_dftd3": torch.tensor(15.0),
     }
     data = nbops.set_nb_mode(data)
     data = nbops.calc_masks(data)
@@ -206,6 +225,7 @@ class TestDFTD3Forward:
         numbers = torch.tensor([[8, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
@@ -233,11 +253,13 @@ class TestDFTD3Forward:
         numbers = torch.tensor([[6, 1, 1]], device=device)
 
         data1 = {"coord": coord.clone(), "numbers": numbers.clone()}
+        data1 = add_dftd3_keys(data1, device)
         data1 = nbops.set_nb_mode(data1)
         data1 = nbops.calc_masks(data1)
         result1 = module(data1)
 
         data2 = {"coord": coord.clone(), "numbers": numbers.clone()}
+        data2 = add_dftd3_keys(data2, device)
         data2 = nbops.set_nb_mode(data2)
         data2 = nbops.calc_masks(data2)
         result2 = module(data2)
@@ -262,6 +284,7 @@ class TestDFTD3Additive:
         numbers = torch.tensor([[6, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
@@ -281,6 +304,7 @@ class TestDFTD3Additive:
         numbers = torch.tensor([[6, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
@@ -312,6 +336,7 @@ class TestDFTD3PhysicalCorrectness:
         numbers = torch.tensor([[6, 6]], device=device)
 
         data_close = {"coord": coord_close, "numbers": numbers}
+        data_close = add_dftd3_keys(data_close, device)
         data_close = nbops.set_nb_mode(data_close)
         data_close = nbops.calc_masks(data_close)
         result_close = module(data_close)
@@ -319,6 +344,7 @@ class TestDFTD3PhysicalCorrectness:
         # Far atoms
         coord_far = torch.tensor([[[0.0, 0.0, 0.0], [5.0, 0.0, 0.0]]], device=device)
         data_far = {"coord": coord_far, "numbers": numbers.clone()}
+        data_far = add_dftd3_keys(data_far, device)
         data_far = nbops.set_nb_mode(data_far)
         data_far = nbops.calc_masks(data_far)
 
@@ -337,6 +363,7 @@ class TestDFTD3PhysicalCorrectness:
         # H-H pair
         numbers_hh = torch.tensor([[1, 1]], device=device)
         data_hh = {"coord": coord.clone(), "numbers": numbers_hh}
+        data_hh = add_dftd3_keys(data_hh, device)
         data_hh = nbops.set_nb_mode(data_hh)
         data_hh = nbops.calc_masks(data_hh)
         result_hh = module(data_hh)
@@ -345,6 +372,7 @@ class TestDFTD3PhysicalCorrectness:
         module2 = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
         numbers_cc = torch.tensor([[6, 6]], device=device)
         data_cc = {"coord": coord.clone(), "numbers": numbers_cc}
+        data_cc = add_dftd3_keys(data_cc, device)
         data_cc = nbops.set_nb_mode(data_cc)
         data_cc = nbops.calc_masks(data_cc)
         result_cc = module2(data_cc)
@@ -378,6 +406,7 @@ class TestDFTD3Batching:
         numbers = torch.tensor([[6, 1, 1], [6, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
@@ -408,6 +437,7 @@ class TestDFTD3Autograd:
         numbers = torch.tensor([[8, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
@@ -426,6 +456,7 @@ class TestDFTD3Autograd:
         numbers = torch.tensor([[8, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
@@ -443,6 +474,7 @@ class TestDFTD3Autograd:
         numbers = torch.tensor([[6, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
@@ -465,6 +497,7 @@ class TestDFTD3Autograd:
         numbers = torch.tensor([[6, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
@@ -496,6 +529,7 @@ class TestDFTD3Autograd:
         numbers = torch.tensor([[6, 1, 1], [6, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
@@ -521,6 +555,7 @@ class TestDFTD3Autograd:
         numbers = torch.tensor([[6, 1, 1], [6, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
@@ -554,6 +589,7 @@ class TestDFTD3TorchScript:
         numbers = torch.tensor([[8, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
@@ -578,6 +614,7 @@ class TestDFTD3TorchScript:
         numbers = torch.tensor([[8, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
@@ -596,6 +633,7 @@ class TestDFTD3TorchScript:
         numbers = torch.tensor([[8, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
@@ -604,3 +642,88 @@ class TestDFTD3TorchScript:
             result = module(data)
 
         assert result["energy"].shape == (1,)
+
+
+# =============================================================================
+# torch.compile Tests
+# =============================================================================
+
+
+@pytest.mark.gpu
+class TestDFTD3Compile:
+    """Tests for torch.compile compatibility."""
+
+    def test_compile_forward(self, device):
+        """Test that DFTD3 module can be compiled and produces correct results."""
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
+        compiled_module = torch.compile(module, fullgraph=False)
+
+        # Create test input
+        coord = torch.tensor([[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]], device=device)
+        numbers = torch.tensor([[8, 1, 1]], device=device)
+
+        data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
+        data = nbops.set_nb_mode(data)
+        data = nbops.calc_masks(data)
+
+        # Compare eager vs compiled
+        with torch.no_grad():
+            eager_result = module(data.copy())
+            compiled_result = compiled_module(data.copy())
+
+        torch.testing.assert_close(eager_result["energy"], compiled_result["energy"], rtol=1e-5, atol=1e-6)
+
+    def test_compile_with_gradients(self, device):
+        """Test that compiled DFTD3 works with gradient computation."""
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
+        compiled_module = torch.compile(module, fullgraph=False)
+
+        # Create test input with gradients
+        coord = torch.tensor(
+            [[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]],
+            device=device,
+            requires_grad=True,
+        )
+        numbers = torch.tensor([[8, 1, 1]], device=device)
+
+        data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
+        data = nbops.set_nb_mode(data)
+        data = nbops.calc_masks(data)
+
+        # Run compiled forward and backward
+        result = compiled_module(data)
+        result["energy"].sum().backward()
+
+        # Verify gradients are finite
+        assert coord.grad is not None
+        assert torch.isfinite(coord.grad).all()
+
+    def test_compile_batched(self, device):
+        """Test that compiled DFTD3 works with batched input."""
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
+        compiled_module = torch.compile(module, fullgraph=False)
+
+        # Batch of 2 molecules
+        coord = torch.tensor(
+            [
+                [[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]],
+                [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
+            ],
+            device=device,
+        )
+        numbers = torch.tensor([[6, 1, 1], [6, 1, 1]], device=device)
+
+        data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
+        data = nbops.set_nb_mode(data)
+        data = nbops.calc_masks(data)
+
+        # Compare eager vs compiled
+        with torch.no_grad():
+            eager_result = module(data.copy())
+            compiled_result = compiled_module(data.copy())
+
+        assert compiled_result["energy"].shape == (2,)
+        torch.testing.assert_close(eager_result["energy"], compiled_result["energy"], rtol=1e-5, atol=1e-6)

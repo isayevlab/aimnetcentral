@@ -186,6 +186,10 @@ class DFTD3(nn.Module):
         BJ damping parameter 2.
     s6 : float, optional
         Scaling factor for C6 term. Default is 1.0.
+    cutoff : float, optional
+        Cutoff distance in Angstroms for smoothing. Default is 15.0.
+    smoothing_fraction : float, optional
+        Fraction of cutoff at which smoothing starts. Default is 0.8.
     key_out : str, optional
         Key for output energy in data dict. Default is "energy".
     compute_forces : bool, optional
@@ -200,6 +204,8 @@ class DFTD3(nn.Module):
         a1: float,
         a2: float,
         s6: float = 1.0,
+        cutoff: float = 15.0,
+        smoothing_fraction: float = 0.8,
         key_out: str = "energy",
         compute_forces: bool = False,
         compute_virial: bool = False,
@@ -213,6 +219,10 @@ class DFTD3(nn.Module):
         self.s8 = s8
         self.a1 = a1
         self.a2 = a2
+
+        # Smoothing parameters as module attributes
+        self.smoothing_on: float = cutoff * smoothing_fraction
+        self.smoothing_off: float = cutoff
 
         # Load D3 reference parameters and convert to nvalchemiops format
         dirname = os.path.dirname(os.path.dirname(__file__))
@@ -230,6 +240,19 @@ class DFTD3(nn.Module):
         self.register_buffer("r4r2", param["r4r2"].float())
         self.register_buffer("c6ab", c6ab.float())
         self.register_buffer("cn_ref", cn_ref.float())
+
+    def set_smoothing(self, cutoff: float, smoothing_fraction: float = 0.8) -> None:
+        """Update smoothing parameters based on new cutoff and fraction.
+
+        Parameters
+        ----------
+        cutoff : float
+            Cutoff distance in Angstroms.
+        smoothing_fraction : float
+            Fraction of cutoff at which smoothing starts (default 0.8).
+        """
+        self.smoothing_on = cutoff * smoothing_fraction
+        self.smoothing_off = cutoff
 
     def _load_from_state_dict(
         self,
@@ -433,5 +456,7 @@ class DFTD3(nn.Module):
             s8=self.s8,
             num_systems=num_systems,
             fill_value=fill_value,
+            smoothing_on=self.smoothing_on,
+            smoothing_off=self.smoothing_off,
             compute_virial=self.compute_virial,
         )

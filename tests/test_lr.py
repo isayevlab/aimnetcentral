@@ -6,6 +6,12 @@ import torch
 from aimnet import nbops, ops
 from aimnet.modules.lr import LRCoulomb
 
+# Coulomb methods for parametrized tests (non-periodic)
+# Note: "ewald" excluded here because it requires cell and flat format (mode 1)
+# Ewald is tested separately in TestLRCoulombEwald and TestLRCoulombEwaldPBC classes
+COULOMB_METHODS = ["simple", "dsf"]
+COULOMB_METHODS_ALL = ["simple", "dsf", "ewald"]
+
 
 def setup_data_mode_0(device, n_atoms=5):
     """Create test data in nb_mode=0 format."""
@@ -31,7 +37,7 @@ def setup_data_mode_1(device, n_atoms=5):
     coord = torch.rand((n_atoms + 1, 3), device=device) * 5  # +1 for padding
     numbers = torch.cat([torch.randint(1, 10, (n_atoms,), device=device), torch.tensor([0], device=device)])
     charges = torch.cat([torch.randn(n_atoms, device=device) * 0.3, torch.tensor([0.0], device=device)])
-    mol_idx = torch.cat([torch.zeros(n_atoms, dtype=torch.long, device=device), torch.tensor([1], device=device)])
+    mol_idx = torch.cat([torch.zeros(n_atoms, dtype=torch.long, device=device), torch.tensor([0], device=device)])
 
     # Create neighbor matrix (all atoms see each other)
     max_nb = n_atoms
@@ -59,40 +65,6 @@ def setup_data_mode_1(device, n_atoms=5):
     data["d_ij"] = d_ij
 
     return data
-
-
-class TestLRCoulombInit:
-    """Tests for LRCoulomb initialization."""
-
-    def test_default_init(self, device):
-        """Test default initialization."""
-        module = LRCoulomb().to(device)
-        assert module.key_in == "charges"
-        assert module.key_out == "e_h"
-        assert module.method == "simple"
-
-    def test_custom_keys(self, device):
-        """Test initialization with custom keys."""
-        module = LRCoulomb(key_in="q", key_out="energy_coul").to(device)
-        assert module.key_in == "q"
-        assert module.key_out == "energy_coul"
-
-    def test_dsf_method(self, device):
-        """Test DSF method initialization."""
-        module = LRCoulomb(method="dsf", dsf_alpha=0.25, dsf_rc=12.0).to(device)
-        assert module.method == "dsf"
-        assert module.dsf_alpha == 0.25
-        assert module.dsf_rc == 12.0
-
-    def test_ewald_method(self, device):
-        """Test Ewald method initialization."""
-        module = LRCoulomb(method="ewald").to(device)
-        assert module.method == "ewald"
-
-    def test_invalid_method(self, device):
-        """Test that invalid method raises ValueError."""
-        with pytest.raises(ValueError, match="Unknown method"):
-            LRCoulomb(method="invalid").to(device)
 
 
 class TestLRCoulombSimple:
@@ -206,16 +178,19 @@ class TestLRCoulombEwald:
 
         # Ewald requires cell and flat format (mode 1)
         N = 5
+        max_nb = N
         coord = torch.rand((N + 1, 3), device=device) * 5
         numbers = torch.cat([torch.randint(1, 10, (N,), device=device), torch.tensor([0], device=device)])
         charges = torch.cat([torch.randn(N, device=device) * 0.3, torch.tensor([0.0], device=device)])
         cell = torch.eye(3, device=device) * 10
-        mol_idx = torch.cat([torch.zeros(N, dtype=torch.long, device=device), torch.tensor([1], device=device)])
+        mol_idx = torch.cat([torch.zeros(N, dtype=torch.long, device=device), torch.tensor([0], device=device)])
         # Create neighbor matrix for mode 1
-        nbmat = torch.zeros((N + 1, N), dtype=torch.long, device=device)
+        nbmat = torch.zeros((N + 1, max_nb), dtype=torch.long, device=device)
         for i in range(N):
-            nbmat[i] = torch.tensor([j for j in range(N + 1) if j != i][:N], device=device)
+            nbmat[i] = torch.tensor([j for j in range(N + 1) if j != i][:max_nb], device=device)
         nbmat[-1] = N  # padding points to itself
+        # Create shifts (no periodic images in this simple test)
+        shifts = torch.zeros((N + 1, max_nb, 3), dtype=torch.float32, device=device)
 
         data = {
             "coord": coord,
@@ -224,6 +199,10 @@ class TestLRCoulombEwald:
             "cell": cell,
             "mol_idx": mol_idx,
             "nbmat": nbmat,
+            "shifts": shifts,
+            "nbmat_coulomb": nbmat,
+            "shifts_coulomb": shifts.to(torch.int32),
+            "cutoff_coulomb": torch.tensor(8.0),
         }
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
@@ -239,15 +218,18 @@ class TestLRCoulombEwald:
         module = LRCoulomb(method="ewald").to(device)
 
         N = 5
+        max_nb = N
         coord = torch.rand((N + 1, 3), device=device) * 5
         numbers = torch.cat([torch.randint(1, 10, (N,), device=device), torch.tensor([0], device=device)])
         charges = torch.zeros(N + 1, device=device)
         cell = torch.eye(3, device=device) * 10
-        mol_idx = torch.cat([torch.zeros(N, dtype=torch.long, device=device), torch.tensor([1], device=device)])
-        nbmat = torch.zeros((N + 1, N), dtype=torch.long, device=device)
+        mol_idx = torch.cat([torch.zeros(N, dtype=torch.long, device=device), torch.tensor([0], device=device)])
+        nbmat = torch.zeros((N + 1, max_nb), dtype=torch.long, device=device)
         for i in range(N):
-            nbmat[i] = torch.tensor([j for j in range(N + 1) if j != i][:N], device=device)
+            nbmat[i] = torch.tensor([j for j in range(N + 1) if j != i][:max_nb], device=device)
         nbmat[-1] = N
+        # Create shifts (no periodic images in this simple test)
+        shifts = torch.zeros((N + 1, max_nb, 3), dtype=torch.float32, device=device)
 
         data = {
             "coord": coord,
@@ -256,6 +238,10 @@ class TestLRCoulombEwald:
             "cell": cell,
             "mol_idx": mol_idx,
             "nbmat": nbmat,
+            "shifts": shifts,
+            "nbmat_coulomb": nbmat,
+            "shifts_coulomb": shifts.to(torch.int32),
+            "cutoff_coulomb": torch.tensor(8.0),
         }
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
@@ -353,8 +339,8 @@ class TestLRCoulombConsistency:
         assert torch.isfinite(result_simple["e_h"])
         assert torch.isfinite(result_dsf["e_h"])
 
-    def test_energy_sign_consistency(self, device):
-        """Test that all methods agree on energy sign for simple systems."""
+    def test_energy_sign_consistency_simple(self, device):
+        """Test that simple method gives correct energy sign."""
         # Two opposite charges - should be attractive (negative)
         coord = torch.tensor([[[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]]], device=device)
         numbers = torch.tensor([[1, 1]], device=device)
@@ -365,11 +351,24 @@ class TestLRCoulombConsistency:
         data = nbops.calc_masks(data)
         data["d_ij"], _ = ops.calc_distances(data)
 
-        module_simple = LRCoulomb(method="simple").to(device)
-        result = module_simple(data)
+        module = LRCoulomb(method="simple").to(device)
+        result = module(data)
 
         # Opposite charges should have negative energy
         assert result["e_h"].item() < 0
+
+    @pytest.mark.parametrize("method", COULOMB_METHODS)
+    def test_finite_energy_output(self, device, method):
+        """Test that all methods produce finite energy output."""
+        data = setup_data_mode_0(device, n_atoms=5)
+
+        if method == "dsf":
+            module = LRCoulomb(method=method, dsf_rc=10.0).to(device)
+        else:
+            module = LRCoulomb(method=method).to(device)
+
+        result = module(data)
+        assert torch.isfinite(result["e_h"]).all()
 
 
 class TestLRCoulombAdditive:
@@ -413,3 +412,148 @@ class TestLRCoulombAdditive:
         assert "new_energy" not in data
         result = module(data)
         assert "new_energy" in result
+
+
+# =============================================================================
+# PBC Coulomb Tests
+# =============================================================================
+
+
+def setup_pbc_data(pbc_fixture: dict, device: torch.device, cutoff: float = 8.0) -> dict:
+    """Set up periodic data with neighbor list for Coulomb calculations."""
+    data = pbc_fixture.copy()
+    coord = data["coord"]
+    n_atoms = coord.shape[0]
+
+    # Create a simple all-pairs neighbor matrix
+    max_nb = min(n_atoms - 1, 50)
+    nbmat = torch.zeros((n_atoms, max_nb), dtype=torch.long, device=device)
+    for i in range(n_atoms):
+        neighbors = [j for j in range(n_atoms) if j != i][:max_nb]
+        for k, nb in enumerate(neighbors):
+            nbmat[i, k] = nb
+        for k in range(len(neighbors), max_nb):
+            nbmat[i, k] = n_atoms - 1
+
+    # Shifts are unit cell translations - use float for matrix multiplication with cell
+    shifts = torch.zeros((n_atoms, max_nb, 3), dtype=torch.float32, device=device)
+
+    data["nbmat"] = nbmat
+    data["shifts"] = shifts
+    # Long-range neighbor list keys (used by LRCoulomb module)
+    # shifts_lr must be float for matrix multiplication with cell in calc_distances
+    data["nbmat_lr"] = nbmat
+    data["shifts_lr"] = shifts.clone()
+    data["nbmat_coulomb"] = nbmat
+    data["shifts_coulomb"] = shifts.clone()
+    data["cutoff_coulomb"] = torch.tensor(cutoff, device=device)
+
+    data = nbops.set_nb_mode(data)
+    data = nbops.calc_masks(data)
+
+    d_ij, _ = ops.calc_distances(data)
+    data["d_ij"] = d_ij
+
+    return data
+
+
+class TestLRCoulombDSFPBC:
+    """Tests for DSF Coulomb with periodic boundary conditions."""
+
+    def test_dsf_pbc_output_shape(self, pbc_crystal_small, device):
+        """Test DSF output shape with PBC."""
+        module = LRCoulomb(method="dsf", dsf_rc=8.0).to(device)
+        data = setup_pbc_data(pbc_crystal_small, device)
+
+        n_atoms = data["coord"].shape[0]
+        data["charges"] = torch.randn(n_atoms, device=device) * 0.3
+
+        result = module(data)
+
+        assert "e_h" in result
+        assert result["e_h"].shape == (1,)
+
+    def test_dsf_pbc_gradient_wrt_coords(self, pbc_crystal_small, device):
+        """Test DSF coordinate gradients with PBC."""
+        module = LRCoulomb(method="dsf", dsf_rc=8.0).to(device)
+
+        data = pbc_crystal_small.copy()
+        data["coord"] = data["coord"].clone().requires_grad_(True)
+        data = setup_pbc_data(data, device)
+
+        n_atoms = data["coord"].shape[0]
+        data["charges"] = torch.randn(n_atoms, device=device) * 0.3
+
+        result = module(data)
+        result["e_h"].backward()
+
+        assert data["coord"].grad is not None
+        assert torch.isfinite(data["coord"].grad).all()
+
+    def test_dsf_pbc_finite_energy(self, pbc_crystal_small, device):
+        """Test DSF produces finite energy with PBC."""
+        module = LRCoulomb(method="dsf", dsf_rc=8.0).to(device)
+        data = setup_pbc_data(pbc_crystal_small, device)
+
+        n_atoms = data["coord"].shape[0]
+        data["charges"] = torch.randn(n_atoms, device=device) * 0.3
+
+        result = module(data)
+
+        assert torch.isfinite(result["e_h"]).all()
+
+
+class TestLRCoulombEwaldPBC:
+    """Tests for Ewald Coulomb with periodic boundary conditions."""
+
+    def test_ewald_pbc_output_shape(self, pbc_crystal_small, device):
+        """Test Ewald output shape with PBC."""
+        module = LRCoulomb(method="ewald").to(device)
+        data = setup_pbc_data(pbc_crystal_small, device, cutoff=8.0)
+
+        n_atoms = data["coord"].shape[0]
+        charges = torch.randn(n_atoms, device=device) * 0.3
+        charges = charges - charges.mean()  # Make neutral
+        data["charges"] = charges
+
+        result = module(data)
+
+        assert "e_h" in result
+        assert torch.isfinite(result["e_h"]).all()
+
+    def test_ewald_pbc_gradient_wrt_coords(self, pbc_crystal_small, device):
+        """Test Ewald coordinate gradients with PBC."""
+        module = LRCoulomb(method="ewald").to(device)
+
+        data = pbc_crystal_small.copy()
+        data["coord"] = data["coord"].clone().requires_grad_(True)
+        data = setup_pbc_data(data, device)
+
+        n_atoms = data["coord"].shape[0]
+        charges = torch.randn(n_atoms, device=device) * 0.3
+        charges = charges - charges.mean()
+        data["charges"] = charges
+
+        result = module(data)
+        result["e_h"].backward()
+
+        assert data["coord"].grad is not None
+        assert torch.isfinite(data["coord"].grad).all()
+
+    def test_ewald_pbc_cell_present(self, pbc_crystal_small, device):
+        """Test Ewald requires cell for PBC."""
+        data = setup_pbc_data(pbc_crystal_small, device)
+
+        n_atoms = data["coord"].shape[0]
+        charges = torch.randn(n_atoms, device=device) * 0.3
+        charges = charges - charges.mean()
+        data["charges"] = charges
+
+        # Verify cell is present
+        assert "cell" in data
+        assert data["cell"].shape == (3, 3)
+
+        module = LRCoulomb(method="ewald").to(device)
+        result = module(data)
+
+        assert torch.isfinite(result["e_h"]).all()

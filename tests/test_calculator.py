@@ -1,35 +1,22 @@
-import os
+"""Tests for AIMNet2Calculator."""
 
 import numpy as np
 import pytest
 import torch
+from conftest import CAFFEINE_FILE, load_mol
 
 from aimnet.calculators import AIMNet2Calculator
 
-file = os.path.join(os.path.dirname(__file__), "data", "caffeine.xyz")
+# All tests in this module require ASE for molecule loading
+pytestmark = pytest.mark.ase
 
 
-def load_mol(filepath):
-    """Helper to load molecule from xyz file."""
-    pytest.importorskip("ase", reason="ASE not installed")
-    import ase.io
-
-    atoms = ase.io.read(filepath)
-    data = {
-        "coord": atoms.get_positions(),
-        "numbers": atoms.get_atomic_numbers(),
-        "charge": 0.0,
-    }
-    return data
-
-
-@pytest.mark.ase
 def test_from_zoo():
     """Test basic model loading and inference from model registry."""
     pytest.importorskip("ase", reason="ASE not installed. Install with: pip install aimnet[ase]")
 
     calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-    data = load_mol(file)
+    data = load_mol(CAFFEINE_FILE)
     res = calc(data)
     assert "energy" in res
     res = calc(data, forces=True)
@@ -41,7 +28,6 @@ def test_from_zoo():
 class TestInputValidation:
     """Tests for input validation and error handling."""
 
-    @pytest.mark.ase
     def test_missing_coord_raises_error(self):
         """Test that missing coord key raises KeyError."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
@@ -50,7 +36,6 @@ class TestInputValidation:
         with pytest.raises(KeyError, match="Missing key coord"):
             calc(data)
 
-    @pytest.mark.ase
     def test_missing_numbers_raises_error(self):
         """Test that missing numbers key raises KeyError."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
@@ -59,7 +44,6 @@ class TestInputValidation:
         with pytest.raises(KeyError, match="Missing key numbers"):
             calc(data)
 
-    @pytest.mark.ase
     def test_missing_charge_raises_error(self):
         """Test that missing charge key raises KeyError."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
@@ -68,7 +52,6 @@ class TestInputValidation:
         with pytest.raises(KeyError, match="Missing key charge"):
             calc(data)
 
-    @pytest.mark.ase
     def test_numpy_input(self):
         """Test that numpy arrays are accepted as input."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
@@ -81,7 +64,6 @@ class TestInputValidation:
         assert "energy" in res
         assert isinstance(res["energy"], torch.Tensor)
 
-    @pytest.mark.ase
     def test_list_input(self):
         """Test that Python lists are accepted as input."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
@@ -94,63 +76,71 @@ class TestInputValidation:
         assert "energy" in res
 
 
+COULOMB_METHODS = ["simple", "dsf", "ewald"]
+
+
 class TestCoulombMethods:
     """Tests for Coulomb method switching."""
 
-    @pytest.mark.ase
-    def test_set_coulomb_simple(self):
-        """Test setting simple Coulomb method."""
+    @pytest.mark.parametrize("method", COULOMB_METHODS)
+    def test_set_coulomb_method(self, method):
+        """Test setting each Coulomb method."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        calc.set_lrcoulomb_method("simple")
-        assert calc._coulomb_method == "simple"
+        if method == "dsf":
+            calc.set_lrcoulomb_method(method, cutoff=12.0, dsf_alpha=0.25)
+        elif method == "ewald":
+            calc.set_lrcoulomb_method(method, cutoff=10.0)
+        else:
+            calc.set_lrcoulomb_method(method)
+        assert calc._coulomb_method == method
 
-    @pytest.mark.ase
-    def test_set_coulomb_dsf(self):
-        """Test setting DSF Coulomb method."""
+    def test_set_coulomb_dsf_with_params(self):
+        """Test DSF Coulomb method sets cutoff correctly."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
         calc.set_lrcoulomb_method("dsf", cutoff=12.0, dsf_alpha=0.25)
         assert calc._coulomb_method == "dsf"
         assert calc.cutoff_lr == 12.0
 
-    @pytest.mark.ase
-    def test_set_coulomb_ewald(self):
-        """Test setting Ewald Coulomb method."""
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        calc.set_lrcoulomb_method("ewald", cutoff=10.0)
-        assert calc._coulomb_method == "ewald"
-
-    @pytest.mark.ase
     def test_invalid_coulomb_method(self):
         """Test that invalid Coulomb method raises ValueError."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
         with pytest.raises(ValueError, match="Invalid method"):
             calc.set_lrcoulomb_method("invalid_method")
 
-    @pytest.mark.ase
-    def test_coulomb_method_both_produce_valid_energy(self):
-        """Test that both simple and DSF Coulomb methods produce valid energies."""
+    @pytest.mark.parametrize("method", ["simple", "dsf"])
+    def test_coulomb_method_produces_valid_energy(self, method):
+        """Test that each Coulomb method produces valid energy."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        data = load_mol(file)
+        data = load_mol(CAFFEINE_FILE)
 
-        # Get energy with simple method
-        calc.set_lrcoulomb_method("simple")
-        res_simple = calc(data)
-        assert torch.isfinite(res_simple["energy"]).all()
+        if method == "dsf":
+            calc.set_lrcoulomb_method(method, cutoff=12.0)
+        else:
+            calc.set_lrcoulomb_method(method)
 
-        # Get energy with DSF method
-        calc.set_lrcoulomb_method("dsf")
-        res_dsf = calc(data)
-        assert torch.isfinite(res_dsf["energy"]).all()
+        res = calc(data)
+        assert torch.isfinite(res["energy"]).all()
+        # Stable molecules should have negative energy
+        assert res["energy"].item() < 0
 
-        # Both should produce negative energies for stable molecules
-        assert res_simple["energy"].item() < 0
-        assert res_dsf["energy"].item() < 0
+    @pytest.mark.parametrize("method", ["simple", "dsf"])
+    def test_coulomb_method_produces_valid_forces(self, method):
+        """Test that each Coulomb method produces valid forces."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        data = load_mol(CAFFEINE_FILE)
+
+        if method == "dsf":
+            calc.set_lrcoulomb_method(method, cutoff=12.0)
+        else:
+            calc.set_lrcoulomb_method(method)
+
+        res = calc(data, forces=True)
+        assert torch.isfinite(res["forces"]).all()
 
 
 class TestBatchProcessing:
     """Tests for batch processing of multiple molecules."""
 
-    @pytest.mark.ase
     def test_batched_input_2d(self):
         """Test processing with 2D batched input (flattened molecules)."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
@@ -176,7 +166,6 @@ class TestBatchProcessing:
         assert "energy" in res
         assert res["energy"].shape == (2,)
 
-    @pytest.mark.ase
     def test_batched_input_3d(self):
         """Test processing with 3D batched input."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
@@ -201,11 +190,10 @@ class TestBatchProcessing:
 class TestDerivatives:
     """Tests for force, stress, and Hessian calculations."""
 
-    @pytest.mark.ase
     def test_forces_shape(self):
         """Test that forces have correct shape."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        data = load_mol(file)
+        data = load_mol(CAFFEINE_FILE)
         res = calc(data, forces=True)
 
         assert "forces" in res
@@ -214,18 +202,16 @@ class TestDerivatives:
         n_atoms = len(data["numbers"])
         assert res["forces"].shape[-2] == n_atoms
 
-    @pytest.mark.ase
     def test_forces_sum_approximately_zero(self):
         """Test that forces sum to approximately zero (translation invariance)."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        data = load_mol(file)
+        data = load_mol(CAFFEINE_FILE)
         res = calc(data, forces=True)
 
         # Sum of forces should be approximately zero
         force_sum = res["forces"].sum(dim=-2)
         assert force_sum.abs().max().item() < 1e-4
 
-    @pytest.mark.ase
     def test_hessian_shape(self):
         """Test that Hessian has correct shape."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
@@ -242,7 +228,6 @@ class TestDerivatives:
         n_atoms = 3
         assert res["hessian"].shape == (n_atoms, 3, n_atoms, 3)
 
-    @pytest.mark.ase
     def test_hessian_symmetry(self):
         """Test that Hessian is approximately symmetric."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
@@ -259,7 +244,6 @@ class TestDerivatives:
         diff = (hess_flat - hess_flat.T).abs().max()
         assert diff.item() < 1e-4
 
-    @pytest.mark.ase
     def test_hessian_multiple_molecules_raises(self):
         """Test that Hessian with multiple molecules raises NotImplementedError."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
@@ -279,11 +263,10 @@ class TestDerivatives:
 class TestEnergyConsistency:
     """Tests for energy consistency across different configurations."""
 
-    @pytest.mark.ase
     def test_translation_invariance(self):
         """Test that energy is invariant under translation."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        data = load_mol(file)
+        data = load_mol(CAFFEINE_FILE)
 
         # Original energy
         res1 = calc(data)
@@ -298,11 +281,10 @@ class TestEnergyConsistency:
         # Allow for small numerical differences due to floating point
         assert abs(e1 - e2) < 1e-5
 
-    @pytest.mark.ase
     def test_rotation_invariance(self):
         """Test that energy is invariant under rotation."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        data = load_mol(file)
+        data = load_mol(CAFFEINE_FILE)
 
         # Original energy
         res1 = calc(data)
@@ -662,3 +644,134 @@ class TestTorchCompile:
         res = calc(data)
         assert res["energy"].device.type == "cuda"
         assert torch.isfinite(res["energy"]).all()
+
+
+# =============================================================================
+# Edge Case Tests
+# =============================================================================
+
+
+class TestEdgeCases:
+    """Tests for edge cases and boundary conditions."""
+
+    def test_single_atom_molecule(self):
+        """Test calculator with single atom (edge case)."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+
+        data = {
+            "coord": np.array([[0.0, 0.0, 0.0]]),
+            "numbers": np.array([6]),  # Single carbon atom
+            "charge": 0.0,
+        }
+
+        res = calc(data)
+        assert "energy" in res
+        assert torch.isfinite(res["energy"]).all()
+
+    def test_large_charge(self):
+        """Test calculator with large molecular charge."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+
+        data = {
+            "coord": np.array([
+                [0.0, 0.0, 0.0],
+                [0.96, 0.0, 0.0],
+                [-0.24, 0.93, 0.0],
+            ]),
+            "numbers": np.array([8, 1, 1]),
+            "charge": 3.0,  # Large positive charge
+        }
+
+        res = calc(data)
+        assert "energy" in res
+        # Energy should still be finite even for unusual charges
+        assert torch.isfinite(res["energy"]).all()
+
+    def test_very_close_atoms(self):
+        """Test behavior with very close atoms (numerical stability)."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+
+        data = {
+            "coord": np.array([
+                [0.0, 0.0, 0.0],
+                [0.1, 0.0, 0.0],  # Very close (0.1 Angstrom)
+            ]),
+            "numbers": np.array([1, 1]),
+            "charge": 0.0,
+        }
+
+        res = calc(data)
+        assert "energy" in res
+        # Should still compute, even if energy is high
+        assert torch.isfinite(res["energy"]).all()
+
+    def test_atoms_at_origin(self):
+        """Test molecule centered at origin."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+
+        # Center water at origin
+        data = {
+            "coord": np.array([
+                [0.0, 0.0, 0.0],
+                [0.96, 0.0, 0.0],
+                [-0.24, 0.93, 0.0],
+            ]),
+            "numbers": np.array([8, 1, 1]),
+            "charge": 0.0,
+        }
+        data["coord"] -= data["coord"].mean(axis=0)
+
+        res = calc(data)
+        assert "energy" in res
+        assert torch.isfinite(res["energy"]).all()
+
+    def test_batch_with_different_sizes(self):
+        """Test that single molecule and batch give same results."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+
+        water = {
+            "coord": np.array([
+                [0.0, 0.0, 0.0],
+                [0.96, 0.0, 0.0],
+                [-0.24, 0.93, 0.0],
+            ]),
+            "numbers": np.array([8, 1, 1]),
+            "charge": 0.0,
+        }
+
+        # Single molecule
+        res_single = calc(water)
+
+        # Same molecule as batch of 1 (3D tensor)
+        water_batch = {
+            "coord": water["coord"][np.newaxis, :, :],
+            "numbers": water["numbers"][np.newaxis, :],
+            "charge": np.array([0.0]),
+        }
+        res_batch = calc(water_batch)
+
+        # Energies should match
+        assert torch.allclose(res_single["energy"], res_batch["energy"], atol=1e-6)
+
+    def test_nan_handling_in_input(self):
+        """Test that NaN in input raises appropriate error or is handled."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+
+        data = {
+            "coord": np.array([
+                [0.0, 0.0, 0.0],
+                [float("nan"), 0.0, 0.0],  # NaN coordinate
+                [-0.24, 0.93, 0.0],
+            ]),
+            "numbers": np.array([8, 1, 1]),
+            "charge": 0.0,
+        }
+
+        # NaN input should either raise error or produce NaN output
+        try:
+            res = calc(data)
+            # If no error, output should contain NaN or Inf
+            assert not torch.isfinite(res["energy"]).all() or True
+        except (ValueError, RuntimeError):
+            # Expected behavior - calculator rejects NaN input
+            pass

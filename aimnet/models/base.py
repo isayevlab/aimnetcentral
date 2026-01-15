@@ -15,15 +15,35 @@ class AIMNet2Base(nn.Module):
 
     _required_keys: Final = ["coord", "numbers", "charge"]
     _required_keys_dtype: Final = [__default_dtype, torch.int64, __default_dtype]
-    _optional_keys: Final = ["mult", "nbmat", "nbmat_lr", "mol_idx", "shifts", "shifts_lr", "cell"]
+    _optional_keys: Final = [
+        "mult",
+        "nbmat",
+        "nbmat_lr",
+        "mol_idx",
+        "shifts",
+        "shifts_lr",
+        "cell",
+        "nbmat_dftd3",
+        "shifts_dftd3",
+        "cutoff_dftd3",
+        "nbmat_coulomb",
+        "shifts_coulomb",
+        "cutoff_coulomb",
+    ]
     _optional_keys_dtype: Final = [
-        __default_dtype,
-        torch.int64,
-        torch.int64,
-        torch.int64,
-        __default_dtype,
-        __default_dtype,
-        __default_dtype,
+        __default_dtype,  # mult
+        torch.int64,  # nbmat
+        torch.int64,  # nbmat_lr
+        torch.int64,  # mol_idx
+        __default_dtype,  # shifts
+        __default_dtype,  # shifts_lr
+        __default_dtype,  # cell
+        torch.int64,  # nbmat_dftd3
+        __default_dtype,  # shifts_dftd3
+        __default_dtype,  # cutoff_dftd3
+        torch.int64,  # nbmat_coulomb
+        __default_dtype,  # shifts_coulomb
+        __default_dtype,  # cutoff_coulomb
     ]
     __constants__: ClassVar = ["_required_keys", "_required_keys_dtype", "_optional_keys", "_optional_keys_dtype"]
 

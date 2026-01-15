@@ -75,6 +75,8 @@ class _DFTD3Function(Function):
         s8: float,
         num_systems: int,
         fill_value: int,
+        smoothing_on: float,
+        smoothing_off: float,
         compute_virial: bool,
         has_cell: bool,
         has_shifts: bool,
@@ -82,6 +84,10 @@ class _DFTD3Function(Function):
         """Forward pass: compute DFT-D3 dispersion energy."""
         # Convert coordinates to Bohr
         coord_bohr = coord * constants.Bohr_inv
+
+        # Convert smoothing to Bohr
+        smoothing_on_bohr = smoothing_on * constants.Bohr_inv
+        smoothing_off_bohr = smoothing_off * constants.Bohr_inv
 
         # Convert cell to Bohr if present
         cell_bohr = None
@@ -103,6 +109,8 @@ class _DFTD3Function(Function):
             a2=a2,
             s8=s8,
             s6=s6,
+            s5_smoothing_on=smoothing_on_bohr,
+            s5_smoothing_off=smoothing_off_bohr,
             covalent_radii=rcov,
             r4r2=r4r2,
             c6_reference=c6ab,
@@ -163,7 +171,7 @@ class _DFTD3Function(Function):
             dE_dcell_ang = dE_dcell_bohr * constants.Hartree * constants.Bohr_inv
             grad_cell = dE_dcell_ang * grad_energy.view(-1, 1, 1)
 
-        # Return gradients for all 19 inputs (only coord and cell have gradients)
+        # Return gradients for all 21 inputs (only coord and cell have gradients)
         return (
             grad_coord,
             grad_cell,
@@ -181,6 +189,8 @@ class _DFTD3Function(Function):
             None,  # s8
             None,  # num_systems
             None,  # fill_value
+            None,  # smoothing_on
+            None,  # smoothing_off
             None,  # compute_virial
             None,  # has_cell
             None,  # has_shifts
@@ -210,6 +220,8 @@ def dftd3_fwd(
     s8: float,
     num_systems: int,
     fill_value: int,
+    smoothing_on: float,
+    smoothing_off: float,
     compute_virial: bool,
     has_cell: bool,
     has_shifts: bool,
@@ -236,6 +248,8 @@ def dftd3_fwd(
         s8,
         num_systems,
         fill_value,
+        smoothing_on,
+        smoothing_off,
         compute_virial,
         has_cell,
         has_shifts,
@@ -261,6 +275,8 @@ def _(
     s8: float,
     num_systems: int,
     fill_value: int,
+    smoothing_on: float,
+    smoothing_off: float,
     compute_virial: bool,
     has_cell: bool,
     has_shifts: bool,
@@ -300,6 +316,8 @@ def _dftd3_setup_context(ctx: Any, inputs: tuple[Any, ...], output: list[Tensor]
         s8,
         num_systems,
         fill_value,
+        smoothing_on,
+        smoothing_off,
         compute_virial,
         has_cell,
         has_shifts,
@@ -340,7 +358,7 @@ def _dftd3_backward(
         dE_dcell_ang = dE_dcell_bohr * constants.Hartree * constants.Bohr_inv
         grad_cell = dE_dcell_ang * grad_energy.view(-1, 1, 1)
 
-    # Return gradients for all 19 inputs (only coord and cell have gradients)
+    # Return gradients for all 21 inputs (only coord and cell have gradients)
     return (
         grad_coord,
         grad_cell,
@@ -358,6 +376,8 @@ def _dftd3_backward(
         None,  # s8
         None,  # num_systems
         None,  # fill_value
+        None,  # smoothing_on
+        None,  # smoothing_off
         None,  # compute_virial
         None,  # has_cell
         None,  # has_shifts
@@ -393,6 +413,8 @@ def dftd3_energy(
     s8: float,
     num_systems: int,
     fill_value: int,
+    smoothing_on: float,
+    smoothing_off: float,
     compute_virial: bool = False,
 ) -> Tensor:
     """
@@ -435,6 +457,10 @@ def dftd3_energy(
         Number of systems in batch
     fill_value : int
         Fill value for invalid neighbor indices
+    smoothing_on : float
+        Distance at which smoothing starts, in Angstrom.
+    smoothing_off : float
+        Distance at which smoothing ends (cutoff), in Angstrom.
     compute_virial : bool
         Whether to compute virial tensor for cell gradients
 
@@ -467,6 +493,8 @@ def dftd3_energy(
         s8,
         num_systems,
         fill_value,
+        smoothing_on,
+        smoothing_off,
         compute_virial,
         has_cell,
         has_shifts,

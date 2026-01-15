@@ -41,6 +41,9 @@ def load_ops():
     available_ops = []
 
     # Import warp kernels to trigger registration
+    # Import custom ops module to trigger registration
+    from aimnet.modules import ops as _ops  # noqa: F401
+
     from . import conv_sv_2d_sp_wp  # noqa: F401
 
     # Verify ops are available
