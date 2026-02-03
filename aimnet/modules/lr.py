@@ -240,25 +240,53 @@ class DispParam(nn.Module):
         key_out: str = "disp_param",
     ):
         super().__init__()
-        if (ptfile is None and (ref_c6 is None or ref_alpha is None)) or (
-            ptfile is not None and (ref_c6 is not None or ref_alpha is not None)
-        ):
-            raise ValueError("Either ptfile or ref_c6 and ref_alpha should be supplied.")
-        # load data
-        ref = torch.load(ptfile) if ptfile is not None else torch.zeros(87, 2)
-        for i, p in enumerate([ref_c6, ref_alpha]):
-            if p is not None:
-                if isinstance(p, Tensor):
-                    ref[: p.shape[0], i] = p
-                else:
-                    for k, v in p.items():
-                        ref[k, i] = v
+        # Validate: cannot mix ptfile with ref_c6/ref_alpha
+        if ptfile is not None and (ref_c6 is not None or ref_alpha is not None):
+            raise ValueError("Cannot specify both ptfile and ref_c6/ref_alpha.")
+
+        # Load reference data
+        if ptfile is not None:
+            ref = torch.load(ptfile, weights_only=True)
+        elif ref_c6 is not None or ref_alpha is not None:
+            ref = torch.zeros(87, 2)
+            for i, p in enumerate([ref_c6, ref_alpha]):
+                if p is not None:
+                    if isinstance(p, Tensor):
+                        ref[: p.shape[0], i] = p
+                    else:
+                        for k, v in p.items():
+                            ref[k, i] = v
+        else:
+            # Placeholder - will be populated by load_state_dict
+            ref = torch.zeros(87, 2)
+
         # Element 0 represents dummy atoms with c6=0 and alpha=1
         ref[0, 0] = 0.0
         ref[0, 1] = 1.0
         self.register_buffer("disp_param0", ref)
         self.key_in = key_in
         self.key_out = key_out
+
+    def _load_from_state_dict(
+        self,
+        state_dict: dict,
+        prefix: str,
+        local_metadata: dict,
+        strict: bool,
+        missing_keys: list,
+        unexpected_keys: list,
+        error_msgs: list,
+    ) -> None:
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
+        # Validate buffer has non-zero values (safety check)
+        key = prefix + "disp_param0"
+        if key in state_dict:
+            buf = state_dict[key]
+            nonzero = (buf != 0).sum() / buf.numel()
+            if nonzero < 0.1:
+                raise ValueError(f"DispParam buffer appears to have mostly zero values (nonzero: {nonzero}). This may indicate a loading issue.")
 
     def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         disp_param_mult = data[self.key_in].clamp(min=-4, max=4).exp()

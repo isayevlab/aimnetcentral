@@ -516,6 +516,15 @@ def strip_lr_modules_from_yaml(
         else:
             new_outputs[key] = value
 
+    # Strip ptfile from DispParam configs (buffer is in state dict)
+    for key, value in new_outputs.items():
+        if isinstance(value, dict):
+            module_class = value.get("class", "")
+            if "DispParam" in module_class:
+                kwargs = value.get("kwargs", {})
+                if "ptfile" in kwargs:
+                    kwargs.pop("ptfile")
+
     # Add SRCoulomb if LRCoulomb was present
     if has_coulomb:
         new_outputs["srcoulomb"] = {
