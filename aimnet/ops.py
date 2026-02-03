@@ -16,6 +16,34 @@ def lazy_calc_dij_lr(data: dict[str, Tensor]) -> dict[str, Tensor]:
     return data
 
 
+def lazy_calc_dij(data: dict[str, Tensor], suffix: str) -> dict[str, Tensor]:
+    """Lazily calculate distances for a given suffix.
+
+    Computes and caches d_ij{suffix} in data dict if not present.
+    For nb_mode=0 (no neighbor list), reuses d_ij.
+
+    Parameters
+    ----------
+    data : dict
+        Data dictionary.
+    suffix : str
+        Suffix for neighbor matrix (e.g., "_coulomb", "_dftd3", "_lr").
+
+    Returns
+    -------
+    dict
+        Data dictionary with d_ij{suffix} added.
+    """
+    key = f"d_ij{suffix}"
+    if key not in data:
+        nb_mode = nbops.get_nb_mode(data)
+        if nb_mode == 0:
+            data[key] = data["d_ij"]
+        else:
+            data[key] = calc_distances(data, suffix=suffix)[0]
+    return data
+
+
 def calc_distances(data: dict[str, Tensor], suffix: str = "", pad_value: float = 1.0) -> tuple[Tensor, Tensor]:
     coord_i, coord_j = nbops.get_ij(data["coord"], data, suffix)
     if f"shifts{suffix}" in data:
@@ -150,10 +178,32 @@ def get_shifts_within_cutoff(cell: Tensor, cutoff: Tensor) -> Tensor:
     return shifts
 
 
-def coulomb_matrix_ewald(coord: Tensor, cell: Tensor) -> Tensor:
+def coulomb_matrix_ewald(coord: Tensor, cell: Tensor, accuracy: float = 1e-8) -> Tensor:
+    """Compute Coulomb matrix using Ewald summation.
+
+    Parameters
+    ----------
+    coord : Tensor
+        Atomic coordinates, shape (N, 3).
+    cell : Tensor
+        Unit cell vectors, shape (3, 3).
+    accuracy : float
+        Target accuracy for the Ewald summation. Controls the real-space
+        and reciprocal-space cutoffs. Lower values give higher accuracy
+        but require more computation. Default is 1e-8.
+
+        The cutoffs are computed as:
+        - eta = (V^2 / N)^(1/6) / sqrt(2*pi)
+        - cutoff_real = sqrt(-2 * ln(accuracy)) * eta
+        - cutoff_recip = sqrt(-2 * ln(accuracy)) / eta
+
+    Returns
+    -------
+    Tensor
+        Coulomb matrix J, shape (N, N).
+    """
     # single molecule implementation. nb_mode == 1
     assert coord.ndim == 2 and cell.ndim == 2, "Only single molecule is supported"
-    accuracy = 1e-8
     N = coord.shape[0]
     volume = torch.det(cell)
     eta = ((volume**2 / N) ** (1 / 6)) / math.sqrt(2.0 * math.pi)

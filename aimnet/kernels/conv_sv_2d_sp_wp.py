@@ -48,18 +48,16 @@ def _conv_sv_2d_sp_kernel(
     output: wp.array3d(dtype=wp.vec4f),  # (B, A, G, D)
 ):
     """Forward: output[b,a,g] = sum_m a[idx[b,m],a,g] * g[b,m,g]"""
-    B, A, G = a.shape[0], a.shape[1], a.shape[2]
-    M = idx.shape[1]
+    B, M = idx.shape[0], idx.shape[1]
+    padding_value = B - 1  # last row is padding
 
     _b, _a, _g = wp.tid()
-    if _b >= B or _a >= A or _g >= G:
-        return
 
     acc = wp.vec4f()
     for _m in range(M):
-        if _m == M:
-            break
         _idx = idx[_b, _m]
+        if _idx >= padding_value:
+            break
         a_val = a[_idx, _a, _g]
         g_val = g[_b, _m, _g]
         acc += a_val * g_val
@@ -74,18 +72,16 @@ def _conv_sv_2d_sp_backward_a_kernel(
     grad_a: wp.array3d(dtype=wp.float32),  # (B, A, G)
 ):
     """Backward w.r.t. a: grad_a[idx[b,m],a,g] += dot(grad_output[b,a,g], g[b,m,g])"""
-    B, A, G = grad_a.shape[0], grad_a.shape[1], grad_a.shape[2]
-    M = idx.shape[1]
+    B, M = idx.shape[0], idx.shape[1]
+    padding_value = B - 1  # last row is padding
 
     _b, _a, _g = wp.tid()
-    if _b >= B or _a >= A or _g >= G:
-        return
 
     grad_out = grad_output[_b, _a, _g]
     for _m in range(M):
-        if _m == M:
-            break
         _idx = idx[_b, _m]
+        if _idx >= padding_value:
+            break
         g_val = g[_b, _m, _g]
         val = wp.dot(grad_out, g_val)
         wp.atomic_add(grad_a, _idx, _a, _g, val)
@@ -99,14 +95,16 @@ def _conv_sv_2d_sp_backward_g_kernel(
     grad_g: wp.array3d(dtype=wp.vec4f),  # (B, M, G, D)
 ):
     """Backward w.r.t. g: grad_g[b,m,g] = sum_a a[idx[b,m],a,g] * grad_output[b,a,g]"""
-    B, M, G = grad_g.shape[0], grad_g.shape[1], grad_g.shape[2]
-    A = grad_output.shape[1]
+    B = idx.shape[0]
+    A = a.shape[1]
+    padding_value = B - 1  # last row is padding
 
     _b, _m, _g = wp.tid()
-    if _b >= B or _m >= M or _g >= G:
-        return
 
     _idx = idx[_b, _m]
+    if _idx >= padding_value:
+        return
+
     acc = wp.vec4f()
 
     for _a in range(A):
@@ -125,14 +123,16 @@ def _conv_sv_2d_sp_double_backward_a_g_kernel(
     grad_g: wp.array3d(dtype=wp.vec4f),  # (B, M, G, D)
 ):
     """Double backward: d(grad_a)/dg -> grad_g"""
-    B, M, G = grad_g.shape[0], grad_g.shape[1], grad_g.shape[2]
-    A = grad_output.shape[1]
+    B = idx.shape[0]
+    A = grad_grad_a.shape[1]
+    padding_value = B - 1  # last row is padding
 
     _b, _m, _g = wp.tid()
-    if _b >= B or _m >= M or _g >= G:
-        return
 
     _idx = idx[_b, _m]
+    if _idx >= padding_value:
+        return
+
     acc = wp.vec4f()
 
     for _a in range(A):
@@ -151,18 +151,16 @@ def _conv_sv_2d_sp_double_backward_g_contrib_kernel(
     grad_output_double: wp.array3d(dtype=wp.vec4f),  # (B, A, G, D) - OUTPUT
 ):
     """Double backward from grad2_g: einsum('bmgd,bmag->bagd', grad2_g, a_selected)"""
-    B, A, G = grad_output_double.shape[0], grad_output_double.shape[1], grad_output_double.shape[2]
-    M = idx.shape[1]
+    B, M = idx.shape[0], idx.shape[1]
+    padding_value = B - 1  # last row is padding
 
     _b, _a, _g = wp.tid()
-    if _b >= B or _a >= A or _g >= G:
-        return
 
     acc = wp.vec4f()
     for _m in range(M):
-        if _m == M:
-            break
         _idx = idx[_b, _m]
+        if _idx >= padding_value:
+            break
         a_val = a[_idx, _a, _g]
         grad2_g_val = grad2_g[_b, _m, _g]
         acc += a_val * grad2_g_val
@@ -178,18 +176,16 @@ def _conv_sv_2d_sp_double_backward_a_contrib_kernel(
     grad_output_double: wp.array3d(dtype=wp.vec4f),  # (B, A, G, D) - OUTPUT
 ):
     """Double backward from grad2_a: einsum('bmag,bmgd->bagd', grad2_a_selected, g)"""
-    B, A, G = grad_output_double.shape[0], grad_output_double.shape[1], grad_output_double.shape[2]
-    M = idx.shape[1]
+    B, M = idx.shape[0], idx.shape[1]
+    padding_value = B - 1  # last row is padding
 
     _b, _a, _g = wp.tid()
-    if _b >= B or _a >= A or _g >= G:
-        return
 
     acc = wp.vec4f()
     for _m in range(M):
-        if _m == M:
-            break
         _idx = idx[_b, _m]
+        if _idx >= padding_value:
+            break
         grad2_a_val = grad2_a[_idx, _a, _g]
         g_val = g[_b, _m, _g]
         acc += grad2_a_val * g_val
@@ -216,7 +212,7 @@ def _(a: Tensor, idx: Tensor, g: Tensor) -> Tensor:
 
     wp.launch(
         _conv_sv_2d_sp_kernel,
-        dim=(B, A, G),
+        dim=(B - 1, A, G),  # B-1: exclude padding row
         stream=stream,
         device=device,
         inputs=(
@@ -250,12 +246,12 @@ def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor) -> list[Tensor]:
     grad_a = torch.zeros_like(a)
     grad_g = torch.zeros(B_out, M, G, 4, dtype=g.dtype, device=g.device)
 
-    grad_output_contig = grad_output.contiguous()
+    grad_output_contig = grad_output.detach().contiguous()
 
     # Launch backward w.r.t. a
     wp.launch(
         _conv_sv_2d_sp_backward_a_kernel,
-        dim=(B, A, G),
+        dim=(B - 1, A, G),  # B-1: exclude padding row
         stream=stream,
         device=device,
         inputs=(
@@ -269,7 +265,7 @@ def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor) -> list[Tensor]:
     # Launch backward w.r.t. g
     wp.launch(
         _conv_sv_2d_sp_backward_g_kernel,
-        dim=(B_out, M, G),
+        dim=(B_out - 1, M, G),  # B_out-1: exclude padding row
         stream=stream,
         device=device,
         inputs=(
@@ -316,14 +312,18 @@ def _(
     grad_a_double = torch.zeros_like(a)
     grad_g_double = torch.zeros(B_out, M, G, 4, dtype=a.dtype, device=a.device)
 
+    grad_output_contig = grad_output.detach().contiguous()
+    grad2_a_contig = grad2_a.detach().contiguous()
+    grad2_g_contig = grad2_g.detach().contiguous()
+
     # Contribution from grad2_g to grad_grad_output
     wp.launch(
         _conv_sv_2d_sp_double_backward_g_contrib_kernel,
-        dim=(B, A, G),
+        dim=(B - 1, A, G),  # B-1: exclude padding row
         stream=stream,
         device=device,
         inputs=(
-            wp.from_torch(grad2_g.contiguous(), return_ctype=True, dtype=wp.vec4f),
+            wp.from_torch(grad2_g_contig, return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(a.detach(), return_ctype=True),
             wp.from_torch(idx.to(torch.int32), return_ctype=True),
             wp.from_torch(grad_grad_output, return_ctype=True, dtype=wp.vec4f),
@@ -334,11 +334,11 @@ def _(
     grad_output_2_a = torch.zeros(B, A, G, 4, dtype=a.dtype, device=a.device)
     wp.launch(
         _conv_sv_2d_sp_double_backward_a_contrib_kernel,
-        dim=(B, A, G),
+        dim=(B - 1, A, G),  # B-1: exclude padding row
         stream=stream,
         device=device,
         inputs=(
-            wp.from_torch(grad2_a.contiguous(), return_ctype=True),
+            wp.from_torch(grad2_a_contig, return_ctype=True),
             wp.from_torch(idx.to(torch.int32), return_ctype=True),
             wp.from_torch(g.detach(), return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(grad_output_2_a, return_ctype=True, dtype=wp.vec4f),
@@ -349,13 +349,13 @@ def _(
     # Mixed partial: d(grad_a)/dg -> grad_g_double
     wp.launch(
         _conv_sv_2d_sp_double_backward_a_g_kernel,
-        dim=(B_out, M, G),
+        dim=(B_out - 1, M, G),  # B_out-1: exclude padding row
         stream=stream,
         device=device,
         inputs=(
-            wp.from_torch(grad2_a.contiguous(), return_ctype=True),
+            wp.from_torch(grad2_a_contig, return_ctype=True),
             wp.from_torch(idx.to(torch.int32), return_ctype=True),
-            wp.from_torch(grad_output.contiguous(), return_ctype=True, dtype=wp.vec4f),
+            wp.from_torch(grad_output_contig, return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(grad_g_double, return_ctype=True, dtype=wp.vec4f),
         ),
     )
@@ -363,13 +363,13 @@ def _(
     # Mixed partial: d(grad_g)/da -> grad_a_double
     wp.launch(
         _conv_sv_2d_sp_backward_a_kernel,
-        dim=(B, A, G),
+        dim=(B - 1, A, G),  # B-1: exclude padding row
         stream=stream,
         device=device,
         inputs=(
-            wp.from_torch(grad_output.contiguous(), return_ctype=True, dtype=wp.vec4f),
+            wp.from_torch(grad_output_contig, return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(idx.to(torch.int32), return_ctype=True),
-            wp.from_torch(grad2_g.contiguous(), return_ctype=True, dtype=wp.vec4f),
+            wp.from_torch(grad2_g_contig, return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(grad_a_double, return_ctype=True),
         ),
     )
@@ -459,15 +459,20 @@ torch.library.register_autograd(
 
 
 def conv_sv_2d_sp(a: Tensor, idx: Tensor, g: Tensor) -> Tensor:
-    """
-    Compute conv_sv_2d_sp with support for 1st and 2nd order derivatives.
+    """Compute conv_sv_2d_sp with support for 1st and 2nd order derivatives.
 
-    Args:
-        a: Input tensor of shape (B, A, G)
-        idx: Index tensor of shape (B, M)
-        g: Gate tensor of shape (B, M, G, 4)
+    Parameters
+    ----------
+    a : Tensor
+        Input tensor of shape (B, A, G).
+    idx : Tensor
+        Index tensor of shape (B, M).
+    g : Tensor
+        Gate tensor of shape (B, M, G, 4).
 
-    Returns:
-        Output tensor of shape (B, A, G, 4)
+    Returns
+    -------
+    Tensor
+        Output tensor of shape (B, A, G, 4).
     """
     return torch.ops.aimnet.conv_sv_2d_sp_fwd(a, idx, g)

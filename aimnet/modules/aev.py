@@ -79,10 +79,12 @@ class AEVSV(nn.Module):
         self.register_parameter("shifts" + mod, nn.Parameter(shifts, requires_grad=False))
 
     def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
-        # shapes (..., m) and (..., m, 3)
+        # d_ij: distances to neighbors (..., m)
+        # r_ij: displacement vectors to neighbors (..., m, 3)
         d_ij, r_ij = ops.calc_distances(data)
         data["d_ij"] = d_ij
-        # shapes (..., m, g, 4) where 4 = 1 scalar + 3 vector
+        # Atomic environment vectors: (..., m, g, 4)
+        # 4 components = 1 scalar (radial) + 3 vector (directional)
         g_sv = self._calc_aev(r_ij, d_ij, data)
         data["g_sv"] = g_sv
         return data
@@ -90,10 +92,14 @@ class AEVSV(nn.Module):
     def _calc_aev(self, r_ij: Tensor, d_ij: Tensor, data: dict[str, Tensor]) -> Tensor:
         fc_ij = ops.cosine_cutoff(d_ij, self.rc_s)  # (..., m)
         fc_ij = nbops.mask_ij_(fc_ij, data, 0.0)
-        # (..., m, nshifts) * (..., m, 1) -> (..., m, shitfs)
+        # Apply cutoff envelope to Gaussian-expanded distances
+        # Shape: (..., m, nshifts) * (..., m, 1) -> (..., m, nshifts)
         gs = ops.exp_expand(d_ij, self.shifts_s, self.eta_s) * fc_ij.unsqueeze(-1)
-        u_ij = r_ij / d_ij.unsqueeze(-1)  # (..., m, 3) / (..., m, 1) -> (..., m, 3)
-        # (..., m, 1, shifts), (..., m, 3, 1) -> (..., m, shifts, 3)
+        # Normalize displacement vectors to unit direction vectors
+        # Shape: (..., m, 3) / (..., m, 1) -> (..., m, 3)
+        u_ij = r_ij / d_ij.unsqueeze(-1)
+        # Combine radial basis with directional info for vector features
+        # Shape: (..., m, 1, nshifts) * (..., m, 3, 1) -> (..., m, nshifts, 3)
         gv = gs.unsqueeze(-1) * u_ij.unsqueeze(-2)
         g_sv = torch.cat([gs.unsqueeze(-1), gv], dim=-1)
         return g_sv
@@ -110,8 +116,6 @@ class ConvSV(nn.Module):
         Number of feature channels for atomic features.
     d2features : bool, optional
         Flag indicating whether to use 2D features. Default is False.
-    do_vector : bool, optional
-        Flag indicating whether to perform vector convolution. Default is True.
     nshifts_v : Optional[int], optional
         Number of shifts for vector convolution. If not provided, defaults to the value of nshifts_s.
     ncomb_v : Optional[int], optional
@@ -123,7 +127,6 @@ class ConvSV(nn.Module):
         nshifts_s: int,
         nchannel: int,
         d2features: bool = False,
-        do_vector: bool = True,
         nshifts_v: int | None = None,
         ncomb_v: int | None = None,
     ):
@@ -150,7 +153,10 @@ class ConvSV(nn.Module):
         mode = nbops.get_nb_mode(data)
         if self.d2features:
             if mode > 0 and a.device.type == "cuda":
-                avf_sv = conv_sv_2d_sp(a, data["nbmat"], g_sv)  # type: ignore[misc]
+                avf_sv = conv_sv_2d_sp(a, data["nbmat"], g_sv)
+            elif mode > 0:
+                a_j = a.index_select(0, data["nbmat"].flatten()).unflatten(0, data["nbmat"].shape)
+                avf_sv = torch.einsum("...mag,...mgd->...agd", a_j, g_sv)
             else:
                 avf_sv = torch.einsum("...mag,...mgd->...agd", a.unsqueeze(1), g_sv)
         else:
@@ -167,12 +173,12 @@ class ConvSV(nn.Module):
 def _init_ahg(b: int, m: int, n: int):
     ret = torch.zeros(b, m, n)
     for i in range(b):
-        ret[i] = _init_ahg_one(m, n)  # pylinit: disable-arguments-out-of-order
+        ret[i] = _init_ahg_one(m, n)  # pylint: disable=arguments-out-of-order
     return ret
 
 
 def _init_ahg_one(m: int, n: int):
-    # make x8 times more vectors to select most diverse
+    # Oversample by 8x to select most orthogonal vectors via maxmin algorithm
     x = torch.arange(m).unsqueeze(0)
     a1, a2, a3, a4 = torch.randn(8 * n, 4).unsqueeze(-2).unbind(-1)
     y = a1 * torch.sin(a2 * 2 * x * math.pi / m) + a3 * torch.cos(a4 * 2 * x * math.pi / m)
