@@ -12,12 +12,12 @@ pip install "aimnet[train] @ git+https://github.com/isayevlab/aimnetcentral.git"
 
 ## Commands Overview
 
-| Command | Purpose | Typical Use |
-|---------|---------|-------------|
-| `aimnet train` | Train a model | Training from scratch |
-| `aimnet export` | Export trained weights to inference format | After training |
-| `aimnet convert` | Convert legacy .jpt to new .pt format | Migrating old models |
-| `aimnet calc_sae` | Calculate self-atomic energies | Before training |
+| Command           | Purpose                                    | Typical Use           |
+| ----------------- | ------------------------------------------ | --------------------- |
+| `aimnet train`    | Train a model                              | Training from scratch |
+| `aimnet export`   | Export trained weights to inference format | After training        |
+| `aimnet convert`  | Convert legacy .jpt to new .pt format      | Migrating old models  |
+| `aimnet calc_sae` | Calculate self-atomic energies             | Before training       |
 
 ## aimnet train
 
@@ -35,12 +35,12 @@ aimnet train --config config.yaml --model model.yaml
 aimnet train [OPTIONS]
 ```
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `--config PATH` | Required | Training configuration YAML file |
-| `--model PATH` | Required | Model architecture YAML file |
-| `--resume PATH` | Optional | Resume from checkpoint |
-| `--device DEVICE` | Optional | Device to use (cuda/cpu) |
+| Option            | Type     | Description                      |
+| ----------------- | -------- | -------------------------------- |
+| `--config PATH`   | Required | Training configuration YAML file |
+| `--model PATH`    | Required | Model architecture YAML file     |
+| `--resume PATH`   | Optional | Resume from checkpoint           |
+| `--device DEVICE` | Optional | Device to use (cuda/cpu)         |
 
 ### Example Configuration
 
@@ -116,19 +116,19 @@ aimnet export INPUT OUTPUT [OPTIONS]
 
 **Positional Arguments:**
 
-| Argument | Description |
-|----------|-------------|
-| `INPUT` | Path to trained weights (.pt checkpoint) |
-| `OUTPUT` | Path for exported model (.pt file) |
+| Argument | Description                              |
+| -------- | ---------------------------------------- |
+| `INPUT`  | Path to trained weights (.pt checkpoint) |
+| `OUTPUT` | Path for exported model (.pt file)       |
 
 **Options:**
 
-| Option | Description |
-|--------|-------------|
-| `--model PATH` | Model architecture YAML (required) |
-| `--sae PATH` | Self-atomic energies YAML (required) |
-| `--needs-coulomb` | Force external Coulomb module |
-| `--needs-dispersion` | Force external DFTD3 module |
+| Option               | Description                          |
+| -------------------- | ------------------------------------ |
+| `--model PATH`       | Model architecture YAML (required)   |
+| `--sae PATH`         | Self-atomic energies YAML (required) |
+| `--needs-coulomb`    | Force external Coulomb module        |
+| `--needs-dispersion` | Force external DFTD3 module          |
 
 ### Export Process
 
@@ -192,11 +192,11 @@ aimnet convert INPUT CONFIG OUTPUT
 
 **Positional Arguments:**
 
-| Argument | Description |
-|----------|-------------|
-| `INPUT` | Legacy .jpt model file |
+| Argument | Description                       |
+| -------- | --------------------------------- |
+| `INPUT`  | Legacy .jpt model file            |
 | `CONFIG` | Original model configuration YAML |
-| `OUTPUT` | Output .pt model file |
+| `OUTPUT` | Output .pt model file             |
 
 ### Conversion Process
 
@@ -246,15 +246,15 @@ aimnet calc_sae INPUT OUTPUT [OPTIONS]
 
 **Positional Arguments:**
 
-| Argument | Description |
-|----------|-------------|
-| `INPUT` | HDF5 dataset with single-atom energies |
-| `OUTPUT` | Output YAML file for SAE values |
+| Argument | Description                            |
+| -------- | -------------------------------------- |
+| `INPUT`  | HDF5 dataset with single-atom energies |
+| `OUTPUT` | Output YAML file for SAE values        |
 
 **Options:**
 
-| Option | Description |
-|--------|-------------|
+| Option            | Description                                      |
+| ----------------- | ------------------------------------------------ |
 | `--elements LIST` | Comma-separated atomic numbers (e.g., "1,6,7,8") |
 
 ### SAE Format
@@ -263,10 +263,10 @@ Output YAML format:
 
 ```yaml
 # Self-atomic energies in eV
-1: -13.587  # Hydrogen
-6: -1027.592  # Carbon
-7: -1483.525  # Nitrogen
-8: -2039.734  # Oxygen
+1: -13.587 # Hydrogen
+6: -1027.592 # Carbon
+7: -1483.525 # Nitrogen
+8: -2039.734 # Oxygen
 ```
 
 ### Example
@@ -351,20 +351,20 @@ python test_equivalence.py old_model.jpt new_model.pt
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `AIMNET_CACHE_DIR` | Model cache directory | `~/.cache/aimnet/` |
-| `CUDA_VISIBLE_DEVICES` | GPU device selection | All available |
+| Variable               | Description           | Default            |
+| ---------------------- | --------------------- | ------------------ |
+| `AIMNET_CACHE_DIR`     | Model cache directory | `~/.cache/aimnet/` |
+| `CUDA_VISIBLE_DEVICES` | GPU device selection  | All available      |
 
 ## Exit Codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | General error |
-| 2 | Invalid arguments |
-| 3 | File not found |
-| 4 | Configuration error |
+| Code | Meaning             |
+| ---- | ------------------- |
+| 0    | Success             |
+| 1    | General error       |
+| 2    | Invalid arguments   |
+| 3    | File not found      |
+| 4    | Configuration error |
 
 ## Getting Help
 

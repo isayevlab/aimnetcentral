@@ -7,10 +7,10 @@ It reflects the current implementation in `aimnet.models.base`, `aimnet.models.u
 
 AIMNet2 supports two model formats:
 
-| Format | Extension | Version | Description |
-|--------|-----------|---------|-------------|
-| Legacy | `.jpt` | 1 | TorchScript JIT-compiled model with embedded LR modules |
-| New | `.pt` | 2 | State dict with embedded YAML config and metadata |
+| Format | Extension | Version | Description                                             |
+| ------ | --------- | ------- | ------------------------------------------------------- |
+| Legacy | `.jpt`    | 1       | TorchScript JIT-compiled model with embedded LR modules |
+| New    | `.pt`     | 2       | State dict with embedded YAML config and metadata       |
 
 ### Format Detection
 
@@ -26,50 +26,52 @@ For early v2 bundles that predate `format_version`, `load_model()` defaults to `
 
 ### Core Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `format_version` | `int` | `1` = legacy JIT, `2` = new format (default for early v2 bundles) |
-| `cutoff` | `float` | Model short-range cutoff radius (Å) |
-| `implemented_species` | `list[int]` | Supported atomic numbers |
+| Field                 | Type        | Description                                                       |
+| --------------------- | ----------- | ----------------------------------------------------------------- |
+| `format_version`      | `int`       | `1` = legacy JIT, `2` = new format (default for early v2 bundles) |
+| `cutoff`              | `float`     | Model short-range cutoff radius (Å)                               |
+| `implemented_species` | `list[int]` | Supported atomic numbers                                          |
 
 ### Coulomb Configuration
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `needs_coulomb` | `bool` | If `True`, calculator should add external Coulomb |
-| `coulomb_mode` | `str` | What's embedded: `"sr_embedded"`, `"full_embedded"`, or `"none"` |
-| `coulomb_sr_rc` | `float | None` | SR Coulomb cutoff (only if `coulomb_mode="sr_embedded"`) |
-| `coulomb_sr_envelope` | `str | None` | Envelope function: `"exp"` (mollifier) or `"cosine"` |
+| Field                 | Type   | Description                                                      |
+| --------------------- | ------ | ---------------------------------------------------------------- | -------------------------------------------------------- |
+| `needs_coulomb`       | `bool` | If `True`, calculator should add external Coulomb                |
+| `coulomb_mode`        | `str`  | What's embedded: `"sr_embedded"`, `"full_embedded"`, or `"none"` |
+| `coulomb_sr_rc`       | `float | None`                                                            | SR Coulomb cutoff (only if `coulomb_mode="sr_embedded"`) |
+| `coulomb_sr_envelope` | `str   | None`                                                            | Envelope function: `"exp"` (mollifier) or `"cosine"`     |
 
 ### Dispersion Configuration
 
-| Field | Type | Description |
-|-------|------|-------------|
+| Field              | Type   | Description                                     |
+| ------------------ | ------ | ----------------------------------------------- | --------------------------------- |
 | `needs_dispersion` | `bool` | If `True`, calculator should add external DFTD3 |
-| `d3_params` | `dict | None` | D3 parameters: `{s6, s8, a1, a2}` |
+| `d3_params`        | `dict  | None`                                           | D3 parameters: `{s6, s8, a1, a2}` |
 
 ## Which Format Should I Use?
 
 ### Decision Matrix
 
-| Scenario | Format | Model Type | Notes |
-|----------|--------|------------|-------|
-| Training new model | v2 (.pt) | Export after training | Flexible, modern |
-| Need runtime Coulomb control | v2 (.pt) | Convert from v1 if needed | Switch simple/DSF/Ewald |
-| Production inference | v2 (.pt) | Preferred | Smaller, more flexible |
-| Legacy deployment | v1 (.jpt) | Keep as-is | If compatibility required |
-| Experimenting with methods | v2 (.pt) | Required | Runtime reconfiguration |
-| Fixed pipeline | Either | Use what works | No strong preference |
+| Scenario                     | Format    | Model Type                | Notes                     |
+| ---------------------------- | --------- | ------------------------- | ------------------------- |
+| Training new model           | v2 (.pt)  | Export after training     | Flexible, modern          |
+| Need runtime Coulomb control | v2 (.pt)  | Convert from v1 if needed | Switch simple/DSF/Ewald   |
+| Production inference         | v2 (.pt)  | Preferred                 | Smaller, more flexible    |
+| Legacy deployment            | v1 (.jpt) | Keep as-is                | If compatibility required |
+| Experimenting with methods   | v2 (.pt)  | Required                  | Runtime reconfiguration   |
+| Fixed pipeline               | Either    | Use what works            | No strong preference      |
 
 ### Quick Selection Guide
 
 **Use v2 (.pt) if:**
+
 - Training new models
 - Need to try different Coulomb methods
 - Want runtime flexibility
 - Prefer modern PyTorch features
 
 **Keep v1 (.jpt) if:**
+
 - Existing deployment works
 - Don't need to change methods
 - Legacy compatibility required
@@ -131,6 +133,7 @@ The short-range Coulomb cutoff defines the distance within which SR Coulomb inte
 **Constraint:** `coulomb_sr_rc <= model cutoff`
 
 The SR cutoff must be less than or equal to the model's short-range cutoff (`cutoff`) because:
+
 - SRCoulomb uses the same neighbor list as the neural network
 - Atom pairs beyond the model cutoff are not visible to SRCoulomb
 - Typical value: 4.6 Å (with model cutoff of 5.0 Å)
@@ -138,6 +141,7 @@ The SR cutoff must be less than or equal to the model's short-range cutoff (`cut
 #### SR Envelope (`coulomb_sr_envelope`)
 
 The envelope function defines how the SR interaction decays at the cutoff:
+
 - `"exp"`: Smooth mollifier-based decay (default)
 - `"cosine"`: Cosine-based decay
 
@@ -200,6 +204,7 @@ defaults to 15.0 Å cutoff and 0.8 smoothing fraction unless overridden at runti
 ### Legacy Format (.jpt)
 
 TorchScript module with attributes:
+
 - `cutoff`: Model cutoff
 - `cutoff_lr`: Long-range cutoff (if applicable)
 - LRCoulomb and DFTD3/D3BJ modules embedded
@@ -257,12 +262,12 @@ aimnet convert model.jpt config.yaml model_v2.pt
 
 ### Key Changes During Conversion
 
-| Legacy | New |
-|--------|-----|
-| `outputs.lrcoulomb.*` | Removed |
-| `outputs.dftd3.*` | Removed |
-| `outputs.d3bj.*` | Removed |
-| (none) | `outputs.srcoulomb.*` added |
+| Legacy                | New                         |
+| --------------------- | --------------------------- |
+| `outputs.lrcoulomb.*` | Removed                     |
+| `outputs.dftd3.*`     | Removed                     |
+| `outputs.d3bj.*`      | Removed                     |
+| (none)                | `outputs.srcoulomb.*` added |
 
 ## Loading Models
 
@@ -286,18 +291,18 @@ print(metadata["coulomb_mode"])
 
 ## Metadata Behavior Summary
 
-| Model Type | `needs_coulomb` | `coulomb_mode` | Calculator Behavior |
-|------------|-----------------|----------------|---------------------|
-| New with Coulomb | `True` | `"sr_embedded"` | Adds external LRCoulomb |
-| New without Coulomb | `False` | `"none"` | No external Coulomb |
-| Legacy JIT | `False` | `"full_embedded"` | Coulomb embedded in JIT |
+| Model Type          | `needs_coulomb` | `coulomb_mode`    | Calculator Behavior     |
+| ------------------- | --------------- | ----------------- | ----------------------- |
+| New with Coulomb    | `True`          | `"sr_embedded"`   | Adds external LRCoulomb |
+| New without Coulomb | `False`         | `"none"`          | No external Coulomb     |
+| Legacy JIT          | `False`         | `"full_embedded"` | Coulomb embedded in JIT |
 
-| Model Type | `needs_dispersion` | Calculator Behavior |
-|------------|-------------------|---------------------|
-| New with DFTD3/D3BJ | `True` | Adds external DFTD3 |
-| New with D3TS | `False` | D3TS embedded |
-| New without dispersion | `False` | No dispersion |
-| Legacy with DFTD3 | `False` | Embedded in JIT (d3_params extracted for diagnostics) |
+| Model Type             | `needs_dispersion` | Calculator Behavior                                   |
+| ---------------------- | ------------------ | ----------------------------------------------------- |
+| New with DFTD3/D3BJ    | `True`             | Adds external DFTD3                                   |
+| New with D3TS          | `False`            | D3TS embedded                                         |
+| New without dispersion | `False`            | No dispersion                                         |
+| Legacy with DFTD3      | `False`            | Embedded in JIT (d3_params extracted for diagnostics) |
 
 ## API Reference
 
@@ -306,10 +311,12 @@ print(metadata["coulomb_mode"])
 Load model from file with automatic format detection.
 
 **Parameters:**
+
 - `path` (`str`): Path to model file (`.pt` or `.jpt`)
 - `device` (`str`): Device to load model on
 
 **Returns:**
+
 - `model` (`nn.Module`): Loaded model
 - `metadata` (`ModelMetadata`): Metadata dictionary
 
@@ -330,11 +337,13 @@ See [Metadata Structure](#metadata-structure) for field definitions.
 - **Metadata**: Rich metadata for validation and documentation
 
 **When to convert:**
+
 - You have legacy `.jpt` models and want runtime Coulomb control
 - You're training new models (use v2 from the start)
 - You need to modify model architecture post-training
 
 **When to keep v1:**
+
 - Legacy compatibility required
 - Model works fine and no new features needed
 - Deployment pipeline expects JIT models
@@ -344,6 +353,7 @@ See [Metadata Structure](#metadata-structure) for field definitions.
 #### 1. Prepare Required Files
 
 You'll need:
+
 - `model.jpt` - Your legacy JIT model
 - `config.yaml` - Original model configuration
 
@@ -359,6 +369,7 @@ aimnet convert model.jpt config.yaml model_v2.pt
 ```
 
 **What happens during conversion:**
+
 - Extracts model weights from JIT state dict
 - Strips embedded LRCoulomb/DFTD3 modules
 - Adds SRCoulomb if LRCoulomb was present
@@ -398,6 +409,7 @@ assert force_diff < 1e-4, "Force mismatch!"
 ```
 
 **Expected differences:**
+
 - Energies: < 1e-5 eV (numerical precision)
 - Forces: < 1e-4 eV/Å (gradient precision)
 

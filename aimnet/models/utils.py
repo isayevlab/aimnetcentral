@@ -10,7 +10,7 @@ This module provides helper functions for:
 from __future__ import annotations
 
 import contextlib
-from typing import Iterator
+from collections.abc import Iterator
 
 import torch
 from torch import nn
@@ -627,15 +627,14 @@ def load_v1_model(
                 print("WARNING: D3 params appear to be all zeros - extraction may have failed!")
                 print(f"  Extracted: {d3_params}")
             else:
-                print(f"  D3 parameters: s6={d3_params['s6']}, s8={d3_params['s8']}, "
-                      f"a1={d3_params['a1']}, a2={d3_params['a2']}")
+                print(
+                    f"  D3 parameters: s6={d3_params['s6']}, s8={d3_params['s8']}, "
+                    f"a1={d3_params['a1']}, a2={d3_params['a2']}"
+                )
         else:
             # Check if D3TS is embedded
             outputs = model_config.get("kwargs", {}).get("outputs", {})
-            has_d3ts = any(
-                "D3TS" in outputs.get(k, {}).get("class", "")
-                for k in ["dftd3", "d3bj", "d3ts"]
-            )
+            has_d3ts = any("D3TS" in outputs.get(k, {}).get("class", "") for k in ["dftd3", "d3bj", "d3ts"])
             if has_d3ts:
                 print("  D3TS dispersion kept embedded (uses NN-predicted C6/alpha)")
 
@@ -644,10 +643,7 @@ def load_v1_model(
     has_embedded_lr = False
 
     # Check for embedded D3TS
-    has_d3ts = any(
-        "D3TS" in outputs.get(k, {}).get("class", "")
-        for k in ["dftd3", "d3bj", "d3ts"]
-    )
+    has_d3ts = any("D3TS" in outputs.get(k, {}).get("class", "") for k in ["dftd3", "d3bj", "d3ts"])
     if has_d3ts:
         has_embedded_lr = True
 
@@ -668,9 +664,7 @@ def load_v1_model(
     load_result = core_model.load_state_dict(jit_sd, strict=False)
 
     # Validate keys
-    real_missing, real_unexpected = validate_state_dict_keys(
-        load_result.missing_keys, load_result.unexpected_keys
-    )
+    real_missing, real_unexpected = validate_state_dict_keys(load_result.missing_keys, load_result.unexpected_keys)
     if real_missing:
         print(f"WARNING: Unexpected missing keys: {real_missing}")
     if real_unexpected:

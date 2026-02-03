@@ -70,13 +70,13 @@ print(f"Forces shape: {result['forces'].shape}")
 
 The calculator returns a dictionary with:
 
-| Key | Shape | Description | Units |
-|-----|-------|-------------|-------|
-| `energy` | `()` or `(B,)` | Total energy | eV |
-| `charges` | `(N,)` or `(B, N)` | Atomic partial charges | e |
-| `forces` | `(N, 3)` or `(B, N, 3)` | Atomic forces (if requested) | eV/Å |
-| `stress` | `(3, 3)` or `(B, 3, 3)` | Stress tensor (if requested with PBC) | eV/Å³ |
-| `hessian` | `(N, 3, N, 3)` | Hessian matrix (if requested, single molecule) | eV/Å² |
+| Key       | Shape                   | Description                                    | Units |
+| --------- | ----------------------- | ---------------------------------------------- | ----- |
+| `energy`  | `()` or `(B,)`          | Total energy                                   | eV    |
+| `charges` | `(N,)` or `(B, N)`      | Atomic partial charges                         | e     |
+| `forces`  | `(N, 3)` or `(B, N, 3)` | Atomic forces (if requested)                   | eV/Å  |
+| `stress`  | `(3, 3)` or `(B, 3, 3)` | Stress tensor (if requested with PBC)          | eV/Å³ |
+| `hessian` | `(N, 3, N, 3)`          | Hessian matrix (if requested, single molecule) | eV/Å² |
 
 ## Common Tasks
 
@@ -189,7 +189,6 @@ opt.run(fmax=0.01)  # Converge to 0.01 eV/Angstrom
 # Get final energy
 final_energy = atoms.get_potential_energy()
 ```
-
 
 ## Next Steps
 

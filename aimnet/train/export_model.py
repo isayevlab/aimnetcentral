@@ -71,14 +71,16 @@ def mask_not_implemented_species(model: nn.Module, species: list[int]) -> nn.Mod
 @click.command()
 @click.argument("weights", type=click.Path(exists=True))
 @click.argument("output", type=str)
-@click.option("--model", "-m", type=click.Path(exists=True), required=True,
-              help="Path to model definition YAML file")
-@click.option("--sae", "-s", type=click.Path(exists=True), required=True,
-              help="Path to the SAE YAML file")
-@click.option("--needs-coulomb/--no-coulomb", default=None,
-              help="Override Coulomb detection. Default: auto-detect from YAML")
-@click.option("--needs-dispersion/--no-dispersion", default=None,
-              help="Override dispersion detection. Default: auto-detect from YAML")
+@click.option("--model", "-m", type=click.Path(exists=True), required=True, help="Path to model definition YAML file")
+@click.option("--sae", "-s", type=click.Path(exists=True), required=True, help="Path to the SAE YAML file")
+@click.option(
+    "--needs-coulomb/--no-coulomb", default=None, help="Override Coulomb detection. Default: auto-detect from YAML"
+)
+@click.option(
+    "--needs-dispersion/--no-dispersion",
+    default=None,
+    help="Override dispersion detection. Default: auto-detect from YAML",
+)
 def export_model(
     weights: str,
     output: str,
@@ -127,9 +129,7 @@ def export_model(
     load_result = core_model.load_state_dict(source_sd, strict=False)
 
     # Check for unexpected missing/extra keys
-    real_missing, real_unexpected = validate_state_dict_keys(
-        load_result.missing_keys, load_result.unexpected_keys
-    )
+    real_missing, real_unexpected = validate_state_dict_keys(load_result.missing_keys, load_result.unexpected_keys)
     if real_missing:
         print(f"WARNING: Unexpected missing keys: {real_missing}")
     if real_unexpected:

@@ -189,7 +189,7 @@ class TestEwaldPeriodic:
         n_atoms = data["coord"].shape[0]
         # Create explicitly neutral system
         charges = torch.ones(n_atoms, device=device)
-        charges[n_atoms // 2:] = -1.0
+        charges[n_atoms // 2 :] = -1.0
         if n_atoms % 2 != 0:
             charges[-1] = 0.0
         data["charges"] = charges

@@ -87,9 +87,7 @@ def load_model(path: str, device: str = "cpu") -> tuple[nn.Module, ModelMetadata
         load_result = model.load_state_dict(data["state_dict"], strict=False)
 
         # Check for unexpected missing/extra keys
-        real_missing, real_unexpected = validate_state_dict_keys(
-            load_result.missing_keys, load_result.unexpected_keys
-        )
+        real_missing, real_unexpected = validate_state_dict_keys(load_result.missing_keys, load_result.unexpected_keys)
         if real_missing or real_unexpected:
             msg_parts = []
             if real_missing:

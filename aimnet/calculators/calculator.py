@@ -267,9 +267,7 @@ class AIMNet2Calculator:
 
         # Set up external Coulomb if needed
         if final_needs_coulomb:
-            sr_embedded = (
-                metadata.get("coulomb_mode") == "sr_embedded" if metadata is not None else False
-            )
+            sr_embedded = metadata.get("coulomb_mode") == "sr_embedded" if metadata is not None else False
             # For PBC, user can switch to DSF/Ewald via set_lrcoulomb_method()
             # When sr_embedded=True: model has SRCoulomb which subtracts SR, so external
             # should compute FULL (subtract_sr=False) to give: (NN - SR) + FULL = NN + LR
@@ -706,10 +704,9 @@ class AIMNet2Calculator:
     def prepare_input(self, data: dict[str, Any]) -> dict[str, Tensor]:
         data = self.to_input_tensors(data)
         data = self.mol_flatten(data)
-        if data.get("cell") is not None:
-            if self._coulomb_method == "simple":
-                warnings.warn("Switching to DSF Coulomb for PBC", stacklevel=1)
-                self.set_lrcoulomb_method("dsf")
+        if data.get("cell") is not None and self._coulomb_method == "simple":
+            warnings.warn("Switching to DSF Coulomb for PBC", stacklevel=1)
+            self.set_lrcoulomb_method("dsf")
         if data["coord"].ndim == 2:
             # Skip neighbor list calculation if already provided
             if "nbmat" not in data:

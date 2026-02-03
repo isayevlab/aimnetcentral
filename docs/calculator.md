@@ -82,11 +82,11 @@ AIMNet2Calculator(
 
 Model to use for inference.
 
-| Type | Behavior |
-|------|----------|
+| Type                  | Behavior                                                             |
+| --------------------- | -------------------------------------------------------------------- |
 | `str` (registry name) | Loads from model registry (e.g., `"aimnet2"`), downloading if needed |
-| `str` (file path) | Loads from `.pt` (v2) or `.jpt` (v1 legacy) file if the path exists |
-| `torch.nn.Module` | Uses provided module directly |
+| `str` (file path)     | Loads from `.pt` (v2) or `.jpt` (v1 legacy) file if the path exists  |
+| `torch.nn.Module`     | Uses provided module directly                                        |
 
 For `torch.nn.Module`, metadata is read from `model.metadata` attribute if available (v2 models).
 
@@ -101,11 +101,11 @@ The calculator uses two input modes:
 2. **Flattened + neighbor lists (mode 1)**: 2D input for coordinates `(num_atoms, 3)` with `mol_idx` and neighbor
    lists (sparse O(N)). Used for large systems, CPU execution, and periodic systems.
 
-| Condition | Behavior | Complexity |
-|-----------|----------|------------|
-| `N > nb_threshold` | If input is mode 0 (3D), flatten to mode 1 (2D with `mol_idx`) | O(N) linear |
-| `device == "cpu"` | If input is mode 0 (3D), always flatten to mode 1 | O(N) linear |
-| `N < nb_threshold` and CUDA | Keep mode 0 (3D) | O(N²) fully connected |
+| Condition                   | Behavior                                                       | Complexity            |
+| --------------------------- | -------------------------------------------------------------- | --------------------- |
+| `N > nb_threshold`          | If input is mode 0 (3D), flatten to mode 1 (2D with `mol_idx`) | O(N) linear           |
+| `device == "cpu"`           | If input is mode 0 (3D), always flatten to mode 1              | O(N) linear           |
+| `N < nb_threshold` and CUDA | Keep mode 0 (3D)                                               | O(N²) fully connected |
 
 This affects memory usage and performance for batched inference. The mode=0 path uses a fully connected
 graph (all-pairs interactions), which scales as O(N²) but is fast for GPU. The mode=1
@@ -116,11 +116,11 @@ for periodic systems; PBC inputs always go through neighbor lists.
 
 Whether to attach external Coulomb module.
 
-| Value | Behavior |
-|-------|----------|
-| `None` (default) | Determined from model metadata |
-| `True` | Force external Coulomb (overrides metadata) |
-| `False` | No external Coulomb (overrides metadata) |
+| Value            | Behavior                                    |
+| ---------------- | ------------------------------------------- |
+| `None` (default) | Determined from model metadata              |
+| `True`           | Force external Coulomb (overrides metadata) |
+| `False`          | No external Coulomb (overrides metadata)    |
 
 Only affects v2 format models. Legacy JIT models have embedded Coulomb.
 If you override this flag on a model without Coulomb metadata, ensure it is
@@ -130,11 +130,11 @@ compatible with the expected subtraction for short range Coulomb contribution (s
 
 Whether to attach external DFTD3 module.
 
-| Value | Behavior |
-|-------|----------|
-| `None` (default) | Determined from model metadata |
-| `True` | Force external DFTD3 (overrides metadata) |
-| `False` | No external DFTD3 (overrides metadata) |
+| Value            | Behavior                                  |
+| ---------------- | ----------------------------------------- |
+| `None` (default) | Determined from model metadata            |
+| `True`           | Force external DFTD3 (overrides metadata) |
+| `False`          | No external DFTD3 (overrides metadata)    |
 
 Only affects new-format models. Raises `ValueError` if `needs_dispersion=True` but `d3_params` are missing in metadata.
 
@@ -142,21 +142,21 @@ Only affects new-format models. Raises `ValueError` if `needs_dispersion=True` b
 
 Device to run the model on.
 
-| Value | Behavior |
-|-------|----------|
+| Value            | Behavior                                      |
+| ---------------- | --------------------------------------------- |
 | `None` (default) | Auto-detect: uses CUDA if available, else CPU |
-| `"cuda"` | Force CUDA device |
-| `"cpu"` | Force CPU device |
-| `"cuda:N"` | Specific CUDA device (e.g., `"cuda:1"`) |
+| `"cuda"`         | Force CUDA device                             |
+| `"cpu"`          | Force CPU device                              |
+| `"cuda:N"`       | Specific CUDA device (e.g., `"cuda:1"`)       |
 
 #### `compile_model`
 
 Whether to compile the model with `torch.compile()` for faster inference.
 
-| Value | Behavior |
-|-------|----------|
-| `False` (default) | No compilation |
-| `True` | Compile model with `torch.compile()` |
+| Value             | Behavior                             |
+| ----------------- | ------------------------------------ |
+| `False` (default) | No compilation                       |
+| `True`            | Compile model with `torch.compile()` |
 
 Compilation adds overhead on first call but speeds up subsequent calls. Useful for
 MD trajectories, geometry optimizations, or repeated evaluations.
@@ -179,11 +179,11 @@ for available options.
 Priority: explicit flags > model metadata > no external modules
 ```
 
-| Model Source | Metadata Source |
-|--------------|-----------------|
-| File path (`.pt`/`.jpt`) | Loaded from file |
-| `nn.Module` | `model.metadata` attribute |
-| No metadata + no flags | No external LR modules |
+| Model Source             | Metadata Source            |
+| ------------------------ | -------------------------- |
+| File path (`.pt`/`.jpt`) | Loaded from file           |
+| `nn.Module`              | `model.metadata` attribute |
+| No metadata + no flags   | No external LR modules     |
 
 ## Properties
 
@@ -203,11 +203,11 @@ Primary long-range cutoff reference. Used for backward compatibility with legacy
 
 Coulomb-specific cutoff distance. Tracked separately from the DFTD3 cutoff.
 
-| Method | Value |
-|--------|-------|
-| `"simple"` | `inf` (all pairs) |
-| `"dsf"` | Configured cutoff (default 15.0 Å) |
-| `"ewald"` | `None` (Ewald manages its own real-space cutoff internally) |
+| Method     | Value                                                       |
+| ---------- | ----------------------------------------------------------- |
+| `"simple"` | `inf` (all pairs)                                           |
+| `"dsf"`    | Configured cutoff (default 15.0 Å)                          |
+| `"ewald"`  | `None` (Ewald manages its own real-space cutoff internally) |
 
 ### `dftd3_cutoff`
 
@@ -225,6 +225,7 @@ The calculator keeps Coulomb and DFTD3 cutoffs independent. Long-range neighbor 
 **Data dictionary keys:**
 
 LR modules prefer their specific suffix, falling back to `_lr`:
+
 - **LRCoulomb**: Tries `nbmat_coulomb` first, falls back to `nbmat_lr`
 - **DFTD3/D3TS**: Tries `nbmat_dftd3` first, falls back to `nbmat_lr`
 
@@ -249,6 +250,7 @@ When neighbor lists are shared, all keys point to the same array.
 Current Coulomb method: `"simple"`, `"dsf"`, `"ewald"`, or `None`.
 
 Returns `None` for:
+
 - Legacy models with embedded Coulomb
 - Models without Coulomb
 
@@ -265,12 +267,12 @@ Main inference method. Also callable via `calculator(data, ...)`.
 
 **Parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `data` | `dict` | required | Input data dictionary |
-| `forces` | `bool` | `False` | Compute atomic forces |
-| `stress` | `bool` | `False` | Compute stress tensor (requires `cell`) |
-| `hessian` | `bool` | `False` | Compute Hessian matrix |
+| Parameter | Type   | Default  | Description                             |
+| --------- | ------ | -------- | --------------------------------------- |
+| `data`    | `dict` | required | Input data dictionary                   |
+| `forces`  | `bool` | `False`  | Compute atomic forces                   |
+| `stress`  | `bool` | `False`  | Compute stress tensor (requires `cell`) |
+| `hessian` | `bool` | `False`  | Compute Hessian matrix                  |
 
 **Returns:** Dictionary with computed outputs.
 
@@ -295,20 +297,20 @@ Set the long-range Coulomb method.
 
 **Parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `method` | `str` | required | `"simple"`, `"dsf"`, or `"ewald"` |
-| `cutoff` | `float` | `15.0` | Cutoff for DSF method (Å). Not used for Ewald. |
-| `dsf_alpha` | `float` | `0.2` | Alpha parameter for DSF method |
-| `ewald_accuracy` | `float` | `1e-8` | Target accuracy for Ewald summation |
+| Parameter        | Type    | Default  | Description                                    |
+| ---------------- | ------- | -------- | ---------------------------------------------- |
+| `method`         | `str`   | required | `"simple"`, `"dsf"`, or `"ewald"`              |
+| `cutoff`         | `float` | `15.0`   | Cutoff for DSF method (Å). Not used for Ewald. |
+| `dsf_alpha`      | `float` | `0.2`    | Alpha parameter for DSF method                 |
+| `ewald_accuracy` | `float` | `1e-8`   | Target accuracy for Ewald summation            |
 
 **Behavior:**
 
-| Method | Description | Coulomb cutoff |
-|--------|-------------|----------------|
-| `"simple"` | Direct Coulomb sum (all pairs) | `inf` |
-| `"dsf"` | Damped shifted force | Configured cutoff |
-| `"ewald"` | Ewald summation | Computed from accuracy |
+| Method     | Description                    | Coulomb cutoff         |
+| ---------- | ------------------------------ | ---------------------- |
+| `"simple"` | Direct Coulomb sum (all pairs) | `inf`                  |
+| `"dsf"`    | Damped shifted force           | Configured cutoff      |
+| `"ewald"`  | Ewald summation                | Computed from accuracy |
 
 **Ewald Accuracy Parameter:**
 
@@ -321,11 +323,11 @@ geometry:
 \]
 
 \[
-r_{\text{cutoff}} = \sqrt{-2 \ln \varepsilon} \cdot \eta
+r\_{\text{cutoff}} = \sqrt{-2 \ln \varepsilon} \cdot \eta
 \]
 
 \[
-k_{\text{cutoff}} = \frac{\sqrt{-2 \ln \varepsilon}}{\eta}
+k\_{\text{cutoff}} = \frac{\sqrt{-2 \ln \varepsilon}}{\eta}
 \]
 
 Where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and
@@ -333,6 +335,7 @@ Where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and
 precision but require more computation.
 
 **Notes:**
+
 - Updates external `LRCoulomb` module if present
 - Automatically updates neighbor lists
 - Issues warning for legacy models (no effect)
@@ -352,11 +355,12 @@ Set the unified long-range cutoff for all LR modules.
 
 **Parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `cutoff` | `float` | Cutoff distance (Å) for LR neighbor lists |
+| Parameter | Type    | Description                               |
+| --------- | ------- | ----------------------------------------- |
+| `cutoff`  | `float` | Cutoff distance (Å) for LR neighbor lists |
 
 **Notes:**
+
 - Updates both Coulomb and DFTD3 cutoffs
 - Ewald method ignores this cutoff (uses its own internal cutoff)
 - Automatically rebuilds neighbor lists
@@ -374,12 +378,13 @@ Set DFTD3 cutoff and smoothing.
 
 **Parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `cutoff` | `float | None` | `15.0` | Cutoff distance (Å) |
-| `smoothing_fraction` | `float | None` | `0.2` | Fraction of cutoff used as smoothing width |
+| Parameter            | Type   | Default | Description |
+| -------------------- | ------ | ------- | ----------- | ------------------------------------------ |
+| `cutoff`             | `float | None`   | `15.0`      | Cutoff distance (Å)                        |
+| `smoothing_fraction` | `float | None`   | `0.2`       | Fraction of cutoff used as smoothing width |
 
 **Notes:**
+
 - Only updates smoothing parameters for external DFTD3 modules
 - Always updates neighbor list cutoffs used by the calculator
 - For legacy models with embedded DFTD3, the embedded module’s smoothing parameters do not change,
@@ -396,29 +401,30 @@ calc.set_dftd3_cutoff(cutoff=20.0, smoothing_fraction=0.25)  # smoothing from 15
 
 ### Required Keys
 
-| Key | Type | Shape | Description |
-|-----|------|-------|-------------|
-| `coord` | `float32` | `(N, 3)` or `(B, N, 3)` | Atomic coordinates (Å) |
-| `numbers` | `int64` | `(N,)` or `(B, N)` | Atomic numbers |
-| `charge` | `float32` | `(1,)` or `(B,)` | Molecular charge(s) |
+| Key       | Type      | Shape                   | Description            |
+| --------- | --------- | ----------------------- | ---------------------- |
+| `coord`   | `float32` | `(N, 3)` or `(B, N, 3)` | Atomic coordinates (Å) |
+| `numbers` | `int64`   | `(N,)` or `(B, N)`      | Atomic numbers         |
+| `charge`  | `float32` | `(1,)` or `(B,)`        | Molecular charge(s)    |
 
 ### Optional Keys
 
-| Key | Type | Shape | Description |
-|-----|------|-------|-------------|
-| `mult` | `float32` | `(B,)` | Multiplicity |
-| `mol_idx` | `int64` | `(N,)` | Molecule index per atom |
-| `cell` | `float32` | `(3, 3)` or `(B, 3, 3)` | Unit cell vectors |
-| `nbmat` | `int64` | `(N, max_nb)` | Pre-computed neighbor matrix |
-| `nbmat_lr` | `int64` | `(N, max_nb)` | Long-range neighbor matrix |
-| `nb_pad_mask` | `bool` | `(N, max_nb)` | Optional padding mask for `nbmat` |
-| `nb_pad_mask_lr` | `bool` | `(N, max_nb)` | Optional padding mask for `nbmat_lr` |
-| `shifts` | `float32` | `(N, max_nb, 3)` | PBC shifts for neighbors |
-| `shifts_lr` | `float32` | `(N, max_nb, 3)` | PBC shifts for LR neighbors |
+| Key              | Type      | Shape                   | Description                          |
+| ---------------- | --------- | ----------------------- | ------------------------------------ |
+| `mult`           | `float32` | `(B,)`                  | Multiplicity                         |
+| `mol_idx`        | `int64`   | `(N,)`                  | Molecule index per atom              |
+| `cell`           | `float32` | `(3, 3)` or `(B, 3, 3)` | Unit cell vectors                    |
+| `nbmat`          | `int64`   | `(N, max_nb)`           | Pre-computed neighbor matrix         |
+| `nbmat_lr`       | `int64`   | `(N, max_nb)`           | Long-range neighbor matrix           |
+| `nb_pad_mask`    | `bool`    | `(N, max_nb)`           | Optional padding mask for `nbmat`    |
+| `nb_pad_mask_lr` | `bool`    | `(N, max_nb)`           | Optional padding mask for `nbmat_lr` |
+| `shifts`         | `float32` | `(N, max_nb, 3)`        | PBC shifts for neighbors             |
+| `shifts_lr`      | `float32` | `(N, max_nb, 3)`        | PBC shifts for LR neighbors          |
 
 ### Input Conversion
 
 The calculator automatically converts:
+
 - NumPy arrays → PyTorch tensors
 - Python lists → PyTorch tensors
 - Scalar tensors → Shape `(1,)`
@@ -428,15 +434,16 @@ Any keys not listed in required/optional tables are ignored during input convers
 
 ## Output Format
 
-| Key | Shape | Description |
-|-----|-------|-------------|
-| `energy` | `(1,)` or `(B,)` | Total energy per molecule |
-| `charges` | `(N,)` or `(B, N)` | Atomic partial charges |
-| `forces` | `(N, 3)` or `(B, N, 3)` | Atomic forces (if requested) |
-| `stress` | `(3, 3)` or `(B, 3, 3)` | Stress tensor (if requested) |
-| `hessian` | `(N, 3, N, 3)` | Hessian matrix (if requested) |
+| Key       | Shape                   | Description                   |
+| --------- | ----------------------- | ----------------------------- |
+| `energy`  | `(1,)` or `(B,)`        | Total energy per molecule     |
+| `charges` | `(N,)` or `(B, N)`      | Atomic partial charges        |
+| `forces`  | `(N, 3)` or `(B, N, 3)` | Atomic forces (if requested)  |
+| `stress`  | `(3, 3)` or `(B, 3, 3)` | Stress tensor (if requested)  |
+| `hessian` | `(N, 3, N, 3)`          | Hessian matrix (if requested) |
 
 **Notes:**
+
 - `forces` requires `forces=True` in `eval()`
 - `stress` requires `stress=True` and `cell` in input
 - `hessian` requires `hessian=True`, only for single molecules
@@ -487,6 +494,7 @@ In this case, the O(N²) fully connected approach is more efficient than constru
 - Variable-sized molecules
 
 **Key Takeaways:**
+
 - PBC always requires neighbor lists (Mode 1)
 - CPU always uses neighbor lists (Mode 1)
 - Small batched molecules on GPU use fully connected (Mode 0)
@@ -530,10 +538,10 @@ data = {
 
 ### Coulomb Method for PBC
 
-| Initial Method | Action |
-|----------------|--------|
-| `"simple"` | Auto-switch to `"dsf"` with warning |
-| `"dsf"` / `"ewald"` | No change |
+| Initial Method      | Action                              |
+| ------------------- | ----------------------------------- |
+| `"simple"`          | Auto-switch to `"dsf"` with warning |
+| `"dsf"` / `"ewald"` | No change                           |
 
 ## Neighbor List Management
 
@@ -559,6 +567,7 @@ The calculator uses `AdaptiveNeighborList` for automatic buffer management in **
 ### Module Suffix Fallback
 
 LR modules prefer their specific neighbor list key, with fallback to `_lr`:
+
 - **LRCoulomb (simple/dsf)**: Tries `nbmat_coulomb`, falls back to `nbmat_lr`
 - **DFTD3/D3TS**: Tries `nbmat_dftd3`, falls back to `nbmat_lr`
 
@@ -574,13 +583,13 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 ### Placement
 
-| Component | Device |
-|-----------|--------|
-| Model | `self.device` |
-| External LRCoulomb | `self.device` |
-| External DFTD3 | `self.device` |
-| Input tensors | Converted to `self.device` |
-| Output tensors | Remain on `self.device` |
+| Component          | Device                     |
+| ------------------ | -------------------------- |
+| Model              | `self.device`              |
+| External LRCoulomb | `self.device`              |
+| External DFTD3     | `self.device`              |
+| Input tensors      | Converted to `self.device` |
+| Output tensors     | Remain on `self.device`    |
 
 ## External LR Module Configuration
 
@@ -636,17 +645,17 @@ Explicit `needs_coulomb` / `needs_dispersion` flags override metadata.
 
 ### LR Module Defaults
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `set_lrcoulomb_method(..., cutoff=15.0)` | `15.0` | Default LR cutoff for DSF (Å) |
-| `set_lrcoulomb_method(..., ewald_accuracy=1e-8)` | `1e-8` | Default accuracy for Ewald summation |
-| `set_dftd3_cutoff(..., smoothing_fraction=0.2)` | `0.2` | DFTD3 smoothing width as fraction of cutoff |
+| Parameter                                        | Default | Description                                 |
+| ------------------------------------------------ | ------- | ------------------------------------------- |
+| `set_lrcoulomb_method(..., cutoff=15.0)`         | `15.0`  | Default LR cutoff for DSF (Å)               |
+| `set_lrcoulomb_method(..., ewald_accuracy=1e-8)` | `1e-8`  | Default accuracy for Ewald summation        |
+| `set_dftd3_cutoff(..., smoothing_fraction=0.2)`  | `0.2`   | DFTD3 smoothing width as fraction of cutoff |
 
 ### Coulomb Defaults
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `coulomb_sr_rc` | `4.6` Å | Short-range Coulomb cutoff |
+| Parameter             | Default | Description                               |
+| --------------------- | ------- | ----------------------------------------- |
+| `coulomb_sr_rc`       | `4.6` Å | Short-range Coulomb cutoff                |
 | `coulomb_sr_envelope` | `"exp"` | Envelope function (`"exp"` or `"cosine"`) |
 
 #### SR Coulomb Cutoff Constraint
@@ -665,34 +674,34 @@ The envelope function (`"exp"` or `"cosine"`) determines how the SR interaction 
 
 Legacy JIT models (`.jpt`) have different behavior:
 
-| Feature | Legacy | New Format |
-|---------|--------|------------|
-| Coulomb | Embedded in model | External module |
-| DFTD3/D3BJ | Embedded in model | External module |
-| `set_lrcoulomb_method()` | Warning, no effect | Updates method |
-| `set_lr_cutoff()` | No effect on embedded modules | Updates `cutoff_lr` for all LR modules |
-| `set_dftd3_cutoff()` | No effect on embedded modules | Updates smoothing for external DFTD3 |
-| `has_external_coulomb` | `False` | `True` (if applicable) |
+| Feature                  | Legacy                        | New Format                             |
+| ------------------------ | ----------------------------- | -------------------------------------- |
+| Coulomb                  | Embedded in model             | External module                        |
+| DFTD3/D3BJ               | Embedded in model             | External module                        |
+| `set_lrcoulomb_method()` | Warning, no effect            | Updates method                         |
+| `set_lr_cutoff()`        | No effect on embedded modules | Updates `cutoff_lr` for all LR modules |
+| `set_dftd3_cutoff()`     | No effect on embedded modules | Updates smoothing for external DFTD3   |
+| `has_external_coulomb`   | `False`                       | `True` (if applicable)                 |
 
 ## Error Handling
 
 ### Common Errors
 
-| Condition | Error |
-|-----------|-------|
-| Invalid model type | `TypeError` |
-| Missing required input key | `KeyError` |
-| Hessian with multiple molecules | `NotImplementedError` |
-| PBC with multiple molecules | `NotImplementedError` |
-| Invalid Coulomb method | `ValueError` |
-| `needs_dispersion=True` without `d3_params` | `ValueError` |
+| Condition                                   | Error                 |
+| ------------------------------------------- | --------------------- |
+| Invalid model type                          | `TypeError`           |
+| Missing required input key                  | `KeyError`            |
+| Hessian with multiple molecules             | `NotImplementedError` |
+| PBC with multiple molecules                 | `NotImplementedError` |
+| Invalid Coulomb method                      | `ValueError`          |
+| `needs_dispersion=True` without `d3_params` | `ValueError`          |
 
 ### Warnings
 
-| Condition | Warning |
-|-----------|---------|
-| `set_lrcoulomb_method()` on legacy model | Warns, no effect |
-| PBC with `"simple"` Coulomb | Auto-switches to `"dsf"` |
+| Condition                                | Warning                  |
+| ---------------------------------------- | ------------------------ |
+| `set_lrcoulomb_method()` on legacy model | Warns, no effect         |
+| PBC with `"simple"` Coulomb              | Auto-switches to `"dsf"` |
 
 ## Complete Example
 
@@ -758,19 +767,21 @@ calc = AIMNet2Calculator(
 ```
 
 **Characteristics:**
+
 - First call will be slow (compilation overhead)
 - Subsequent calls are faster
 - Works with both periodic and non-periodic systems
 
 **When to use:**
+
 - Long MD trajectories
 - Geometry optimization with many steps
 - Repeated evaluation on same system size
 
 **When not to use:**
+
 - Single evaluations (compilation overhead outweighs benefit)
 - Varying system sizes (may trigger recompilation)
-
 
 ### Memory Management
 
@@ -785,11 +796,13 @@ calc = AIMNet2Calculator("aimnet2", nb_threshold=150)
 ```
 
 **For large systems on GPU:**
+
 - Lower `nb_threshold` to use sparse mode
 - Reduces memory footprint
 - Enables processing larger molecules
 
 **For many small molecules:**
+
 - Higher `nb_threshold` to use dense mode longer
 - Maximizes GPU parallelism
 - Faster overall throughput
@@ -828,12 +841,12 @@ for _ in range(1000):
 
 **Choose method for your system:**
 
-| System Type | Method | Parameter | Notes |
-|-------------|--------|-----------|-------|
-| Small non-PBC | `"simple"` | N/A | All pairs, exact |
-| Large non-PBC | `"dsf"` | cutoff=12-15 Å | O(N) scaling |
-| PBC systems | `"dsf"` | cutoff=12-15 Å | Recommended |
-| High-accuracy PBC | `"ewald"` | accuracy=1e-8 | Research-grade |
+| System Type       | Method     | Parameter      | Notes            |
+| ----------------- | ---------- | -------------- | ---------------- |
+| Small non-PBC     | `"simple"` | N/A            | All pairs, exact |
+| Large non-PBC     | `"dsf"`    | cutoff=12-15 Å | O(N) scaling     |
+| PBC systems       | `"dsf"`    | cutoff=12-15 Å | Recommended      |
+| High-accuracy PBC | `"ewald"`  | accuracy=1e-8  | Research-grade   |
 
 ```python
 # Fast for non-PBC
@@ -856,4 +869,3 @@ torch.set_num_threads(4)  # Use 4 CPU cores
 
 calc = AIMNet2Calculator("aimnet2")  # Will use CPU
 ```
-

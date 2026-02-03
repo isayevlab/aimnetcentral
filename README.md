@@ -200,8 +200,8 @@ aimnet train --config my_config.yaml --model aimnet2.yaml
 
 The `AIMNet2Calculator` automatically selects the optimal strategy based on system size (`nb_threshold`, default 120 atoms) and hardware:
 
-1.  **Dense Mode (O(N²))**: Used for small molecules on GPU. Input is kept in 3D batched format `(B, N, 3)`. No neighbor list is computed; the model uses a fully connected graph for maximum parallelism.
-2.  **Sparse Mode (O(N))**: Used for large systems or CPU execution. Input is flattened to 2D `(N_total, 3)` with an adaptive neighbor list. This ensures linear memory scaling.
+1. **Dense Mode (O(N²))**: Used for small molecules on GPU. Input is kept in 3D batched format `(B, N, 3)`. No neighbor list is computed; the model uses a fully connected graph for maximum parallelism.
+2. **Sparse Mode (O(N))**: Used for large systems or CPU execution. Input is flattened to 2D `(N_total, 3)` with an adaptive neighbor list. This ensures linear memory scaling.
 
 ### Adaptive Neighbor List
 

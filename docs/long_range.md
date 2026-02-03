@@ -12,11 +12,13 @@ Select the appropriate method based on your system and accuracy requirements.
 **Only for non-periodic systems.** The calculator automatically switches to DSF if PBC is detected.
 
 **When to use:**
+
 - Small non-periodic systems (< 100 atoms)
 - Quick calculations where exact Coulomb is acceptable
 - Non-production exploratory work
 
 **When NOT to use:**
+
 - Periodic systems (NOT SUPPORTED - auto-switches to DSF)
 - Large systems (O(N²) fully connected becomes prohibitive)
 - Production MD (inefficient for repeated evaluation)
@@ -30,6 +32,7 @@ calc.set_lrcoulomb_method("simple")
 ```
 
 **Characteristics:**
+
 - Exact pairwise 1/r Coulomb sum for non-periodic systems
 - All atom pairs evaluated (fully connected)
 - O(N²) complexity
@@ -38,12 +41,14 @@ calc.set_lrcoulomb_method("simple")
 ### DSF (Damped Shifted Force)
 
 **When to use:**
+
 - Periodic boundary conditions (recommended)
 - Large non-periodic systems (> 200 atoms)
 - Production molecular dynamics
 - When computational efficiency matters
 
 **When NOT to use:**
+
 - When highest accuracy is required (use Ewald instead)
 - Very small systems where Simple is faster
 
@@ -55,18 +60,20 @@ calc.set_lrcoulomb_method("dsf", cutoff=15.0, dsf_alpha=0.2)
 
 **Parameters:**
 
-| Parameter | Typical Range | Default | Notes |
-|-----------|--------------|---------|-------|
-| `cutoff` | 12-20 Å | 15.0 Å | Larger = more accurate, more expensive |
-| `dsf_alpha` | 0.1-0.3 | 0.2 | Damping strength; 0.2 works well for most systems |
+| Parameter   | Typical Range | Default | Notes                                             |
+| ----------- | ------------- | ------- | ------------------------------------------------- |
+| `cutoff`    | 12-20 Å       | 15.0 Å  | Larger = more accurate, more expensive            |
+| `dsf_alpha` | 0.1-0.3       | 0.2     | Damping strength; 0.2 works well for most systems |
 
 **Tuning guidelines:**
+
 - Start with cutoff=15.0 Å, alpha=0.2 (default)
 - Dense systems: reduce cutoff to 12 Å
 - Dilute/surface systems: increase cutoff to 18-20 Å
 - Validate: energies should converge within ~0.1 kcal/mol as cutoff increases
 
 **Characteristics:**
+
 - Smooth truncation at cutoff with shifted force
 - Maintains charge neutrality
 - O(N) scaling with neighbor lists
@@ -76,12 +83,14 @@ calc.set_lrcoulomb_method("dsf", cutoff=15.0, dsf_alpha=0.2)
 ### Ewald Summation
 
 **When to use:**
+
 - Research-grade accuracy required
 - Benchmarking and validation studies
 - Systems where electrostatics dominate behavior
 - When computational cost is acceptable
 
 **When NOT to use:**
+
 - Long MD trajectories (slower than DSF)
 - When DSF accuracy is sufficient
 - Very large systems (reciprocal space cost increases)
@@ -110,14 +119,15 @@ computed automatically based on system geometry:
 \]
 
 \[
-r_{\text{cutoff}} = \sqrt{-2 \ln \varepsilon} \cdot \eta, \quad
-k_{\text{cutoff}} = \frac{\sqrt{-2 \ln \varepsilon}}{\eta}
+r*{\text{cutoff}} = \sqrt{-2 \ln \varepsilon} \cdot \eta, \quad
+k*{\text{cutoff}} = \frac{\sqrt{-2 \ln \varepsilon}}{\eta}
 \]
 
 Where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and
 \(N\) is the number of atoms.
 
 **Characteristics:**
+
 - Splits Coulomb into real-space + reciprocal-space + self-energy terms
 - Configurable accuracy target (default 1e-8)
 - Automatically determines k-space vectors based on accuracy
@@ -125,6 +135,7 @@ Where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and
 - Most accurate method for periodic systems
 
 **When Ewald matters:**
+
 - Computing precise thermodynamic properties
 - Benchmark comparisons against QM calculations
 - Validation of other Coulomb methods
@@ -132,11 +143,11 @@ Where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and
 
 ## Method Comparison
 
-| Method | Complexity | PBC Support | Typical Use Case | Notes |
-|--------|------------|-------------|------------------|-------|
-| Simple | O(N²) fully connected | No | Small molecules, quick tests | Auto-switches for PBC |
-| DSF | O(N) with neighbor lists | Yes | Production MD, large systems | Recommended for PBC |
-| Ewald | O(N log N) to O(N^1.5) | Yes | High-accuracy benchmarks | Research-grade precision |
+| Method | Complexity               | PBC Support | Typical Use Case             | Notes                    |
+| ------ | ------------------------ | ----------- | ---------------------------- | ------------------------ |
+| Simple | O(N²) fully connected    | No          | Small molecules, quick tests | Auto-switches for PBC    |
+| DSF    | O(N) with neighbor lists | Yes         | Production MD, large systems | Recommended for PBC      |
+| Ewald  | O(N log N) to O(N^1.5)   | Yes         | High-accuracy benchmarks     | Research-grade precision |
 
 **Accuracy hierarchy:** Ewald > DSF > Simple (for PBC)
 
@@ -172,13 +183,13 @@ avoid double counting.
 
 **Methods**
 
-1) **Simple (full pairwise Coulomb)**
+1. **Simple (full pairwise Coulomb)**
 
 - Pair energy: `e_ij = q_i q_j / r_ij`
 - Total energy: `E = factor * sum_i sum_j e_ij` (accumulated in float64)
 - If `subtract_sr=True`, subtracts the SR energy described below.
 
-2) **DSF (damped shifted force)**
+2. **DSF (damped shifted force)**
 
 Uses `ops.coulomb_matrix_dsf`:
 
@@ -194,7 +205,7 @@ Pairs with `r > Rc` or masked entries are zeroed. Energy is:
 
 If `subtract_sr=True`, the SR term is subtracted.
 
-3) **Ewald**
+3. **Ewald**
 
 Uses `ops.coulomb_matrix_ewald`, which implements real-space + reciprocal-space + self terms with
 fixed accuracy (`1e-8`). This path requires a single molecule with `coord.ndim == 2` and `cell.ndim == 2`.
@@ -271,12 +282,13 @@ smoothing_off = cutoff
 
 **Parameters:**
 
-| Parameter | Typical Value | Default | Effect |
-|-----------|--------------|---------|--------|
-| `cutoff` | 15-20 Å | 15.0 Å | Interaction cutoff distance |
-| `smoothing_fraction` | 0.1-0.3 | 0.2 | Width of smoothing region as fraction of cutoff |
+| Parameter            | Typical Value | Default | Effect                                          |
+| -------------------- | ------------- | ------- | ----------------------------------------------- |
+| `cutoff`             | 15-20 Å       | 15.0 Å  | Interaction cutoff distance                     |
+| `smoothing_fraction` | 0.1-0.3       | 0.2     | Width of smoothing region as fraction of cutoff |
 
 **Example:** With cutoff=15.0 Å and smoothing_fraction=0.2:
+
 - Full dispersion energy for r < 12.0 Å (smoothing_on)
 - Smoothly interpolated for 12.0 Å < r < 15.0 Å
 - Zero contribution for r > 15.0 Å
@@ -297,6 +309,7 @@ calc.set_dftd3_cutoff(cutoff=20.0, smoothing_fraction=0.15)
 ```
 
 **Smoothing fraction guidelines:**
+
 - Smaller (0.1): Sharper transition, may need tighter convergence
 - Default (0.2): Good balance for most systems
 - Larger (0.3): Smoother transition, more conservative

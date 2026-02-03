@@ -481,9 +481,7 @@ class TestNewFormat:
         load_result = core_model.load_state_dict(original_sd, strict=False)
 
         # Validate keys
-        real_missing, _real_unexpected = validate_state_dict_keys(
-            load_result.missing_keys, load_result.unexpected_keys
-        )
+        real_missing, _real_unexpected = validate_state_dict_keys(load_result.missing_keys, load_result.unexpected_keys)
         # Expected: SRCoulomb missing, LRCoulomb/DFTD3 unexpected
         assert len(real_missing) == 0, f"Unexpected missing keys: {real_missing}"
 

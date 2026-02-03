@@ -99,12 +99,14 @@ $ aimnet export weights.pt model.pt --model config.yaml --sae model.sae
 ```
 
 Arguments:
+
 - `weights.pt`: Raw PyTorch weights file from training
 - `model.pt`: Output model file
 - `--model`: Path to model YAML configuration file
 - `--sae`: Path to self-atomic energies file
 
 The export command creates a self-contained `.pt` file with:
+
 - Model architecture configuration
 - Trained weights with SAE baked into atomic shifts
 - Metadata for Coulomb and dispersion handling
@@ -112,6 +114,7 @@ The export command creates a self-contained `.pt` file with:
 **Model Format**
 
 The new model format separates the core neural network from long-range corrections:
+
 - Core model computes NN energy minus short-range Coulomb
 - Long-range Coulomb (LRCoulomb) is applied externally by the calculator
 - DFTD3 dispersion is applied externally by the calculator
@@ -122,17 +125,17 @@ This allows switching Coulomb methods (simple/DSF/Ewald) at inference time witho
 
 The v2 model format includes the following metadata fields:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `format_version` | int | 2 for new format |
-| `cutoff` | float | Model cutoff radius |
-| `needs_coulomb` | bool | True if calculator should add external Coulomb |
-| `needs_dispersion` | bool | True if calculator should add external DFTD3 |
-| `coulomb_mode` | str | "sr_embedded" (has SRCoulomb) or "none" |
-| `coulomb_sr_rc` | float? | SR Coulomb cutoff (if coulomb_mode="sr_embedded") |
-| `coulomb_sr_envelope` | str? | "exp" or "cosine" (if coulomb_mode="sr_embedded") |
-| `d3_params` | dict? | D3 parameters {s6, s8, a1, a2} if needs_dispersion=True |
-| `implemented_species` | list[int] | Supported atomic numbers |
+| Field                 | Type      | Description                                             |
+| --------------------- | --------- | ------------------------------------------------------- |
+| `format_version`      | int       | 2 for new format                                        |
+| `cutoff`              | float     | Model cutoff radius                                     |
+| `needs_coulomb`       | bool      | True if calculator should add external Coulomb          |
+| `needs_dispersion`    | bool      | True if calculator should add external DFTD3            |
+| `coulomb_mode`        | str       | "sr_embedded" (has SRCoulomb) or "none"                 |
+| `coulomb_sr_rc`       | float?    | SR Coulomb cutoff (if coulomb_mode="sr_embedded")       |
+| `coulomb_sr_envelope` | str?      | "exp" or "cosine" (if coulomb_mode="sr_embedded")       |
+| `d3_params`           | dict?     | D3 parameters {s6, s8, a1, a2} if needs_dispersion=True |
+| `implemented_species` | list[int] | Supported atomic numbers                                |
 
 **Runtime Configuration**
 
@@ -155,6 +158,7 @@ if calc.has_external_dftd3:
 **Backward Compatibility**
 
 The calculator automatically detects and loads both formats:
+
 - New `.pt` files with embedded metadata (format version 2)
 - Legacy JIT-compiled `.jpt` files (format version 1)
 
@@ -169,11 +173,13 @@ $ aimnet convert model.jpt config.yaml model_new.pt
 ```
 
 Arguments:
+
 - `model.jpt`: Legacy JIT-compiled model file
 - `config.yaml`: Model YAML configuration file
 - `model_new.pt`: Output file in new format
 
 The conversion:
+
 - Extracts model cutoff and D3 parameters from the JIT model
 - Rebuilds the architecture from YAML with SRCoulomb embedded
 - Loads weights from the JIT model
@@ -184,19 +190,22 @@ The conversion:
 For maintainers migrating the model registry from legacy `.jpt` to new `.pt` format:
 
 1. **Convert each model:**
+
    ```bash
    aimnet convert aimnet2_wb97m_d3_0.jpt aimnet/models/aimnet2_dftd3_wb97m.yaml aimnet2_wb97m_d3_0.pt
    ```
 
 2. **Validate conversion:**
+
    ```bash
    python scripts/validate_conversion.py aimnet2_wb97m_d3_0.pt aimnet2_wb97m_d3_0.jpt \
        --structure tests/data/caffeine.xyz
    ```
-   
+
    The validation script compares energies and forces between formats and reports any discrepancies.
 
 3. **Upload to GCS:**
+
    ```bash
    gsutil cp aimnet2_wb97m_d3_0.pt gs://aimnetcentral/AIMNet2/aimnet2_wb97m_d3_0.pt
    ```
@@ -204,7 +213,7 @@ For maintainers migrating the model registry from legacy `.jpt` to new `.pt` for
 4. **Update model_registry.yaml:**
    ```yaml
    models:
-       aimnet2_wb97m_d3_0:
-           file: aimnet2_wb97m_d3_0.pt
-           url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_wb97m_d3_0.pt
+     aimnet2_wb97m_d3_0:
+       file: aimnet2_wb97m_d3_0.pt
+       url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_wb97m_d3_0.pt
    ```

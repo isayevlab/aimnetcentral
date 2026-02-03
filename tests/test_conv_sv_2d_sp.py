@@ -106,7 +106,7 @@ class TestConvSV2dSP:
     @pytest.fixture
     def test_data_cuda(self):
         """Standard test data on CUDA: B=8, A=16, G=12, M=10, D=4
-        
+
         Note: The padding sentinel is B-1 (last row). Valid neighbor indices are in [0, B-2].
         The kernel uses `if idx >= padding_value: break` for padding detection.
         """
@@ -126,7 +126,7 @@ class TestConvSV2dSP:
     @pytest.fixture
     def test_data_small_cuda(self):
         """Smaller test data for gradient tests on CUDA.
-        
+
         Note: M must be >= B so that the padding sentinel (M) is never a valid batch index.
         """
         if not torch.cuda.is_available():
@@ -252,7 +252,7 @@ class TestConvSV2dSP:
 
     def test_different_shapes(self, test_data_cuda):
         """Test with various tensor shapes.
-        
+
         Note: M must be >= B so that the padding sentinel (M) is never a valid batch index.
         """
         # Test with different batch sizes, ensuring M >= B
@@ -291,7 +291,7 @@ class TestConvSV2dSP:
 
     def test_padding_behavior(self):
         """Test that padding (idx == M) is handled correctly.
-        
+
         Note: M must be >= B so that the padding sentinel (M) is never a valid batch index.
         """
         if not torch.cuda.is_available():
