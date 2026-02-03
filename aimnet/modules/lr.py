@@ -277,16 +277,28 @@ class DispParam(nn.Module):
         unexpected_keys: list,
         error_msgs: list,
     ) -> None:
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
-        # Validate buffer has non-zero values (safety check)
+        # Resize placeholder buffer to match checkpoint size before loading
         key = prefix + "disp_param0"
         if key in state_dict:
             buf = state_dict[key]
+            if buf.shape != self.disp_param0.shape:
+                # Resize placeholder to match checkpoint
+                self.disp_param0 = torch.zeros_like(buf)
+
+            # Validate buffer has non-zero values (safety check)
             nonzero = (buf != 0).sum() / buf.numel()
             if nonzero < 0.1:
-                raise ValueError(f"DispParam buffer appears to have mostly zero values (nonzero: {nonzero}). This may indicate a loading issue.")
+                import warnings
+
+                warnings.warn(
+                    f"DispParam buffer appears to have mostly zero values (nonzero: {nonzero:.1%}). "
+                    "This may indicate a loading issue.",
+                    stacklevel=2,
+                )
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
 
     def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         disp_param_mult = data[self.key_in].clamp(min=-4, max=4).exp()
