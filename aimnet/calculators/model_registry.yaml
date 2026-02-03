@@ -1,65 +1,89 @@
 # map file name to url
 models:
     aimnet2_wb97m_d3_0:
-        file: aimnet2_wb97m_d3_0.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_wb97m_d3_0.jpt
+        file: aimnet2_wb97m_d3_0.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_0.pt
     aimnet2_wb97m_d3_1:
-        file: aimnet2_wb97m_d3_1.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_wb97m_d3_1.jpt
+        file: aimnet2_wb97m_d3_1.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_1.pt
     aimnet2_wb97m_d3_2:
-        file: aimnet2_wb97m_d3_2.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_wb97m_d3_2.jpt
+        file: aimnet2_wb97m_d3_2.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_2.pt
     aimnet2_wb97m_d3_3:
-        file: aimnet2_wb97m_d3_3.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_wb97m_d3_3.jpt
+        file: aimnet2_wb97m_d3_3.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_3.pt
     aimnet2_b973c_d3_0:
-        file: aimnet2_b973c_d3_0.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_b973c_d3_0.jpt
+        file: aimnet2_b973c_d3_0.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_0.pt
     aimnet2_b973c_d3_1:
-        file: aimnet2_b973c_d3_1.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_b973c_d3_1.jpt
+        file: aimnet2_b973c_d3_1.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_1.pt
     aimnet2_b973c_d3_2:
-        file: aimnet2_b973c_d3_2.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_b973c_d3_2.jpt
+        file: aimnet2_b973c_d3_2.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_2.pt
     aimnet2_b973c_d3_3:
-        file: aimnet2_b973c_d3_3.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_b973c_d3_3.jpt
+        file: aimnet2_b973c_d3_3.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_3.pt
     aimnet2_b973c_2025_d3_0:
-        file: aimnet2_2025_b973c_d3_0.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_2025_b973c_d3_0.jpt
+        file: aimnet2_2025_b973c_d3_0.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_0.pt
     aimnet2_b973c_2025_d3_1:
-        file: aimnet2_2025_b973c_d3_1.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_2025_b973c_d3_1.jpt
+        file: aimnet2_2025_b973c_d3_1.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_1.pt
     aimnet2_b973c_2025_d3_2:
-        file: aimnet2_2025_b973c_d3_2.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_2025_b973c_d3_2.jpt
+        file: aimnet2_2025_b973c_d3_2.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_2.pt
     aimnet2_b973c_2025_d3_3:
-        file: aimnet2_2025_b973c_d3_3.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_2025_b973c_d3_3.jpt
+        file: aimnet2_2025_b973c_d3_3.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_3.pt
     aimnet2nse_0:
-        file: aimnet2_nse_0.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2NSE/aimnet2nse_wb97m_0.jpt
+        file: aimnet2nse_wb97m_0.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_0.pt
     aimnet2nse_1:
-        file: aimnet2_nse_1.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2NSE/aimnet2nse_wb97m_1.jpt
+        file: aimnet2nse_wb97m_1.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_1.pt
     aimnet2nse_2:
-        file: aimnet2_nse_2.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2NSE/aimnet2nse_wb97m_2.jpt
+        file: aimnet2nse_wb97m_2.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_2.pt
     aimnet2nse_3:
-        file: aimnet2_nse_3.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2NSE/aimnet2nse_wb97m_3.jpt
+        file: aimnet2nse_wb97m_3.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_3.pt
     aimnet2-pd_0:
-        file: aimnet2-pd_0.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2Pd/aimnet2-pd_0.jpt
+        file: aimnet2-pd_0.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2Pd/aimnet2-pd_0.pt
     aimnet2-pd_1:
-        file: aimnet2-pd_1.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2Pd/aimnet2-pd_1.jpt
+        file: aimnet2-pd_1.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2Pd/aimnet2-pd_1.pt
     aimnet2-pd_2:
-        file: aimnet2-pd_2.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2Pd/aimnet2-pd_2.jpt
+        file: aimnet2-pd_2.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2Pd/aimnet2-pd_2.pt
     aimnet2-pd_3:
-        file: aimnet2-pd_3.jpt
-        url: https://storage.googleapis.com/aimnetcentral/AIMNet2Pd/aimnet2-pd_3.jpt
+        file: aimnet2-pd_3.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2Pd/aimnet2-pd_3.pt
+    wb97m_cpcms_v2_0:
+        file: wb97m_cpcms_v2_0.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2CPCM/wb97m_cpcms_v2_0.pt
+    wb97m_cpcms_v2_1:
+        file: wb97m_cpcms_v2_1.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2CPCM/wb97m_cpcms_v2_1.pt
+    wb97m_cpcms_v2_2:
+        file: wb97m_cpcms_v2_2.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2CPCM/wb97m_cpcms_v2_2.pt
+    wb97m_cpcms_v2_3:
+        file: wb97m_cpcms_v2_3.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2CPCM/wb97m_cpcms_v2_3.pt
+    wb97m_cpcms_v2_4:
+        file: wb97m_cpcms_v2_4.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2CPCM/wb97m_cpcms_v2_4.pt
+    wb97m_cpcms_v2_5:
+        file: wb97m_cpcms_v2_5.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2CPCM/wb97m_cpcms_v2_5.pt
+    wb97m_cpcms_v2_6:
+        file: wb97m_cpcms_v2_6.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2CPCM/wb97m_cpcms_v2_6.pt
+    wb97m_cpcms_v2_7:
+        file: wb97m_cpcms_v2_7.pt
+        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2CPCM/wb97m_cpcms_v2_7.pt
 
 # map model alias to file name
 aliases:
@@ -69,3 +93,4 @@ aliases:
     aimnet2nse: aimnet2nse_0
     aimnet2pd: aimnet2-pd_0
     aimnet2_2025: aimnet2_b973c_2025_d3_0
+    aimnet2_cpcm: wb97m_cpcms_v2_0
