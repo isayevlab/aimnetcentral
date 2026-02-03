@@ -28,7 +28,7 @@ class AIMNet2(AIMNet2Base):
 
         self.aev = AEVSV(**aev)
         nshifts_s = aev["nshifts_s"]
-        nshifts_v = aev.get("nshitfs_v") or nshifts_s
+        nshifts_v = aev.get("nshifts_v") or nshifts_s
         if d2features:
             if nshifts_s != nshifts_v:
                 raise ValueError("nshifts_s must be equal to nshifts_v for d2features")
@@ -48,7 +48,7 @@ class AIMNet2(AIMNet2Base):
                     self.afv.weight.clone().unsqueeze(-1).expand(64, nfeature, nshifts_s).flatten(-2, -1)
                 )
 
-        conv_param = {"nshifts_s": nshifts_s, "nshifts_v": nshifts_v, "ncomb_v": ncomb_v, "do_vector": True}
+        conv_param = {"nshifts_s": nshifts_s, "nshifts_v": nshifts_v, "ncomb_v": ncomb_v}
         self.conv_a = ConvSV(nchannel=nfeature, d2features=d2features, **conv_param)
         self.conv_q = ConvSV(nchannel=num_charge_channels, d2features=False, **conv_param)
 
@@ -104,7 +104,7 @@ class AIMNet2(AIMNet2Base):
         return data
 
     def _prepare_in_a(self, data: dict[str, Tensor]) -> Tensor:
-        a_i, a_j = nbops.get_ij(data["a"], data)
+        a_i = nbops.get_i(data["a"], data)
         avf_a = self.conv_a(data, data["a"])
         if self.d2features:
             a_i = a_i.flatten(-2, -1)
@@ -112,7 +112,7 @@ class AIMNet2(AIMNet2Base):
         return _in
 
     def _prepare_in_q(self, data: dict[str, Tensor]) -> Tensor:
-        q_i, q_j = nbops.get_ij(data["charges"], data)
+        q_i = nbops.get_i(data["charges"], data)
         avf_q = self.conv_q(data, data["charges"])
         _in = torch.cat([q_i.squeeze(-2), avf_q], dim=-1)
         return _in
@@ -126,7 +126,7 @@ class AIMNet2(AIMNet2Base):
             ],
             dim=-1,
         )
-        # for loss
+        # Charge conservation violation penalty for training loss
         data["_delta_Q"] = data["charge"] - nbops.mol_sum(_q, data)
         q = data["charges"] + _q if delta_q else _q
         data["charges_pre"] = q if self.num_charge_channels == 2 else q.squeeze(-1)
@@ -149,13 +149,11 @@ class AIMNet2(AIMNet2Base):
         if self.num_charge_channels == 2:
             data = self._preprocess_spin_polarized_charge(data)
         else:
-            # make sure that charge has channel dimension
+            # Ensure charge tensor has channel dimension for consistency with features
             data["charge"] = data["charge"].unsqueeze(-1)
 
-        # AEV
         data = self.aev(data)
 
-        # MP iterations
         _npass = len(self.mlps)
         for ipass, mlp in enumerate(self.mlps):
             if ipass == 0:
@@ -181,7 +179,6 @@ class AIMNet2(AIMNet2Base):
             data["charges"] = data["charges"].squeeze(-1)
             data["charge"] = data["charge"].squeeze(-1)
 
-        # readout
         for m in self.outputs.children():
             data = m(data)
 
