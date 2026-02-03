@@ -41,22 +41,61 @@ except ImportError:
     conv_sv_2d_sp = None
 
 
+def generate_valid_neighbor_idx(B: int, M: int, num_neighbors: int, device: str) -> torch.Tensor:
+    """Generate properly structured neighbor indices with padding.
+
+    The Warp kernel expects neighbor indices where:
+    - Real neighbor indices (valid atom indices in [0, B-1)) come first
+    - Padding indices (value = B-1, the last row) come at the end
+    - No real indices appear after the first padding index
+
+    Args:
+        B: Number of atoms including padding row (valid indices are in [0, B-1))
+        M: Maximum number of neighbors
+        num_neighbors: Number of real neighbors per atom
+        device: Device to create tensor on
+
+    Returns:
+        Index tensor of shape (B, M) with proper padding structure
+    """
+    padding_value = B - 1  # last row is padding
+    # Start with all padding
+    idx = torch.full((B, M), padding_value, device=device, dtype=torch.int64)
+    # Fill in real neighbor indices at the beginning (valid range is [0, B-2])
+    n = min(num_neighbors, M)
+    if n > 0 and B > 1:
+        idx[:, :n] = torch.randint(0, padding_value, (B, n), device=device, dtype=torch.int64)
+    return idx
+
+
 def reference_conv_sv_2d_sp_einsum(a, idx, g):
     """Reference implementation using PyTorch einsum.
 
+    This implementation handles padding by masking out padded entries.
+    Padding is indicated by idx >= B-1 (where B-1 is the padding row).
+
     Args:
         a: Input tensor of shape (B, A, G)
-        idx: Index tensor of shape (B, M)
+        idx: Index tensor of shape (B, M) with padding value B-1
         g: Gate tensor of shape (B, M, G, 4)
 
     Returns:
         Output tensor of shape (B, A, G, 4)
     """
     B, M = idx.shape
+    padding_value = B - 1  # last row is padding
+    # Create mask for valid (non-padding) entries: True where idx < padding_value
+    valid_mask = (idx < padding_value).unsqueeze(-1).unsqueeze(-1)  # (B, M, 1, 1)
+    # Zero out g for padded entries
+    g_masked = g * valid_mask
+    # Clamp idx to valid range for indexing (padding entries will be zeroed anyway)
+    idx_clamped = idx.clamp(0, a.shape[0] - 1)
     # Select features based on neighbor indices
-    a_selected = a.index_select(0, idx.flatten()).unflatten(0, (B, M))  # (B, M, A, G)
+    a_selected = a.index_select(0, idx_clamped.flatten()).unflatten(0, (B, M))  # (B, M, A, G)
     # Einsum contraction
-    output = torch.einsum("bmag,bmgd->bagd", a_selected, g)
+    output = torch.einsum("bmag,bmgd->bagd", a_selected, g_masked)
+    # Zero out padding row (kernel doesn't process it)
+    output[-1] = 0
     return output
 
 
@@ -66,30 +105,39 @@ class TestConvSV2dSP:
 
     @pytest.fixture
     def test_data_cuda(self):
-        """Standard test data on CUDA: B=8, A=16, G=12, M=6, D=4"""
+        """Standard test data on CUDA: B=8, A=16, G=12, M=10, D=4
+        
+        Note: The padding sentinel is B-1 (last row). Valid neighbor indices are in [0, B-2].
+        The kernel uses `if idx >= padding_value: break` for padding detection.
+        """
         if not torch.cuda.is_available():
             pytest.skip("CUDA not available")
 
         device = "cuda"
-        B, A, G, M = 8, 16, 12, 6
+        B, A, G, M = 8, 16, 12, 10  # M >= B to ensure padding sentinel works
 
         a = torch.randn(B, A, G, device=device, dtype=torch.float32, requires_grad=True)
-        idx = torch.randint(0, B, (B, M), device=device, dtype=torch.int64)
+        # Use properly structured neighbor indices (all positions filled, no padding)
+        idx = generate_valid_neighbor_idx(B, M, num_neighbors=M, device=device)
         g = torch.randn(B, M, G, 4, device=device, dtype=torch.float32, requires_grad=True)
 
         return a, idx, g
 
     @pytest.fixture
     def test_data_small_cuda(self):
-        """Smaller test data for gradient tests on CUDA."""
+        """Smaller test data for gradient tests on CUDA.
+        
+        Note: M must be >= B so that the padding sentinel (M) is never a valid batch index.
+        """
         if not torch.cuda.is_available():
             pytest.skip("CUDA not available")
 
         device = "cuda"
-        B, A, G, M = 2, 4, 3, 3
+        B, A, G, M = 2, 4, 3, 4  # M >= B to ensure padding sentinel works
 
         a = torch.randn(B, A, G, device=device, dtype=torch.float32, requires_grad=True)
-        idx = torch.randint(0, B, (B, M), device=device, dtype=torch.int64)
+        # Use properly structured neighbor indices (all positions filled, no padding)
+        idx = generate_valid_neighbor_idx(B, M, num_neighbors=M, device=device)
         g = torch.randn(B, M, G, 4, device=device, dtype=torch.float32, requires_grad=True)
 
         return a, idx, g
@@ -203,15 +251,19 @@ class TestConvSV2dSP:
         )
 
     def test_different_shapes(self, test_data_cuda):
-        """Test with various tensor shapes."""
-        # Test with different batch sizes
-        for B in [1, 4, 16]:
-            for M in [2, 8, 16]:
+        """Test with various tensor shapes.
+        
+        Note: M must be >= B so that the padding sentinel (M) is never a valid batch index.
+        """
+        # Test with different batch sizes, ensuring M >= B
+        for B in [1, 4, 8]:
+            for M in [B, B + 2, B + 4]:  # M >= B ensures padding sentinel works
                 A, G = 8, 6
                 device = "cuda"
 
                 a = torch.randn(B, A, G, device=device, dtype=torch.float32)
-                idx = torch.randint(0, B, (B, M), device=device, dtype=torch.int64)
+                # Use properly structured neighbor indices (all positions filled)
+                idx = generate_valid_neighbor_idx(B, M, num_neighbors=M, device=device)
                 g = torch.randn(B, M, G, 4, device=device, dtype=torch.float32)
 
                 output_warp = conv_sv_2d_sp(a, idx, g)
@@ -236,3 +288,29 @@ class TestConvSV2dSP:
         assert torch.allclose(output1, output2, atol=1e-5, rtol=1e-4), (
             f"Op registration test failed. Max diff: {torch.max(torch.abs(output1 - output2))}"
         )
+
+    def test_padding_behavior(self):
+        """Test that padding (idx == M) is handled correctly.
+        
+        Note: M must be >= B so that the padding sentinel (M) is never a valid batch index.
+        """
+        if not torch.cuda.is_available():
+            pytest.skip("CUDA not available")
+
+        device = "cuda"
+        B, A, G, M = 4, 8, 6, 8  # M >= B ensures padding sentinel works
+
+        a = torch.randn(B, A, G, device=device, dtype=torch.float32)
+        g = torch.randn(B, M, G, 4, device=device, dtype=torch.float32)
+
+        # Test with various amounts of padding
+        for num_neighbors in [1, 3, 5, M]:
+            idx = generate_valid_neighbor_idx(B, M, num_neighbors=num_neighbors, device=device)
+
+            output_warp = conv_sv_2d_sp(a, idx, g)
+            output_ref = reference_conv_sv_2d_sp_einsum(a, idx, g)
+
+            assert torch.allclose(output_warp, output_ref, atol=1e-5, rtol=1e-4), (
+                f"Padding test failed for num_neighbors={num_neighbors}. "
+                f"Max diff: {torch.max(torch.abs(output_warp - output_ref))}"
+            )

@@ -1,6 +1,7 @@
 """Shared pytest fixtures for AIMNet2 tests."""
 
 import os
+import warnings
 
 import pytest
 import torch
@@ -12,8 +13,8 @@ from torch import Tensor
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 CAFFEINE_FILE = os.path.join(DATA_DIR, "caffeine.xyz")
-CIF_FILE_1 = os.path.join(DATA_DIR, "1100172.cif")  # Phenylglycinium nitrate (~50 atoms)
-CIF_FILE_2 = os.path.join(DATA_DIR, "2000054.cif")  # Spiro compound (~28 atoms)
+CIF_PHENYLGLYCINIUM = os.path.join(DATA_DIR, "1100172.cif")  # Phenylglycinium nitrate (~50 atoms)
+CIF_SPIRO = os.path.join(DATA_DIR, "2000054.cif")  # Spiro compound (~28 atoms)
 
 # =============================================================================
 # Tolerance Constants
@@ -177,7 +178,9 @@ def pbc_crystal_small(device) -> dict[str, Tensor]:
     pytest.importorskip("ase", reason="ASE required for loading CIF files")
     import ase.io
 
-    atoms = ase.io.read(CIF_FILE_2)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="crystal system.*monoclinic", category=UserWarning)
+        atoms = ase.io.read(CIF_SPIRO)
     n_atoms = len(atoms)
     return {
         "coord": torch.tensor(atoms.get_positions(), device=device, dtype=torch.float32),
@@ -195,7 +198,9 @@ def pbc_crystal_large(device) -> dict[str, Tensor]:
     pytest.importorskip("ase", reason="ASE required for loading CIF files")
     import ase.io
 
-    atoms = ase.io.read(CIF_FILE_1)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="crystal system.*monoclinic", category=UserWarning)
+        atoms = ase.io.read(CIF_PHENYLGLYCINIUM)
     n_atoms = len(atoms)
     return {
         "coord": torch.tensor(atoms.get_positions(), device=device, dtype=torch.float32),
@@ -372,6 +377,11 @@ def add_lr_keys(
     data[f"nbmat{suffix}"] = nbmat
     data[f"shifts{suffix}"] = shifts
     data[f"cutoff{suffix}"] = torch.tensor(cutoff, device=device)
+
+    # Also set nbmat_lr as fallback for resolve_suffix
+    if "nbmat_lr" not in data:
+        data["nbmat_lr"] = nbmat
+        data["shifts_lr"] = shifts
 
     return data
 

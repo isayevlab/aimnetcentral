@@ -4,6 +4,8 @@ These tests verify that the DSF and Ewald Coulomb methods work correctly
 with periodic crystal structures loaded from CIF files.
 """
 
+import warnings
+
 import pytest
 import torch
 
@@ -17,6 +19,9 @@ pytestmark = [pytest.mark.ase, pytest.mark.gpu]
 def setup_pbc_data_with_nblist(data: dict, device: torch.device, cutoff: float = 8.0) -> dict:
     """Set up periodic data with neighbor list for Coulomb calculations.
 
+    Creates an all-pairs neighbor matrix for testing. Sets both short-range
+    (nbmat) and long-range (nbmat_lr) keys for compatibility with all modules.
+
     Parameters
     ----------
     data : dict
@@ -24,18 +29,18 @@ def setup_pbc_data_with_nblist(data: dict, device: torch.device, cutoff: float =
     device : torch.device
         Device for tensors.
     cutoff : float
-        Cutoff for neighbor list.
+        Cutoff for neighbor list (unused, kept for API compatibility).
 
     Returns
     -------
     dict
-        Data with neighbor list keys added.
+        Data with neighbor list keys added (nbmat, nbmat_lr, shifts, shifts_lr).
     """
     coord = data["coord"]
     n_atoms = coord.shape[0]
 
-    # Create a simple all-pairs neighbor matrix (for testing)
-    max_nb = min(n_atoms - 1, 50)  # Limit max neighbors for large systems
+    # Create all-pairs neighbor matrix (for testing)
+    max_nb = min(n_atoms - 1, 50)  # Limit for large systems
     nbmat = torch.zeros((n_atoms, max_nb), dtype=torch.long, device=device)
     for i in range(n_atoms):
         neighbors = [j for j in range(n_atoms) if j != i][:max_nb]
@@ -43,20 +48,16 @@ def setup_pbc_data_with_nblist(data: dict, device: torch.device, cutoff: float =
             nbmat[i, k] = nb
         # Fill remaining with padding index
         for k in range(len(neighbors), max_nb):
-            nbmat[i, k] = n_atoms - 1  # Point to last atom as padding
+            nbmat[i, k] = n_atoms - 1
 
-    # Shifts are unit cell translations - use float for matrix multiplication with cell
+    # Shifts for PBC - zero for non-image neighbors
     shifts = torch.zeros((n_atoms, max_nb, 3), dtype=torch.float32, device=device)
 
+    # Set both short-range and long-range neighbor lists
     data["nbmat"] = nbmat
     data["shifts"] = shifts
-    # Long-range neighbor list keys (used by LRCoulomb module)
-    # shifts_lr must be float for matrix multiplication with cell in calc_distances
     data["nbmat_lr"] = nbmat
     data["shifts_lr"] = shifts.clone()
-    data["nbmat_coulomb"] = nbmat
-    data["shifts_coulomb"] = shifts.clone()
-    data["cutoff_coulomb"] = torch.tensor(cutoff, device=device)
 
     data = nbops.set_nb_mode(data)
     data = nbops.calc_masks(data)
@@ -282,9 +283,9 @@ class TestPBCNeighborList:
 
         n_atoms = data["coord"].shape[0]
         assert "nbmat" in data
-        assert "nbmat_coulomb" in data
+        assert "nbmat_lr" in data
         assert data["nbmat"].shape[0] == n_atoms
-        assert data["nbmat_coulomb"].shape[0] == n_atoms
+        assert data["nbmat_lr"].shape[0] == n_atoms
 
 
 class TestCalculatorPBC:
@@ -293,7 +294,9 @@ class TestCalculatorPBC:
     def test_calculator_pbc_dsf_inference(self, pbc_crystal_small, device):
         """Test full calculator inference on periodic system with DSF."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
 
         data = pbc_crystal_small.copy()
         # Convert to format expected by calculator
@@ -312,7 +315,9 @@ class TestCalculatorPBC:
     def test_calculator_pbc_ewald_inference(self, pbc_crystal_small, device):
         """Test full calculator inference on periodic system with Ewald."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        calc.set_lrcoulomb_method("ewald", cutoff=8.0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-8)
 
         data = pbc_crystal_small.copy()
         data_calc = {
@@ -330,7 +335,9 @@ class TestCalculatorPBC:
     def test_calculator_pbc_forces(self, pbc_crystal_small, device):
         """Test force calculation for periodic system."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
 
         data = pbc_crystal_small.copy()
         data_calc = {
@@ -352,7 +359,9 @@ class TestCalculatorPBC:
     def test_calculator_pbc_both_methods(self, pbc_crystal_small, device, method):
         """Test calculator works with both DSF and Ewald methods."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        calc.set_lrcoulomb_method(method, cutoff=8.0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method(method, cutoff=8.0)
 
         data = pbc_crystal_small.copy()
         data_calc = {
@@ -366,6 +375,59 @@ class TestCalculatorPBC:
 
         assert "energy" in res
         assert torch.isfinite(res["energy"]).all()
+
+
+class TestTorchCompilePBC:
+    """Tests for torch.compile compatibility with periodic boundary conditions."""
+
+    @pytest.mark.skipif(not hasattr(torch, "compile"), reason="torch.compile requires PyTorch 2.0+")
+    def test_torch_compile_pbc_dsf(self, pbc_crystal_small, device):
+        """Test torch.compile works with PBC and DSF Coulomb."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        # Compile the model
+        compiled_model = torch.compile(calc.model)
+        calc.model = compiled_model
+
+        data = pbc_crystal_small.copy()
+        data_calc = {
+            "coord": data["coord"].cpu().numpy(),
+            "numbers": data["numbers"].cpu().numpy(),
+            "charge": 0.0,
+            "cell": data["cell"].cpu().numpy(),
+        }
+
+        res = calc(data_calc)
+
+        assert "energy" in res
+        assert torch.isfinite(res["energy"]).all()
+
+    @pytest.mark.skipif(not hasattr(torch, "compile"), reason="torch.compile requires PyTorch 2.0+")
+    def test_torch_compile_pbc_forces(self, pbc_crystal_small, device):
+        """Test torch.compile works with PBC force calculation."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        compiled_model = torch.compile(calc.model)
+        calc.model = compiled_model
+
+        data = pbc_crystal_small.copy()
+        data_calc = {
+            "coord": data["coord"].cpu().numpy(),
+            "numbers": data["numbers"].cpu().numpy(),
+            "charge": 0.0,
+            "cell": data["cell"].cpu().numpy(),
+        }
+
+        res = calc(data_calc, forces=True)
+
+        assert "forces" in res
+        assert torch.isfinite(res["forces"]).all()
 
 
 class TestLargeCrystal:
@@ -400,7 +462,9 @@ class TestLargeCrystal:
     def test_large_crystal_calculator(self, pbc_crystal_large, device):
         """Test full calculator on larger crystal."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
 
         data = pbc_crystal_large.copy()
         data_calc = {

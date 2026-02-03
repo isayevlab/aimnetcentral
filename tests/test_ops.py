@@ -150,7 +150,7 @@ class TestCalcDistances:
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
-        d_ij, r_ij = ops.calc_distances(data)
+        d_ij, _r_ij = ops.calc_distances(data)
 
         # d_ij should be symmetric
         assert d_ij[0, 0, 1].item() == pytest.approx(d_ij[0, 1, 0].item(), abs=1e-6)
@@ -170,7 +170,7 @@ class TestCalcDistances:
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
-        d_ij, r_ij = ops.calc_distances(data)
+        d_ij, _r_ij = ops.calc_distances(data)
         loss = d_ij.sum()
         loss.backward()
 
@@ -626,7 +626,7 @@ class TestBatchedCells:
         data = nbops.calc_masks(data)
 
         # Should work with single cell
-        d_ij, r_ij = ops.calc_distances(data)
+        d_ij, _r_ij = ops.calc_distances(data)
 
         assert d_ij.shape == (B, N, M)
         assert d_ij[0, 0, 0].item() == pytest.approx(1.0, abs=1e-5)

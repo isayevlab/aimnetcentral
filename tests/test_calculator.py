@@ -1,5 +1,7 @@
 """Tests for AIMNet2Calculator."""
 
+import warnings
+
 import numpy as np
 import pytest
 import torch
@@ -86,18 +88,22 @@ class TestCoulombMethods:
     def test_set_coulomb_method(self, method):
         """Test setting each Coulomb method."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        if method == "dsf":
-            calc.set_lrcoulomb_method(method, cutoff=12.0, dsf_alpha=0.25)
-        elif method == "ewald":
-            calc.set_lrcoulomb_method(method, cutoff=10.0)
-        else:
-            calc.set_lrcoulomb_method(method)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            if method == "dsf":
+                calc.set_lrcoulomb_method(method, cutoff=12.0, dsf_alpha=0.25)
+            elif method == "ewald":
+                calc.set_lrcoulomb_method(method, cutoff=10.0)
+            else:
+                calc.set_lrcoulomb_method(method)
         assert calc._coulomb_method == method
 
     def test_set_coulomb_dsf_with_params(self):
         """Test DSF Coulomb method sets cutoff correctly."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        calc.set_lrcoulomb_method("dsf", cutoff=12.0, dsf_alpha=0.25)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=12.0, dsf_alpha=0.25)
         assert calc._coulomb_method == "dsf"
         assert calc.cutoff_lr == 12.0
 
@@ -113,10 +119,12 @@ class TestCoulombMethods:
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
         data = load_mol(CAFFEINE_FILE)
 
-        if method == "dsf":
-            calc.set_lrcoulomb_method(method, cutoff=12.0)
-        else:
-            calc.set_lrcoulomb_method(method)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            if method == "dsf":
+                calc.set_lrcoulomb_method(method, cutoff=12.0)
+            else:
+                calc.set_lrcoulomb_method(method)
 
         res = calc(data)
         assert torch.isfinite(res["energy"]).all()
@@ -129,10 +137,12 @@ class TestCoulombMethods:
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
         data = load_mol(CAFFEINE_FILE)
 
-        if method == "dsf":
-            calc.set_lrcoulomb_method(method, cutoff=12.0)
-        else:
-            calc.set_lrcoulomb_method(method)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            if method == "dsf":
+                calc.set_lrcoulomb_method(method, cutoff=12.0)
+            else:
+                calc.set_lrcoulomb_method(method)
 
         res = calc(data, forces=True)
         assert torch.isfinite(res["forces"]).all()
@@ -645,6 +655,55 @@ class TestTorchCompile:
         assert res["energy"].device.type == "cuda"
         assert torch.isfinite(res["energy"]).all()
 
+    def test_device_parameter(self):
+        """Test explicit device parameter."""
+        calc = AIMNet2Calculator("aimnet2", device="cpu")
+        assert calc.device == "cpu"
+
+        data = {
+            "coord": torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+            "numbers": torch.tensor([8, 1, 1]),
+            "charge": torch.tensor([0.0]),
+        }
+
+        res = calc(data)
+        assert res["energy"].device.type == "cpu"
+
+    @pytest.mark.skipif(not hasattr(torch, "compile"), reason="torch.compile requires PyTorch 2.0+")
+    def test_compile_model_parameter(self):
+        """Test compile_model constructor parameter."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, compile_model=True)
+
+        data = {
+            "coord": torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+            "numbers": torch.tensor([8, 1, 1]),
+            "charge": torch.tensor([0.0]),
+        }
+
+        res = calc(data)
+        assert "energy" in res
+        assert torch.isfinite(res["energy"]).all()
+
+    @pytest.mark.skipif(not hasattr(torch, "compile"), reason="torch.compile requires PyTorch 2.0+")
+    def test_compile_kwargs_parameter(self):
+        """Test compile_kwargs constructor parameter."""
+        calc = AIMNet2Calculator(
+            "aimnet2",
+            nb_threshold=0,
+            compile_model=True,
+            compile_kwargs={"fullgraph": False},
+        )
+
+        data = {
+            "coord": torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+            "numbers": torch.tensor([8, 1, 1]),
+            "charge": torch.tensor([0.0]),
+        }
+
+        res = calc(data)
+        assert "energy" in res
+        assert torch.isfinite(res["energy"]).all()
+
 
 # =============================================================================
 # Edge Case Tests
@@ -775,3 +834,71 @@ class TestEdgeCases:
         except (ValueError, RuntimeError):
             # Expected behavior - calculator rejects NaN input
             pass
+
+
+class TestCutoffConfiguration:
+    """Tests for smart neighbor list cutoff configuration."""
+
+    def test_should_use_separate_nblist_same_cutoffs(self):
+        """Test that same cutoffs use shared neighbor list."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        # Same cutoffs (within 20%) should return False
+        assert not calc._should_use_separate_nblist(15.0, 15.0)
+        assert not calc._should_use_separate_nblist(15.0, 14.0)  # 7% difference
+        assert not calc._should_use_separate_nblist(15.0, 13.0)  # 15% difference
+
+    def test_should_use_separate_nblist_different_cutoffs(self):
+        """Test that different cutoffs (>20%) use separate neighbor lists."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        # >20% difference should return True
+        assert calc._should_use_separate_nblist(15.0, 10.0)  # 50% difference
+        assert calc._should_use_separate_nblist(15.0, 12.0)  # 25% difference
+
+    def test_should_use_separate_nblist_edge_cases(self):
+        """Test edge cases for separate nblist threshold."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        # Zero or negative cutoffs
+        assert not calc._should_use_separate_nblist(0.0, 15.0)
+        assert not calc._should_use_separate_nblist(15.0, 0.0)
+        assert not calc._should_use_separate_nblist(-1.0, 15.0)
+        # Infinite cutoffs
+        assert not calc._should_use_separate_nblist(float("inf"), 15.0)
+        assert not calc._should_use_separate_nblist(15.0, float("inf"))
+
+    def test_set_dftd3_cutoff_updates_tracking(self):
+        """Test that set_dftd3_cutoff updates internal cutoff tracking."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        original_cutoff = calc._dftd3_cutoff
+        calc.set_dftd3_cutoff(20.0)
+        assert calc._dftd3_cutoff == 20.0
+        assert calc._dftd3_cutoff != original_cutoff
+
+    def test_set_lrcoulomb_updates_tracking(self):
+        """Test that set_lrcoulomb_method updates internal cutoff tracking."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=10.0)
+        assert calc._coulomb_cutoff == 10.0
+        assert calc._coulomb_method == "dsf"
+
+    def test_simple_coulomb_has_infinite_cutoff(self):
+        """Test that simple Coulomb uses infinite cutoff."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("simple")
+        assert calc._coulomb_cutoff == float("inf")
+
+    def test_inference_with_different_cutoffs(self):
+        """Test inference works after setting different cutoffs."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+        calc.set_dftd3_cutoff(15.0)  # 88% difference -> separate nblists
+
+        data = load_mol(CAFFEINE_FILE)
+        res = calc(data)
+        assert "energy" in res
+        assert torch.isfinite(res["energy"]).all()

@@ -1,8 +1,10 @@
 """Tests for ASE calculator interface."""
 
+import warnings
+
 import numpy as np
 import pytest
-from conftest import CAFFEINE_FILE, CIF_FILE_2
+from conftest import CAFFEINE_FILE, CIF_SPIRO
 
 # All tests in this module require ASE
 pytestmark = pytest.mark.ase
@@ -99,10 +101,15 @@ class TestPBC:
 
         from aimnet.calculators import AIMNet2ASE
 
-        atoms = read(CIF_FILE_2)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="crystal system.*monoclinic", category=UserWarning)
+            atoms = read(CIF_SPIRO)
         atoms.calc = AIMNet2ASE("aimnet2")
 
-        e = atoms.get_potential_energy()
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Switching to DSF Coulomb", category=UserWarning)
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            e = atoms.get_potential_energy()
         assert isinstance(e, float)
         assert np.isfinite(e)
 
@@ -113,10 +120,15 @@ class TestPBC:
 
         from aimnet.calculators import AIMNet2ASE
 
-        atoms = read(CIF_FILE_2)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="crystal system.*monoclinic", category=UserWarning)
+            atoms = read(CIF_SPIRO)
         atoms.calc = AIMNet2ASE("aimnet2")
 
-        f = atoms.get_forces()
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Switching to DSF Coulomb", category=UserWarning)
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            f = atoms.get_forces()
         assert f.shape == (len(atoms), 3)
         assert np.isfinite(f).all()
 
@@ -127,11 +139,16 @@ class TestPBC:
 
         from aimnet.calculators import AIMNet2ASE
 
-        atoms = read(CIF_FILE_2)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="crystal system.*monoclinic", category=UserWarning)
+            atoms = read(CIF_SPIRO)
         atoms.calc = AIMNet2ASE("aimnet2")
 
         # Get stress tensor (Voigt notation: xx, yy, zz, yz, xz, xy)
-        stress = atoms.get_stress()
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Switching to DSF Coulomb", category=UserWarning)
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            stress = atoms.get_stress()
         assert stress.shape == (6,)
         assert np.isfinite(stress).all()
 
@@ -142,10 +159,15 @@ class TestPBC:
 
         from aimnet.calculators import AIMNet2ASE
 
-        atoms = read(CIF_FILE_2)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="crystal system.*monoclinic", category=UserWarning)
+            atoms = read(CIF_SPIRO)
         atoms.calc = AIMNet2ASE("aimnet2")
 
-        stress = atoms.get_stress()
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Switching to DSF Coulomb", category=UserWarning)
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            stress = atoms.get_stress()
         # Stress values should be reasonable (not extremely large)
         # Typical stress values are in GPa range (1e-4 to 1e-1 eV/Å³)
         assert np.abs(stress).max() < 10.0  # Sanity check

@@ -17,52 +17,19 @@ if not torch.cuda.is_available():
     pytest.skip("CUDA not available", allow_module_level=True)
 
 
-def create_cpu_calculator():
-    """Create a CPU-only calculator instance for comparison tests.
-
-    Uses __new__ to bypass __init__ which auto-selects CUDA when available.
-    This approach directly initializes attributes to force CPU execution.
-    """
-    from aimnet.calculators.calculator import AdaptiveNeighborList
-    from aimnet.calculators.model_registry import get_model_path
-
-    calc = AIMNet2Calculator.__new__(AIMNet2Calculator)
-    calc.device = "cpu"
-
-    p = get_model_path("aimnet2")
-    calc.model = torch.jit.load(p, map_location="cpu")
-    calc.cutoff = calc.model.cutoff
-    calc.lr = hasattr(calc.model, "cutoff_lr")
-    calc.cutoff_lr = getattr(calc.model, "cutoff_lr", float("inf")) if calc.lr else None
-    calc.nb_threshold = 0
-    calc._batch = None
-    calc._max_mol_size = 0
-    calc._saved_for_grad = {}
-    calc._coulomb_method = "simple"
-
-    # Create adaptive neighbor list instances
-    calc._nblist = AdaptiveNeighborList(cutoff=calc.cutoff)
-    if calc.lr and calc.cutoff_lr is not None and calc.cutoff_lr < float("inf"):
-        calc._nblist_lr = AdaptiveNeighborList(cutoff=calc.cutoff_lr)
-    else:
-        calc._nblist_lr = None
-
-    return calc
-
-
 class TestGPUBasics:
     """Basic GPU functionality tests."""
 
     @pytest.mark.ase
     def test_model_on_cuda(self):
         """Test that model is loaded on CUDA device."""
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
         assert calc.device == "cuda"
 
     @pytest.mark.ase
     def test_inference_on_cuda(self):
         """Test basic inference on CUDA."""
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
         data = load_mol(CAFFEINE_FILE)
         res = calc(data)
 
@@ -72,7 +39,7 @@ class TestGPUBasics:
     @pytest.mark.ase
     def test_forces_on_cuda(self):
         """Test force calculation on CUDA."""
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
         data = load_mol(CAFFEINE_FILE)
         res = calc(data, forces=True)
 
@@ -87,13 +54,13 @@ class TestGPUvsCPUConsistency:
     def test_energy_consistency(self):
         """Test that GPU and CPU produce the same energy."""
         # GPU calculation
-        calc_gpu = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc_gpu = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
         data = load_mol(CAFFEINE_FILE)
         res_gpu = calc_gpu(data)
         energy_gpu = res_gpu["energy"].cpu()
 
         # CPU calculation
-        calc_cpu = create_cpu_calculator()
+        calc_cpu = AIMNet2Calculator("aimnet2", device="cpu", nb_threshold=0)
         res_cpu = calc_cpu(data)
         energy_cpu = res_cpu["energy"]
 
@@ -104,13 +71,13 @@ class TestGPUvsCPUConsistency:
     def test_forces_consistency(self):
         """Test that GPU and CPU produce the same forces."""
         # GPU calculation
-        calc_gpu = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc_gpu = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
         data = load_mol(CAFFEINE_FILE)
         res_gpu = calc_gpu(data, forces=True)
         forces_gpu = res_gpu["forces"].cpu()
 
         # CPU calculation
-        calc_cpu = create_cpu_calculator()
+        calc_cpu = AIMNet2Calculator("aimnet2", device="cpu", nb_threshold=0)
         res_cpu = calc_cpu(data, forces=True)
         forces_cpu = res_cpu["forces"]
 
@@ -134,7 +101,7 @@ class TestCUDANeighborList:
         max_neighbors = 100
 
         # CPU computation
-        nbmat_cpu, num_nb_cpu = neighbor_list(
+        nbmat_cpu, _num_nb_cpu = neighbor_list(
             positions=coord_cpu,
             cutoff=cutoff,
             max_neighbors=max_neighbors,
@@ -143,7 +110,7 @@ class TestCUDANeighborList:
         )
 
         # GPU computation
-        nbmat_gpu, num_nb_gpu = neighbor_list(
+        nbmat_gpu, _num_nb_gpu = neighbor_list(
             positions=coord_gpu,
             cutoff=cutoff,
             max_neighbors=max_neighbors,
@@ -171,7 +138,7 @@ class TestGPUBatching:
     @pytest.mark.ase
     def test_large_batch_on_gpu(self):
         """Test large batch processing on GPU."""
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=500)  # Force batched mode
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=500)  # Force batched mode
         data = load_mol(CAFFEINE_FILE)
 
         # Create batch of 10 copies
@@ -199,9 +166,9 @@ class TestGPUBatching:
         n_atoms = len(data["numbers"])
 
         # With high threshold, should use batched mode
-        calc_batch = AIMNet2Calculator("aimnet2", nb_threshold=n_atoms + 100)
+        calc_batch = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=n_atoms + 100)
         # With low threshold, should use flattened mode
-        calc_flat = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc_flat = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
 
         # Both should give same results
         res_batch = calc_batch(data)
@@ -216,7 +183,7 @@ class TestGPUMemory:
     @pytest.mark.ase
     def test_memory_cleanup_after_inference(self):
         """Test that GPU memory is properly cleaned up after inference."""
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
         data = load_mol(CAFFEINE_FILE)
 
         # Run inference multiple times
@@ -242,7 +209,7 @@ class TestGPUMemory:
     @pytest.mark.ase
     def test_no_memory_leak_in_forces(self):
         """Test that force calculation doesn't leak memory."""
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
         data = load_mol(CAFFEINE_FILE)
 
         # Warm up
@@ -275,12 +242,12 @@ class TestCPUGPUConsistency:
         data = load_mol(CAFFEINE_FILE)
 
         # CPU calculation
-        calc_cpu = create_cpu_calculator()
+        calc_cpu = AIMNet2Calculator("aimnet2", device="cpu", nb_threshold=0)
         res_cpu = calc_cpu(data)
         e_cpu = res_cpu["energy"].item()
 
         # GPU calculation
-        calc_gpu = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc_gpu = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
         res_gpu = calc_gpu(data)
         e_gpu = res_gpu["energy"].cpu().item()
 
@@ -292,12 +259,12 @@ class TestCPUGPUConsistency:
         data = load_mol(CAFFEINE_FILE)
 
         # CPU calculation
-        calc_cpu = create_cpu_calculator()
+        calc_cpu = AIMNet2Calculator("aimnet2", device="cpu", nb_threshold=0)
         res_cpu = calc_cpu(data, forces=True)
         f_cpu = res_cpu["forces"].detach().numpy()
 
         # GPU calculation
-        calc_gpu = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc_gpu = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
         res_gpu = calc_gpu(data, forces=True)
         f_gpu = res_gpu["forces"].cpu().detach().numpy()
 
@@ -327,12 +294,12 @@ class TestCPUGPUConsistency:
         }
 
         # CPU calculation
-        calc_cpu = create_cpu_calculator()
+        calc_cpu = AIMNet2Calculator("aimnet2", device="cpu", nb_threshold=0)
         res_cpu = calc_cpu(data)
         e_cpu = res_cpu["energy"].detach().numpy()
 
         # GPU calculation
-        calc_gpu = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc_gpu = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
         res_gpu = calc_gpu(data)
         e_gpu = res_gpu["energy"].cpu().detach().numpy()
 
@@ -358,7 +325,7 @@ class TestCPUGPUConsistency:
         max_neighbors = 50
 
         # CPU computation with PBC
-        nbmat_cpu, num_nb_cpu, shifts_cpu = neighbor_list(
+        nbmat_cpu, _num_nb_cpu, shifts_cpu = neighbor_list(
             positions=coord_cpu,
             cutoff=cutoff,
             cell=cell_cpu.unsqueeze(0),
@@ -369,7 +336,7 @@ class TestCPUGPUConsistency:
         )
 
         # GPU computation with PBC
-        nbmat_gpu, num_nb_gpu, shifts_gpu = neighbor_list(
+        nbmat_gpu, _num_nb_gpu, shifts_gpu = neighbor_list(
             positions=coord_gpu,
             cutoff=cutoff,
             cell=cell_gpu.unsqueeze(0),

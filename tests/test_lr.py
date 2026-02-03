@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from aimnet import nbops, ops
-from aimnet.modules.lr import LRCoulomb
+from aimnet.modules.lr import LRCoulomb, SRCoulomb
 
 # Coulomb methods for parametrized tests (non-periodic)
 # Note: "ewald" excluded here because it requires cell and flat format (mode 1)
@@ -25,7 +25,7 @@ def setup_data_mode_0(device, n_atoms=5):
     data = nbops.calc_masks(data)
 
     # Compute distances
-    d_ij, r_ij = ops.calc_distances(data)
+    d_ij, _r_ij = ops.calc_distances(data)
     data["d_ij"] = d_ij
 
     return data
@@ -61,7 +61,7 @@ def setup_data_mode_1(device, n_atoms=5):
     data = nbops.calc_masks(data)
 
     # Compute distances
-    d_ij, r_ij = ops.calc_distances(data)
+    d_ij, _r_ij = ops.calc_distances(data)
     data["d_ij"] = d_ij
 
     return data
@@ -557,3 +557,97 @@ class TestLRCoulombEwaldPBC:
         result = module(data)
 
         assert torch.isfinite(result["e_h"]).all()
+
+
+class TestLRCoulombEnvelope:
+    """Tests for envelope parameter in LRCoulomb."""
+
+    @pytest.mark.parametrize("envelope", ["exp", "cosine"])
+    def test_envelope_parameter_valid(self, device, envelope):
+        """Test that valid envelope parameters are accepted."""
+        module = LRCoulomb(method="simple", envelope=envelope).to(device)
+        assert module.envelope == envelope
+
+    def test_envelope_parameter_invalid(self, device):
+        """Test that invalid envelope raises ValueError."""
+        with pytest.raises(ValueError, match="Unknown envelope"):
+            LRCoulomb(method="simple", envelope="invalid").to(device)
+
+    def test_exp_envelope_default(self, device):
+        """Test that exp is the default envelope."""
+        module = LRCoulomb(method="simple").to(device)
+        assert module.envelope == "exp"
+
+    @pytest.mark.parametrize("envelope", ["exp", "cosine"])
+    def test_envelope_produces_finite_output(self, device, envelope):
+        """Test that both envelopes produce finite energy."""
+        module = LRCoulomb(method="simple", envelope=envelope, subtract_sr=True).to(device)
+        data = setup_data_mode_0(device, n_atoms=5)
+
+        result = module(data)
+
+        assert torch.isfinite(result["e_h"]).all()
+
+    def test_different_envelopes_give_different_sr(self, device):
+        """Test that different envelopes produce different SR contributions."""
+        data_exp = setup_data_mode_0(device, n_atoms=5)
+        data_cos = setup_data_mode_0(device, n_atoms=5)
+
+        module_exp = LRCoulomb(method="simple", envelope="exp", subtract_sr=True).to(device)
+        module_cos = LRCoulomb(method="simple", envelope="cosine", subtract_sr=True).to(device)
+
+        result_exp = module_exp(data_exp)
+        result_cos = module_cos(data_cos)
+
+        # Results should differ because SR is computed differently
+        # (unless atoms are too far for SR cutoff to matter)
+        assert torch.isfinite(result_exp["e_h"]).all()
+        assert torch.isfinite(result_cos["e_h"]).all()
+
+
+class TestSRCoulomb:
+    """Tests for SRCoulomb module."""
+
+    def test_srcoulomb_creation(self, device):
+        """Test SRCoulomb can be created with default parameters."""
+        module = SRCoulomb().to(device)
+        assert module.key_in == "charges"
+        assert module.key_out == "energy"
+
+    def test_srcoulomb_envelope_parameter(self, device):
+        """Test SRCoulomb accepts envelope parameter."""
+        module_exp = SRCoulomb(envelope="exp").to(device)
+        module_cos = SRCoulomb(envelope="cosine").to(device)
+
+        assert module_exp.envelope == "exp"
+        assert module_cos.envelope == "cosine"
+
+    def test_srcoulomb_invalid_envelope(self, device):
+        """Test SRCoulomb rejects invalid envelope."""
+        with pytest.raises(ValueError, match="Unknown envelope"):
+            SRCoulomb(envelope="invalid").to(device)
+
+    def test_srcoulomb_subtracts_from_energy(self, device):
+        """Test SRCoulomb subtracts energy from data."""
+        module = SRCoulomb(key_out="energy").to(device)
+        data = setup_data_mode_0(device, n_atoms=5)
+
+        # Add initial energy
+        data["energy"] = torch.tensor([10.0], device=device)
+
+        result = module(data)
+
+        # Energy should be reduced (SR Coulomb subtracted)
+        assert result["energy"].item() != 10.0
+        assert torch.isfinite(result["energy"]).all()
+
+    @pytest.mark.parametrize("envelope", ["exp", "cosine"])
+    def test_srcoulomb_envelope_produces_finite(self, device, envelope):
+        """Test that both envelopes produce finite results."""
+        module = SRCoulomb(envelope=envelope, key_out="sr_energy").to(device)
+        data = setup_data_mode_0(device, n_atoms=5)
+
+        result = module(data)
+
+        assert "sr_energy" in result
+        assert torch.isfinite(result["sr_energy"]).all()

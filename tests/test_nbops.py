@@ -318,6 +318,68 @@ class TestGetIj:
         assert x_j.shape == (B, N, 2, 1)
 
 
+class TestGetI:
+    """Tests for get_i function."""
+
+    def test_get_i_mode_0(self, simple_molecule):
+        """Test get_i for mode 0 matches get_ij x_i component."""
+        data = simple_molecule.copy()
+        data = nbops.set_nb_mode(data)
+
+        x = torch.tensor([[[1.0], [2.0], [3.0]]], device=simple_molecule["coord"].device)
+        x_i_only = nbops.get_i(x, data)
+        x_i, _x_j = nbops.get_ij(x, data)
+
+        # Should match get_ij x_i component
+        assert x_i_only.shape == x_i.shape
+        assert torch.allclose(x_i_only, x_i)
+
+        # x_i should be (B, N, 1, features) - expanded along dim 2
+        assert x_i_only.shape == (1, 3, 1, 1)
+
+    def test_get_i_mode_1(self, device):
+        """Test get_i for mode 1 matches get_ij x_i component."""
+        N = 4
+        numbers = torch.tensor([6, 1, 1, 0], device=device)
+        mol_idx = torch.tensor([0, 0, 0, 1], device=device)
+        nbmat = torch.tensor([[1, 2], [0, 2], [0, 1], [3, 3]], device=device)
+
+        data = {"numbers": numbers, "mol_idx": mol_idx, "nbmat": nbmat, "_nb_mode": torch.tensor(1)}
+
+        x = torch.tensor([[1.0], [2.0], [3.0], [0.0]], device=device)
+        x_i_only = nbops.get_i(x, data)
+        x_i, _x_j = nbops.get_ij(x, data)
+
+        # Should match get_ij x_i component
+        assert x_i_only.shape == x_i.shape
+        assert torch.allclose(x_i_only, x_i)
+
+        # x_i: (N, 1, features)
+        assert x_i_only.shape == (N, 1, 1)
+
+    def test_get_i_mode_2(self, device):
+        """Test get_i for mode 2 matches get_ij x_i component."""
+        B, N = 2, 3
+        numbers = torch.tensor([[6, 1, 1], [6, 1, 0]], device=device)
+        nbmat = torch.tensor(
+            [[[1, 2], [0, 2], [0, 1]], [[1, 2], [0, 2], [0, 1]]],  # (B, N, max_nb)
+            device=device,
+        )
+
+        data = {"numbers": numbers, "nbmat": nbmat, "_nb_mode": torch.tensor(2)}
+
+        x = torch.tensor([[[1.0], [2.0], [3.0]], [[4.0], [5.0], [6.0]]], device=device)
+        x_i_only = nbops.get_i(x, data)
+        x_i, _x_j = nbops.get_ij(x, data)
+
+        # Should match get_ij x_i component
+        assert x_i_only.shape == x_i.shape
+        assert torch.allclose(x_i_only, x_i)
+
+        # x_i: (B, N, 1, features)
+        assert x_i_only.shape == (B, N, 1, 1)
+
+
 class TestMolSum:
     """Tests for mol_sum function."""
 
