@@ -48,12 +48,16 @@ from aimnet import constants
 
 
 class _DFTD3Function(Function):
-    """
-    Autograd Function for DFT-D3 dispersion energy computation.
+    """Autograd Function for DFT-D3 dispersion energy computation.
 
     This class wraps the nvalchemiops dftd3 implementation with proper
     autograd support, enabling both gradient computation and TorchScript
     serialization.
+
+    Notes
+    -----
+    Input coordinates are in Angstroms, internally converted to Bohr.
+    Output energies are in eV, forces in eV/Angstrom.
     """
 
     @staticmethod
@@ -85,10 +89,6 @@ class _DFTD3Function(Function):
         # Convert coordinates to Bohr
         coord_bohr = coord * constants.Bohr_inv
 
-        # Convert smoothing to Bohr
-        smoothing_on_bohr = smoothing_on * constants.Bohr_inv
-        smoothing_off_bohr = smoothing_off * constants.Bohr_inv
-
         # Convert cell to Bohr if present
         cell_bohr = None
         if has_cell:
@@ -101,34 +101,41 @@ class _DFTD3Function(Function):
         if has_shifts:
             shifts_arg = shifts
 
+        # Build kwargs for nvalchemiops dftd3 call
+        dftd3_kwargs: dict[str, Any] = {
+            "positions": coord_bohr,
+            "numbers": numbers,
+            "a1": a1,
+            "a2": a2,
+            "s8": s8,
+            "s6": s6,
+            "covalent_radii": rcov,
+            "r4r2": r4r2,
+            "c6_reference": c6ab,
+            "coord_num_ref": cn_ref,
+            "batch_idx": batch_idx,
+            "cell": cell_bohr,
+            "neighbor_matrix": neighbor_matrix,
+            "neighbor_matrix_shifts": shifts_arg,
+            "fill_value": fill_value,
+            "num_systems": num_systems,
+            "compute_virial": compute_virial,
+            "device": str(coord.device),
+        }
+
+        # Only pass smoothing parameters if smoothing is enabled
+        # When smoothing_on >= smoothing_off, omit to use nvalchemiops defaults (1e10)
+        if smoothing_on < smoothing_off:
+            dftd3_kwargs["s5_smoothing_on"] = smoothing_on * constants.Bohr_inv
+            dftd3_kwargs["s5_smoothing_off"] = smoothing_off * constants.Bohr_inv
+
         # Call nvalchemiops dftd3
-        result = dftd3(
-            positions=coord_bohr,
-            numbers=numbers,
-            a1=a1,
-            a2=a2,
-            s8=s8,
-            s6=s6,
-            s5_smoothing_on=smoothing_on_bohr,
-            s5_smoothing_off=smoothing_off_bohr,
-            covalent_radii=rcov,
-            r4r2=r4r2,
-            c6_reference=c6ab,
-            coord_num_ref=cn_ref,
-            batch_idx=batch_idx,
-            cell=cell_bohr,
-            neighbor_matrix=neighbor_matrix,
-            neighbor_matrix_shifts=shifts_arg,
-            fill_value=fill_value,
-            num_systems=num_systems,
-            compute_virial=compute_virial,
-            device=str(coord.device),
-        )
+        result = dftd3(**dftd3_kwargs)
 
         if compute_virial:
-            energy, forces, coord_num, virial = result
+            energy, forces, _coord_num, virial = result
         else:
-            energy, forces, coord_num = result
+            energy, forces, _coord_num = result
             virial = torch.empty(0, device=coord.device)
 
         # Convert to eV/Angstrom units
@@ -302,27 +309,27 @@ def _dftd3_setup_context(ctx: Any, inputs: tuple[Any, ...], output: list[Tensor]
     (
         coord,
         cell,
-        numbers,
+        _numbers,
         batch_idx,
-        neighbor_matrix,
-        shifts,
-        rcov,
-        r4r2,
-        c6ab,
-        cn_ref,
-        a1,
-        a2,
-        s6,
-        s8,
-        num_systems,
-        fill_value,
-        smoothing_on,
-        smoothing_off,
+        _neighbor_matrix,
+        _shifts,
+        _rcov,
+        _r4r2,
+        _c6ab,
+        _cn_ref,
+        _a1,
+        _a2,
+        _s6,
+        _s8,
+        _num_systems,
+        _fill_value,
+        _smoothing_on,
+        _smoothing_off,
         compute_virial,
         has_cell,
-        has_shifts,
+        _has_shifts,
     ) = inputs
-    energy, forces, virial = output
+    _energy, forces, virial = output
 
     # Convert cell to Bohr for backward
     cell_bohr = torch.empty(0, device=coord.device)
@@ -468,6 +475,11 @@ def dftd3_energy(
     -------
     Tensor
         Dispersion energy per system in eV, shape (num_systems,)
+
+    Notes
+    -----
+    Input coordinates are in Angstroms, internally converted to Bohr.
+    Output energies are in eV, forces in eV/Angstrom.
     """
     # Prepare tensors - custom op requires non-None tensors
     cell_tensor = cell if cell is not None else torch.empty(0, device=coord.device)
