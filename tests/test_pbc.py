@@ -620,3 +620,57 @@ class TestBatchedStress:
         assert res["stress"].shape == (2, 3, 3)
         assert torch.isfinite(res["forces"]).all()
         assert torch.isfinite(res["stress"]).all()
+
+    def test_batched_stress_different_cells(self, pbc_crystal_small, device):
+        """Test that systems with different cell sizes have different energy, forces, and stress."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        # Create two systems with different cell sizes
+        data1 = pbc_crystal_small.copy()
+        data2 = pbc_crystal_small.copy()
+
+        # Scale cell and coordinates for second system by 2%
+        scale_factor = 1.02
+        data2["cell"] = data2["cell"] * scale_factor
+        data2["coord"] = data2["coord"] * scale_factor
+
+        # Create batched input
+        n1 = data1["coord"].shape[0]
+        n2 = data2["coord"].shape[0]
+        batched_data = {
+            "coord": torch.cat([data1["coord"], data2["coord"]], dim=0),
+            "numbers": torch.cat([data1["numbers"], data2["numbers"]], dim=0),
+            "charge": torch.tensor([0.0, 0.0], device=device),
+            "cell": torch.stack([data1["cell"], data2["cell"]], dim=0),
+            "mol_idx": torch.cat([
+                torch.zeros(n1, dtype=torch.long, device=device),
+                torch.ones(n2, dtype=torch.long, device=device),
+            ]),
+        }
+
+        res = calc(batched_data, forces=True, stress=True)
+
+        # Verify all quantities are finite
+        assert torch.isfinite(res["energy"]).all()
+        assert torch.isfinite(res["forces"]).all()
+        assert torch.isfinite(res["stress"]).all()
+
+        # Verify energies differ (scaled system should have different energy)
+        assert not torch.allclose(res["energy"][0], res["energy"][1], atol=1e-6), (
+            f"Energies should differ: system1={res['energy'][0]}, system2={res['energy'][1]}"
+        )
+
+        # Verify stresses differ
+        assert not torch.allclose(res["stress"][0], res["stress"][1], atol=1e-6), (
+            "Stresses should differ between systems with different cells"
+        )
+
+        # Verify forces differ (compare force norms since atom counts are same)
+        forces1 = res["forces"][:n1]
+        forces2 = res["forces"][n1:]
+        assert not torch.allclose(forces1, forces2, atol=1e-6), (
+            "Forces should differ between systems with different cells"
+        )
