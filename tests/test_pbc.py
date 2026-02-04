@@ -674,3 +674,103 @@ class TestBatchedStress:
         assert not torch.allclose(forces1, forces2, atol=1e-6), (
             "Forces should differ between systems with different cells"
         )
+
+
+class TestDFTD3Stress:
+    """Tests for DFTD3 contribution to stress calculation."""
+
+    def test_dftd3_stress_finite(self, pbc_crystal_small, device):
+        """Test that stress is finite when DFTD3 is enabled."""
+        # Use aimnet2 model which has DFTD3
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        data = pbc_crystal_small.copy()
+        data_calc = {
+            "coord": data["coord"].cpu().numpy(),
+            "numbers": data["numbers"].cpu().numpy(),
+            "charge": 0.0,
+            "cell": data["cell"].cpu().numpy(),
+        }
+
+        res = calc(data_calc, stress=True)
+
+        assert "stress" in res
+        assert torch.isfinite(res["stress"]).all(), "Stress should be finite with DFTD3"
+
+    def test_dftd3_stress_contribution(self, pbc_crystal_small, device):
+        """Test that DFTD3 contributes to stress (stress differs with/without D3)."""
+        # Calculator with DFTD3 (aimnet2 has it by default)
+        calc_with_d3 = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc_with_d3.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        # Disable DFTD3 for comparison
+        calc_no_d3 = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc_no_d3.set_lrcoulomb_method("dsf", cutoff=8.0)
+        calc_no_d3.external_dftd3 = None  # Disable DFTD3
+
+        data = pbc_crystal_small.copy()
+        data_calc = {
+            "coord": data["coord"].cpu().numpy(),
+            "numbers": data["numbers"].cpu().numpy(),
+            "charge": 0.0,
+            "cell": data["cell"].cpu().numpy(),
+        }
+
+        res_with_d3 = calc_with_d3(data_calc, stress=True)
+        res_no_d3 = calc_no_d3(data_calc, stress=True)
+
+        # Both should be finite
+        assert torch.isfinite(res_with_d3["stress"]).all()
+        assert torch.isfinite(res_no_d3["stress"]).all()
+
+        # Stress should differ when DFTD3 is included
+        assert not torch.allclose(res_with_d3["stress"], res_no_d3["stress"], atol=1e-6), (
+            "Stress should differ when DFTD3 is enabled vs disabled"
+        )
+
+    def test_dftd3_stress_with_scaled_cell(self, pbc_crystal_small, device):
+        """Test that scaled cells produce different stress with DFTD3."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        # Original system
+        data1 = pbc_crystal_small.copy()
+        data1_calc = {
+            "coord": data1["coord"].cpu().numpy(),
+            "numbers": data1["numbers"].cpu().numpy(),
+            "charge": 0.0,
+            "cell": data1["cell"].cpu().numpy(),
+        }
+
+        # Scaled system (2% larger)
+        data2 = pbc_crystal_small.copy()
+        scale_factor = 1.02
+        data2["cell"] = data2["cell"] * scale_factor
+        data2["coord"] = data2["coord"] * scale_factor
+        data2_calc = {
+            "coord": data2["coord"].cpu().numpy(),
+            "numbers": data2["numbers"].cpu().numpy(),
+            "charge": 0.0,
+            "cell": data2["cell"].cpu().numpy(),
+        }
+
+        res1 = calc(data1_calc, stress=True)
+        res2 = calc(data2_calc, stress=True)
+
+        # Both should be finite
+        assert torch.isfinite(res1["stress"]).all()
+        assert torch.isfinite(res2["stress"]).all()
+
+        # Stress should differ for different cell sizes
+        assert not torch.allclose(res1["stress"], res2["stress"], atol=1e-6), (
+            "Stress should differ for different cell sizes with DFTD3"
+        )

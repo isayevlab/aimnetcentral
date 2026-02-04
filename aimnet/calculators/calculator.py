@@ -688,16 +688,17 @@ class AIMNet2Calculator:
         with torch.jit.optimized_execution(False):  # type: ignore
             data = self.model(data)
         # Run external modules if present
-        data = self._run_external_modules(data)
+        data = self._run_external_modules(data, compute_stress=stress)
         data = self.get_derivatives(data, forces=forces, stress=stress, hessian=hessian)
         data = self.process_output(data)
         return data
 
-    def _run_external_modules(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+    def _run_external_modules(self, data: dict[str, Tensor], compute_stress: bool = False) -> dict[str, Tensor]:
         """Run external Coulomb and DFTD3 modules if attached."""
         if self.external_coulomb is not None:
             data = self.external_coulomb(data)
         if self.external_dftd3 is not None:
+            self.external_dftd3.compute_virial = compute_stress
             data = self.external_dftd3(data)
         return data
 
