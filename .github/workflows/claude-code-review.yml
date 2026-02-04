@@ -6,6 +6,12 @@ on:
         # Optional: Only run on specific file changes
         # paths:
         #   - "src/**/*.ts"
+    workflow_dispatch:
+        inputs:
+            pr_number:
+                description: "PR number to review (for manual dispatch)"
+                required: true
+                type: number
         #   - "src/**/*.tsx"
         #   - "src/**/*.js"
         #   - "src/**/*.jsx"
@@ -30,6 +36,7 @@ jobs:
               uses: actions/checkout@v4
               with:
                   fetch-depth: 1
+                  ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pr_number) || github.event.pull_request.head.sha }}
 
             - name: Run Claude Code Review
               id: claude-review
@@ -38,7 +45,7 @@ jobs:
                   claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
                   prompt: |
                       REPO: ${{ github.repository }}
-                      PR NUMBER: ${{ github.event.pull_request.number }}
+                      PR NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_number || github.event.pull_request.number }}
 
                       Please review this pull request and provide feedback on:
                       - Code quality and best practices
