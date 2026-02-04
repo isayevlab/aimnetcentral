@@ -116,6 +116,7 @@ class AdaptiveNeighborList:
                         max_neighbors=self.max_neighbors,
                         half_fill=False,
                         fill_value=fill_value,
+                        method="batch_naive",
                     )
                     shifts = None
             except NeighborOverflowError:
