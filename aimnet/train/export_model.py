@@ -15,6 +15,7 @@ The output file contains:
 - coulomb_sr_rc: Coulomb short-range cutoff (optional, if coulomb_mode="sr_embedded")
 - coulomb_sr_envelope: Envelope function ("exp" or "cosine", optional)
 - d3_params: D3 parameters {s8, a1, a2, s6} (optional, if needs_dispersion=True)
+- has_embedded_lr: Whether model has embedded LR modules (D3TS, SRCoulomb) needing nbmat_lr
 - implemented_species: Parametrized atomic numbers
 - state_dict: Model weights with SAE baked into atomic_shift (float64)
 """
@@ -163,6 +164,19 @@ def export_model(
     if needs_dispersion is not None and needs_dispersion != auto_needs_dispersion:
         print(f"  Overriding needs_dispersion: {auto_needs_dispersion} -> {needs_dispersion}")
 
+    # Detect if model has any embedded LR modules that need nbmat_lr
+    outputs = model_config.get("kwargs", {}).get("outputs", {})
+    has_embedded_lr = False
+
+    # Check for embedded D3TS (uses NN-predicted C6/alpha, must stay embedded)
+    has_d3ts = any("D3TS" in outputs.get(k, {}).get("class", "") for k in ["dftd3", "d3bj", "d3ts"])
+    if has_d3ts:
+        has_embedded_lr = True
+
+    # Check for embedded SRCoulomb (model had LRCoulomb before conversion)
+    if coulomb_mode == "sr_embedded":
+        has_embedded_lr = True
+
     # Create new format dict
     new_format = {
         "format_version": 2,  # v2 = new .pt format (v1 = legacy .jpt)
@@ -174,6 +188,7 @@ def export_model(
         "coulomb_sr_rc": coulomb_sr_rc if final_needs_coulomb else None,
         "coulomb_sr_envelope": coulomb_sr_envelope if final_needs_coulomb else None,
         "d3_params": d3_params if final_needs_dispersion else None,
+        "has_embedded_lr": has_embedded_lr,
         "implemented_species": implemented_species,
         "state_dict": core_model.state_dict(),
     }
@@ -190,6 +205,7 @@ def export_model(
         print(f"  coulomb_sr_envelope: {coulomb_sr_envelope}")
     if final_needs_dispersion:
         print(f"  d3_params: {d3_params}")
+    print(f"  has_embedded_lr: {has_embedded_lr}")
     print(f"  implemented_species: {implemented_species}")
 
 

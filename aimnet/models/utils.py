@@ -480,8 +480,16 @@ def strip_lr_modules_from_yaml(
         d3_params = None
         for key in ["dftd3", "d3bj"]:
             if key in outputs:
-                needs_dispersion = True
                 d3_config = outputs[key]
+                # Check if it's D3TS (must stay embedded, not externalizable)
+                module_class = d3_config.get("class", "")
+                if "D3TS" in module_class:
+                    # D3TS uses NN-predicted C6/alpha, must stay embedded
+                    needs_dispersion = False
+                    d3_params = None
+                    break
+                # DFTD3/D3BJ with tabulated params can be externalized
+                needs_dispersion = True
                 d3_kwargs = d3_config.get("kwargs", {})
                 d3_params = {
                     "s8": d3_kwargs.get("s8", 0.0),
