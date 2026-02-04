@@ -471,7 +471,7 @@ class TestNewFormat:
             config = yaml.safe_load(f)
 
         # 2. Strip LR modules (simulating export)
-        core_config, coulomb_mode, needs_dispersion, d3_params, coulomb_sr_rc, coulomb_sr_envelope = (
+        core_config, coulomb_mode, needs_dispersion, d3_params, coulomb_sr_rc, coulomb_sr_envelope, _disp_ptfile = (
             strip_lr_modules_from_yaml(config, original_sd)
         )
         core_yaml_str = yaml.dump(core_config, default_flow_style=False, sort_keys=False)

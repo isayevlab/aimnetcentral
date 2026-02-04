@@ -357,7 +357,7 @@ def validate_state_dict_keys(
 def strip_lr_modules_from_yaml(
     config: dict,
     source: dict | nn.Module,
-) -> tuple[dict, str, bool, dict[str, float] | None, float | None, str]:
+) -> tuple[dict, str, bool, dict[str, float] | None, float | None, str, str | None]:
     """Remove LRCoulomb and DFTD3 from YAML config, add SRCoulomb.
 
     This is the unified function for both export (from state dict) and
@@ -374,13 +374,14 @@ def strip_lr_modules_from_yaml(
     Returns
     -------
     tuple
-        (config, coulomb_mode, needs_dispersion, d3_params, coulomb_sr_rc, coulomb_sr_envelope):
+        (config, coulomb_mode, needs_dispersion, d3_params, coulomb_sr_rc, coulomb_sr_envelope, disp_ptfile):
         - config: Modified config with LR modules removed and SRCoulomb added
         - coulomb_mode: "sr_embedded" if LRCoulomb was present, else "none"
         - needs_dispersion: True if DFTD3/D3BJ was present
         - d3_params: D3 parameters dict or None
         - coulomb_sr_rc: Short-range Coulomb cutoff or None
         - coulomb_sr_envelope: Envelope function ("exp" or "cosine")
+        - disp_ptfile: Path to DispParam ptfile (if any) for loading buffer
 
     Raises
     ------
@@ -524,14 +525,16 @@ def strip_lr_modules_from_yaml(
         else:
             new_outputs[key] = value
 
-    # Strip ptfile from DispParam configs (buffer is in state dict)
+    # Strip ptfile from DispParam configs but save the path
+    # (raw training weights don't contain disp_param0 buffer, need to load from ptfile)
+    disp_ptfile: str | None = None
     for _key, value in new_outputs.items():
         if isinstance(value, dict):
             module_class = value.get("class", "")
             if "DispParam" in module_class:
                 kwargs = value.get("kwargs", {})
                 if "ptfile" in kwargs:
-                    kwargs.pop("ptfile")
+                    disp_ptfile = kwargs.pop("ptfile")  # Save before removing
 
     # Add SRCoulomb if LRCoulomb was present
     if has_coulomb:
@@ -555,6 +558,7 @@ def strip_lr_modules_from_yaml(
         d3_params,
         coulomb_sr_rc,
         coulomb_sr_envelope if coulomb_sr_envelope else "exp",
+        disp_ptfile,
     )
 
 
@@ -630,7 +634,8 @@ def load_v1_model(
     implemented_species = extract_species(jit_model)
 
     # Strip LR modules from YAML and add SRCoulomb
-    core_config, coulomb_mode, needs_dispersion, d3_params, coulomb_sr_rc, coulomb_sr_envelope = (
+    # Note: disp_ptfile is unused here because JIT model already has disp_param0 in its state dict
+    core_config, coulomb_mode, needs_dispersion, d3_params, coulomb_sr_rc, coulomb_sr_envelope, _disp_ptfile = (
         strip_lr_modules_from_yaml(model_config, jit_model)
     )
 

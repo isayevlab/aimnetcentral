@@ -113,7 +113,7 @@ def export_model(
     source_sd = torch.load(weights, map_location="cpu", weights_only=True)
 
     # Strip LR modules and detect flags
-    core_config, coulomb_mode, needs_dispersion_auto, d3_params, coulomb_sr_rc, coulomb_sr_envelope = (
+    core_config, coulomb_mode, needs_dispersion_auto, d3_params, coulomb_sr_rc, coulomb_sr_envelope, disp_ptfile = (
         strip_lr_modules_from_yaml(model_config, source_sd)
     )
 
@@ -137,6 +137,16 @@ def export_model(
         print(f"WARNING: Unexpected extra keys in source: {real_unexpected}")
     if not real_missing and not real_unexpected:
         print("Loaded weights successfully")
+
+    # Load dispersion parameters from ptfile and inject into model
+    # (raw training weights don't contain disp_param0 buffer)
+    if disp_ptfile is not None:
+        disp_params = torch.load(disp_ptfile, map_location="cpu", weights_only=True)
+        for _name, module in core_model.named_modules():
+            if hasattr(module, "disp_param0"):
+                module.disp_param0.copy_(disp_params)
+                print(f"Loaded disp_param0 from {disp_ptfile}")
+                break
 
     # Bake SAE into atomic_shift (float64)
     print("Baking SAE into atomic_shift...")
