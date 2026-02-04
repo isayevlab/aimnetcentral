@@ -517,7 +517,7 @@ def strip_lr_modules_from_yaml(
             new_outputs[key] = value
 
     # Strip ptfile from DispParam configs (buffer is in state dict)
-    for key, value in new_outputs.items():
+    for _key, value in new_outputs.items():
         if isinstance(value, dict):
             module_class = value.get("class", "")
             if "DispParam" in module_class:

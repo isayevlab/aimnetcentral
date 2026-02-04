@@ -478,3 +478,145 @@ class TestLargeCrystal:
 
         assert "energy" in res
         assert torch.isfinite(res["energy"]).all()
+
+
+class TestBatchedStress:
+    """Tests for batched stress calculation with per-system scaling."""
+
+    def test_batched_stress_shape(self, pbc_crystal_small, pbc_crystal_large, device):
+        """Test that batched stress returns correct shape (B, 3, 3)."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        # Get two crystals (use same one twice with slight perturbation for testing)
+        data1 = pbc_crystal_small.copy()
+        data2 = pbc_crystal_small.copy()
+        data2["coord"] = data2["coord"] + 0.01  # Small perturbation
+
+        # Create batched input with mol_idx
+        n1 = data1["coord"].shape[0]
+        n2 = data2["coord"].shape[0]
+        batched_data = {
+            "coord": torch.cat([data1["coord"], data2["coord"]], dim=0),
+            "numbers": torch.cat([data1["numbers"], data2["numbers"]], dim=0),
+            "charge": torch.tensor([0.0, 0.0], device=device),
+            "cell": torch.stack([data1["cell"], data2["cell"]], dim=0),  # (2, 3, 3)
+            "mol_idx": torch.cat([
+                torch.zeros(n1, dtype=torch.long, device=device),
+                torch.ones(n2, dtype=torch.long, device=device),
+            ]),
+        }
+
+        res = calc(batched_data, stress=True)
+
+        assert "stress" in res
+        assert res["stress"].shape == (2, 3, 3), f"Expected (2, 3, 3), got {res['stress'].shape}"
+        assert torch.isfinite(res["stress"]).all()
+
+    def test_batched_stress_matches_individual(self, pbc_crystal_small, device):
+        """Test that batched stress matches stress computed individually for each system."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        # Create two slightly different systems
+        data1 = pbc_crystal_small.copy()
+        data2 = pbc_crystal_small.copy()
+        data2["coord"] = data2["coord"] + 0.02  # Small perturbation
+
+        # Compute stress individually
+        data1_calc = {
+            "coord": data1["coord"].cpu().numpy(),
+            "numbers": data1["numbers"].cpu().numpy(),
+            "charge": 0.0,
+            "cell": data1["cell"].cpu().numpy(),
+        }
+        res1 = calc(data1_calc, stress=True)
+
+        data2_calc = {
+            "coord": data2["coord"].cpu().numpy(),
+            "numbers": data2["numbers"].cpu().numpy(),
+            "charge": 0.0,
+            "cell": data2["cell"].cpu().numpy(),
+        }
+        res2 = calc(data2_calc, stress=True)
+
+        # Compute stress in batch
+        n1 = data1["coord"].shape[0]
+        n2 = data2["coord"].shape[0]
+        batched_data = {
+            "coord": torch.cat([data1["coord"], data2["coord"]], dim=0),
+            "numbers": torch.cat([data1["numbers"], data2["numbers"]], dim=0),
+            "charge": torch.tensor([0.0, 0.0], device=device),
+            "cell": torch.stack([data1["cell"], data2["cell"]], dim=0),  # (2, 3, 3)
+            "mol_idx": torch.cat([
+                torch.zeros(n1, dtype=torch.long, device=device),
+                torch.ones(n2, dtype=torch.long, device=device),
+            ]),
+        }
+        res_batch = calc(batched_data, stress=True)
+
+        # Compare individual stress with batched stress
+        atol = 1e-5
+        assert torch.allclose(res_batch["stress"][0], res1["stress"], atol=atol), (
+            f"System 1 stress mismatch: batched={res_batch['stress'][0]}, individual={res1['stress']}"
+        )
+        assert torch.allclose(res_batch["stress"][1], res2["stress"], atol=atol), (
+            f"System 2 stress mismatch: batched={res_batch['stress'][1]}, individual={res2['stress']}"
+        )
+
+    def test_single_system_stress_unchanged(self, pbc_crystal_small, device):
+        """Test that single-system stress calculation still works correctly."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        data = pbc_crystal_small.copy()
+        data_calc = {
+            "coord": data["coord"].cpu().numpy(),
+            "numbers": data["numbers"].cpu().numpy(),
+            "charge": 0.0,
+            "cell": data["cell"].cpu().numpy(),
+        }
+
+        res = calc(data_calc, stress=True)
+
+        assert "stress" in res
+        assert res["stress"].shape == (3, 3), f"Expected (3, 3), got {res['stress'].shape}"
+        assert torch.isfinite(res["stress"]).all()
+
+    def test_batched_stress_with_forces(self, pbc_crystal_small, device):
+        """Test that batched stress and forces can be computed together."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        data1 = pbc_crystal_small.copy()
+        data2 = pbc_crystal_small.copy()
+        data2["coord"] = data2["coord"] + 0.01
+
+        n1 = data1["coord"].shape[0]
+        n2 = data2["coord"].shape[0]
+        batched_data = {
+            "coord": torch.cat([data1["coord"], data2["coord"]], dim=0),
+            "numbers": torch.cat([data1["numbers"], data2["numbers"]], dim=0),
+            "charge": torch.tensor([0.0, 0.0], device=device),
+            "cell": torch.stack([data1["cell"], data2["cell"]], dim=0),
+            "mol_idx": torch.cat([
+                torch.zeros(n1, dtype=torch.long, device=device),
+                torch.ones(n2, dtype=torch.long, device=device),
+            ]),
+        }
+
+        res = calc(batched_data, forces=True, stress=True)
+
+        assert "forces" in res
+        assert "stress" in res
+        assert res["stress"].shape == (2, 3, 3)
+        assert torch.isfinite(res["forces"]).all()
+        assert torch.isfinite(res["stress"]).all()

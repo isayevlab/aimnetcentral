@@ -912,9 +912,22 @@ class AIMNet2Calculator:
             self._saved_for_grad["coord"] = data["coord"]
         if stress:
             assert "cell" in data and data["cell"] is not None, "Stress calculation requires cell"
-            scaling = torch.eye(3, requires_grad=True, dtype=data["cell"].dtype, device=data["cell"].device)
-            data["coord"] = data["coord"] @ scaling
-            data["cell"] = data["cell"] @ scaling
+            cell = data["cell"]
+            if cell.ndim == 2:
+                # Single system: (3, 3) scaling
+                scaling = torch.eye(3, requires_grad=True, dtype=cell.dtype, device=cell.device)
+                data["coord"] = data["coord"] @ scaling
+                data["cell"] = cell @ scaling
+            else:
+                # Batched systems: (B, 3, 3) scaling - each system gets independent scaling
+                B = cell.shape[0]
+                scaling = torch.eye(3, dtype=cell.dtype, device=cell.device).unsqueeze(0).expand(B, -1, -1)
+                scaling.requires_grad_(True)
+                mol_idx = data["mol_idx"]
+                # Apply per-atom scaling: coord[i] @ scaling[mol_idx[i]]
+                atom_scaling = torch.index_select(scaling, 0, mol_idx)  # (N_total, 3, 3)
+                data["coord"] = (data["coord"].unsqueeze(1) @ atom_scaling).squeeze(1)
+                data["cell"] = cell @ scaling
             self._saved_for_grad["scaling"] = scaling
         return data
 
