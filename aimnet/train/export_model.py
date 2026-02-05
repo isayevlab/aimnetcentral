@@ -144,6 +144,9 @@ def export_model(
         disp_params = torch.load(disp_ptfile, map_location="cpu", weights_only=True)
         for _name, module in core_model.named_modules():
             if hasattr(module, "disp_param0"):
+                # Resize buffer if needed (ptfile may have different shape than placeholder)
+                if module.disp_param0.shape != disp_params.shape:
+                    module.disp_param0 = torch.zeros_like(disp_params)
                 module.disp_param0.copy_(disp_params)
                 print(f"Loaded disp_param0 from {disp_ptfile}")
                 break

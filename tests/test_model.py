@@ -530,3 +530,59 @@ class TestNewFormat:
         # Verify energy is finite
         assert "energy" in _out
         assert torch.isfinite(_out["energy"]).all(), "Energy should be finite"
+
+    def test_strip_lr_modules_returns_disp_ptfile(self, tmp_path):
+        """Test strip_lr_modules_from_yaml returns disp_ptfile path."""
+        from aimnet.models.utils import strip_lr_modules_from_yaml
+
+        # Create a dummy ptfile
+        ptfile = tmp_path / "disp_params.pt"
+        disp_params = torch.rand(64, 2)
+        torch.save(disp_params, ptfile)
+
+        # Create config with DispParam referencing ptfile
+        config = {
+            "class": "aimnet.models.AIMNet2",
+            "kwargs": {
+                "outputs": {
+                    "c6_alpha": {
+                        "class": "aimnet.modules.DispParam",
+                        "kwargs": {"ptfile": str(ptfile)},
+                    }
+                }
+            },
+        }
+
+        # Call strip_lr_modules_from_yaml with empty state dict
+        result = strip_lr_modules_from_yaml(config, {})
+
+        # Check disp_ptfile is returned (last element of tuple)
+        assert result[-1] == str(ptfile)
+
+        # Verify ptfile was stripped from config
+        stripped_config = result[0]
+        c6_alpha_kwargs = stripped_config["kwargs"]["outputs"]["c6_alpha"]["kwargs"]
+        assert "ptfile" not in c6_alpha_kwargs
+
+    def test_disp_param_shape_mismatch_handling(self, tmp_path):
+        """Test that disp_param0 shape mismatch is handled correctly."""
+        from aimnet.modules.lr import DispParam
+
+        # Create DispParam with default (87, 2) placeholder
+        module = DispParam()
+        assert module.disp_param0.shape == (87, 2)
+
+        # Create ptfile with different shape
+        ptfile = tmp_path / "disp_params.pt"
+        disp_params = torch.rand(64, 2)
+        torch.save(disp_params, ptfile)
+
+        # Load and inject (simulating what export_model does)
+        loaded_params = torch.load(ptfile, map_location="cpu", weights_only=True)
+        if module.disp_param0.shape != loaded_params.shape:
+            module.disp_param0 = torch.zeros_like(loaded_params)
+        module.disp_param0.copy_(loaded_params)
+
+        # Verify shape is now (64, 2)
+        assert module.disp_param0.shape == (64, 2)
+        assert torch.allclose(module.disp_param0, disp_params)
