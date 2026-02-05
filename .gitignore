@@ -1,11 +1,6 @@
 docs/source
 aimnet/calculators/assets/
 
-scripts/compile/*.pt
-scripts/compile/*.jpt
-scripts/compile/*.sae
-scripts/compile/aimnet2_b973c_d3.yaml
-scripts/compile/aimnet2_wb97m_d3.yaml
 
 
 # From https://raw.githubusercontent.com/github/gitignore/main/Python.gitignore
