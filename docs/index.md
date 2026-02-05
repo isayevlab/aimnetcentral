@@ -50,16 +50,15 @@ charges = result["charges"] # partial charges
 
 ## Available Models
 
-| Model          | Elements                                      | Description                      |
-| -------------- | --------------------------------------------- | -------------------------------- |
-| `aimnet2`      | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | wB97M-D3 (default)               |
-| `aimnet2_b973c`| H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c functional                |
-| `aimnet2_2025` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c + improved intermolecular |
-| `aimnet2nse`   | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | Open-shell chemistry             |
-| `aimnet2pd`    | H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I | Palladium-containing systems     |
-| `aimnet2_cpcm` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | CPCM implicit solvation          |
+| Model           | Elements                                      | Description                      |
+| --------------- | --------------------------------------------- | -------------------------------- |
+| `aimnet2`       | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | wB97M-D3 (default)               |
+| `aimnet2_b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c functional                |
+| `aimnet2_2025`  | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c + improved intermolecular |
+| `aimnet2nse`    | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | Open-shell chemistry             |
+| `aimnet2pd`     | H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I | Palladium-containing systems     |
 
-_Each model has ensemble members (append _0 to _3, or _0 to _7 for CPCM). Ensemble averaging recommended for production._
+_Each model has ensemble members (append \_0 to \_3). Ensemble averaging recommended for production._
 
 ## Installation
 

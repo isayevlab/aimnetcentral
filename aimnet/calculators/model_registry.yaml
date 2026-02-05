@@ -60,30 +60,6 @@ models:
     aimnet2-pd_3:
         file: aimnet2-pd_3.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2Pd/aimnet2-pd_3.pt
-    wb97m_cpcms_v2_0:
-        file: wb97m_cpcms_v2_0.pt
-        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2CPCM/wb97m_cpcms_v2_0.pt
-    wb97m_cpcms_v2_1:
-        file: wb97m_cpcms_v2_1.pt
-        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2CPCM/wb97m_cpcms_v2_1.pt
-    wb97m_cpcms_v2_2:
-        file: wb97m_cpcms_v2_2.pt
-        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2CPCM/wb97m_cpcms_v2_2.pt
-    wb97m_cpcms_v2_3:
-        file: wb97m_cpcms_v2_3.pt
-        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2CPCM/wb97m_cpcms_v2_3.pt
-    wb97m_cpcms_v2_4:
-        file: wb97m_cpcms_v2_4.pt
-        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2CPCM/wb97m_cpcms_v2_4.pt
-    wb97m_cpcms_v2_5:
-        file: wb97m_cpcms_v2_5.pt
-        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2CPCM/wb97m_cpcms_v2_5.pt
-    wb97m_cpcms_v2_6:
-        file: wb97m_cpcms_v2_6.pt
-        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2CPCM/wb97m_cpcms_v2_6.pt
-    wb97m_cpcms_v2_7:
-        file: wb97m_cpcms_v2_7.pt
-        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2CPCM/wb97m_cpcms_v2_7.pt
 
 # map model alias to file name
 aliases:
@@ -93,4 +69,3 @@ aliases:
     aimnet2nse: aimnet2nse_0
     aimnet2pd: aimnet2-pd_0
     aimnet2_2025: aimnet2_b973c_2025_d3_0
-    aimnet2_cpcm: wb97m_cpcms_v2_0
