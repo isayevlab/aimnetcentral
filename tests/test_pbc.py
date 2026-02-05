@@ -774,3 +774,70 @@ class TestDFTD3Stress:
         assert not torch.allclose(res1["stress"], res2["stress"], atol=1e-6), (
             "Stress should differ for different cell sizes with DFTD3"
         )
+
+    def test_dftd3_stress_matches_finite_difference(self, pbc_crystal_small, device):
+        """Test that autograd stress matches numerical finite-difference stress."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        data = pbc_crystal_small.copy()
+        cell = data["cell"]
+        coord = data["coord"]
+        numbers = data["numbers"]
+
+        # Compute volume for stress normalization
+        volume = cell.det().abs().item()
+
+        # Compute autograd stress
+        data_calc = {
+            "coord": coord.cpu().numpy(),
+            "numbers": numbers.cpu().numpy(),
+            "charge": 0.0,
+            "cell": cell.cpu().numpy(),
+        }
+        res = calc(data_calc, stress=True)
+        stress_autograd = res["stress"]
+
+        # Compute finite-difference stress
+        delta = 1e-4
+        stress_fd = torch.zeros(3, 3, device=device)
+        for i in range(3):
+            for j in range(3):
+                # Apply small strain in (i,j) direction
+                strain_plus = torch.eye(3, device=device)
+                strain_plus[i, j] += delta
+                cell_plus = cell @ strain_plus
+                coord_plus = coord @ strain_plus
+
+                strain_minus = torch.eye(3, device=device)
+                strain_minus[i, j] -= delta
+                cell_minus = cell @ strain_minus
+                coord_minus = coord @ strain_minus
+
+                # Compute energies
+                data_plus = {
+                    "coord": coord_plus.cpu().numpy(),
+                    "numbers": numbers.cpu().numpy(),
+                    "charge": 0.0,
+                    "cell": cell_plus.cpu().numpy(),
+                }
+                E_plus = calc(data_plus)["energy"].item()
+
+                data_minus = {
+                    "coord": coord_minus.cpu().numpy(),
+                    "numbers": numbers.cpu().numpy(),
+                    "charge": 0.0,
+                    "cell": cell_minus.cpu().numpy(),
+                }
+                E_minus = calc(data_minus)["energy"].item()
+
+                # Central difference for stress component
+                stress_fd[i, j] = (E_plus - E_minus) / (2 * delta * volume)
+
+        # Autograd and finite-difference should match within numerical tolerance
+        # Finite-difference has inherent numerical error, so use relaxed tolerances
+        assert torch.allclose(stress_autograd, stress_fd, rtol=1e-2, atol=1e-3), (
+            f"Stress mismatch:\nautograd={stress_autograd}\nfinite_diff={stress_fd}"
+        )

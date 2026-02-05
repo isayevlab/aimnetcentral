@@ -31,6 +31,26 @@ TorchScript Compatibility
 
 The implementation wraps nvalchemiops calls in torch.autograd.Function classes,
 which enables proper serialization with TorchScript.
+
+Stress Sign Convention
+----------------------
+This module follows the Cauchy (physical) stress convention:
+
+    - Positive stress = tensile (material being stretched)
+    - Negative stress = compressive (material being compressed)
+
+The relationship between virial and Cauchy stress is:
+
+    stress = -virial / volume
+
+where virial = -0.5 * sum_ij(F_ij outer r_ij).
+
+The cell gradient for autograd is computed as:
+
+    dE/dcell = -virial @ inv(cell).T
+
+This ensures the calculator returns physical Cauchy stress compatible with
+ASE and standard MD conventions.
 """
 
 from typing import Any
@@ -170,11 +190,12 @@ class _DFTD3Function(Function):
         # Coord gradient: forces = -dE/dR, so dE/dR = -forces
         grad_coord = -forces * grad_energy[batch_idx].unsqueeze(-1)
 
-        # Cell gradient (if periodic and virial computed)
+        # Cell gradient for physical Cauchy stress
+        # Cauchy stress = -virial / volume, so dE/dcell = -virial @ inv(cell).T
         grad_cell = None
         if has_cell and compute_virial and virial.numel() > 0:
             cell_inv_t = torch.linalg.inv(cell_bohr).transpose(-1, -2)
-            dE_dcell_bohr = virial @ cell_inv_t
+            dE_dcell_bohr = -virial @ cell_inv_t  # Negative sign for Cauchy stress
             dE_dcell_ang = dE_dcell_bohr * constants.Hartree * constants.Bohr_inv
             grad_cell = dE_dcell_ang * grad_energy.view(-1, 1, 1)
 
@@ -357,11 +378,12 @@ def _dftd3_backward(
     # Coord gradient: forces = -dE/dR, so dE/dR = -forces
     grad_coord = -forces * grad_energy[batch_idx].unsqueeze(-1)
 
-    # Cell gradient (if periodic and virial computed)
+    # Cell gradient for physical Cauchy stress
+    # Cauchy stress = -virial / volume, so dE/dcell = -virial @ inv(cell).T
     grad_cell = None
     if has_cell and compute_virial and virial.numel() > 0:
         cell_inv_t = torch.linalg.inv(cell_bohr).transpose(-1, -2)
-        dE_dcell_bohr = virial @ cell_inv_t
+        dE_dcell_bohr = -virial @ cell_inv_t  # Negative sign for Cauchy stress
         dE_dcell_ang = dE_dcell_bohr * constants.Hartree * constants.Bohr_inv
         grad_cell = dE_dcell_ang * grad_energy.view(-1, 1, 1)
 
