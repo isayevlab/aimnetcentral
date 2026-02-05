@@ -16,15 +16,59 @@ def lazy_calc_dij_lr(data: dict[str, Tensor]) -> dict[str, Tensor]:
     return data
 
 
+def lazy_calc_dij(data: dict[str, Tensor], suffix: str) -> dict[str, Tensor]:
+    """Lazily calculate distances for a given suffix.
+
+    Computes and caches d_ij{suffix} in data dict if not present.
+    For nb_mode=0 (no neighbor list), reuses d_ij.
+
+    Parameters
+    ----------
+    data : dict
+        Data dictionary.
+    suffix : str
+        Suffix for neighbor matrix (e.g., "_coulomb", "_dftd3", "_lr").
+
+    Returns
+    -------
+    dict
+        Data dictionary with d_ij{suffix} added.
+    """
+    key = f"d_ij{suffix}"
+    if key not in data:
+        nb_mode = nbops.get_nb_mode(data)
+        if nb_mode == 0:
+            data[key] = data["d_ij"]
+        else:
+            data[key] = calc_distances(data, suffix=suffix)[0]
+    return data
+
+
 def calc_distances(data: dict[str, Tensor], suffix: str = "", pad_value: float = 1.0) -> tuple[Tensor, Tensor]:
     coord_i, coord_j = nbops.get_ij(data["coord"], data, suffix)
     if f"shifts{suffix}" in data:
         assert "cell" in data, "cell is required if shifts are provided"
         nb_mode = nbops.get_nb_mode(data)
+        cell = data["cell"]
         if nb_mode == 2:
-            shifts = torch.einsum("bnmd,bdh->bnmh", data[f"shifts{suffix}"], data["cell"])
+            # Batched format: shifts (B, N, M, 3), cell (B, 3, 3) or (3, 3)
+            if cell.ndim == 2:
+                shifts = torch.einsum("bnmd,dh->bnmh", data[f"shifts{suffix}"], cell)
+            else:
+                shifts = torch.einsum("bnmd,bdh->bnmh", data[f"shifts{suffix}"], cell)
+        elif nb_mode == 1:
+            # Flat format: shifts (N_total, M, 3), cell (3, 3) or (B, 3, 3)
+            if cell.ndim == 2:
+                shifts = data[f"shifts{suffix}"] @ cell
+            else:
+                # Batched cells - need mol_idx to select correct cell for each atom
+                mol_idx = data["mol_idx"]
+                atom_cell = cell[mol_idx]  # (N_total, 3, 3)
+                # shifts: (N_total, M, 3), atom_cell: (N_total, 3, 3)
+                shifts = torch.einsum("nmd,ndh->nmh", data[f"shifts{suffix}"], atom_cell)
         else:
-            shifts = data[f"shifts{suffix}"] @ data["cell"]
+            # nb_mode == 0: no neighbor matrix, shouldn't have shifts
+            shifts = data[f"shifts{suffix}"] @ cell
         coord_j = coord_j + shifts
     r_ij = coord_j - coord_i
     r_ij = nbops.mask_ij_(r_ij, data, mask_value=pad_value, inplace=False, suffix=suffix)
@@ -98,8 +142,8 @@ def coulomb_matrix_dsf(d_ij: Tensor, Rc: float, alpha: float, data: dict[str, Te
     _c3 = _c2 / Rc
     _c4 = 2 * alpha * math.exp(-((alpha * Rc) ** 2)) / (Rc * math.pi**0.5)
     J = _c1 - _c2 + (d_ij - Rc) * (_c3 + _c4)
-    # mask for d_ij > Rc
-    mask = data["mask_ij_lr"] & (d_ij > Rc)
+    # Zero invalid pairs: padding/diagonal (mask_ij_lr) OR beyond cutoff
+    mask = data["mask_ij_lr"] | (d_ij > Rc)
     J.masked_fill_(mask, 0.0)
     return J
 
@@ -109,13 +153,19 @@ def coulomb_matrix_sf(q_j: Tensor, d_ij: Tensor, Rc: float, data: dict[str, Tens
     _c2 = 1.0 / Rc
     _c3 = _c2 / Rc
     J = _c1 - _c2 + (d_ij - Rc) * _c3
-    mask = data["mask_ij_lr"] & (d_ij > Rc)
+    # Zero invalid pairs: padding/diagonal (mask_ij_lr) OR beyond cutoff
+    mask = data["mask_ij_lr"] | (d_ij > Rc)
     J.masked_fill_(mask, 0.0)
     return J
 
 
 def get_shifts_within_cutoff(cell: Tensor, cutoff: Tensor) -> Tensor:
-    assert cell.shape == (3, 3), "Batch cell is not supported"
+    """Get all lattice shift vectors within cutoff distance.
+
+    Note: Batched cells are not supported - this function is only used by Ewald summation
+    which is a single-molecule calculation.
+    """
+    assert cell.ndim == 2 and cell.shape == (3, 3), "Batched cells not supported for Ewald summation"
     cell_inv = torch.inverse(cell).mT
     inv_distances = cell_inv.norm(p=2, dim=-1)
     num_repeats = torch.ceil(cutoff * inv_distances).to(torch.long)
@@ -128,10 +178,32 @@ def get_shifts_within_cutoff(cell: Tensor, cutoff: Tensor) -> Tensor:
     return shifts
 
 
-def coulomb_matrix_ewald(coord: Tensor, cell: Tensor) -> Tensor:
+def coulomb_matrix_ewald(coord: Tensor, cell: Tensor, accuracy: float = 1e-8) -> Tensor:
+    """Compute Coulomb matrix using Ewald summation.
+
+    Parameters
+    ----------
+    coord : Tensor
+        Atomic coordinates, shape (N, 3).
+    cell : Tensor
+        Unit cell vectors, shape (3, 3).
+    accuracy : float
+        Target accuracy for the Ewald summation. Controls the real-space
+        and reciprocal-space cutoffs. Lower values give higher accuracy
+        but require more computation. Default is 1e-8.
+
+        The cutoffs are computed as:
+        - eta = (V^2 / N)^(1/6) / sqrt(2*pi)
+        - cutoff_real = sqrt(-2 * ln(accuracy)) * eta
+        - cutoff_recip = sqrt(-2 * ln(accuracy)) / eta
+
+    Returns
+    -------
+    Tensor
+        Coulomb matrix J, shape (N, N).
+    """
     # single molecule implementation. nb_mode == 1
     assert coord.ndim == 2 and cell.ndim == 2, "Only single molecule is supported"
-    accuracy = 1e-8
     N = coord.shape[0]
     volume = torch.det(cell)
     eta = ((volume**2 / N) ** (1 / 6)) / math.sqrt(2.0 * math.pi)

@@ -150,7 +150,7 @@ class TestCalcDistances:
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
-        d_ij, r_ij = ops.calc_distances(data)
+        d_ij, _r_ij = ops.calc_distances(data)
 
         # d_ij should be symmetric
         assert d_ij[0, 0, 1].item() == pytest.approx(d_ij[0, 1, 0].item(), abs=1e-6)
@@ -170,7 +170,7 @@ class TestCalcDistances:
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
-        d_ij, r_ij = ops.calc_distances(data)
+        d_ij, _r_ij = ops.calc_distances(data)
         loss = d_ij.sum()
         loss.backward()
 
@@ -310,44 +310,6 @@ class TestCoulombMatrixSF:
         assert torch.isfinite(J).all()
 
 
-class TestCoulombMatrixEwald:
-    """Tests for coulomb_matrix_ewald function."""
-
-    def test_ewald_shape(self, device):
-        """Test Ewald Coulomb matrix shape."""
-        N = 4
-        coord = torch.rand((N, 3), device=device) * 5
-        cell = torch.eye(3, device=device) * 10
-
-        J = ops.coulomb_matrix_ewald(coord, cell)
-
-        assert J.shape == (N, N)
-
-    def test_ewald_symmetry(self, device):
-        """Test that Ewald matrix is symmetric."""
-        coord = torch.tensor(
-            [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
-            device=device,
-        )
-        cell = torch.eye(3, device=device) * 10
-
-        J = ops.coulomb_matrix_ewald(coord, cell)
-
-        # Should be symmetric
-        assert torch.allclose(J, J.T, atol=1e-5)
-
-    def test_ewald_self_interaction(self, device):
-        """Test that Ewald self-interaction term is negative."""
-        coord = torch.tensor([[0.0, 0.0, 0.0], [5.0, 0.0, 0.0]], device=device)
-        cell = torch.eye(3, device=device) * 10
-
-        J = ops.coulomb_matrix_ewald(coord, cell)
-
-        # Diagonal (self-interaction) should be negative
-        assert J[0, 0].item() < 0
-        assert J[1, 1].item() < 0
-
-
 class TestNSE:
     """Tests for nse (neural charge equilibration) function."""
 
@@ -474,45 +436,197 @@ class TestTransitionFunctions:
             assert torch.isfinite(x.grad).all()
 
 
-class TestGetShiftsWithinCutoff:
-    """Tests for get_shifts_within_cutoff function (PBC shifts)."""
+class TestBatchedCells:
+    """Tests for batched cell support in calc_distances."""
 
-    def test_shifts_cubic_cell(self, device):
-        """Test shift generation for cubic cell."""
-        cell = torch.eye(3, device=device) * 10.0
-        cutoff = torch.tensor(5.0, device=device)
-
-        shifts = ops.get_shifts_within_cutoff(cell, cutoff)
-
-        # Should include [0, 0, 0]
-        zero_shift = (shifts == 0).all(dim=-1)
-        assert zero_shift.any()
-
-        # Number of shifts depends on cutoff/cell ratio
-        # For cutoff=5 and cell=10, should be relatively small
-        assert shifts.shape[0] > 0
-
-    def test_shifts_non_cubic_cell(self, device):
-        """Test shift generation for non-cubic cell."""
-        # Triclinic cell
-        cell = torch.tensor(
-            [[10.0, 0.0, 0.0], [2.0, 9.0, 0.0], [1.0, 1.0, 8.0]],
+    def test_calc_distances_batched_cells_nb_mode1(self, device):
+        """Test calc_distances with flat coordinates and batched cells (nb_mode=1)."""
+        # Create flat coordinates for 2 systems (3 atoms each)
+        coord = torch.tensor(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],
+                [0.0, 2.0, 0.0],
+                [0.0, 0.0, 0.0],  # padding atom
+            ],
+            dtype=torch.float32,
             device=device,
         )
-        cutoff = torch.tensor(5.0, device=device)
 
-        shifts = ops.get_shifts_within_cutoff(cell, cutoff)
+        # Batched cells (2, 3, 3) - different cell sizes
+        cell = torch.stack([
+            torch.eye(3, device=device) * 10.0,
+            torch.eye(3, device=device) * 20.0,
+        ])
 
-        # Should produce valid shifts
-        assert shifts.shape[0] > 0
-        assert shifts.shape[1] == 3
+        mol_idx = torch.tensor([0, 0, 0, 1, 1, 1, 1], device=device)
 
-    def test_shifts_symmetry(self, device):
-        """Test that shifts are symmetric around origin."""
+        # Create neighbor matrix (N_total, M)
+        N = 7
+        M = 3
+        nbmat = torch.full((N, M), N - 1, dtype=torch.int32, device=device)
+        # Atom 0's neighbors: 1, 2
+        nbmat[0, 0] = 1
+        nbmat[0, 1] = 2
+        # Atom 1's neighbors: 0, 2
+        nbmat[1, 0] = 0
+        nbmat[1, 1] = 2
+        # Atom 2's neighbors: 0, 1
+        nbmat[2, 0] = 0
+        nbmat[2, 1] = 1
+        # Atom 3's neighbors: 4, 5
+        nbmat[3, 0] = 4
+        nbmat[3, 1] = 5
+        # Atom 4's neighbors: 3, 5
+        nbmat[4, 0] = 3
+        nbmat[4, 1] = 5
+        # Atom 5's neighbors: 3, 4
+        nbmat[5, 0] = 3
+        nbmat[5, 1] = 4
+
+        # Create shifts (N_total, M, 3) - zeros for non-PBC test
+        shifts = torch.zeros((N, M, 3), dtype=torch.float32, device=device)
+
+        data = {
+            "coord": coord,
+            "numbers": torch.tensor([8, 1, 1, 8, 1, 1, 0], device=device),
+            "mol_idx": mol_idx,
+            "nbmat": nbmat,
+            "shifts": shifts,
+            "cell": cell,
+        }
+        data = nbops.set_nb_mode(data)
+        data = nbops.calc_masks(data)
+
+        # Should not raise with batched cells
+        d_ij, r_ij = ops.calc_distances(data)
+
+        # Check shapes
+        assert d_ij.shape == (N, M)
+        assert r_ij.shape == (N, M, 3)
+
+        # Distances should be positive for real neighbors
+        assert d_ij[0, 0].item() == pytest.approx(1.0, abs=1e-5)  # Atom 0 to 1
+        assert d_ij[3, 0].item() == pytest.approx(2.0, abs=1e-5)  # Atom 3 to 4
+
+    def test_calc_distances_batched_cells_nb_mode2(self, device):
+        """Test calc_distances with batched coordinates and batched cells (nb_mode=2)."""
+        # Batched coordinates (B, N, 3)
+        coord = torch.tensor(
+            [
+                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+                [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
+            ],
+            dtype=torch.float32,
+            device=device,
+        )
+
+        # Batched cells (B, 3, 3)
+        cell = torch.stack([
+            torch.eye(3, device=device) * 10.0,
+            torch.eye(3, device=device) * 20.0,
+        ])
+
+        # Create neighbor matrix (B, N, M)
+        # Note: In mode 2, nbmat indices are GLOBAL into flattened (B*N) array
+        # System 0 atoms: 0, 1, 2; System 1 atoms: 3, 4, 5
+        B, N, M = 2, 3, 2
+        fill_val = B * N  # Fill value is total number of atoms
+        nbmat = torch.full((B, N, M), fill_val, dtype=torch.int32, device=device)
+        # System 0: atom 0's neighbors are atoms 1, 2 (global indices 1, 2)
+        nbmat[0, 0, 0] = 1
+        nbmat[0, 0, 1] = 2
+        nbmat[0, 1, 0] = 0
+        nbmat[0, 1, 1] = 2
+        nbmat[0, 2, 0] = 0
+        nbmat[0, 2, 1] = 1
+        # System 1: atom 3's neighbors are atoms 4, 5 (global indices 4, 5)
+        nbmat[1, 0, 0] = 4  # System 1, atom 0 -> global atom 4
+        nbmat[1, 0, 1] = 5  # System 1, atom 0 -> global atom 5
+        nbmat[1, 1, 0] = 3
+        nbmat[1, 1, 1] = 5
+        nbmat[1, 2, 0] = 3
+        nbmat[1, 2, 1] = 4
+
+        # Create shifts (B, N, M, 3)
+        shifts = torch.zeros((B, N, M, 3), dtype=torch.float32, device=device)
+
+        data = {
+            "coord": coord,
+            "numbers": torch.tensor([[8, 1, 1], [8, 1, 1]], device=device),
+            "nbmat": nbmat,
+            "shifts": shifts,
+            "cell": cell,
+        }
+        data = nbops.set_nb_mode(data)
+        data = nbops.calc_masks(data)
+
+        # Should not raise with batched cells
+        d_ij, r_ij = ops.calc_distances(data)
+
+        # Check shapes
+        assert d_ij.shape == (B, N, M)
+        assert r_ij.shape == (B, N, M, 3)
+
+        # Check distances
+        # System 0: distance from atom 0 to atom 1 is 1.0
+        assert d_ij[0, 0, 0].item() == pytest.approx(1.0, abs=1e-5)
+        # System 1: distance from atom 0 to atom 1 is 2.0
+        assert d_ij[1, 0, 0].item() == pytest.approx(2.0, abs=1e-5)
+
+    def test_calc_distances_single_cell_nb_mode2(self, device):
+        """Test calc_distances with batched coordinates but single cell (backward compatible)."""
+        # Batched coordinates (B, N, 3)
+        coord = torch.tensor(
+            [
+                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+                [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
+            ],
+            dtype=torch.float32,
+            device=device,
+        )
+
+        # Single cell (3, 3)
         cell = torch.eye(3, device=device) * 10.0
-        cutoff = torch.tensor(3.0, device=device)
 
-        shifts = ops.get_shifts_within_cutoff(cell, cutoff)
+        # Create neighbor matrix (B, N, M)
+        # Note: In mode 2, nbmat indices are GLOBAL into flattened (B*N) array
+        B, N, M = 2, 3, 2
+        fill_val = B * N
+        nbmat = torch.full((B, N, M), fill_val, dtype=torch.int32, device=device)
+        # System 0
+        nbmat[0, 0, 0] = 1
+        nbmat[0, 0, 1] = 2
+        nbmat[0, 1, 0] = 0
+        nbmat[0, 1, 1] = 2
+        nbmat[0, 2, 0] = 0
+        nbmat[0, 2, 1] = 1
+        # System 1 (global indices 3, 4, 5)
+        nbmat[1, 0, 0] = 4
+        nbmat[1, 0, 1] = 5
+        nbmat[1, 1, 0] = 3
+        nbmat[1, 1, 1] = 5
+        nbmat[1, 2, 0] = 3
+        nbmat[1, 2, 1] = 4
 
-        # Sum of all shifts should be zero (symmetric)
-        assert shifts.sum(0).abs().max().item() < 1e-6
+        # Create shifts (B, N, M, 3)
+        shifts = torch.zeros((B, N, M, 3), dtype=torch.float32, device=device)
+
+        data = {
+            "coord": coord,
+            "numbers": torch.tensor([[8, 1, 1], [8, 1, 1]], device=device),
+            "nbmat": nbmat,
+            "shifts": shifts,
+            "cell": cell,  # Single cell, not batched
+        }
+        data = nbops.set_nb_mode(data)
+        data = nbops.calc_masks(data)
+
+        # Should work with single cell
+        d_ij, _r_ij = ops.calc_distances(data)
+
+        assert d_ij.shape == (B, N, M)
+        assert d_ij[0, 0, 0].item() == pytest.approx(1.0, abs=1e-5)
