@@ -64,7 +64,8 @@ def test_aimnet2():
     atoms = ase.io.read(os.path.join(os.path.dirname(__file__), "data", "caffeine.xyz"), format="extxyz")
     ref_e = atoms.get_potential_energy()
     ref_f = atoms.get_forces()
-    ref_q = atoms.arrays["initial_charges"]  # extxyz stores per-atom charges in arrays
+    # ASE versions parse charge key differently: "initial_charges" or "charge"
+    ref_q = atoms.arrays.get("initial_charges", atoms.arrays.get("charge"))
 
     _in = {
         "coord": torch.as_tensor(atoms.get_positions()).unsqueeze(0),  # type: ignore
