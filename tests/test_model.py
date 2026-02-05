@@ -74,8 +74,9 @@ def test_aimnet2():
             ref_q = atoms.arrays[key]
             break
     # Fallback: try ASE's get_initial_charges() method
+    # ASE raises different errors: KeyError, RuntimeError, or AssertionError depending on version
     if ref_q is None and hasattr(atoms, "get_initial_charges"):
-        with contextlib.suppress(RuntimeError, KeyError):
+        with contextlib.suppress(RuntimeError, KeyError, AssertionError):
             ref_q = atoms.get_initial_charges()
     if ref_q is None:
         # Provide helpful error message for debugging
