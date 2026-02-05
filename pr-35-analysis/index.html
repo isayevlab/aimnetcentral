@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Roman Zubatyuk" /><link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/pr-35-analysis/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Deep Analysis: PR #35 — Integrate nvalchemi-toolkit-ops and new model format - AIMNetCentral</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="../assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Deep Analysis: PR #35 \u2014 Integrate nvalchemi-toolkit-ops and new model format";
+        var mkdocs_page_input_path = "pr-35-analysis.md";
+        var mkdocs_page_url = "/aimnetcentral/pr-35-analysis/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> AIMNetCentral
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../getting_started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../calculator/">Calculator</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../model_format/">Model Format</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../long_range/">Long Range</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../cli/">CLI Reference</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../train/">Train</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">API Reference</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/">Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/calculators/">Calculators</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/modules/">Modules</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/data/">Data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/config/">Config</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">AIMNetCentral</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Deep Analysis: PR #35 — Integrate nvalchemi-toolkit-ops and new model format</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/isayevlab/aimnetcentral/edit/main/docs/pr-35-analysis.md">Edit on isayevlab/aimnetcentral</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="deep-analysis-pr-35-integrate-nvalchemi-toolkit-ops-and-new-model-format">Deep Analysis: PR #35 — Integrate nvalchemi-toolkit-ops and new model format<a class="headerlink" href="#deep-analysis-pr-35-integrate-nvalchemi-toolkit-ops-and-new-model-format" title="Permanent link">&para;</a></h1>
+<p><strong>Author:</strong> Roman Zubatyuk (@zubatyuk)
+<strong>Scope:</strong> +11,272 / -1,498 lines across 51 files
+<strong>Branch:</strong> <code>feature/alchemi-nblist-external-lr</code> → <code>main</code></p>
+<hr />
+<h2 id="executive-summary">Executive Summary<a class="headerlink" href="#executive-summary" title="Permanent link">&para;</a></h2>
+<p>This PR is a major architectural overhaul of AIMNet2 that:</p>
+<ol>
+<li><strong>Replaces the custom Numba neighbor list</strong> with <code>nvalchemi-toolkit-ops</code> (GPU-accelerated neighbor lists and DFT-D3)</li>
+<li><strong>Introduces NVIDIA Warp kernels</strong> for <code>conv_sv_2d_sp</code> sparse convolutions (~5x speedup potential)</li>
+<li><strong>Adds a new model format</strong> (<code>.pt</code> with embedded YAML) replacing legacy JIT <code>.jpt</code></li>
+<li><strong>Externalizes long-range modules</strong> (LRCoulomb, DFTD3) for runtime configuration</li>
+<li><strong>Enables batched PBC</strong> with stress tensor support for cell optimization and NPT</li>
+</ol>
+<hr />
+<h2 id="1-architecture-changes">1. Architecture Changes<a class="headerlink" href="#1-architecture-changes" title="Permanent link">&para;</a></h2>
+<h3 id="11-neighbor-list-numba-nvalchemiops">1.1 Neighbor List: Numba → nvalchemiops<a class="headerlink" href="#11-neighbor-list-numba-nvalchemiops" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>Before</th>
+<th>After</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Implementation</td>
+<td><code>nbmat.py</code> + <code>nb_kernel_cpu.py</code> + <code>nb_kernel_cuda.py</code> (Numba)</td>
+<td><code>nvalchemiops.neighborlist.neighbor_list</code></td>
+</tr>
+<tr>
+<td>Overflow handling</td>
+<td><code>TooManyNeighborsError</code> + manual <code>max_density</code> scaling</td>
+<td><code>NeighborOverflowError</code> + <code>AdaptiveNeighborList</code> with hysteresis</td>
+</tr>
+<tr>
+<td>PBC support</td>
+<td>Single-cell only</td>
+<td>Batched cells via <code>cell (B, 3, 3)</code>, <code>mol_idx</code> for atom→cell mapping</td>
+</tr>
+<tr>
+<td>Buffer sizing</td>
+<td>Fixed <code>calc_max_nb(cutoff, density)</code></td>
+<td>Dynamic ~75% utilization, 16-aligned</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Removed files:</strong> <code>nbmat.py</code>, <code>nb_kernel_cpu.py</code>, <code>nb_kernel_cuda.py</code> (659 lines total)</p>
+<p><strong>New:</strong> <code>AdaptiveNeighborList</code> in <code>calculator.py</code> wraps <code>nvalchemiops</code> with:</p>
+<ul>
+<li><code>_round_to_16()</code> for memory alignment</li>
+<li>Retry loop on <code>NeighborOverflowError</code> (1.5x buffer increase)</li>
+<li>Shrink when utilization &lt; 2/3 of target (hysteresis to avoid thrashing)</li>
+</ul>
+<h3 id="12-warp-kernels-for-conv_sv_2d_sp">1.2 Warp Kernels for conv_sv_2d_sp<a class="headerlink" href="#12-warp-kernels-for-conv_sv_2d_sp" title="Permanent link">&para;</a></h3>
+<p><strong>New:</strong> <code>aimnet/kernels/conv_sv_2d_sp_wp.py</code> (478 lines)</p>
+<ul>
+<li>Custom CUDA kernels via NVIDIA Warp for sparse 2D convolution</li>
+<li>PyTorch custom ops: <code>aimnet::conv_sv_2d_sp_fwd</code>, <code>_bwd</code>, <code>_bwd_bwd</code></li>
+<li><strong>Critical fix:</strong> Kernel dimensions use <code>B-1</code> to exclude padding row (gradient correctness)</li>
+<li>CPU fallback for <code>d2features</code> when Warp unavailable</li>
+<li><code>weights_only=True</code> in <code>torch.load</code> for security (model loading)</li>
+</ul>
+<h3 id="13-model-format-jpt-pt">1.3 Model Format: .jpt → .pt<a class="headerlink" href="#13-model-format-jpt-pt" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>Structure</th>
+<th>Loading</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Legacy <code>.jpt</code></td>
+<td>JIT-compiled TorchScript</td>
+<td><code>torch.jit.load()</code></td>
+</tr>
+<tr>
+<td>New <code>.pt</code></td>
+<td><code>{state_dict, config_yaml, metadata}</code></td>
+<td><code>load_model()</code> auto-detection</td>
+</tr>
+</tbody>
+</table>
+<p><strong>New modules:</strong></p>
+<ul>
+<li><code>aimnet/models/utils.py</code> — <code>load_model()</code>, <code>ModelMetadata</code> TypedDict, inspection helpers</li>
+<li><code>aimnet/models/convert.py</code> — JIT → v2 conversion</li>
+<li><code>aimnet/train/export_model.py</code> — Export trained models</li>
+</ul>
+<p><strong>Registry:</strong> All model URLs updated to <code>aimnet2v2/</code> path.</p>
+<hr />
+<h2 id="2-external-long-range-modules">2. External Long-Range Modules<a class="headerlink" href="#2-external-long-range-modules" title="Permanent link">&para;</a></h2>
+<h3 id="21-decoupling">2.1 Decoupling<a class="headerlink" href="#21-decoupling" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>LRCoulomb</strong> and <strong>DFTD3</strong> moved from embedded model components to attachable calculator modules</li>
+<li>Metadata drives attachment: <code>needs_coulomb</code>, <code>needs_dispersion</code>, <code>d3_params</code>, <code>coulomb_mode</code></li>
+<li><code>set_lrcoulomb_method()</code> now updates external module; legacy embedded Coulomb gets a warning</li>
+</ul>
+<h3 id="22-separate-neighbor-lists">2.2 Separate Neighbor Lists<a class="headerlink" href="#22-separate-neighbor-lists" title="Permanent link">&para;</a></h3>
+<p>When Coulomb and DFTD3 cutoffs differ by &gt;20%, separate <code>AdaptiveNeighborList</code> instances:</p>
+<ul>
+<li><code>_nblist_dftd3</code>, <code>_nblist_coulomb</code> (or shared <code>_nblist_lr</code>)</li>
+<li>Data keys: <code>nbmat_lr</code>, <code>nbmat_coulomb</code>, <code>nbmat_dftd3</code>, <code>shifts_*</code></li>
+</ul>
+<h3 id="23-dftd3-via-nvalchemiops">2.3 DFTD3 via nvalchemiops<a class="headerlink" href="#23-dftd3-via-nvalchemiops" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>aimnet/modules/lr.py</code>: New <code>DFTD3</code> class wrapping <code>nvalchemiops.interactions.dispersion.dftd3</code></li>
+<li><code>_DFTD3Function</code> autograd wrapper with conditional smoothing</li>
+<li><code>resolve_suffix()</code> for neighbor list lookup (supports <code>_dftd3</code>, <code>_coulomb</code>, etc.)</li>
+</ul>
+<hr />
+<h2 id="3-batched-pbc-and-stress">3. Batched PBC and Stress<a class="headerlink" href="#3-batched-pbc-and-stress" title="Permanent link">&para;</a></h2>
+<h3 id="31-move_coord_to_cell">3.1 move_coord_to_cell<a class="headerlink" href="#31-move_coord_to_cell" title="Permanent link">&para;</a></h3>
+<p>Extended for batched cells:</p>
+<ul>
+<li><code>cell (3, 3)</code> + <code>coord (N, 3)</code> or <code>(B, N, 3)</code> — existing behavior</li>
+<li><code>cell (B, 3, 3)</code> + flat <code>coord (N_total, 3)</code> — requires <code>mol_idx</code> for atom→cell mapping</li>
+</ul>
+<h3 id="32-stress-tensor">3.2 Stress Tensor<a class="headerlink" href="#32-stress-tensor" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>get_derivatives()</code>: Volume computation supports batched cells <code>(B, 3, 3)</code></li>
+<li><code>volume = torch.linalg.det(cell).abs().unsqueeze(-1).unsqueeze(-1)</code> for batched</li>
+</ul>
+<h3 id="33-pbc-multiple-molecules">3.3 PBC + Multiple Molecules<a class="headerlink" href="#33-pbc-multiple-molecules" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Previous: <code>NotImplementedError</code> for PBC with multiple molecules</li>
+<li>Current: Removed; PBC with <code>mol_idx</code> and batched cells is supported</li>
+</ul>
+<hr />
+<h2 id="4-dependencies">4. Dependencies<a class="headerlink" href="#4-dependencies" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>Version</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>nvalchemi-toolkit-ops</code></td>
+<td>≥0.2</td>
+<td>Neighbor lists, DFT-D3</td>
+</tr>
+<tr>
+<td><code>warp-lang</code></td>
+<td>≥1.11</td>
+<td>CUDA kernels for conv_sv_2d_sp</td>
+</tr>
+<tr>
+<td><code>numba</code></td>
+<td>—</td>
+<td><strong>Removed</strong> from core deps</td>
+</tr>
+<tr>
+<td><code>numpy</code></td>
+<td>—</td>
+<td>Constraint <code>&lt;3.0</code> removed (lock shows unconstrained)</td>
+</tr>
+<tr>
+<td><code>ase</code></td>
+<td>3.22.1 → 3.27.0</td>
+<td>Bumped in lock</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Note:</strong> <code>nvalchemi-toolkit-ops</code> depends on <code>warp-lang</code>; both add ~120MB+ to install. Warp has platform-specific wheels (Linux x86_64, ARM64, macOS ARM64, Windows).</p>
+<hr />
+<h2 id="5-api-changes">5. API Changes<a class="headerlink" href="#5-api-changes" title="Permanent link">&para;</a></h2>
+<h3 id="51-aimnet2calculator">5.1 AIMNet2Calculator<a class="headerlink" href="#51-aimnet2calculator" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>New params:</strong> <code>needs_coulomb</code>, <code>needs_dispersion</code>, <code>device</code>, <code>compile_model</code>, <code>compile_kwargs</code>, <code>train</code></li>
+<li><strong>Changed:</strong> <code>nb_threshold</code> default 320 → 120</li>
+<li><strong>New methods:</strong> <code>set_lr_cutoff()</code>, <code>set_dftd3_cutoff()</code></li>
+<li><strong>New properties:</strong> <code>has_external_coulomb</code>, <code>has_external_dftd3</code>, <code>coulomb_method</code>, <code>coulomb_cutoff</code>, <code>dftd3_cutoff</code></li>
+<li><strong>set_lrcoulomb_method:</strong> Added <code>ewald_accuracy</code> (default 1e-8)</li>
+</ul>
+<h3 id="52-prepare_input">5.2 prepare_input<a class="headerlink" href="#52-prepare_input" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Skips <code>make_nbmat</code> if <code>nbmat</code> already in data (user-provided neighbor list)</li>
+<li>PBC: Always flattens when <code>cell</code> present (for correct neighbor list with shifts)</li>
+</ul>
+<h3 id="53-base-keys">5.3 Base Keys<a class="headerlink" href="#53-base-keys" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>_optional_keys</code> extended: <code>shifts_lr</code> added</li>
+<li><code>_optional_keys_dtype</code> updated with comments</li>
+</ul>
+<hr />
+<h2 id="6-test-coverage">6. Test Coverage<a class="headerlink" href="#6-test-coverage" title="Permanent link">&para;</a></h2>
+<h3 id="new-extended-tests">New / Extended Tests<a class="headerlink" href="#new-extended-tests" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>test_conv_sv_2d_sp.py</code> — Warp kernel forward, backward, double-backward, shapes</li>
+<li><code>test_dftd3.py</code> — DFTD3 energy, gradients, smoothing</li>
+<li><code>test_pbc.py</code> — DSF/Ewald with CIF crystals, stress, torch.compile</li>
+<li><code>test_model.py</code> — <code>load_model()</code>, metadata, conversion</li>
+<li><code>test_calculator.py</code> — External modules, <code>set_lrcoulomb_method</code>, <code>set_dftd3_cutoff</code></li>
+<li><code>test_ops.py</code> — <code>resolve_suffix()</code>, <code>get_i()</code>, batched PBC distances</li>
+</ul>
+<h3 id="removed">Removed<a class="headerlink" href="#removed" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>test_nbmat.py</code> (136 lines) — Replaced by nvalchemiops-based flow</li>
+</ul>
+<h3 id="fixtures">Fixtures<a class="headerlink" href="#fixtures" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>conftest.py</code>: <code>pbc_crystal_small</code>, <code>pbc_crystal_large</code> from CIF</li>
+<li>New CIF files: <code>1100172.cif</code>, <code>2000054.cif</code></li>
+</ul>
+<hr />
+<h2 id="7-risks-and-considerations">7. Risks and Considerations<a class="headerlink" href="#7-risks-and-considerations" title="Permanent link">&para;</a></h2>
+<h3 id="71-breaking-changes">7.1 Breaking Changes<a class="headerlink" href="#71-breaking-changes" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Model registry URLs</strong> — All point to <code>aimnet2v2/</code>; legacy <code>.jpt</code> URLs no longer used. Users with cached <code>.jpt</code> must re-download or convert.</li>
+<li><strong>nb_threshold</strong> — Default 320 → 120 changes when flattening kicks in; may affect performance for medium-sized systems.</li>
+<li><strong>numba removed</strong> — Any code depending on <code>aimnet.calculators.nbmat</code> or <code>nb_kernel_*</code> will break.</li>
+</ol>
+<h3 id="72-compatibility">7.2 Compatibility<a class="headerlink" href="#72-compatibility" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>CPU-only:</strong> Warp and nvalchemiops have CPU fallbacks where implemented; verify CPU path for neighbor lists and DFTD3.</li>
+<li><strong>Windows:</strong> <code>warp-lang</code> has <code>win_amd64</code> wheel; nvalchemiops availability on Windows should be confirmed.</li>
+<li><strong>Legacy models:</strong> <code>load_model()</code> supports both formats; embedded Coulomb/D3 models still work but <code>set_lrcoulomb_method</code> only affects external modules.</li>
+</ul>
+<h3 id="73-security">7.3 Security<a class="headerlink" href="#73-security" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>weights_only=True</code> in <code>torch.load</code> for v2 models (good practice)</li>
+<li>DispParam: <code>ptfile</code> stripped during export; validation hook checks buffer values after load</li>
+</ul>
+<h3 id="74-performance">7.4 Performance<a class="headerlink" href="#74-performance" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Warp kernels: ~5x speedup for <code>conv_sv_2d_sp</code> on GPU (per PR description)</li>
+<li>Adaptive neighbor list: Hysteresis may cause occasional buffer resizing in MD; 75% target balances memory vs. recomputation</li>
+<li>Batched PBC: More complex <code>move_coord_to_cell</code> and stress; benchmark on representative workloads</li>
+</ul>
+<hr />
+<h2 id="8-documentation">8. Documentation<a class="headerlink" href="#8-documentation" title="Permanent link">&para;</a></h2>
+<ul>
+<li>New: <code>docs/calculator.md</code>, <code>docs/cli.md</code>, <code>docs/getting_started.md</code>, <code>docs/long_range.md</code>, <code>docs/model_format.md</code></li>
+<li>Updated: <code>docs/index.md</code>, <code>docs/api/calculators.md</code>, <code>docs/train.md</code></li>
+<li>Removed: <code>docs/reference.md</code> (empty)</li>
+<li>README: Technical details on batching, AdaptiveNeighborList, buffer management</li>
+</ul>
+<hr />
+<h2 id="9-recommendations-for-review">9. Recommendations for Review<a class="headerlink" href="#9-recommendations-for-review" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Verify nvalchemiops API</strong> — Confirm <code>neighbor_list</code> and <code>dftd3</code> signatures match usage; check error handling for <code>NeighborOverflowError</code>.</li>
+<li><strong>Warp kernel correctness</strong> — <code>B-1</code> padding exclusion is critical; validate on edge cases (single atom, max neighbors).</li>
+<li><strong>Model conversion</strong> — Test <code>aimnet convert</code> and <code>aimnet export</code> on real trained models; ensure metadata round-trip.</li>
+<li><strong>PBC + batched cells</strong> — Test <code>mol_idx</code> mapping with multiple cells; validate stress tensor for NPT.</li>
+<li><strong>CI/CD</strong> — Ensure <code>nvalchemi-toolkit-ops</code> and <code>warp-lang</code> install cleanly on all supported platforms (Linux, Windows, macOS).</li>
+<li><strong>Backward compatibility</strong> — Run existing examples and ASE integration with both legacy and new model formats.</li>
+</ol>
+<hr />
+<h2 id="10-code-review-agent-dispatch">10. Code Review Agent Dispatch<a class="headerlink" href="#10-code-review-agent-dispatch" title="Permanent link">&para;</a></h2>
+<p>To trigger the Claude Code Review workflow manually:</p>
+<ol>
+<li><strong>Via GitHub UI:</strong> Actions → "Claude Code Review" → "Run workflow" (after adding <code>workflow_dispatch</code>)</li>
+<li><strong>Via gh CLI:</strong> <code>gh workflow run "Claude Code Review" -f pr_number=35</code></li>
+<li><strong>Via PR comment:</strong> Post <code>@claude please review this PR</code> to trigger the Claude workflow (if configured)</li>
+</ol>
+              
+            </div>
+          </div><footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/isayevlab/aimnetcentral" class="fa fa-code-fork" style="color: #fcfcfc"> isayevlab/aimnetcentral</a>
+        </span>
+    
+    
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

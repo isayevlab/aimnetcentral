@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Roman Zubatyuk" /><link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/api/modules/" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Modules - AIMNetCentral</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="../../assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Modules";
+        var mkdocs_page_input_path = "api/modules.md";
+        var mkdocs_page_url = "/aimnetcentral/api/modules/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> AIMNetCentral
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../getting_started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../calculator/">Calculator</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../model_format/">Model Format</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../long_range/">Long Range</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../cli/">CLI Reference</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../train/">Train</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">API Reference</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../">Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../calculators/">Calculators</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Modules</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#core-modules">Core Modules</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#aimnet.modules.core">core</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.modules.core.SRRep">SRRep</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.modules.core.MLP">MLP</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#aimnet2-model">AIMNet2 Model</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#aimnet.models.aimnet2">aimnet2</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#base-classes">Base Classes</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#aimnet.models.base">base</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.models.base.AIMNet2Base">AIMNet2Base</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#aimnet.models.base.AIMNet2Base.metadata">metadata</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#aimnet.models.base.AIMNet2Base.prepare_input">prepare_input</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.models.base.ModelMetadata">ModelMetadata</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.models.base.load_model">load_model</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#aimnet.models.base.load_model--parameters">Parameters</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#aimnet.models.base.load_model--returns">Returns</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#aimnet.models.base.load_model--notes">Notes</a>
+    </li>
+        </ul>
+    </li>
+        </ul>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data/">Data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../config/">Config</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">AIMNetCentral</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">API Reference</li>
+      <li class="breadcrumb-item active">Modules</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/isayevlab/aimnetcentral/edit/main/docs/api/modules.md">Edit on isayevlab/aimnetcentral</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="modules">Modules<a class="headerlink" href="#modules" title="Permanent link">&para;</a></h1>
+<p>Neural network modules and model components.</p>
+<h2 id="core-modules">Core Modules<a class="headerlink" href="#core-modules" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="aimnet.modules.core" class="doc doc-heading">
+            <code>core</code>
+
+
+<a href="#aimnet.modules.core" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="aimnet.modules.core.SRRep" class="doc doc-heading">
+              <code class="highlight language-python"><span class="n">SRRep</span><span class="p">(</span><span class="n">key_out</span><span class="o">=</span><span class="s1">&#39;e_rep&#39;</span><span class="p">,</span> <span class="n">cutoff_fn</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">,</span> <span class="n">rc</span><span class="o">=</span><span class="mf">5.2</span><span class="p">,</span> <span class="n">reduce_sum</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></code>
+
+<a href="#aimnet.modules.core.SRRep" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="torch.nn.Module">Module</span></code></p>
+
+
+
+        <p>GFN1-stype short range repulsion function</p>
+
+
+
+
+
+
+
+                  <details class="quote">
+                    <summary>Source code in <code>aimnet/modules/core.py</code></summary>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span>
+<span class="normal">211</span>
+<span class="normal">212</span>
+<span class="normal">213</span>
+<span class="normal">214</span>
+<span class="normal">215</span>
+<span class="normal">216</span>
+<span class="normal">217</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key_out</span><span class="o">=</span><span class="s2">&quot;e_rep&quot;</span><span class="p">,</span> <span class="n">cutoff_fn</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="n">rc</span><span class="o">=</span><span class="mf">5.2</span><span class="p">,</span> <span class="n">reduce_sum</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_gfn1_rep</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">key_out</span> <span class="o">=</span> <span class="n">key_out</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">cutoff_fn</span> <span class="o">=</span> <span class="n">cutoff_fn</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">reduce_sum</span> <span class="o">=</span> <span class="n">reduce_sum</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;rc&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">rc</span><span class="p">))</span>
+    <span class="n">gfn1_repa</span><span class="p">,</span> <span class="n">gfn1_repb</span> <span class="o">=</span> <span class="n">get_gfn1_rep</span><span class="p">()</span>
+    <span class="n">weight</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">gfn1_repa</span><span class="p">,</span> <span class="n">gfn1_repb</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">(</span><span class="mi">87</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">padding_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">_weight</span><span class="o">=</span><span class="n">weight</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+                  </details>
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="aimnet.modules.core.MLP" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">MLP</span><span class="p">(</span><span class="n">n_in</span><span class="p">,</span> <span class="n">n_out</span><span class="p">,</span> <span class="n">hidden</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">activation_fn</span><span class="o">=</span><span class="s1">&#39;torch.nn.GELU&#39;</span><span class="p">,</span> <span class="n">activation_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">weight_init_fn</span><span class="o">=</span><span class="s1">&#39;torch.nn.init.xavier_normal_&#39;</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">last_linear</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></code>
+
+<a href="#aimnet.modules.core.MLP" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Convenience function to build MLP from config</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>aimnet/modules/core.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span>
+<span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span>
+<span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span>
+<span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span>
+<span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span>
+<span class="normal">38</span>
+<span class="normal">39</span>
+<span class="normal">40</span>
+<span class="normal">41</span>
+<span class="normal">42</span>
+<span class="normal">43</span>
+<span class="normal">44</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">MLP</span><span class="p">(</span>
+    <span class="n">n_in</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">hidden</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">activation_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torch.nn.GELU&quot;</span><span class="p">,</span>
+    <span class="n">activation_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">weight_init_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torch.nn.init.xavier_normal_&quot;</span><span class="p">,</span>
+    <span class="n">bias</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">last_linear</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convenience function to build MLP from config&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">hidden</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">hidden</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">activation_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">activation_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="c1"># hp search hack</span>
+    <span class="n">hidden</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">hidden</span> <span class="k">if</span> <span class="n">x</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">activation_fn</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">activation_fn</span> <span class="o">=</span> <span class="n">get_init_module</span><span class="p">(</span><span class="n">activation_fn</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="n">activation_kwargs</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weight_init_fn</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">weight_init_fn</span> <span class="o">=</span> <span class="n">get_module</span><span class="p">(</span><span class="n">weight_init_fn</span><span class="p">)</span>
+    <span class="n">sizes</span> <span class="o">=</span> <span class="p">[</span><span class="n">n_in</span><span class="p">,</span> <span class="o">*</span><span class="n">hidden</span><span class="p">,</span> <span class="n">n_out</span><span class="p">]</span>
+    <span class="n">layers</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">sizes</span><span class="p">)):</span>
+        <span class="n">n_in</span><span class="p">,</span> <span class="n">n_out</span> <span class="o">=</span> <span class="n">sizes</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">],</span> <span class="n">sizes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        <span class="n">layer</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_in</span><span class="p">,</span> <span class="n">n_out</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="n">bias</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="n">weight_init_fn</span><span class="p">(</span><span class="n">layer</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">bias</span><span class="p">:</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">init</span><span class="o">.</span><span class="n">zeros_</span><span class="p">(</span><span class="n">layer</span><span class="o">.</span><span class="n">bias</span><span class="p">)</span>
+        <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">layer</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">last_linear</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">sizes</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">activation_fn</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="o">*</span><span class="n">layers</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="aimnet2-model">AIMNet2 Model<a class="headerlink" href="#aimnet2-model" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="aimnet.models.aimnet2" class="doc doc-heading">
+            <code>aimnet2</code>
+
+
+<a href="#aimnet.models.aimnet2" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="base-classes">Base Classes<a class="headerlink" href="#base-classes" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="aimnet.models.base" class="doc doc-heading">
+            <code>base</code>
+
+
+<a href="#aimnet.models.base" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="aimnet.models.base.AIMNet2Base" class="doc doc-heading">
+              <code class="highlight language-python"><span class="n">AIMNet2Base</span><span class="p">()</span></code>
+
+<a href="#aimnet.models.base.AIMNet2Base" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="torch.nn.Module">Module</span></code></p>
+
+
+
+        <p>Base class for AIMNet2 models. Implements pre-processing data:
+converting to right dtype and device, setting nb mode, calculating masks.</p>
+
+
+
+
+
+
+
+                  <details class="quote">
+                    <summary>Source code in <code>aimnet/models/base.py</code></summary>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="c1"># Use object.__setattr__ to avoid TorchScript tracing this attribute</span>
+    <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_metadata&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+                  </details>
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="aimnet.models.base.AIMNet2Base.metadata" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">metadata</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#aimnet.models.base.AIMNet2Base.metadata" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return model metadata if available.</p>
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="aimnet.models.base.AIMNet2Base.prepare_input" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">prepare_input</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></code>
+
+<a href="#aimnet.models.base.AIMNet2Base.prepare_input" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Common operations for input preparation.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>aimnet/models/base.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">210</span>
+<span class="normal">211</span>
+<span class="normal">212</span>
+<span class="normal">213</span>
+<span class="normal">214</span>
+<span class="normal">215</span>
+<span class="normal">216</span>
+<span class="normal">217</span>
+<span class="normal">218</span>
+<span class="normal">219</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">prepare_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Common operations for input preparation.&quot;&quot;&quot;</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_dtype</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">nbops</span><span class="o">.</span><span class="n">set_nb_mode</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">nbops</span><span class="o">.</span><span class="n">calc_masks</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;charge&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Charge should be 1D tensor.&quot;</span>
+    <span class="k">if</span> <span class="s2">&quot;mult&quot;</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;mult&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Mult should be 1D tensor.&quot;</span>
+    <span class="k">return</span> <span class="n">data</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="aimnet.models.base.ModelMetadata" class="doc doc-heading">
+            <code>ModelMetadata</code>
+
+
+<a href="#aimnet.models.base.ModelMetadata" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.TypedDict">TypedDict</span></code></p>
+
+
+
+        <p>Metadata returned by load_model().</p>
+<p>This TypedDict documents the structure of the metadata dictionary.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="aimnet.models.base.load_model" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">load_model</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cpu&#39;</span><span class="p">)</span></code>
+
+<a href="#aimnet.models.base.load_model" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Load model from file, supporting both new and legacy formats.</p>
+<p>Automatically detects format:
+- New format: state dict with embedded YAML config and metadata
+- Legacy format: JIT-compiled TorchScript model</p>
+<h5 id="aimnet.models.base.load_model--parameters">Parameters<a class="headerlink" href="#aimnet.models.base.load_model--parameters" title="Permanent link">&para;</a></h5>
+<p>path : str
+    Path to the model file (.pt or .jpt).
+device : str
+    Device to load the model on. Default is "cpu".</p>
+<h5 id="aimnet.models.base.load_model--returns">Returns<a class="headerlink" href="#aimnet.models.base.load_model--returns" title="Permanent link">&para;</a></h5>
+<p>model : nn.Module
+    The loaded model with weights.
+metadata : ModelMetadata
+    Dictionary containing model metadata. See ModelMetadata TypedDict for fields.</p>
+<h5 id="aimnet.models.base.load_model--notes">Notes<a class="headerlink" href="#aimnet.models.base.load_model--notes" title="Permanent link">&para;</a></h5>
+<p>For legacy JIT models (format_version=1), <code>needs_coulomb</code> and <code>needs_dispersion</code>
+are False because LR modules are already embedded in the TorchScript model.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>aimnet/models/base.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 47</span>
+<span class="normal"> 48</span>
+<span class="normal"> 49</span>
+<span class="normal"> 50</span>
+<span class="normal"> 51</span>
+<span class="normal"> 52</span>
+<span class="normal"> 53</span>
+<span class="normal"> 54</span>
+<span class="normal"> 55</span>
+<span class="normal"> 56</span>
+<span class="normal"> 57</span>
+<span class="normal"> 58</span>
+<span class="normal"> 59</span>
+<span class="normal"> 60</span>
+<span class="normal"> 61</span>
+<span class="normal"> 62</span>
+<span class="normal"> 63</span>
+<span class="normal"> 64</span>
+<span class="normal"> 65</span>
+<span class="normal"> 66</span>
+<span class="normal"> 67</span>
+<span class="normal"> 68</span>
+<span class="normal"> 69</span>
+<span class="normal"> 70</span>
+<span class="normal"> 71</span>
+<span class="normal"> 72</span>
+<span class="normal"> 73</span>
+<span class="normal"> 74</span>
+<span class="normal"> 75</span>
+<span class="normal"> 76</span>
+<span class="normal"> 77</span>
+<span class="normal"> 78</span>
+<span class="normal"> 79</span>
+<span class="normal"> 80</span>
+<span class="normal"> 81</span>
+<span class="normal"> 82</span>
+<span class="normal"> 83</span>
+<span class="normal"> 84</span>
+<span class="normal"> 85</span>
+<span class="normal"> 86</span>
+<span class="normal"> 87</span>
+<span class="normal"> 88</span>
+<span class="normal"> 89</span>
+<span class="normal"> 90</span>
+<span class="normal"> 91</span>
+<span class="normal"> 92</span>
+<span class="normal"> 93</span>
+<span class="normal"> 94</span>
+<span class="normal"> 95</span>
+<span class="normal"> 96</span>
+<span class="normal"> 97</span>
+<span class="normal"> 98</span>
+<span class="normal"> 99</span>
+<span class="normal">100</span>
+<span class="normal">101</span>
+<span class="normal">102</span>
+<span class="normal">103</span>
+<span class="normal">104</span>
+<span class="normal">105</span>
+<span class="normal">106</span>
+<span class="normal">107</span>
+<span class="normal">108</span>
+<span class="normal">109</span>
+<span class="normal">110</span>
+<span class="normal">111</span>
+<span class="normal">112</span>
+<span class="normal">113</span>
+<span class="normal">114</span>
+<span class="normal">115</span>
+<span class="normal">116</span>
+<span class="normal">117</span>
+<span class="normal">118</span>
+<span class="normal">119</span>
+<span class="normal">120</span>
+<span class="normal">121</span>
+<span class="normal">122</span>
+<span class="normal">123</span>
+<span class="normal">124</span>
+<span class="normal">125</span>
+<span class="normal">126</span>
+<span class="normal">127</span>
+<span class="normal">128</span>
+<span class="normal">129</span>
+<span class="normal">130</span>
+<span class="normal">131</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span>
+<span class="normal">135</span>
+<span class="normal">136</span>
+<span class="normal">137</span>
+<span class="normal">138</span>
+<span class="normal">139</span>
+<span class="normal">140</span>
+<span class="normal">141</span>
+<span class="normal">142</span>
+<span class="normal">143</span>
+<span class="normal">144</span>
+<span class="normal">145</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_model</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">ModelMetadata</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load model from file, supporting both new and legacy formats.</span>
+
+<span class="sd">    Automatically detects format:</span>
+<span class="sd">    - New format: state dict with embedded YAML config and metadata</span>
+<span class="sd">    - Legacy format: JIT-compiled TorchScript model</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path : str</span>
+<span class="sd">        Path to the model file (.pt or .jpt).</span>
+<span class="sd">    device : str</span>
+<span class="sd">        Device to load the model on. Default is &quot;cpu&quot;.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    model : nn.Module</span>
+<span class="sd">        The loaded model with weights.</span>
+<span class="sd">    metadata : ModelMetadata</span>
+<span class="sd">        Dictionary containing model metadata. See ModelMetadata TypedDict for fields.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    For legacy JIT models (format_version=1), `needs_coulomb` and `needs_dispersion`</span>
+<span class="sd">    are False because LR modules are already embedded in the TorchScript model.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">yaml</span>
+
+    <span class="c1"># torch.load auto-detects TorchScript and dispatches to torch.jit.load</span>
+    <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span> <span class="s2">&quot;.*looks like a TorchScript archive.*&quot;</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">map_location</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">weights_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="c1"># Check result type to determine format</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;model_yaml&quot;</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+        <span class="c1"># New state dict format</span>
+        <span class="n">model_config</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;model_yaml&quot;</span><span class="p">])</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">build_module</span><span class="p">(</span><span class="n">model_config</span><span class="p">)</span>
+
+        <span class="c1"># Use strict=False because modules may differ between formats</span>
+        <span class="n">load_result</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;state_dict&quot;</span><span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="c1"># Check for unexpected missing/extra keys</span>
+        <span class="n">real_missing</span><span class="p">,</span> <span class="n">real_unexpected</span> <span class="o">=</span> <span class="n">validate_state_dict_keys</span><span class="p">(</span><span class="n">load_result</span><span class="o">.</span><span class="n">missing_keys</span><span class="p">,</span> <span class="n">load_result</span><span class="o">.</span><span class="n">unexpected_keys</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">real_missing</span> <span class="ow">or</span> <span class="n">real_unexpected</span><span class="p">:</span>
+            <span class="n">msg_parts</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">if</span> <span class="n">real_missing</span><span class="p">:</span>
+                <span class="n">msg_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Missing keys: </span><span class="si">{</span><span class="n">real_missing</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">real_unexpected</span><span class="p">:</span>
+                <span class="n">msg_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected keys: </span><span class="si">{</span><span class="n">real_unexpected</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;State dict mismatch during model loading. </span><span class="si">{</span><span class="s1">&#39;; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">msg_parts</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+        <span class="n">model</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="c1"># Preserve float64 precision for atomic shifts (SAE values) after device transfer</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;outputs&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">outputs</span><span class="p">,</span> <span class="s2">&quot;atomic_shift&quot;</span><span class="p">):</span>
+            <span class="n">model</span><span class="o">.</span><span class="n">outputs</span><span class="o">.</span><span class="n">atomic_shift</span><span class="o">.</span><span class="n">shifts</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">outputs</span><span class="o">.</span><span class="n">atomic_shift</span><span class="o">.</span><span class="n">shifts</span><span class="o">.</span><span class="n">double</span><span class="p">()</span>
+
+        <span class="n">metadata</span><span class="p">:</span> <span class="n">ModelMetadata</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;format_version&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;format_version&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>  <span class="c1"># Default 2 for early v2 files without version</span>
+            <span class="s2">&quot;cutoff&quot;</span><span class="p">:</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;cutoff&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;needs_coulomb&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;needs_coulomb&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+            <span class="s2">&quot;needs_dispersion&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;needs_dispersion&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+            <span class="s2">&quot;coulomb_mode&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;coulomb_mode&quot;</span><span class="p">,</span> <span class="s2">&quot;none&quot;</span><span class="p">),</span>
+            <span class="s2">&quot;coulomb_sr_rc&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;coulomb_sr_rc&quot;</span><span class="p">),</span>
+            <span class="s2">&quot;coulomb_sr_envelope&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;coulomb_sr_envelope&quot;</span><span class="p">),</span>
+            <span class="s2">&quot;d3_params&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;d3_params&quot;</span><span class="p">),</span>
+            <span class="s2">&quot;has_embedded_lr&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;has_embedded_lr&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+            <span class="s2">&quot;implemented_species&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;implemented_species&quot;</span><span class="p">,</span> <span class="p">[]),</span>
+        <span class="p">}</span>
+
+        <span class="c1"># Attach metadata to model for easy access</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">metadata</span>
+
+        <span class="k">return</span> <span class="n">model</span><span class="p">,</span> <span class="n">metadata</span>
+
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">ScriptModule</span><span class="p">):</span>
+        <span class="c1"># Legacy JIT format - LR modules are already embedded in the TorchScript model</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">data</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="n">ModelMetadata</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;format_version&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>  <span class="c1"># Legacy .jpt format is v1</span>
+            <span class="s2">&quot;cutoff&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">cutoff</span><span class="p">),</span>
+            <span class="c1"># Legacy models have LR modules embedded - don&#39;t add external ones</span>
+            <span class="s2">&quot;needs_coulomb&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="s2">&quot;needs_dispersion&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="s2">&quot;coulomb_mode&quot;</span><span class="p">:</span> <span class="s2">&quot;full_embedded&quot;</span><span class="p">,</span>
+            <span class="c1"># No coulomb_sr_rc/envelope for legacy (full Coulomb is embedded)</span>
+            <span class="s2">&quot;d3_params&quot;</span><span class="p">:</span> <span class="n">extract_d3_params</span><span class="p">(</span><span class="n">model</span><span class="p">)</span> <span class="k">if</span> <span class="n">has_externalizable_dftd3</span><span class="p">(</span><span class="n">model</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s2">&quot;implemented_species&quot;</span><span class="p">:</span> <span class="n">extract_species</span><span class="p">(</span><span class="n">model</span><span class="p">),</span>
+        <span class="p">}</span>
+
+        <span class="c1"># Attempt metadata assignment; silently fails for JIT models</span>
+        <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">RuntimeError</span><span class="p">):</span>
+            <span class="n">model</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">metadata</span>  <span class="c1"># type: ignore[attr-defined]</span>
+
+        <span class="k">return</span> <span class="n">model</span><span class="p">,</span> <span class="n">metadata</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown model format: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../calculators/" class="btn btn-neutral float-left" title="Calculators"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../data/" class="btn btn-neutral float-right" title="Data">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/isayevlab/aimnetcentral" class="fa fa-code-fork" style="color: #fcfcfc"> isayevlab/aimnetcentral</a>
+        </span>
+    
+    
+      <span><a href="../calculators/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../data/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

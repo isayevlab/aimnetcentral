@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Roman Zubatyuk" /><link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/model_format/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Model Format - AIMNetCentral</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="../assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Model Format";
+        var mkdocs_page_input_path = "model_format.md";
+        var mkdocs_page_url = "/aimnetcentral/model_format/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> AIMNetCentral
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../getting_started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../calculator/">Calculator</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Model Format</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#model-formats">Model Formats</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#format-detection">Format Detection</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#metadata-structure">Metadata Structure</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#core-fields">Core Fields</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#coulomb-configuration">Coulomb Configuration</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#dispersion-configuration">Dispersion Configuration</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#which-format-should-i-use">Which Format Should I Use?</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#decision-matrix">Decision Matrix</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#quick-selection-guide">Quick Selection Guide</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#coulomb-modes">Coulomb Modes</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#coulomb-mode-comparison">Coulomb Mode Comparison</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#sr_embedded">"sr_embedded"</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#sr-coulomb-cutoff-coulomb_sr_rc">SR Coulomb Cutoff (coulomb_sr_rc)</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#sr-envelope-coulomb_sr_envelope">SR Envelope (coulomb_sr_envelope)</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#full_embedded">"full_embedded"</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#none">"none"</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dispersion-modes">Dispersion Modes</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#external-dftd3-needs_dispersiontrue">External DFTD3 (needs_dispersion=True)</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#embedded-d3ts">Embedded D3TS</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#no-dispersion">No Dispersion</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#file-structure">File Structure</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#new-format-pt">New Format (.pt)</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#legacy-format-jpt">Legacy Format (.jpt)</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#exporting-models">Exporting Models</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#export-process">Export Process</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#export-options">Export Options</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#converting-legacy-models">Converting Legacy Models</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#conversion-process">Conversion Process</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#key-changes-during-conversion">Key Changes During Conversion</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#loading-models">Loading Models</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#loading-behavior">Loading Behavior</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#metadata-behavior-summary">Metadata Behavior Summary</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#api-reference">API Reference</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#load_modelpath-devicecpu">load_model(path, device="cpu")</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#modelmetadata-typeddict">ModelMetadata (TypedDict)</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#migration-guide">Migration Guide</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#why-migrate-to-v2-format">Why Migrate to v2 Format?</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#step-by-step-migration">Step-by-Step Migration</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#1-prepare-required-files">1. Prepare Required Files</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#2-run-conversion">2. Run Conversion</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#3-validate-conversion">3. Validate Conversion</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#4-test-runtime-flexibility">4. Test Runtime Flexibility</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#common-conversion-issues">Common Conversion Issues</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#issue-missing-configyaml">Issue: Missing config.yaml</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#issue-weight-mismatch">Issue: Weight Mismatch</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#issue-implemented-species-mismatch">Issue: Implemented Species Mismatch</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#exporting-new-models">Exporting New Models</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#cli-commands">CLI Commands</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../long_range/">Long Range</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../cli/">CLI Reference</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../train/">Train</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">API Reference</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/">Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/calculators/">Calculators</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/modules/">Modules</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/data/">Data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/config/">Config</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">AIMNetCentral</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Model Format</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/isayevlab/aimnetcentral/edit/main/docs/model_format.md">Edit on isayevlab/aimnetcentral</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="model-format-and-conversion">Model Format and Conversion<a class="headerlink" href="#model-format-and-conversion" title="Permanent link">&para;</a></h1>
+<p>This document describes the AIMNet2 model format, metadata structure, and conversion between legacy and new formats.
+It reflects the current implementation in <code>aimnet.models.base</code>, <code>aimnet.models.utils</code>, and <code>aimnet.calculators.calculator</code>.</p>
+<h2 id="model-formats">Model Formats<a class="headerlink" href="#model-formats" title="Permanent link">&para;</a></h2>
+<p>AIMNet2 supports two model formats:</p>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>Extension</th>
+<th>Version</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Legacy</td>
+<td><code>.jpt</code></td>
+<td>1</td>
+<td>TorchScript JIT-compiled model with embedded LR modules</td>
+</tr>
+<tr>
+<td>New</td>
+<td><code>.pt</code></td>
+<td>2</td>
+<td>State dict with embedded YAML config and metadata</td>
+</tr>
+</tbody>
+</table>
+<h3 id="format-detection">Format Detection<a class="headerlink" href="#format-detection" title="Permanent link">&para;</a></h3>
+<p>When loading a model via <code>load_model()</code>, the format is automatically detected:</p>
+<ul>
+<li><strong>New format</strong>: Dictionary containing <code>"model_yaml"</code> key</li>
+<li><strong>Legacy format</strong>: <code>torch.jit.ScriptModule</code> instance</li>
+</ul>
+<h2 id="metadata-structure">Metadata Structure<a class="headerlink" href="#metadata-structure" title="Permanent link">&para;</a></h2>
+<p>Model metadata is returned by <code>load_model()</code> as a <code>ModelMetadata</code> TypedDict.
+For early v2 bundles that predate <code>format_version</code>, <code>load_model()</code> defaults to <code>format_version=2</code>.</p>
+<h3 id="core-fields">Core Fields<a class="headerlink" href="#core-fields" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>format_version</code></td>
+<td><code>int</code></td>
+<td><code>1</code> = legacy JIT, <code>2</code> = new format (default for early v2 bundles)</td>
+</tr>
+<tr>
+<td><code>cutoff</code></td>
+<td><code>float</code></td>
+<td>Model short-range cutoff radius (Å)</td>
+</tr>
+<tr>
+<td><code>implemented_species</code></td>
+<td><code>list[int]</code></td>
+<td>Supported atomic numbers</td>
+</tr>
+</tbody>
+</table>
+<h3 id="coulomb-configuration">Coulomb Configuration<a class="headerlink" href="#coulomb-configuration" title="Permanent link">&para;</a></h3>
+<p>| Field                 | Type   | Description                                                      |
+| --------------------- | ------ | ---------------------------------------------------------------- | -------------------------------------------------------- |
+| <code>needs_coulomb</code>       | <code>bool</code> | If <code>True</code>, calculator should add external Coulomb                |
+| <code>coulomb_mode</code>        | <code>str</code>  | What's embedded: <code>"sr_embedded"</code>, <code>"full_embedded"</code>, or <code>"none"</code> |
+| <code>coulomb_sr_rc</code>       | <code>float | None</code>                                                            | SR Coulomb cutoff (only if <code>coulomb_mode="sr_embedded"</code>) |
+| <code>coulomb_sr_envelope</code> | <code>str   | None</code>                                                            | Envelope function: <code>"exp"</code> (mollifier) or <code>"cosine"</code>     |</p>
+<h3 id="dispersion-configuration">Dispersion Configuration<a class="headerlink" href="#dispersion-configuration" title="Permanent link">&para;</a></h3>
+<p>| Field              | Type   | Description                                     |
+| ------------------ | ------ | ----------------------------------------------- | --------------------------------- |
+| <code>needs_dispersion</code> | <code>bool</code> | If <code>True</code>, calculator should add external DFTD3 |
+| <code>d3_params</code>        | <code>dict  | None</code>                                           | D3 parameters: <code>{s6, s8, a1, a2}</code> |</p>
+<h2 id="which-format-should-i-use">Which Format Should I Use?<a class="headerlink" href="#which-format-should-i-use" title="Permanent link">&para;</a></h2>
+<h3 id="decision-matrix">Decision Matrix<a class="headerlink" href="#decision-matrix" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Format</th>
+<th>Model Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Training new model</td>
+<td>v2 (.pt)</td>
+<td>Export after training</td>
+<td>Flexible, modern</td>
+</tr>
+<tr>
+<td>Need runtime Coulomb control</td>
+<td>v2 (.pt)</td>
+<td>Convert from v1 if needed</td>
+<td>Switch simple/DSF/Ewald</td>
+</tr>
+<tr>
+<td>Production inference</td>
+<td>v2 (.pt)</td>
+<td>Preferred</td>
+<td>Smaller, more flexible</td>
+</tr>
+<tr>
+<td>Legacy deployment</td>
+<td>v1 (.jpt)</td>
+<td>Keep as-is</td>
+<td>If compatibility required</td>
+</tr>
+<tr>
+<td>Experimenting with methods</td>
+<td>v2 (.pt)</td>
+<td>Required</td>
+<td>Runtime reconfiguration</td>
+</tr>
+<tr>
+<td>Fixed pipeline</td>
+<td>Either</td>
+<td>Use what works</td>
+<td>No strong preference</td>
+</tr>
+</tbody>
+</table>
+<h3 id="quick-selection-guide">Quick Selection Guide<a class="headerlink" href="#quick-selection-guide" title="Permanent link">&para;</a></h3>
+<p><strong>Use v2 (.pt) if:</strong></p>
+<ul>
+<li>Training new models</li>
+<li>Need to try different Coulomb methods</li>
+<li>Want runtime flexibility</li>
+<li>Prefer modern PyTorch features</li>
+</ul>
+<p><strong>Keep v1 (.jpt) if:</strong></p>
+<ul>
+<li>Existing deployment works</li>
+<li>Don't need to change methods</li>
+<li>Legacy compatibility required</li>
+<li>No issues with current setup</li>
+</ul>
+<h2 id="coulomb-modes">Coulomb Modes<a class="headerlink" href="#coulomb-modes" title="Permanent link">&para;</a></h2>
+<p>The <code>coulomb_mode</code> field describes what Coulomb treatment is embedded in the model.</p>
+<h3 id="coulomb-mode-comparison">Coulomb Mode Comparison<a class="headerlink" href="#coulomb-mode-comparison" title="Permanent link">&para;</a></h3>
+<pre><code>┌─────────────────────────────────────────────────────────────────┐
+│ sr_embedded (v2 format - RECOMMENDED)                           │
+├─────────────────────────────────────────────────────────────────┤
+│ Model:      E_NN - E_SR (SR Coulomb subtracted)                 │
+│ Calculator: + E_full (adds full Coulomb externally)             │
+│ Total:      E_NN + E_LR (SR cancels out)                        │
+│                                                                  │
+│ Runtime control: ✓ Can switch simple/DSF/Ewald                  │
+│ File size:       Smaller (no LR modules embedded)               │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ full_embedded (v1 legacy format)                                │
+├─────────────────────────────────────────────────────────────────┤
+│ Model:      E_NN + E_Coulomb (full Coulomb embedded in JIT)     │
+│ Calculator: (nothing)                                           │
+│ Total:      E_NN + E_Coulomb                                    │
+│                                                                  │
+│ Runtime control: ✗ Fixed method, warning only                   │
+│ File size:       Larger (modules in JIT)                        │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ none (no Coulomb)                                               │
+├─────────────────────────────────────────────────────────────────┤
+│ Model:      E_NN only                                           │
+│ Calculator: (nothing)                                           │
+│ Total:      E_NN                                                │
+│                                                                  │
+│ Runtime control: N/A                                            │
+│ Use case:       Models without electrostatics                   │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3 id="sr_embedded"><code>"sr_embedded"</code><a class="headerlink" href="#sr_embedded" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Model has <strong>SRCoulomb</strong> (short-range) embedded</li>
+<li>Model outputs: <code>E_NN - E_SR</code></li>
+<li>Calculator adds <strong>full</strong> Coulomb externally: <code>E_total = (E_NN - E_SR) + E_full = E_NN + E_LR</code></li>
+<li>Uses <code>coulomb_sr_rc</code> and <code>coulomb_sr_envelope</code> from metadata</li>
+<li>User can switch Coulomb method (simple/DSF/Ewald) at runtime via <code>set_lrcoulomb_method()</code></li>
+</ul>
+<h4 id="sr-coulomb-cutoff-coulomb_sr_rc">SR Coulomb Cutoff (<code>coulomb_sr_rc</code>)<a class="headerlink" href="#sr-coulomb-cutoff-coulomb_sr_rc" title="Permanent link">&para;</a></h4>
+<p>The short-range Coulomb cutoff defines the distance within which SR Coulomb interactions are computed by the embedded <code>SRCoulomb</code> module.</p>
+<p><strong>Constraint:</strong> <code>coulomb_sr_rc &lt;= model cutoff</code></p>
+<p>The SR cutoff must be less than or equal to the model's short-range cutoff (<code>cutoff</code>) because:</p>
+<ul>
+<li>SRCoulomb uses the same neighbor list as the neural network</li>
+<li>Atom pairs beyond the model cutoff are not visible to SRCoulomb</li>
+<li>Typical value: 4.6 Å (with model cutoff of 5.0 Å)</li>
+</ul>
+<h4 id="sr-envelope-coulomb_sr_envelope">SR Envelope (<code>coulomb_sr_envelope</code>)<a class="headerlink" href="#sr-envelope-coulomb_sr_envelope" title="Permanent link">&para;</a></h4>
+<p>The envelope function defines how the SR interaction decays at the cutoff:</p>
+<ul>
+<li><code>"exp"</code>: Smooth mollifier-based decay (default)</li>
+<li><code>"cosine"</code>: Cosine-based decay</li>
+</ul>
+<h3 id="full_embedded"><code>"full_embedded"</code><a class="headerlink" href="#full_embedded" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Legacy JIT model with <strong>full Coulomb</strong> embedded</li>
+<li>Model outputs: <code>E_NN + E_Coulomb</code> directly</li>
+<li>No external Coulomb needed (<code>needs_coulomb=False</code>)</li>
+<li>Coulomb method cannot be changed at runtime</li>
+</ul>
+<h3 id="none"><code>"none"</code><a class="headerlink" href="#none" title="Permanent link">&para;</a></h3>
+<ul>
+<li>No Coulomb treatment in model</li>
+<li><code>needs_coulomb=False</code></li>
+<li>Model outputs: <code>E_NN</code> only</li>
+</ul>
+<h2 id="dispersion-modes">Dispersion Modes<a class="headerlink" href="#dispersion-modes" title="Permanent link">&para;</a></h2>
+<h3 id="external-dftd3-needs_dispersiontrue">External DFTD3 (<code>needs_dispersion=True</code>)<a class="headerlink" href="#external-dftd3-needs_dispersiontrue" title="Permanent link">&para;</a></h3>
+<ul>
+<li>DFTD3/D3BJ module removed from model during export</li>
+<li>D3 parameters (<code>s6</code>, <code>s8</code>, <code>a1</code>, <code>a2</code>) stored in <code>d3_params</code> metadata</li>
+<li>Calculator creates external DFTD3 module</li>
+<li>Cutoff can be configured via <code>set_dftd3_cutoff()</code> for external DFTD3 only</li>
+</ul>
+<p><strong>Note:</strong> DFTD3 cutoff/smoothing values are not currently stored in metadata. External DFTD3
+defaults to 15.0 Å cutoff and 0.8 smoothing fraction unless overridden at runtime.</p>
+<h3 id="embedded-d3ts">Embedded D3TS<a class="headerlink" href="#embedded-d3ts" title="Permanent link">&para;</a></h3>
+<ul>
+<li>D3TS (learned parameters) remains embedded in model</li>
+<li><code>needs_dispersion=False</code> for D3TS models</li>
+<li>Cannot be modified at runtime</li>
+</ul>
+<h3 id="no-dispersion">No Dispersion<a class="headerlink" href="#no-dispersion" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>needs_dispersion=False</code> and no D3TS</li>
+<li>Model outputs energy without dispersion correction</li>
+</ul>
+<h2 id="file-structure">File Structure<a class="headerlink" href="#file-structure" title="Permanent link">&para;</a></h2>
+<h3 id="new-format-pt">New Format (.pt)<a class="headerlink" href="#new-format-pt" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">{
+    &quot;format_version&quot;: 2,        # Default for early v2 bundles may be omitted
+    &quot;model_yaml&quot;: str,           # Core model YAML config (no LR modules)
+    &quot;cutoff&quot;: float,
+    &quot;needs_coulomb&quot;: bool,
+    &quot;needs_dispersion&quot;: bool,
+    &quot;coulomb_mode&quot;: str,
+    &quot;coulomb_sr_rc&quot;: float | None,
+    &quot;coulomb_sr_envelope&quot;: str | None,
+    &quot;d3_params&quot;: dict | None,    # DFTD3 params for external use
+    &quot;implemented_species&quot;: list[int],
+    &quot;state_dict&quot;: dict,          # Model weights (SAE baked in)
+}
+</code></pre>
+<h3 id="legacy-format-jpt">Legacy Format (.jpt)<a class="headerlink" href="#legacy-format-jpt" title="Permanent link">&para;</a></h3>
+<p>TorchScript module with attributes:</p>
+<ul>
+<li><code>cutoff</code>: Model cutoff</li>
+<li><code>cutoff_lr</code>: Long-range cutoff (if applicable)</li>
+<li>LRCoulomb and DFTD3/D3BJ modules embedded</li>
+</ul>
+<h2 id="exporting-models">Exporting Models<a class="headerlink" href="#exporting-models" title="Permanent link">&para;</a></h2>
+<p>Use the <code>aimnet export</code> CLI command:</p>
+<pre><code class="language-bash">aimnet export weights.pt model_v2.pt --model config.yaml --sae sae.yaml
+</code></pre>
+<h3 id="export-process">Export Process<a class="headerlink" href="#export-process" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Load model YAML config, SAE (self-atomic energies), and weights</li>
+<li>Strip LRCoulomb/DFTD3 modules from config</li>
+<li>Add SRCoulomb if LRCoulomb was present (requires determinable <code>rc</code>)</li>
+<li>Build core model from modified config</li>
+<li>Load weights (with <code>strict=False</code> for module changes)</li>
+<li>Bake SAE into <code>atomic_shift.shifts.weight</code> as float64</li>
+<li>Mask unimplemented species (set NaN in <code>afv.weight</code>)</li>
+<li>Save with metadata</li>
+</ol>
+<h3 id="export-options">Export Options<a class="headerlink" href="#export-options" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">aimnet export weights.pt model.pt \
+    --model config.yaml \
+    --sae sae.yaml \
+    --needs-coulomb    # Override: force external Coulomb
+    --needs-dispersion # Override: force external DFTD3
+</code></pre>
+<p>Explicit flags override auto-detection from config.</p>
+<h2 id="converting-legacy-models">Converting Legacy Models<a class="headerlink" href="#converting-legacy-models" title="Permanent link">&para;</a></h2>
+<p>Use the <code>aimnet convert</code> CLI command:</p>
+<pre><code class="language-bash">aimnet convert model.jpt config.yaml model_v2.pt
+</code></pre>
+<h3 id="conversion-process">Conversion Process<a class="headerlink" href="#conversion-process" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Load legacy JIT model and YAML config</li>
+<li>Extract <code>cutoff</code> from model attribute</li>
+<li>Extract <code>implemented_species</code> from <code>afv.weight</code> (non-NaN entries)</li>
+<li>Strip LR modules from config, add SRCoulomb if needed (requires determinable <code>rc</code>)</li>
+<li>Build core model from modified config</li>
+<li>Load weights from JIT state dict</li>
+<li>Validate keys (filter expected missing/unexpected)</li>
+<li>Convert <code>atomic_shift</code> to float64</li>
+<li>Save with metadata</li>
+</ol>
+<h3 id="key-changes-during-conversion">Key Changes During Conversion<a class="headerlink" href="#key-changes-during-conversion" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Legacy</th>
+<th>New</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>outputs.lrcoulomb.*</code></td>
+<td>Removed</td>
+</tr>
+<tr>
+<td><code>outputs.dftd3.*</code></td>
+<td>Removed</td>
+</tr>
+<tr>
+<td><code>outputs.d3bj.*</code></td>
+<td>Removed</td>
+</tr>
+<tr>
+<td>(none)</td>
+<td><code>outputs.srcoulomb.*</code> added</td>
+</tr>
+</tbody>
+</table>
+<h2 id="loading-models">Loading Models<a class="headerlink" href="#loading-models" title="Permanent link">&para;</a></h2>
+<pre><code class="language-python">from aimnet.models.base import load_model
+
+model, metadata = load_model(&quot;model.pt&quot;, device=&quot;cuda&quot;)
+
+# Access metadata
+print(metadata[&quot;cutoff&quot;])
+print(metadata[&quot;needs_coulomb&quot;])
+print(metadata[&quot;coulomb_mode&quot;])
+</code></pre>
+<h3 id="loading-behavior">Loading Behavior<a class="headerlink" href="#loading-behavior" title="Permanent link">&para;</a></h3>
+<ul>
+<li>New format: Parses YAML, builds model, loads state dict</li>
+<li>Legacy format: Returns JIT model directly</li>
+<li>Metadata always returned as <code>ModelMetadata</code> dict</li>
+<li><code>atomic_shift</code> converted to float64 after loading (precision)</li>
+</ul>
+<h2 id="metadata-behavior-summary">Metadata Behavior Summary<a class="headerlink" href="#metadata-behavior-summary" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Model Type</th>
+<th><code>needs_coulomb</code></th>
+<th><code>coulomb_mode</code></th>
+<th>Calculator Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>New with Coulomb</td>
+<td><code>True</code></td>
+<td><code>"sr_embedded"</code></td>
+<td>Adds external LRCoulomb</td>
+</tr>
+<tr>
+<td>New without Coulomb</td>
+<td><code>False</code></td>
+<td><code>"none"</code></td>
+<td>No external Coulomb</td>
+</tr>
+<tr>
+<td>Legacy JIT</td>
+<td><code>False</code></td>
+<td><code>"full_embedded"</code></td>
+<td>Coulomb embedded in JIT</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Model Type</th>
+<th><code>needs_dispersion</code></th>
+<th>Calculator Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>New with DFTD3/D3BJ</td>
+<td><code>True</code></td>
+<td>Adds external DFTD3</td>
+</tr>
+<tr>
+<td>New with D3TS</td>
+<td><code>False</code></td>
+<td>D3TS embedded</td>
+</tr>
+<tr>
+<td>New without dispersion</td>
+<td><code>False</code></td>
+<td>No dispersion</td>
+</tr>
+<tr>
+<td>Legacy with DFTD3</td>
+<td><code>False</code></td>
+<td>Embedded in JIT (d3_params extracted for diagnostics)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h2>
+<h3 id="load_modelpath-devicecpu"><code>load_model(path, device="cpu")</code><a class="headerlink" href="#load_modelpath-devicecpu" title="Permanent link">&para;</a></h3>
+<p>Load model from file with automatic format detection.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>path</code> (<code>str</code>): Path to model file (<code>.pt</code> or <code>.jpt</code>)</li>
+<li><code>device</code> (<code>str</code>): Device to load model on</li>
+</ul>
+<p><strong>Returns:</strong></p>
+<ul>
+<li><code>model</code> (<code>nn.Module</code>): Loaded model</li>
+<li><code>metadata</code> (<code>ModelMetadata</code>): Metadata dictionary</li>
+</ul>
+<h3 id="modelmetadata-typeddict"><code>ModelMetadata</code> (TypedDict)<a class="headerlink" href="#modelmetadata-typeddict" title="Permanent link">&para;</a></h3>
+<p>See <a href="#metadata-structure">Metadata Structure</a> for field definitions.</p>
+<h3 id="migration-guide">Migration Guide<a class="headerlink" href="#migration-guide" title="Permanent link">&para;</a></h3>
+<h3 id="why-migrate-to-v2-format">Why Migrate to v2 Format?<a class="headerlink" href="#why-migrate-to-v2-format" title="Permanent link">&para;</a></h3>
+<p><strong>Benefits of v2 (.pt) over v1 (.jpt):</strong></p>
+<ul>
+<li><strong>Runtime flexibility</strong>: Change Coulomb method (simple/DSF/Ewald) without retraining</li>
+<li><strong>Smaller files</strong>: Separate external modules reduce file size</li>
+<li><strong>Better debugging</strong>: Access model structure and weights directly</li>
+<li><strong>Modern workflow</strong>: Compatible with latest PyTorch features</li>
+<li><strong>Metadata</strong>: Rich metadata for validation and documentation</li>
+</ul>
+<p><strong>When to convert:</strong></p>
+<ul>
+<li>You have legacy <code>.jpt</code> models and want runtime Coulomb control</li>
+<li>You're training new models (use v2 from the start)</li>
+<li>You need to modify model architecture post-training</li>
+</ul>
+<p><strong>When to keep v1:</strong></p>
+<ul>
+<li>Legacy compatibility required</li>
+<li>Model works fine and no new features needed</li>
+<li>Deployment pipeline expects JIT models</li>
+</ul>
+<h3 id="step-by-step-migration">Step-by-Step Migration<a class="headerlink" href="#step-by-step-migration" title="Permanent link">&para;</a></h3>
+<h4 id="1-prepare-required-files">1. Prepare Required Files<a class="headerlink" href="#1-prepare-required-files" title="Permanent link">&para;</a></h4>
+<p>You'll need:</p>
+<ul>
+<li><code>model.jpt</code> - Your legacy JIT model</li>
+<li><code>config.yaml</code> - Original model configuration</li>
+</ul>
+<pre><code class="language-bash"># If you don't have config.yaml, you may need to reconstruct it
+# from training logs or model inspection
+</code></pre>
+<h4 id="2-run-conversion">2. Run Conversion<a class="headerlink" href="#2-run-conversion" title="Permanent link">&para;</a></h4>
+<pre><code class="language-bash">aimnet convert model.jpt config.yaml model_v2.pt
+</code></pre>
+<p><strong>What happens during conversion:</strong></p>
+<ul>
+<li>Extracts model weights from JIT state dict</li>
+<li>Strips embedded LRCoulomb/DFTD3 modules</li>
+<li>Adds SRCoulomb if LRCoulomb was present</li>
+<li>Preserves atomic shifts (SAE) as float64</li>
+<li>Detects implemented species from weights</li>
+<li>Generates metadata dictionary</li>
+</ul>
+<h4 id="3-validate-conversion">3. Validate Conversion<a class="headerlink" href="#3-validate-conversion" title="Permanent link">&para;</a></h4>
+<pre><code class="language-python">from aimnet.calculators import AIMNet2Calculator
+import torch
+
+# Load both models
+calc_v1 = AIMNet2Calculator(&quot;model.jpt&quot;)
+calc_v2 = AIMNet2Calculator(&quot;model_v2.pt&quot;)
+
+# Test data
+data = {
+    &quot;coord&quot;: torch.randn(10, 3),
+    &quot;numbers&quot;: torch.randint(1, 9, (10,)),
+    &quot;charge&quot;: 0.0,
+}
+
+# Compare energies (should match within tolerance)
+result_v1 = calc_v1(data, forces=True)
+result_v2 = calc_v2(data, forces=True)
+
+energy_diff = (result_v1[&quot;energy&quot;] - result_v2[&quot;energy&quot;]).abs()
+force_diff = (result_v1[&quot;forces&quot;] - result_v2[&quot;forces&quot;]).abs().max()
+
+print(f&quot;Energy difference: {energy_diff:.2e} eV&quot;)
+print(f&quot;Max force difference: {force_diff:.2e} eV/Å&quot;)
+
+assert energy_diff &lt; 1e-5, &quot;Energy mismatch!&quot;
+assert force_diff &lt; 1e-4, &quot;Force mismatch!&quot;
+</code></pre>
+<p><strong>Expected differences:</strong></p>
+<ul>
+<li>Energies: &lt; 1e-5 eV (numerical precision)</li>
+<li>Forces: &lt; 1e-4 eV/Å (gradient precision)</li>
+</ul>
+<h4 id="4-test-runtime-flexibility">4. Test Runtime Flexibility<a class="headerlink" href="#4-test-runtime-flexibility" title="Permanent link">&para;</a></h4>
+<pre><code class="language-python"># v2 models support runtime method changes
+calc_v2.set_lrcoulomb_method(&quot;dsf&quot;, cutoff=15.0)
+result_dsf = calc_v2(data)
+
+calc_v2.set_lrcoulomb_method(&quot;ewald&quot;, ewald_accuracy=1e-8)
+result_ewald = calc_v2(data)
+
+# v1 models show warning but don't change
+calc_v1.set_lrcoulomb_method(&quot;dsf&quot;, cutoff=15.0)
+# Warning: Cannot change method for legacy models
+</code></pre>
+<h3 id="common-conversion-issues">Common Conversion Issues<a class="headerlink" href="#common-conversion-issues" title="Permanent link">&para;</a></h3>
+<h4 id="issue-missing-configyaml">Issue: Missing config.yaml<a class="headerlink" href="#issue-missing-configyaml" title="Permanent link">&para;</a></h4>
+<p><strong>Problem:</strong> You have a <code>.jpt</code> model but no configuration file.</p>
+<p><strong>Solution:</strong> Inspect the model to reconstruct config:</p>
+<pre><code class="language-python">import torch
+model = torch.jit.load(&quot;model.jpt&quot;)
+
+# Inspect attributes
+print(f&quot;Cutoff: {model.cutoff}&quot;)
+print(f&quot;Cutoff LR: {model.cutoff_lr}&quot;)
+
+# May need to manually create config based on model structure
+</code></pre>
+<h4 id="issue-weight-mismatch">Issue: Weight Mismatch<a class="headerlink" href="#issue-weight-mismatch" title="Permanent link">&para;</a></h4>
+<p><strong>Problem:</strong> Conversion completes but validation shows large differences.</p>
+<p><strong>Solution:</strong> Check for module name mismatches:</p>
+<pre><code class="language-bash"># Use verbose mode to see what's happening
+aimnet convert model.jpt config.yaml model_v2.pt --verbose
+
+# Check for unexpected missing keys
+# Some modules may have been renamed
+</code></pre>
+<h4 id="issue-implemented-species-mismatch">Issue: Implemented Species Mismatch<a class="headerlink" href="#issue-implemented-species-mismatch" title="Permanent link">&para;</a></h4>
+<p><strong>Problem:</strong> Converted model has wrong <code>implemented_species</code>.</p>
+<p><strong>Solution:</strong> Species are auto-detected from non-NaN entries in <code>afv.weight</code>. Verify:</p>
+<pre><code class="language-python">from aimnet.models.base import load_model
+model, metadata = load_model(&quot;model_v2.pt&quot;)
+print(metadata[&quot;implemented_species&quot;])
+
+# If wrong, may need to fix config before conversion
+</code></pre>
+<h3 id="exporting-new-models">Exporting New Models<a class="headerlink" href="#exporting-new-models" title="Permanent link">&para;</a></h3>
+<p>For newly trained models, export directly to v2:</p>
+<pre><code class="language-bash">aimnet export weights.pt model_v2.pt \
+    --model config.yaml \
+    --sae sae.yaml
+</code></pre>
+<p><strong>Optional flags:</strong></p>
+<pre><code class="language-bash"># Override auto-detection
+--needs-coulomb       # Force external Coulomb
+--needs-dispersion    # Force external DFTD3
+</code></pre>
+<h2 id="cli-commands">CLI Commands<a class="headerlink" href="#cli-commands" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># Export trained model
+aimnet export weights.pt output.pt --model config.yaml --sae sae.yaml
+
+# Convert legacy JIT model
+aimnet convert model.jpt config.yaml output.pt
+
+# Calculate SAE from dataset
+aimnet calc_sae dataset.h5 sae.yaml
+</code></pre>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../calculator/" class="btn btn-neutral float-left" title="Calculator"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../long_range/" class="btn btn-neutral float-right" title="Long Range">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/isayevlab/aimnetcentral" class="fa fa-code-fork" style="color: #fcfcfc"> isayevlab/aimnetcentral</a>
+        </span>
+    
+    
+      <span><a href="../calculator/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../long_range/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

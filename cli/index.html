@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Roman Zubatyuk" /><link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/cli/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>CLI Reference - AIMNetCentral</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="../assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "CLI Reference";
+        var mkdocs_page_input_path = "cli.md";
+        var mkdocs_page_url = "/aimnetcentral/cli/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> AIMNetCentral
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../getting_started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../calculator/">Calculator</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../model_format/">Model Format</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../long_range/">Long Range</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">CLI Reference</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#commands-overview">Commands Overview</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#aimnet-train">aimnet train</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#basic-usage">Basic Usage</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#options">Options</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#example-configuration">Example Configuration</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#complete-example">Complete Example</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#aimnet-export">aimnet export</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#basic-usage_1">Basic Usage</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#options_1">Options</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#export-process">Export Process</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#examples">Examples</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#aimnet-convert">aimnet convert</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#basic-usage_2">Basic Usage</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#options_2">Options</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#conversion-process">Conversion Process</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#example">Example</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#aimnet-calc_sae">aimnet calc_sae</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#basic-usage_3">Basic Usage</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#options_3">Options</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#sae-format">SAE Format</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#example_1">Example</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#creating-single-atom-dataset">Creating Single-Atom Dataset</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#common-workflows">Common Workflows</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#complete-training-workflow">Complete Training Workflow</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#legacy-migration-workflow">Legacy Migration Workflow</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#environment-variables">Environment Variables</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#exit-codes">Exit Codes</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#getting-help">Getting Help</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#see-also">See Also</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../train/">Train</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">API Reference</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/">Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/calculators/">Calculators</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/modules/">Modules</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/data/">Data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/config/">Config</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">AIMNetCentral</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">CLI Reference</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/isayevlab/aimnetcentral/edit/main/docs/cli.md">Edit on isayevlab/aimnetcentral</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="cli-reference">CLI Reference<a class="headerlink" href="#cli-reference" title="Permanent link">&para;</a></h1>
+<p>AIMNet2 provides command-line tools for training, model export, conversion, and data preprocessing.</p>
+<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<p>CLI tools are available with the <code>train</code> extras:</p>
+<pre><code class="language-bash">pip install &quot;aimnet[train] @ git+https://github.com/isayevlab/aimnetcentral.git&quot;
+</code></pre>
+<h2 id="commands-overview">Commands Overview<a class="headerlink" href="#commands-overview" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Purpose</th>
+<th>Typical Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>aimnet train</code></td>
+<td>Train a model</td>
+<td>Training from scratch</td>
+</tr>
+<tr>
+<td><code>aimnet export</code></td>
+<td>Export trained weights to inference format</td>
+<td>After training</td>
+</tr>
+<tr>
+<td><code>aimnet convert</code></td>
+<td>Convert legacy .jpt to new .pt format</td>
+<td>Migrating old models</td>
+</tr>
+<tr>
+<td><code>aimnet calc_sae</code></td>
+<td>Calculate self-atomic energies</td>
+<td>Before training</td>
+</tr>
+</tbody>
+</table>
+<h2 id="aimnet-train">aimnet train<a class="headerlink" href="#aimnet-train" title="Permanent link">&para;</a></h2>
+<p>Train an AIMNet2 model from a configuration file.</p>
+<h3 id="basic-usage">Basic Usage<a class="headerlink" href="#basic-usage" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">aimnet train --config config.yaml --model model.yaml
+</code></pre>
+<h3 id="options">Options<a class="headerlink" href="#options" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">aimnet train [OPTIONS]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--config PATH</code></td>
+<td>Required</td>
+<td>Training configuration YAML file</td>
+</tr>
+<tr>
+<td><code>--model PATH</code></td>
+<td>Required</td>
+<td>Model architecture YAML file</td>
+</tr>
+<tr>
+<td><code>--resume PATH</code></td>
+<td>Optional</td>
+<td>Resume from checkpoint</td>
+</tr>
+<tr>
+<td><code>--device DEVICE</code></td>
+<td>Optional</td>
+<td>Device to use (cuda/cpu)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="example-configuration">Example Configuration<a class="headerlink" href="#example-configuration" title="Permanent link">&para;</a></h3>
+<p>Training requires two YAML files:</p>
+<p><strong>config.yaml</strong> (training parameters):</p>
+<pre><code class="language-yaml">data:
+  train: data/train.h5
+  val: data/val.h5
+  batch_size: 32
+
+optimizer:
+  lr: 0.001
+  weight_decay: 0.0
+
+training:
+  epochs: 100
+  checkpoint_dir: checkpoints/
+  log_interval: 10
+</code></pre>
+<p><strong>model.yaml</strong> (architecture):</p>
+<pre><code class="language-yaml">class: aimnet.models.AIMNet2
+kwargs:
+  nfeature: 16
+  hidden: [[512, 380], [512, 380]]
+  aev:
+    rc_s: 5.0
+    nshifts_s: 16
+  outputs:
+    energy_mlp:
+      class: aimnet.modules.Output
+      # ... output configuration
+</code></pre>
+<h3 id="complete-example">Complete Example<a class="headerlink" href="#complete-example" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># Train with W&amp;B logging
+aimnet train \
+  --config experiments/train_config.yaml \
+  --model models/aimnet2.yaml \
+  --device cuda
+
+# Resume training
+aimnet train \
+  --config experiments/train_config.yaml \
+  --model models/aimnet2.yaml \
+  --resume checkpoints/last.pt
+</code></pre>
+<p>See <a href="../train/">train.md</a> for detailed training documentation.</p>
+<h2 id="aimnet-export">aimnet export<a class="headerlink" href="#aimnet-export" title="Permanent link">&para;</a></h2>
+<p>Export trained model weights to inference format (.pt).</p>
+<h3 id="basic-usage_1">Basic Usage<a class="headerlink" href="#basic-usage_1" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">aimnet export weights.pt output.pt --model model.yaml --sae sae.yaml
+</code></pre>
+<h3 id="options_1">Options<a class="headerlink" href="#options_1" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">aimnet export INPUT OUTPUT [OPTIONS]
+</code></pre>
+<p><strong>Positional Arguments:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>INPUT</code></td>
+<td>Path to trained weights (.pt checkpoint)</td>
+</tr>
+<tr>
+<td><code>OUTPUT</code></td>
+<td>Path for exported model (.pt file)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Options:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--model PATH</code></td>
+<td>Model architecture YAML (required)</td>
+</tr>
+<tr>
+<td><code>--sae PATH</code></td>
+<td>Self-atomic energies YAML (required)</td>
+</tr>
+<tr>
+<td><code>--needs-coulomb</code></td>
+<td>Force external Coulomb module</td>
+</tr>
+<tr>
+<td><code>--needs-dispersion</code></td>
+<td>Force external DFTD3 module</td>
+</tr>
+</tbody>
+</table>
+<h3 id="export-process">Export Process<a class="headerlink" href="#export-process" title="Permanent link">&para;</a></h3>
+<p>The export process:</p>
+<ol>
+<li>Loads model architecture from YAML</li>
+<li>Strips LRCoulomb/DFTD3 modules</li>
+<li>Adds SRCoulomb if LRCoulomb was present</li>
+<li>Loads trained weights</li>
+<li>Bakes SAE into atomic_shift as float64</li>
+<li>Masks unimplemented species</li>
+<li>Saves with metadata</li>
+</ol>
+<h3 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h3>
+<p><strong>Basic export:</strong></p>
+<pre><code class="language-bash">aimnet export \
+  checkpoints/best.pt \
+  models/aimnet2_production.pt \
+  --model configs/aimnet2.yaml \
+  --sae configs/sae.yaml
+</code></pre>
+<p><strong>Override auto-detection:</strong></p>
+<pre><code class="language-bash"># Force external Coulomb and DFTD3
+aimnet export weights.pt model.pt \
+  --model config.yaml \
+  --sae sae.yaml \
+  --needs-coulomb \
+  --needs-dispersion
+</code></pre>
+<p><strong>Export without dispersion:</strong></p>
+<pre><code class="language-bash"># Model without DFTD3 correction
+aimnet export weights.pt model_no_d3.pt \
+  --model config_no_d3.yaml \
+  --sae sae.yaml
+</code></pre>
+<h2 id="aimnet-convert">aimnet convert<a class="headerlink" href="#aimnet-convert" title="Permanent link">&para;</a></h2>
+<p>Convert legacy .jpt (JIT) models to new .pt format.</p>
+<h3 id="basic-usage_2">Basic Usage<a class="headerlink" href="#basic-usage_2" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">aimnet convert model.jpt config.yaml output.pt
+</code></pre>
+<h3 id="options_2">Options<a class="headerlink" href="#options_2" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">aimnet convert INPUT CONFIG OUTPUT
+</code></pre>
+<p><strong>Positional Arguments:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>INPUT</code></td>
+<td>Legacy .jpt model file</td>
+</tr>
+<tr>
+<td><code>CONFIG</code></td>
+<td>Original model configuration YAML</td>
+</tr>
+<tr>
+<td><code>OUTPUT</code></td>
+<td>Output .pt model file</td>
+</tr>
+</tbody>
+</table>
+<h3 id="conversion-process">Conversion Process<a class="headerlink" href="#conversion-process" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Loads legacy JIT model</li>
+<li>Extracts weights from state dict</li>
+<li>Strips embedded LR modules</li>
+<li>Adds SRCoulomb if needed</li>
+<li>Converts atomic_shift to float64</li>
+<li>Generates metadata</li>
+<li>Saves as v2 format</li>
+</ol>
+<h3 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># Convert legacy model
+aimnet convert \
+  legacy/aimnet2_old.jpt \
+  configs/aimnet2.yaml \
+  models/aimnet2_new.pt
+
+# Verify conversion
+python -c &quot;
+from aimnet.calculators import AIMNet2Calculator
+calc = AIMNet2Calculator('models/aimnet2_new.pt')
+print(f'Cutoff: {calc.cutoff}')
+print(f'Has external Coulomb: {calc.has_external_coulomb}')
+&quot;
+</code></pre>
+<p>See <a href="../model_format/#migration-guide">model_format.md</a> for detailed migration guide.</p>
+<h2 id="aimnet-calc_sae">aimnet calc_sae<a class="headerlink" href="#aimnet-calc_sae" title="Permanent link">&para;</a></h2>
+<p>Calculate self-atomic energies (SAE) from a dataset.</p>
+<h3 id="basic-usage_3">Basic Usage<a class="headerlink" href="#basic-usage_3" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">aimnet calc_sae dataset.h5 output_sae.yaml
+</code></pre>
+<h3 id="options_3">Options<a class="headerlink" href="#options_3" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">aimnet calc_sae INPUT OUTPUT [OPTIONS]
+</code></pre>
+<p><strong>Positional Arguments:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>INPUT</code></td>
+<td>HDF5 dataset with single-atom energies</td>
+</tr>
+<tr>
+<td><code>OUTPUT</code></td>
+<td>Output YAML file for SAE values</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Options:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--elements LIST</code></td>
+<td>Comma-separated atomic numbers (e.g., "1,6,7,8")</td>
+</tr>
+</tbody>
+</table>
+<h3 id="sae-format">SAE Format<a class="headerlink" href="#sae-format" title="Permanent link">&para;</a></h3>
+<p>Output YAML format:</p>
+<pre><code class="language-yaml"># Self-atomic energies in eV
+1: -13.587 # Hydrogen
+6: -1027.592 # Carbon
+7: -1483.525 # Nitrogen
+8: -2039.734 # Oxygen
+</code></pre>
+<h3 id="example_1">Example<a class="headerlink" href="#example_1" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># Calculate SAE for H, C, N, O
+aimnet calc_sae \
+  data/single_atoms.h5 \
+  configs/sae.yaml \
+  --elements &quot;1,6,7,8&quot;
+
+# Use in training
+aimnet train \
+  --config train_config.yaml \
+  --model model.yaml
+  # SAE loaded from train_config
+</code></pre>
+<h3 id="creating-single-atom-dataset">Creating Single-Atom Dataset<a class="headerlink" href="#creating-single-atom-dataset" title="Permanent link">&para;</a></h3>
+<p>SAE calculation requires single-atom reference calculations:</p>
+<pre><code class="language-python">import h5py
+import numpy as np
+
+# Single-atom energies from reference calculations (e.g., DFT)
+sae_data = {
+    1: -13.587,   # H atom energy
+    6: -1027.592, # C atom energy
+    # ... more elements
+}
+
+# Create HDF5 dataset
+with h5py.File(&quot;single_atoms.h5&quot;, &quot;w&quot;) as f:
+    for z, energy in sae_data.items():
+        grp = f.create_group(f&quot;atom_{z}&quot;)
+        grp[&quot;energy&quot;] = energy
+        grp[&quot;numbers&quot;] = [z]
+</code></pre>
+<h2 id="common-workflows">Common Workflows<a class="headerlink" href="#common-workflows" title="Permanent link">&para;</a></h2>
+<h3 id="complete-training-workflow">Complete Training Workflow<a class="headerlink" href="#complete-training-workflow" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># 1. Calculate SAE
+aimnet calc_sae single_atoms.h5 sae.yaml
+
+# 2. Train model
+aimnet train \
+  --config config.yaml \
+  --model aimnet2.yaml
+
+# 3. Export best checkpoint
+aimnet export \
+  checkpoints/best.pt \
+  production_model.pt \
+  --model aimnet2.yaml \
+  --sae sae.yaml
+
+# 4. Validate
+python validate_model.py production_model.pt
+</code></pre>
+<h3 id="legacy-migration-workflow">Legacy Migration Workflow<a class="headerlink" href="#legacy-migration-workflow" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># 1. Convert .jpt to .pt
+aimnet convert \
+  old_model.jpt \
+  original_config.yaml \
+  new_model.pt
+
+# 2. Test equivalence
+python test_equivalence.py old_model.jpt new_model.pt
+
+# 3. Update inference code
+# Replace: calc = AIMNet2Calculator(&quot;old_model.jpt&quot;)
+# With:    calc = AIMNet2Calculator(&quot;new_model.pt&quot;)
+</code></pre>
+<h2 id="environment-variables">Environment Variables<a class="headerlink" href="#environment-variables" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AIMNET_CACHE_DIR</code></td>
+<td>Model cache directory</td>
+<td><code>~/.cache/aimnet/</code></td>
+</tr>
+<tr>
+<td><code>CUDA_VISIBLE_DEVICES</code></td>
+<td>GPU device selection</td>
+<td>All available</td>
+</tr>
+</tbody>
+</table>
+<h2 id="exit-codes">Exit Codes<a class="headerlink" href="#exit-codes" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>Success</td>
+</tr>
+<tr>
+<td>1</td>
+<td>General error</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Invalid arguments</td>
+</tr>
+<tr>
+<td>3</td>
+<td>File not found</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Configuration error</td>
+</tr>
+</tbody>
+</table>
+<h2 id="getting-help">Getting Help<a class="headerlink" href="#getting-help" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># General help
+aimnet --help
+
+# Command-specific help
+aimnet train --help
+aimnet export --help
+aimnet convert --help
+aimnet calc_sae --help
+</code></pre>
+<h2 id="see-also">See Also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../train/">Training Guide</a> - Detailed training documentation</li>
+<li><a href="../model_format/">Model Format</a> - Model file specifications</li>
+<li><a href="../calculator/">Calculator API</a> - Python inference API</li>
+</ul>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../long_range/" class="btn btn-neutral float-left" title="Long Range"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../train/" class="btn btn-neutral float-right" title="Train">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/isayevlab/aimnetcentral" class="fa fa-code-fork" style="color: #fcfcfc"> isayevlab/aimnetcentral</a>
+        </span>
+    
+    
+      <span><a href="../long_range/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../train/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

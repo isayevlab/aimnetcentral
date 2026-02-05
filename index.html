@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="description" content="AIMNet Machine Learned Interatomic Potential" /><meta name="author" content="Roman Zubatyuk" /><link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/" />
+      <link rel="shortcut icon" href="img/favicon.ico" />
+    <title>AIMNetCentral</title>
+    <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Home";
+        var mkdocs_page_input_path = "index.md";
+        var mkdocs_page_url = "/aimnetcentral/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="." class="icon icon-home"> AIMNetCentral
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="./search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Home</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#what-is-aimnet2">What is AIMNet2?</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#key-features">Key Features</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#quick-start">Quick Start</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#available-models">Available Models</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#documentation-guide">Documentation Guide</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#core-documentation">Core Documentation</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#workflows">Workflows</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#api-reference">API Reference</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#common-use-cases">Common Use Cases</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#periodic-systems">Periodic Systems</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#configuring-long-range-methods">Configuring Long-Range Methods</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#ase-integration">ASE Integration</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#support-and-contributing">Support and Contributing</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#citation">Citation</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#license">License</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="getting_started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="calculator/">Calculator</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="model_format/">Model Format</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="long_range/">Long Range</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="cli/">CLI Reference</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="train/">Train</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">API Reference</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="api/">Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="api/calculators/">Calculators</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="api/modules/">Modules</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="api/data/">Data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="api/config/">Config</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href=".">AIMNetCentral</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Home</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/isayevlab/aimnetcentral/edit/main/docs/index.md">Edit on isayevlab/aimnetcentral</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="aimnet2-machine-learned-interatomic-potential">AIMNet2: Machine-Learned Interatomic Potential<a class="headerlink" href="#aimnet2-machine-learned-interatomic-potential" title="Permanent link">&para;</a></h1>
+<p><a href="https://img.shields.io/github/v/release/isayevlab/aimnetcentral"><img alt="Release" src="https://img.shields.io/github/v/release/isayevlab/aimnetcentral" /></a>
+<a href="https://github.com/isayevlab/aimnetcentral/actions/workflows/main.yml?query=branch%3Amain"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/isayevlab/aimnetcentral/main.yml?branch=main" /></a>
+<a href="https://img.shields.io/github/license/isayevlab/aimnetcentral"><img alt="License" src="https://img.shields.io/github/license/isayevlab/aimnetcentral" /></a></p>
+<h2 id="what-is-aimnet2">What is AIMNet2?<a class="headerlink" href="#what-is-aimnet2" title="Permanent link">&para;</a></h2>
+<p>AIMNet2 is a neural network potential for fast and accurate atomistic simulations. Built on PyTorch, it provides:</p>
+<ul>
+<li>Accurate predictions for neutral, charged, organic, and elemental-organic systems</li>
+<li>Fast inference on both CPU and GPU</li>
+<li>Integration with popular simulation packages (ASE, PySisyphus)</li>
+<li>Configurable long-range electrostatics (DSF, Ewald) for periodic systems</li>
+</ul>
+<p>AIMNet2 combines a graph neural network architecture with flexible long-range interactions, making it suitable for molecular dynamics, geometry optimization, and property prediction across diverse chemical systems.</p>
+<h2 id="key-features">Key Features<a class="headerlink" href="#key-features" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Accurate and Versatile</strong>: Handles neutral, charged, organic, and elemental-organic systems with consistent accuracy</li>
+<li><strong>Flexible Interfaces</strong>: Calculator API for direct inference, plus ASE and PySisyphus integration for simulation workflows</li>
+<li><strong>Configurable Long-Range</strong>: Choose between Simple, DSF, or Ewald methods for Coulomb interactions</li>
+<li><strong>GPU Accelerated</strong>: CUDA support with optional <code>compile_mode</code> for ~5x MD speedup</li>
+<li><strong>Periodic Boundary Conditions</strong>: Full support for bulk and surface systems</li>
+</ul>
+<h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
+<pre><code class="language-python">from aimnet.calculators import AIMNet2Calculator
+
+# Load model
+calc = AIMNet2Calculator(&quot;aimnet2&quot;)
+
+# Run inference
+result = calc({
+    &quot;coord&quot;: coords,    # (N, 3) array in Angstrom
+    &quot;numbers&quot;: numbers, # (N,) atomic numbers
+    &quot;charge&quot;: 0.0,      # molecular charge
+}, forces=True)
+
+# Access results
+energy = result[&quot;energy&quot;]   # eV
+forces = result[&quot;forces&quot;]   # eV/Angstrom
+charges = result[&quot;charges&quot;] # partial charges
+</code></pre>
+<h2 id="available-models">Available Models<a class="headerlink" href="#available-models" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Elements</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>aimnet2</code></td>
+<td>H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I</td>
+<td>wB97M-D3 (default)</td>
+</tr>
+<tr>
+<td><code>aimnet2_b973c</code></td>
+<td>H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I</td>
+<td>B97-3c functional</td>
+</tr>
+<tr>
+<td><code>aimnet2_2025</code></td>
+<td>H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I</td>
+<td>B97-3c + improved intermolecular</td>
+</tr>
+<tr>
+<td><code>aimnet2nse</code></td>
+<td>H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I</td>
+<td>Open-shell chemistry</td>
+</tr>
+<tr>
+<td><code>aimnet2pd</code></td>
+<td>H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I</td>
+<td>Palladium-containing systems</td>
+</tr>
+</tbody>
+</table>
+<p><em>Each model has ensemble members (append _0 to _3). Ensemble averaging recommended for production.</em></p>
+<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<p>Basic installation:</p>
+<pre><code class="language-bash">pip install aimnet
+</code></pre>
+<p>With optional features:</p>
+<pre><code class="language-bash"># ASE integration
+pip install &quot;aimnet[ase]&quot;
+
+# PySisyphus integration
+pip install &quot;aimnet[pysis]&quot;
+
+# Training tools
+pip install &quot;aimnet[train]&quot;
+</code></pre>
+<p><strong>Requirements:</strong> Python 3.11 or 3.12. GPU support optional (PyTorch with CUDA).</p>
+<h2 id="documentation-guide">Documentation Guide<a class="headerlink" href="#documentation-guide" title="Permanent link">&para;</a></h2>
+<h3 id="core-documentation">Core Documentation<a class="headerlink" href="#core-documentation" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><a href="getting_started/">Getting Started</a></strong> - Installation and first calculations</li>
+<li><strong><a href="calculator/">Calculator API</a></strong> - Comprehensive reference for <code>AIMNet2Calculator</code></li>
+<li><strong><a href="model_format/">Model Format</a></strong> - Understanding model files and metadata</li>
+<li><strong><a href="long_range/">Long Range</a></strong> - Coulomb and dispersion methods</li>
+</ul>
+<h3 id="workflows">Workflows<a class="headerlink" href="#workflows" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><a href="train/">Training</a></strong> - Training custom models</li>
+<li><strong><a href="cli/">CLI Reference</a></strong> - Command-line tools</li>
+</ul>
+<h3 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><a href="api/calculators/">Calculators</a></strong> - <code>AIMNet2Calculator</code>, <code>AIMNet2ASE</code>, <code>AIMNet2Pysis</code></li>
+<li><strong><a href="api/modules/">Modules</a></strong> - Core neural network modules</li>
+<li><strong><a href="api/data/">Data</a></strong> - Dataset and sampling utilities</li>
+<li><strong><a href="api/config/">Config</a></strong> - Configuration utilities</li>
+</ul>
+<h2 id="common-use-cases">Common Use Cases<a class="headerlink" href="#common-use-cases" title="Permanent link">&para;</a></h2>
+<h3 id="periodic-systems">Periodic Systems<a class="headerlink" href="#periodic-systems" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">result = calc({
+    &quot;coord&quot;: coords,
+    &quot;numbers&quot;: numbers,
+    &quot;charge&quot;: 0.0,
+    &quot;cell&quot;: cell_vectors,  # (3, 3) in Angstrom
+}, forces=True, stress=True)
+</code></pre>
+<h3 id="configuring-long-range-methods">Configuring Long-Range Methods<a class="headerlink" href="#configuring-long-range-methods" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python"># DSF for periodic systems
+calc.set_lrcoulomb_method(&quot;dsf&quot;, cutoff=15.0)
+
+# Ewald for high accuracy (accuracy parameter controls precision)
+calc.set_lrcoulomb_method(&quot;ewald&quot;, ewald_accuracy=1e-8)
+</code></pre>
+<h3 id="ase-integration">ASE Integration<a class="headerlink" href="#ase-integration" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">from ase.io import read
+from aimnet.calculators import AIMNet2ASE
+
+atoms = read(&quot;structure.xyz&quot;)
+atoms.calc = AIMNet2ASE(&quot;aimnet2&quot;)
+energy = atoms.get_potential_energy()
+</code></pre>
+<h2 id="support-and-contributing">Support and Contributing<a class="headerlink" href="#support-and-contributing" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Issues</strong>: <a href="https://github.com/isayevlab/aimnetcentral/issues">GitHub Issues</a></li>
+<li><strong>Discussions</strong>: <a href="https://github.com/isayevlab/aimnetcentral/discussions">GitHub Discussions</a></li>
+<li><strong>Repository</strong>: <a href="https://github.com/isayevlab/aimnetcentral">github.com/isayevlab/aimnetcentral</a></li>
+</ul>
+<h2 id="citation">Citation<a class="headerlink" href="#citation" title="Permanent link">&para;</a></h2>
+<p>If you use AIMNet2, please cite:</p>
+<pre><code class="language-bibtex">@article{aimnet2,
+  title={AIMNet2: A Neural Network Potential to Meet Your Neutral, Charged, Organic, and Elemental-Organic Needs},
+  author={Anstine, Dylan M and Zubatyuk, Roman and Isayev, Olexandr},
+  journal={Chemical Science},
+  volume={16},
+  pages={10228--10244},
+  year={2025},
+  doi={10.1039/D4SC08572H}
+}
+</code></pre>
+<h2 id="license">License<a class="headerlink" href="#license" title="Permanent link">&para;</a></h2>
+<p>See <a href="https://github.com/isayevlab/aimnetcentral/blob/main/LICENSE">LICENSE</a> for details.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="getting_started/" class="btn btn-neutral float-right" title="Getting Started">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/isayevlab/aimnetcentral" class="fa fa-code-fork" style="color: #fcfcfc"> isayevlab/aimnetcentral</a>
+        </span>
+    
+    
+    
+      <span><a href="getting_started/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = ".";</script>
+    <script src="js/theme_extra.js"></script>
+    <script src="js/theme.js"></script>
+      <script src="search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>
+
+<!--
+MkDocs version : 1.6.1
+Build Date UTC : 2026-02-05 15:40:24.010111+00:00
+-->

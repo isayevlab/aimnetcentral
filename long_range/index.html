@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Roman Zubatyuk" /><link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/long_range/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Long Range - AIMNetCentral</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="../assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Long Range";
+        var mkdocs_page_input_path = "long_range.md";
+        var mkdocs_page_url = "/aimnetcentral/long_range/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> AIMNetCentral
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../getting_started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../calculator/">Calculator</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../model_format/">Model Format</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Long Range</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#choosing-a-coulomb-method">Choosing a Coulomb Method</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#simple-all-pairs-pairwise-coulomb">Simple (All-Pairs Pairwise Coulomb)</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#dsf-damped-shifted-force">DSF (Damped Shifted Force)</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#ewald-summation">Ewald Summation</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#method-comparison">Method Comparison</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#common-data-and-neighbor-list-handling">Common Data and Neighbor-List Handling</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#lrcoulomb">LRCoulomb</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#srcoulomb">SRCoulomb</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dispparam">DispParam</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#d3ts">D3TS</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dftd3">DFTD3</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#smoothing-window">Smoothing Window</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#tuning-dftd3-parameters">Tuning DFTD3 Parameters</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#forces">Forces</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#d3-parameters">D3 Parameters</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#complete-examples">Complete Examples</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#dsf-for-periodic-system">DSF for Periodic System</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#ewald-for-high-accuracy">Ewald for High Accuracy</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#changing-methods-at-runtime">Changing Methods at Runtime</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#separate-coulomb-and-dftd3-cutoffs">Separate Coulomb and DFTD3 Cutoffs</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#calculator-integration-external-modules">Calculator Integration (External Modules)</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../cli/">CLI Reference</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../train/">Train</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">API Reference</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/">Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/calculators/">Calculators</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/modules/">Modules</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/data/">Data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/config/">Config</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">AIMNetCentral</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Long Range</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/isayevlab/aimnetcentral/edit/main/docs/long_range.md">Edit on isayevlab/aimnetcentral</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="long-range-modules">Long-Range Modules<a class="headerlink" href="#long-range-modules" title="Permanent link">&para;</a></h1>
+<p>This page documents the long-range (LR) modules implemented in <code>aimnet/modules/lr.py</code>. All modules operate on
+the shared data dictionary and add their contributions to <code>data[key_out]</code> (usually <code>energy</code>).</p>
+<h2 id="choosing-a-coulomb-method">Choosing a Coulomb Method<a class="headerlink" href="#choosing-a-coulomb-method" title="Permanent link">&para;</a></h2>
+<p>Select the appropriate method based on your system and accuracy requirements.</p>
+<h3 id="simple-all-pairs-pairwise-coulomb">Simple (All-Pairs Pairwise Coulomb)<a class="headerlink" href="#simple-all-pairs-pairwise-coulomb" title="Permanent link">&para;</a></h3>
+<p><strong>Only for non-periodic systems.</strong> The calculator automatically switches to DSF if PBC is detected.</p>
+<p><strong>When to use:</strong></p>
+<ul>
+<li>Small non-periodic systems (&lt; 100 atoms)</li>
+<li>Quick calculations where exact Coulomb is acceptable</li>
+<li>Non-production exploratory work</li>
+</ul>
+<p><strong>When NOT to use:</strong></p>
+<ul>
+<li>Periodic systems (NOT SUPPORTED - auto-switches to DSF)</li>
+<li>Large systems (O(N²) fully connected becomes prohibitive)</li>
+<li>Production MD (inefficient for repeated evaluation)</li>
+</ul>
+<p><strong>Configuration:</strong></p>
+<pre><code class="language-python">calc.set_lrcoulomb_method(&quot;simple&quot;)
+# No cutoff - all pairs evaluated
+# WARNING: Will auto-switch to DSF if PBC (cell) is provided
+</code></pre>
+<p><strong>Characteristics:</strong></p>
+<ul>
+<li>Exact pairwise 1/r Coulomb sum for non-periodic systems</li>
+<li>All atom pairs evaluated (fully connected)</li>
+<li>O(N²) complexity</li>
+<li>Not applicable to periodic boundary conditions</li>
+</ul>
+<h3 id="dsf-damped-shifted-force">DSF (Damped Shifted Force)<a class="headerlink" href="#dsf-damped-shifted-force" title="Permanent link">&para;</a></h3>
+<p><strong>When to use:</strong></p>
+<ul>
+<li>Periodic boundary conditions (recommended)</li>
+<li>Large non-periodic systems (&gt; 200 atoms)</li>
+<li>Production molecular dynamics</li>
+<li>When computational efficiency matters</li>
+</ul>
+<p><strong>When NOT to use:</strong></p>
+<ul>
+<li>When highest accuracy is required (use Ewald instead)</li>
+<li>Very small systems where Simple is faster</li>
+</ul>
+<p><strong>Configuration:</strong></p>
+<pre><code class="language-python">calc.set_lrcoulomb_method(&quot;dsf&quot;, cutoff=15.0, dsf_alpha=0.2)
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Typical Range</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cutoff</code></td>
+<td>12-20 Å</td>
+<td>15.0 Å</td>
+<td>Larger = more accurate, more expensive</td>
+</tr>
+<tr>
+<td><code>dsf_alpha</code></td>
+<td>0.1-0.3</td>
+<td>0.2</td>
+<td>Damping strength; 0.2 works well for most systems</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Tuning guidelines:</strong></p>
+<ul>
+<li>Start with cutoff=15.0 Å, alpha=0.2 (default)</li>
+<li>Dense systems: reduce cutoff to 12 Å</li>
+<li>Dilute/surface systems: increase cutoff to 18-20 Å</li>
+<li>Validate: energies should converge within ~0.1 kcal/mol as cutoff increases</li>
+</ul>
+<p><strong>Characteristics:</strong></p>
+<ul>
+<li>Smooth truncation at cutoff with shifted force</li>
+<li>Maintains charge neutrality</li>
+<li>O(N) scaling with neighbor lists</li>
+<li>Energy and forces continuous at cutoff</li>
+<li>Based on Wolf summation method</li>
+</ul>
+<h3 id="ewald-summation">Ewald Summation<a class="headerlink" href="#ewald-summation" title="Permanent link">&para;</a></h3>
+<p><strong>When to use:</strong></p>
+<ul>
+<li>Research-grade accuracy required</li>
+<li>Benchmarking and validation studies</li>
+<li>Systems where electrostatics dominate behavior</li>
+<li>When computational cost is acceptable</li>
+</ul>
+<p><strong>When NOT to use:</strong></p>
+<ul>
+<li>Long MD trajectories (slower than DSF)</li>
+<li>When DSF accuracy is sufficient</li>
+<li>Very large systems (reciprocal space cost increases)</li>
+</ul>
+<p><strong>Configuration:</strong></p>
+<pre><code class="language-python"># Default accuracy (1e-8)
+calc.set_lrcoulomb_method(&quot;ewald&quot;)
+
+# Custom accuracy (higher precision, more computation)
+calc.set_lrcoulomb_method(&quot;ewald&quot;, ewald_accuracy=1e-10)
+
+# Lower accuracy (faster, but less precise)
+calc.set_lrcoulomb_method(&quot;ewald&quot;, ewald_accuracy=1e-6)
+</code></pre>
+<p><strong>Accuracy Parameter:</strong></p>
+<p>The <code>ewald_accuracy</code> parameter controls the real-space and reciprocal-space cutoffs.
+Lower values give higher precision but require more computation. The cutoffs are
+computed automatically based on system geometry:</p>
+<p>[
+\eta = \frac{(V^2 / N)^{1/6}}{\sqrt{2\pi}}
+]</p>
+<p>[
+r<em>{\text{cutoff}} = \sqrt{-2 \ln \varepsilon} \cdot \eta, \quad
+k</em>{\text{cutoff}} = \frac{\sqrt{-2 \ln \varepsilon}}{\eta}
+]</p>
+<p>Where (\varepsilon) is the accuracy parameter, (V) is the cell volume, and
+(N) is the number of atoms.</p>
+<p><strong>Characteristics:</strong></p>
+<ul>
+<li>Splits Coulomb into real-space + reciprocal-space + self-energy terms</li>
+<li>Configurable accuracy target (default 1e-8)</li>
+<li>Automatically determines k-space vectors based on accuracy</li>
+<li>O(N log N) to O(N^1.5) complexity depending on implementation</li>
+<li>Most accurate method for periodic systems</li>
+</ul>
+<p><strong>When Ewald matters:</strong></p>
+<ul>
+<li>Computing precise thermodynamic properties</li>
+<li>Benchmark comparisons against QM calculations</li>
+<li>Validation of other Coulomb methods</li>
+<li>Systems with significant long-range charge ordering</li>
+</ul>
+<h2 id="method-comparison">Method Comparison<a class="headerlink" href="#method-comparison" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Complexity</th>
+<th>PBC Support</th>
+<th>Typical Use Case</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Simple</td>
+<td>O(N²) fully connected</td>
+<td>No</td>
+<td>Small molecules, quick tests</td>
+<td>Auto-switches for PBC</td>
+</tr>
+<tr>
+<td>DSF</td>
+<td>O(N) with neighbor lists</td>
+<td>Yes</td>
+<td>Production MD, large systems</td>
+<td>Recommended for PBC</td>
+</tr>
+<tr>
+<td>Ewald</td>
+<td>O(N log N) to O(N^1.5)</td>
+<td>Yes</td>
+<td>High-accuracy benchmarks</td>
+<td>Research-grade precision</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Accuracy hierarchy:</strong> Ewald &gt; DSF &gt; Simple (for PBC)</p>
+<p><strong>Speed hierarchy:</strong> Simple (small N) &gt; DSF &gt; Ewald</p>
+<p><strong>Recommendation:</strong> Use DSF for periodic systems unless you need Ewald's precision.</p>
+<h2 id="common-data-and-neighbor-list-handling">Common Data and Neighbor-List Handling<a class="headerlink" href="#common-data-and-neighbor-list-handling" title="Permanent link">&para;</a></h2>
+<p><strong>Neighbor-list keys and suffix fallback</strong></p>
+<ul>
+<li>Coulomb modules prefer <code>nbmat_coulomb</code> and fall back to <code>nbmat_lr</code>.</li>
+<li>Dispersion modules (<code>DFTD3</code>, <code>D3TS</code>) prefer <code>nbmat_dftd3</code> and fall back to <code>nbmat_lr</code>.</li>
+</ul>
+<p>This fallback behavior is implemented via <code>nbops.resolve_suffix</code>, and distance calculation is lazily computed
+with <code>ops.lazy_calc_dij</code>.</p>
+<p><strong>Distance and masking</strong></p>
+<p>Distances use <code>d_ij{suffix}</code> derived from <code>coord</code> (and <code>shifts{suffix}</code> when PBC is present). Padding/diagonal
+pairs are masked via <code>mask_ij{suffix}</code>. For DSF, pairs beyond <code>Rc</code> are also masked.</p>
+<h2 id="lrcoulomb">LRCoulomb<a class="headerlink" href="#lrcoulomb" title="Permanent link">&para;</a></h2>
+<p><code>LRCoulomb</code> computes a long-range Coulomb contribution, optionally subtracting the short-range (SR) part to
+avoid double counting.</p>
+<p><strong>Inputs</strong></p>
+<ul>
+<li><code>charges</code> (default <code>key_in</code>)</li>
+<li><code>coord</code>, <code>cell</code> (for Ewald)</li>
+<li>Neighbor lists as described above</li>
+</ul>
+<p><strong>Methods</strong></p>
+<ol>
+<li>
+<p><strong>Simple (full pairwise Coulomb)</strong></p>
+</li>
+<li>
+<p>Pair energy: <code>e_ij = q_i q_j / r_ij</code></p>
+</li>
+<li>Total energy: <code>E = factor * sum_i sum_j e_ij</code> (accumulated in float64)</li>
+<li>
+<p>If <code>subtract_sr=True</code>, subtracts the SR energy described below.</p>
+</li>
+<li>
+<p><strong>DSF (damped shifted force)</strong></p>
+</li>
+</ol>
+<p>Uses <code>ops.coulomb_matrix_dsf</code>:</p>
+<pre><code>J(r) = erfc(alpha r)/r
+     - erfc(alpha Rc)/Rc
+     + (r - Rc) * (erfc(alpha Rc)/Rc^2 + 2 alpha exp(-(alpha Rc)^2) / (Rc sqrt(pi)))
+</code></pre>
+<p>Pairs with <code>r &gt; Rc</code> or masked entries are zeroed. Energy is:</p>
+<p><code>E = factor * sum_i sum_j q_i q_j J(r_ij)</code></p>
+<p>If <code>subtract_sr=True</code>, the SR term is subtracted.</p>
+<ol>
+<li><strong>Ewald</strong></li>
+</ol>
+<p>Uses <code>ops.coulomb_matrix_ewald</code>, which implements real-space + reciprocal-space + self terms with
+fixed accuracy (<code>1e-8</code>). This path requires a single molecule with <code>coord.ndim == 2</code> and <code>cell.ndim == 2</code>.</p>
+<p>If <code>subtract_sr=True</code>, the SR term is subtracted.</p>
+<p><strong>SR subtraction (shared by all methods)</strong></p>
+<p>The SR term uses an envelope cutoff:</p>
+<ul>
+<li><code>exp</code>: <code>fc(d) = exp(-1 / (1 - (d/rc)^2)) / 0.36787944117144233</code></li>
+<li><code>cosine</code>: <code>fc(d) = 0.5 * (cos(pi * d / rc) + 1)</code></li>
+</ul>
+<p>SR pair energy: <code>e_ij = fc(r_ij) * q_i q_j / r_ij</code></p>
+<p>The SR contribution is summed per molecule and subtracted from <code>key_out</code> when <code>subtract_sr=True</code>.</p>
+<h2 id="srcoulomb">SRCoulomb<a class="headerlink" href="#srcoulomb" title="Permanent link">&para;</a></h2>
+<p><code>SRCoulomb</code> subtracts the SR Coulomb contribution from <code>key_out</code>. It uses the same SR formula as <code>LRCoulomb</code>
+(envelope + cutoff) and is typically embedded in models trained with SR Coulomb so that external LR methods
+can add the full Coulomb energy without double counting.</p>
+<h2 id="dispparam">DispParam<a class="headerlink" href="#dispparam" title="Permanent link">&para;</a></h2>
+<p><code>DispParam</code> produces per-atom dispersion parameters (<code>c6</code>, <code>alpha</code>) from a reference table.</p>
+<ul>
+<li>Reference is loaded from a <code>.pt</code> file or provided as <code>ref_c6</code> / <code>ref_alpha</code>.</li>
+<li>Per-atom scaling uses <code>disp_param_mult = exp(clamp(disp_param, -4, 4))</code>.</li>
+<li>Output <code>disp_param</code> has shape <code>(N, 2)</code> with columns <code>(c6, alpha)</code>.</li>
+</ul>
+<h2 id="d3ts">D3TS<a class="headerlink" href="#d3ts" title="Permanent link">&para;</a></h2>
+<p><code>D3TS</code> implements a DFT-D3-like pairwise dispersion with the TS combination rule.</p>
+<p><strong>Inputs</strong></p>
+<ul>
+<li><code>disp_param</code> (from <code>DispParam</code>)</li>
+<li><code>coord</code>, <code>numbers</code></li>
+<li>Neighbor lists with <code>_dftd3</code> or <code>_lr</code> suffix</li>
+</ul>
+<p><strong>Key equations</strong></p>
+<p>TS combination rule:</p>
+<p><code>c6_ij = 2 c6_i c6_j / (c6_i * alpha_j / alpha_i + c6_j * alpha_i / alpha_j)</code></p>
+<p>Let <code>rr = r4r2[numbers]</code> and <code>rr_ij = 3 * rr_i * rr_j</code>. The BJ-like radius term is:</p>
+<p><code>r0_ij = a1 * sqrt(rr_ij) + a2</code></p>
+<p>Distances are converted to Bohr: <code>r = d_ij * Bohr_inv</code>.</p>
+<p>Energy per pair:</p>
+<p><code>e_ij = c6_ij * (s6 / (r^6 + r0_ij^6) + s8 * rr_ij / (r^8 + r0_ij^8))</code></p>
+<p>Total energy is summed per molecule and multiplied by <code>-half_Hartree</code>.</p>
+<h2 id="dftd3">DFTD3<a class="headerlink" href="#dftd3" title="Permanent link">&para;</a></h2>
+<p><code>DFTD3</code> computes DFT-D3 dispersion correction using the BJ damping function with C6/C8 terms. Uses the <code>dftd3_energy</code> custom autograd op from <code>aimnet.modules.ops</code>. No 3-body term (Axilrod-Teller-Muto) is included.</p>
+<h3 id="smoothing-window">Smoothing Window<a class="headerlink" href="#smoothing-window" title="Permanent link">&para;</a></h3>
+<p>Dispersion interactions are smoothly damped to zero near the cutoff to ensure continuous energy and forces.</p>
+<p>The smoothing window is defined by:</p>
+<pre><code class="language-python">smoothing_on = cutoff * (1 - smoothing_fraction)
+smoothing_off = cutoff
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Typical Value</th>
+<th>Default</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cutoff</code></td>
+<td>15-20 Å</td>
+<td>15.0 Å</td>
+<td>Interaction cutoff distance</td>
+</tr>
+<tr>
+<td><code>smoothing_fraction</code></td>
+<td>0.1-0.3</td>
+<td>0.2</td>
+<td>Width of smoothing region as fraction of cutoff</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Example:</strong> With cutoff=15.0 Å and smoothing_fraction=0.2:</p>
+<ul>
+<li>Full dispersion energy for r &lt; 12.0 Å (smoothing_on)</li>
+<li>Smoothly interpolated for 12.0 Å &lt; r &lt; 15.0 Å</li>
+<li>Zero contribution for r &gt; 15.0 Å</li>
+</ul>
+<h3 id="tuning-dftd3-parameters">Tuning DFTD3 Parameters<a class="headerlink" href="#tuning-dftd3-parameters" title="Permanent link">&para;</a></h3>
+<p><strong>Adjusting cutoff:</strong></p>
+<pre><code class="language-python"># Default: 15.0 Å
+calc.set_dftd3_cutoff(cutoff=15.0, smoothing_fraction=0.2)
+
+# For dense systems: shorter cutoff
+calc.set_dftd3_cutoff(cutoff=12.0, smoothing_fraction=0.2)
+
+# For surface/interface: longer cutoff
+calc.set_dftd3_cutoff(cutoff=20.0, smoothing_fraction=0.15)
+</code></pre>
+<p><strong>Smoothing fraction guidelines:</strong></p>
+<ul>
+<li>Smaller (0.1): Sharper transition, may need tighter convergence</li>
+<li>Default (0.2): Good balance for most systems</li>
+<li>Larger (0.3): Smoother transition, more conservative</li>
+</ul>
+<p><strong>Validation:</strong>
+Test energy convergence by varying cutoff. Dispersion energy should change by &lt; 0.05 kcal/mol when cutoff increases by 2 Å.</p>
+<h3 id="forces">Forces<a class="headerlink" href="#forces" title="Permanent link">&para;</a></h3>
+<p>If <code>compute_forces=True</code> and coordinates require grad, forces are automatically computed as <code>-grad(energy)</code> and added to <code>data["forces"]</code>.</p>
+<h3 id="d3-parameters">D3 Parameters<a class="headerlink" href="#d3-parameters" title="Permanent link">&para;</a></h3>
+<p>DFTD3 requires functional-specific parameters stored in model metadata:</p>
+<pre><code class="language-python">d3_params = {
+    &quot;s6&quot;: 1.0,      # C6 scaling
+    &quot;s8&quot;: 0.3908,   # C8 scaling (functional-dependent)
+    &quot;a1&quot;: 0.5660,   # BJ damping parameter
+    &quot;a2&quot;: 3.1280,   # BJ damping parameter
+}
+</code></pre>
+<p>These are set during model training/export and should not be modified for inference.</p>
+<h2 id="complete-examples">Complete Examples<a class="headerlink" href="#complete-examples" title="Permanent link">&para;</a></h2>
+<h3 id="dsf-for-periodic-system">DSF for Periodic System<a class="headerlink" href="#dsf-for-periodic-system" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">from aimnet.calculators import AIMNet2Calculator
+import torch
+
+# Create calculator
+calc = AIMNet2Calculator(&quot;aimnet2&quot;)
+
+# Configure DSF method
+calc.set_lrcoulomb_method(&quot;dsf&quot;, cutoff=15.0, dsf_alpha=0.2)
+
+# Periodic system
+cell = torch.tensor([
+    [10.0, 0.0, 0.0],
+    [0.0, 10.0, 0.0],
+    [0.0, 0.0, 10.0],
+])
+
+result = calc({
+    &quot;coord&quot;: coords,  # (N, 3)
+    &quot;numbers&quot;: numbers,  # (N,)
+    &quot;charge&quot;: 0.0,
+    &quot;cell&quot;: cell,
+}, forces=True, stress=True)
+
+print(f&quot;Energy: {result['energy'].item():.4f} eV&quot;)
+print(f&quot;Stress: {result['stress']}&quot;)  # (3, 3)
+</code></pre>
+<h3 id="ewald-for-high-accuracy">Ewald for High Accuracy<a class="headerlink" href="#ewald-for-high-accuracy" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python"># Configure Ewald method with default accuracy (1e-8)
+calc.set_lrcoulomb_method(&quot;ewald&quot;)
+
+# Same periodic system as above
+result_ewald = calc({
+    &quot;coord&quot;: coords,
+    &quot;numbers&quot;: numbers,
+    &quot;charge&quot;: 0.0,
+    &quot;cell&quot;: cell,
+}, forces=True)
+
+# Compare with DSF
+calc.set_lrcoulomb_method(&quot;dsf&quot;, cutoff=15.0)
+result_dsf = calc({
+    &quot;coord&quot;: coords,
+    &quot;numbers&quot;: numbers,
+    &quot;charge&quot;: 0.0,
+    &quot;cell&quot;: cell,
+}, forces=True)
+
+energy_diff = abs(result_ewald[&quot;energy&quot;] - result_dsf[&quot;energy&quot;])
+print(f&quot;DSF vs Ewald energy difference: {energy_diff.item():.4f} eV&quot;)
+# Typically &lt; 0.01 eV for well-converged cutoffs
+</code></pre>
+<h3 id="changing-methods-at-runtime">Changing Methods at Runtime<a class="headerlink" href="#changing-methods-at-runtime" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">calc = AIMNet2Calculator(&quot;aimnet2&quot;)
+
+# Start with simple
+calc.set_lrcoulomb_method(&quot;simple&quot;)
+result_simple = calc(data)
+
+# Switch to DSF
+calc.set_lrcoulomb_method(&quot;dsf&quot;, cutoff=15.0)
+result_dsf = calc(data)
+
+# Switch to Ewald
+calc.set_lrcoulomb_method(&quot;ewald&quot;, ewald_accuracy=1e-8)
+result_ewald = calc(data)
+
+# Compare energies
+print(f&quot;Simple: {result_simple['energy'].item():.4f} eV&quot;)
+print(f&quot;DSF:    {result_dsf['energy'].item():.4f} eV&quot;)
+print(f&quot;Ewald:  {result_ewald['energy'].item():.4f} eV&quot;)
+</code></pre>
+<h3 id="separate-coulomb-and-dftd3-cutoffs">Separate Coulomb and DFTD3 Cutoffs<a class="headerlink" href="#separate-coulomb-and-dftd3-cutoffs" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python"># Set different cutoffs for Coulomb and DFTD3
+calc.set_lrcoulomb_method(&quot;dsf&quot;, cutoff=12.0)  # Coulomb cutoff
+calc.set_dftd3_cutoff(cutoff=15.0, smoothing_fraction=0.2)  # DFTD3 cutoff
+
+# Calculator will use separate neighbor lists
+result = calc(data, forces=True)
+
+# Check cutoffs
+print(f&quot;Coulomb cutoff: {calc.coulomb_cutoff} Å&quot;)
+print(f&quot;DFTD3 cutoff: {calc.dftd3_cutoff} Å&quot;)
+</code></pre>
+<h2 id="calculator-integration-external-modules">Calculator Integration (External Modules)<a class="headerlink" href="#calculator-integration-external-modules" title="Permanent link">&para;</a></h2>
+<p><code>AIMNet2Calculator</code> attaches external LR modules based on model metadata:</p>
+<ul>
+<li>External <code>LRCoulomb</code> is created when <code>needs_coulomb=True</code>. If <code>coulomb_mode="sr_embedded"</code>,
+  the model already subtracts SR Coulomb, so the external module adds the full Coulomb energy.</li>
+<li>External <code>DFTD3</code> is created when <code>needs_dispersion=True</code> and <code>d3_params</code> are present.</li>
+</ul>
+<p>See <a href="../calculator/">calculator.md</a> for attachment logic and runtime configuration methods.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../model_format/" class="btn btn-neutral float-left" title="Model Format"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../cli/" class="btn btn-neutral float-right" title="CLI Reference">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/isayevlab/aimnetcentral" class="fa fa-code-fork" style="color: #fcfcfc"> isayevlab/aimnetcentral</a>
+        </span>
+    
+    
+      <span><a href="../model_format/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../cli/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

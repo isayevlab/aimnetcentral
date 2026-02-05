@@ -1,0 +1,1522 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Roman Zubatyuk" /><link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/calculator/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Calculator - AIMNetCentral</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="../assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Calculator";
+        var mkdocs_page_input_path = "calculator.md";
+        var mkdocs_page_url = "/aimnetcentral/calculator/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> AIMNetCentral
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../getting_started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Calculator</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#quick-start">Quick Start</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#basic-inference">Basic Inference</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#with-forces">With Forces</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#periodic-systems">Periodic Systems</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#changing-coulomb-methods">Changing Coulomb Methods</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#constructor">Constructor</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#parameters">Parameters</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#model">model</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#nb_threshold">nb_threshold</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#needs_coulomb">needs_coulomb</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#needs_dispersion">needs_dispersion</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#device">device</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#compile_model">compile_model</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#compile_kwargs">compile_kwargs</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#metadata-resolution">Metadata Resolution</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#properties">Properties</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#device_1">device</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#cutoff">cutoff</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#cutoff_lr">cutoff_lr</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#coulomb_cutoff">coulomb_cutoff</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#dftd3_cutoff">dftd3_cutoff</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#has_external_coulomb">has_external_coulomb</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#has_external_dftd3">has_external_dftd3</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#coulomb_method">coulomb_method</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#methods">Methods</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#evaldata-forcesfalse-stressfalse-hessianfalse">eval(data, forces=False, stress=False, hessian=False)</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#set_lrcoulomb_methodmethod-cutoff150-dsf_alpha02-ewald_accuracy1e-8">set_lrcoulomb_method(method, cutoff=15.0, dsf_alpha=0.2, ewald_accuracy=1e-8)</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#set_lr_cutoffcutoff">set_lr_cutoff(cutoff)</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#set_dftd3_cutoffcutoffnone-smoothing_fractionnone">set_dftd3_cutoff(cutoff=None, smoothing_fraction=None)</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#input-format">Input Format</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#required-keys">Required Keys</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#optional-keys">Optional Keys</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#input-conversion">Input Conversion</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#output-format">Output Format</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#batching-and-neighbor-modes">Batching and Neighbor Modes</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#dense-mode-on2">Dense Mode (O(N²))</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#sparse-mode-on">Sparse Mode (O(N))</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#mode-2-batched-sparse-manual">Mode 2: Batched Sparse (manual)</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#choosing-the-right-mode">Choosing the Right Mode</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#flattening-logic">Flattening Logic</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#periodic-boundary-conditions-pbc">Periodic Boundary Conditions (PBC)</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#input-requirements">Input Requirements</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#behavior">Behavior</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#coulomb-method-for-pbc">Coulomb Method for PBC</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#neighbor-list-management">Neighbor List Management</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#adaptive-neighbor-lists">Adaptive Neighbor Lists</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#neighbor-list-format-and-padding">Neighbor List Format and Padding</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#module-suffix-fallback">Module Suffix Fallback</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#device-handling">Device Handling</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#automatic-selection">Automatic Selection</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#placement">Placement</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#external-lr-module-configuration">External LR Module Configuration</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#lrcoulomb-setup">LRCoulomb Setup</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#dftd3-setup">DFTD3 Setup</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#how-lr-modules-are-attached">How LR Modules Are Attached</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#cutoff-handling-for-lr-modules">Cutoff Handling for LR Modules</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#default-values">Default Values</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#lr-module-defaults">LR Module Defaults</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#coulomb-defaults">Coulomb Defaults</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#sr-coulomb-cutoff-constraint">SR Coulomb Cutoff Constraint</a>
+    </li>
+        </ul>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#legacy-model-compatibility">Legacy Model Compatibility</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#error-handling">Error Handling</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#common-errors">Common Errors</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#warnings">Warnings</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#complete-example">Complete Example</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#performance-tips">Performance Tips</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#hardware-acceleration">Hardware Acceleration</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#compile-mode">Compile Mode</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#memory-management">Memory Management</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#pre-compute-neighbor-lists">Pre-compute Neighbor Lists</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#coulomb-method-selection">Coulomb Method Selection</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#multi-threading-cpu">Multi-threading (CPU)</a>
+    </li>
+        </ul>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../model_format/">Model Format</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../long_range/">Long Range</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../cli/">CLI Reference</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../train/">Train</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">API Reference</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/">Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/calculators/">Calculators</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/modules/">Modules</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/data/">Data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/config/">Config</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">AIMNetCentral</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Calculator</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/isayevlab/aimnetcentral/edit/main/docs/calculator.md">Edit on isayevlab/aimnetcentral</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="aimnet2calculator">AIMNet2Calculator<a class="headerlink" href="#aimnet2calculator" title="Permanent link">&para;</a></h1>
+<p>This document provides detailed documentation of the <code>AIMNet2Calculator</code> class behavior.</p>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p><code>AIMNet2Calculator</code> is a helper class for loading AIMNet2 models and performing inference. It handles:</p>
+<ul>
+<li>Model loading (from registry, file path, or <code>nn.Module</code>)</li>
+<li>External long-range (LR) module setup (Coulomb, DFTD3)</li>
+<li>Neighbor list computation and management</li>
+<li>Input preprocessing and output postprocessing</li>
+<li>Batching and periodic boundary conditions (PBC)</li>
+</ul>
+<p>For LR module math and behavior, see <a href="../long_range/">long_range.md</a>.</p>
+<h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
+<h3 id="basic-inference">Basic Inference<a class="headerlink" href="#basic-inference" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">from aimnet.calculators import AIMNet2Calculator
+
+calc = AIMNet2Calculator(&quot;aimnet2&quot;)
+result = calc({
+    &quot;coord&quot;: coords,    # (N, 3)
+    &quot;numbers&quot;: numbers, # (N,)
+    &quot;charge&quot;: 0.0,
+})
+energy = result[&quot;energy&quot;]
+</code></pre>
+<h3 id="with-forces">With Forces<a class="headerlink" href="#with-forces" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">result = calc(data, forces=True)
+forces = result[&quot;forces&quot;]  # (N, 3)
+</code></pre>
+<h3 id="periodic-systems">Periodic Systems<a class="headerlink" href="#periodic-systems" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">calc.set_lrcoulomb_method(&quot;dsf&quot;, cutoff=15.0)
+result = calc({
+    &quot;coord&quot;: coords,
+    &quot;numbers&quot;: numbers,
+    &quot;charge&quot;: 0.0,
+    &quot;cell&quot;: cell,  # (3, 3)
+}, forces=True, stress=True)
+</code></pre>
+<h3 id="changing-coulomb-methods">Changing Coulomb Methods<a class="headerlink" href="#changing-coulomb-methods" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python"># DSF (recommended for PBC)
+calc.set_lrcoulomb_method(&quot;dsf&quot;, cutoff=15.0, dsf_alpha=0.2)
+
+# Ewald (high accuracy, currently limited to non-batched case)
+calc.set_lrcoulomb_method(&quot;ewald&quot;, ewald_accuracy=1e-8)
+
+# Simple (all pairs)
+calc.set_lrcoulomb_method(&quot;simple&quot;)
+</code></pre>
+<h2 id="constructor">Constructor<a class="headerlink" href="#constructor" title="Permanent link">&para;</a></h2>
+<pre><code class="language-python">AIMNet2Calculator(
+    model: str | nn.Module = &quot;aimnet2&quot;,
+    nb_threshold: int = 120,
+    needs_coulomb: bool | None = None,
+    needs_dispersion: bool | None = None,
+    device: str | None = None,
+    compile_model: bool = False,
+    compile_kwargs: dict | None = None,
+)
+</code></pre>
+<h3 id="parameters">Parameters<a class="headerlink" href="#parameters" title="Permanent link">&para;</a></h3>
+<h4 id="model"><code>model</code><a class="headerlink" href="#model" title="Permanent link">&para;</a></h4>
+<p>Model to use for inference.</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>str</code> (registry name)</td>
+<td>Loads from model registry (e.g., <code>"aimnet2"</code>), downloading if needed</td>
+</tr>
+<tr>
+<td><code>str</code> (file path)</td>
+<td>Loads from <code>.pt</code> (v2) or <code>.jpt</code> (v1 legacy) file if the path exists</td>
+</tr>
+<tr>
+<td><code>torch.nn.Module</code></td>
+<td>Uses provided module directly</td>
+</tr>
+</tbody>
+</table>
+<p>For <code>torch.nn.Module</code>, metadata is read from <code>model.metadata</code> attribute if available (v2 models).</p>
+<h4 id="nb_threshold"><code>nb_threshold</code><a class="headerlink" href="#nb_threshold" title="Permanent link">&para;</a></h4>
+<p>Threshold for batching/flattening decisions. Default: <code>120</code>.</p>
+<p>The calculator uses two input modes:</p>
+<ol>
+<li><strong>Fully connected (mode 0)</strong>: 3D batched input for coordinates <code>(num_mols, num_atoms, 3)</code> with all-pairs
+   interactions (dense O(N²)). Fast on GPU for small systems.</li>
+<li><strong>Flattened + neighbor lists (mode 1)</strong>: 2D input for coordinates <code>(num_atoms, 3)</code> with <code>mol_idx</code> and neighbor
+   lists (sparse O(N)). Used for large systems, CPU execution, and periodic systems.</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Behavior</th>
+<th>Complexity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>N &gt; nb_threshold</code></td>
+<td>If input is mode 0 (3D), flatten to mode 1 (2D with <code>mol_idx</code>)</td>
+<td>O(N) linear</td>
+</tr>
+<tr>
+<td><code>device == "cpu"</code></td>
+<td>If input is mode 0 (3D), always flatten to mode 1</td>
+<td>O(N) linear</td>
+</tr>
+<tr>
+<td><code>N &lt; nb_threshold</code> and CUDA</td>
+<td>Keep mode 0 (3D)</td>
+<td>O(N²) fully connected</td>
+</tr>
+</tbody>
+</table>
+<p>This affects memory usage and performance for batched inference. The mode=0 path uses a fully connected
+graph (all-pairs interactions), which scales as O(N²) but is fast for GPU. The mode=1
+path uses neighbor lists, which scale linearly with system size. Fully connected mode is not used
+for periodic systems; PBC inputs always go through neighbor lists.</p>
+<h4 id="needs_coulomb"><code>needs_coulomb</code><a class="headerlink" href="#needs_coulomb" title="Permanent link">&para;</a></h4>
+<p>Whether to attach external Coulomb module.</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>None</code> (default)</td>
+<td>Determined from model metadata</td>
+</tr>
+<tr>
+<td><code>True</code></td>
+<td>Force external Coulomb (overrides metadata)</td>
+</tr>
+<tr>
+<td><code>False</code></td>
+<td>No external Coulomb (overrides metadata)</td>
+</tr>
+</tbody>
+</table>
+<p>Only affects v2 format models. Legacy JIT models have embedded Coulomb.
+If you override this flag on a model without Coulomb metadata, ensure it is
+compatible with the expected subtraction for short range Coulomb contribution (see <code>coulomb_mode</code> in model metadata).</p>
+<h4 id="needs_dispersion"><code>needs_dispersion</code><a class="headerlink" href="#needs_dispersion" title="Permanent link">&para;</a></h4>
+<p>Whether to attach external DFTD3 module.</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>None</code> (default)</td>
+<td>Determined from model metadata</td>
+</tr>
+<tr>
+<td><code>True</code></td>
+<td>Force external DFTD3 (overrides metadata)</td>
+</tr>
+<tr>
+<td><code>False</code></td>
+<td>No external DFTD3 (overrides metadata)</td>
+</tr>
+</tbody>
+</table>
+<p>Only affects new-format models. Raises <code>ValueError</code> if <code>needs_dispersion=True</code> but <code>d3_params</code> are missing in metadata.</p>
+<h4 id="device"><code>device</code><a class="headerlink" href="#device" title="Permanent link">&para;</a></h4>
+<p>Device to run the model on.</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>None</code> (default)</td>
+<td>Auto-detect: uses CUDA if available, else CPU</td>
+</tr>
+<tr>
+<td><code>"cuda"</code></td>
+<td>Force CUDA device</td>
+</tr>
+<tr>
+<td><code>"cpu"</code></td>
+<td>Force CPU device</td>
+</tr>
+<tr>
+<td><code>"cuda:N"</code></td>
+<td>Specific CUDA device (e.g., <code>"cuda:1"</code>)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="compile_model"><code>compile_model</code><a class="headerlink" href="#compile_model" title="Permanent link">&para;</a></h4>
+<p>Whether to compile the model with <code>torch.compile()</code> for faster inference.</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>False</code> (default)</td>
+<td>No compilation</td>
+</tr>
+<tr>
+<td><code>True</code></td>
+<td>Compile model with <code>torch.compile()</code></td>
+</tr>
+</tbody>
+</table>
+<p>Compilation adds overhead on first call but speeds up subsequent calls. Useful for
+MD trajectories, geometry optimizations, or repeated evaluations.</p>
+<h4 id="compile_kwargs"><code>compile_kwargs</code><a class="headerlink" href="#compile_kwargs" title="Permanent link">&para;</a></h4>
+<p>Additional keyword arguments to pass to <code>torch.compile()</code>. Default is <code>None</code>.</p>
+<pre><code class="language-python"># Example: use reduce-overhead mode for lower latency
+calc = AIMNet2Calculator(&quot;aimnet2&quot;, compile_model=True, compile_kwargs={&quot;mode&quot;: &quot;reduce-overhead&quot;})
+</code></pre>
+<p>See <a href="https://pytorch.org/docs/stable/generated/torch.compile.html">torch.compile documentation</a>
+for available options.</p>
+<h3 id="metadata-resolution">Metadata Resolution<a class="headerlink" href="#metadata-resolution" title="Permanent link">&para;</a></h3>
+<pre><code>Priority: explicit flags &gt; model metadata &gt; no external modules
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Model Source</th>
+<th>Metadata Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>File path (<code>.pt</code>/<code>.jpt</code>)</td>
+<td>Loaded from file</td>
+</tr>
+<tr>
+<td><code>nn.Module</code></td>
+<td><code>model.metadata</code> attribute</td>
+</tr>
+<tr>
+<td>No metadata + no flags</td>
+<td>No external LR modules</td>
+</tr>
+</tbody>
+</table>
+<h2 id="properties">Properties<a class="headerlink" href="#properties" title="Permanent link">&para;</a></h2>
+<h3 id="device_1"><code>device</code><a class="headerlink" href="#device_1" title="Permanent link">&para;</a></h3>
+<p>Device string (e.g., <code>"cuda"</code>, <code>"cpu"</code>, <code>"cuda:1"</code>). Set via constructor parameter or auto-detected.</p>
+<h3 id="cutoff"><code>cutoff</code><a class="headerlink" href="#cutoff" title="Permanent link">&para;</a></h3>
+<p>Short-range model cutoff in Ångströms. Typically 5.0 Å.</p>
+<h3 id="cutoff_lr"><code>cutoff_lr</code><a class="headerlink" href="#cutoff_lr" title="Permanent link">&para;</a></h3>
+<p>Primary long-range cutoff reference. Used for backward compatibility with legacy models.</p>
+<h3 id="coulomb_cutoff"><code>coulomb_cutoff</code><a class="headerlink" href="#coulomb_cutoff" title="Permanent link">&para;</a></h3>
+<p>Coulomb-specific cutoff distance. Tracked separately from the DFTD3 cutoff.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>"simple"</code></td>
+<td><code>inf</code> (all pairs)</td>
+</tr>
+<tr>
+<td><code>"dsf"</code></td>
+<td>Configured cutoff (default 15.0 Å)</td>
+</tr>
+<tr>
+<td><code>"ewald"</code></td>
+<td><code>None</code> (Ewald manages its own real-space cutoff internally)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="dftd3_cutoff"><code>dftd3_cutoff</code><a class="headerlink" href="#dftd3_cutoff" title="Permanent link">&para;</a></h3>
+<p>DFTD3-specific cutoff distance. Default: 15.0 Å.</p>
+<p><strong>Neighbor list behavior:</strong></p>
+<p>The calculator keeps Coulomb and DFTD3 cutoffs independent. Long-range neighbor lists are:</p>
+<ul>
+<li><strong>Shared</strong> when both cutoffs are finite and within 20% of each other</li>
+<li><strong>Separate</strong> when both cutoffs are finite and differ by more than 20%</li>
+<li><strong>All pairs</strong> for <code>"simple"</code> Coulomb (effectively no cutoff)</li>
+<li><strong>Ignored by Ewald</strong>, which builds its own real-space/reciprocal sums</li>
+</ul>
+<p><strong>Data dictionary keys:</strong></p>
+<p>LR modules prefer their specific suffix, falling back to <code>_lr</code>:</p>
+<ul>
+<li><strong>LRCoulomb</strong>: Tries <code>nbmat_coulomb</code> first, falls back to <code>nbmat_lr</code></li>
+<li><strong>DFTD3/D3TS</strong>: Tries <code>nbmat_dftd3</code> first, falls back to <code>nbmat_lr</code></li>
+</ul>
+<p>When neighbor lists are shared, all keys point to the same array.</p>
+<p><strong>Modifying cutoffs:</strong></p>
+<ul>
+<li><code>set_lr_cutoff(cutoff)</code>: Updates both Coulomb and DFTD3 cutoffs</li>
+<li><code>set_lrcoulomb_method(method, cutoff)</code>: Updates Coulomb cutoff only</li>
+<li><code>set_dftd3_cutoff(cutoff)</code>: Updates DFTD3 cutoff only</li>
+</ul>
+<h3 id="has_external_coulomb"><code>has_external_coulomb</code><a class="headerlink" href="#has_external_coulomb" title="Permanent link">&para;</a></h3>
+<p><code>True</code> if external <code>LRCoulomb</code> module is attached. <code>False</code> for legacy models with embedded Coulomb.</p>
+<h3 id="has_external_dftd3"><code>has_external_dftd3</code><a class="headerlink" href="#has_external_dftd3" title="Permanent link">&para;</a></h3>
+<p><code>True</code> if external <code>DFTD3</code> module is attached. <code>False</code> for legacy models or D3TS models.</p>
+<h3 id="coulomb_method"><code>coulomb_method</code><a class="headerlink" href="#coulomb_method" title="Permanent link">&para;</a></h3>
+<p>Current Coulomb method: <code>"simple"</code>, <code>"dsf"</code>, <code>"ewald"</code>, or <code>None</code>.</p>
+<p>Returns <code>None</code> for:</p>
+<ul>
+<li>Legacy models with embedded Coulomb</li>
+<li>Models without Coulomb</li>
+</ul>
+<p><strong>Note on Ewald:</strong></p>
+<p>Ewald summation uses its own internal real-space cutoff based on accuracy requirements.
+When Ewald is selected, <code>coulomb_cutoff</code> is <code>None</code> and does not contribute to neighbor list computation.</p>
+<h2 id="methods">Methods<a class="headerlink" href="#methods" title="Permanent link">&para;</a></h2>
+<h3 id="evaldata-forcesfalse-stressfalse-hessianfalse"><code>eval(data, forces=False, stress=False, hessian=False)</code><a class="headerlink" href="#evaldata-forcesfalse-stressfalse-hessianfalse" title="Permanent link">&para;</a></h3>
+<p>Main inference method. Also callable via <code>calculator(data, ...)</code>.</p>
+<p><strong>Parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data</code></td>
+<td><code>dict</code></td>
+<td>required</td>
+<td>Input data dictionary</td>
+</tr>
+<tr>
+<td><code>forces</code></td>
+<td><code>bool</code></td>
+<td><code>False</code></td>
+<td>Compute atomic forces</td>
+</tr>
+<tr>
+<td><code>stress</code></td>
+<td><code>bool</code></td>
+<td><code>False</code></td>
+<td>Compute stress tensor (requires <code>cell</code>)</td>
+</tr>
+<tr>
+<td><code>hessian</code></td>
+<td><code>bool</code></td>
+<td><code>False</code></td>
+<td>Compute Hessian matrix</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns:</strong> Dictionary with computed outputs.</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-python">calc = AIMNet2Calculator(&quot;aimnet2&quot;)
+result = calc.eval({
+    &quot;coord&quot;: coords,      # (N, 3) or (B, N, 3)
+    &quot;numbers&quot;: numbers,   # (N,) or (B, N)
+    &quot;charge&quot;: charge,     # (1,) or (B,)
+}, forces=True)
+
+energy = result[&quot;energy&quot;]
+forces = result[&quot;forces&quot;]
+charges = result[&quot;charges&quot;]
+</code></pre>
+<h3 id="set_lrcoulomb_methodmethod-cutoff150-dsf_alpha02-ewald_accuracy1e-8"><code>set_lrcoulomb_method(method, cutoff=15.0, dsf_alpha=0.2, ewald_accuracy=1e-8)</code><a class="headerlink" href="#set_lrcoulomb_methodmethod-cutoff150-dsf_alpha02-ewald_accuracy1e-8" title="Permanent link">&para;</a></h3>
+<p>Set the long-range Coulomb method.</p>
+<p><strong>Parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>method</code></td>
+<td><code>str</code></td>
+<td>required</td>
+<td><code>"simple"</code>, <code>"dsf"</code>, or <code>"ewald"</code></td>
+</tr>
+<tr>
+<td><code>cutoff</code></td>
+<td><code>float</code></td>
+<td><code>15.0</code></td>
+<td>Cutoff for DSF method (Å). Not used for Ewald.</td>
+</tr>
+<tr>
+<td><code>dsf_alpha</code></td>
+<td><code>float</code></td>
+<td><code>0.2</code></td>
+<td>Alpha parameter for DSF method</td>
+</tr>
+<tr>
+<td><code>ewald_accuracy</code></td>
+<td><code>float</code></td>
+<td><code>1e-8</code></td>
+<td>Target accuracy for Ewald summation</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Behavior:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Description</th>
+<th>Coulomb cutoff</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>"simple"</code></td>
+<td>Direct Coulomb sum (all pairs)</td>
+<td><code>inf</code></td>
+</tr>
+<tr>
+<td><code>"dsf"</code></td>
+<td>Damped shifted force</td>
+<td>Configured cutoff</td>
+</tr>
+<tr>
+<td><code>"ewald"</code></td>
+<td>Ewald summation</td>
+<td>Computed from accuracy</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Ewald Accuracy Parameter:</strong></p>
+<p>For Ewald summation, the <code>ewald_accuracy</code> parameter controls the real-space and
+reciprocal-space cutoffs. The cutoffs are computed automatically based on system
+geometry:</p>
+<p>[
+\eta = \frac{(V^2 / N)^{1/6}}{\sqrt{2\pi}}
+]</p>
+<p>[
+r_{\text{cutoff}} = \sqrt{-2 \ln \varepsilon} \cdot \eta
+]</p>
+<p>[
+k_{\text{cutoff}} = \frac{\sqrt{-2 \ln \varepsilon}}{\eta}
+]</p>
+<p>Where (\varepsilon) is the accuracy parameter, (V) is the cell volume, and
+(N) is the number of atoms. Lower accuracy values (e.g., <code>1e-10</code>) give higher
+precision but require more computation.</p>
+<p><strong>Notes:</strong></p>
+<ul>
+<li>Updates external <code>LRCoulomb</code> module if present</li>
+<li>Automatically updates neighbor lists</li>
+<li>Issues warning for legacy models (no effect)</li>
+<li>Auto-switches to <code>"dsf"</code> when PBC is detected with <code>"simple"</code> method (see PBC notes below)</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-python">calc = AIMNet2Calculator(&quot;aimnet2&quot;)
+calc.set_lrcoulomb_method(&quot;dsf&quot;, cutoff=12.0, dsf_alpha=0.20)
+calc.set_lrcoulomb_method(&quot;ewald&quot;, ewald_accuracy=1e-6)
+</code></pre>
+<h3 id="set_lr_cutoffcutoff"><code>set_lr_cutoff(cutoff)</code><a class="headerlink" href="#set_lr_cutoffcutoff" title="Permanent link">&para;</a></h3>
+<p>Set the unified long-range cutoff for all LR modules.</p>
+<p><strong>Parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cutoff</code></td>
+<td><code>float</code></td>
+<td>Cutoff distance (Å) for LR neighbor lists</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Notes:</strong></p>
+<ul>
+<li>Updates both Coulomb and DFTD3 cutoffs</li>
+<li>Ewald method ignores this cutoff (uses its own internal cutoff)</li>
+<li>Automatically rebuilds neighbor lists</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-python">calc = AIMNet2Calculator(&quot;aimnet2&quot;)
+calc.set_lr_cutoff(20.0)  # Updates both Coulomb and DFTD3 cutoffs
+</code></pre>
+<h3 id="set_dftd3_cutoffcutoffnone-smoothing_fractionnone"><code>set_dftd3_cutoff(cutoff=None, smoothing_fraction=None)</code><a class="headerlink" href="#set_dftd3_cutoffcutoffnone-smoothing_fractionnone" title="Permanent link">&para;</a></h3>
+<p>Set DFTD3 cutoff and smoothing.</p>
+<p><strong>Parameters:</strong></p>
+<p>| Parameter            | Type   | Default | Description |
+| -------------------- | ------ | ------- | ----------- | ------------------------------------------ |
+| <code>cutoff</code>             | <code>float | None</code>   | <code>15.0</code>      | Cutoff distance (Å)                        |
+| <code>smoothing_fraction</code> | <code>float | None</code>   | <code>0.2</code>       | Fraction of cutoff used as smoothing width |</p>
+<p><strong>Notes:</strong></p>
+<ul>
+<li>Only updates smoothing parameters for external DFTD3 modules</li>
+<li>Always updates neighbor list cutoffs used by the calculator</li>
+<li>For legacy models with embedded DFTD3, the embedded module’s smoothing parameters do not change,
+  but the neighbor list cutoff provided by the calculator can still change dispersion behavior</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-python">calc = AIMNet2Calculator(&quot;aimnet2&quot;)
+calc.set_dftd3_cutoff(cutoff=20.0, smoothing_fraction=0.25)  # smoothing from 15A to 20A
+</code></pre>
+<h2 id="input-format">Input Format<a class="headerlink" href="#input-format" title="Permanent link">&para;</a></h2>
+<h3 id="required-keys">Required Keys<a class="headerlink" href="#required-keys" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Shape</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>coord</code></td>
+<td><code>float32</code></td>
+<td><code>(N, 3)</code> or <code>(B, N, 3)</code></td>
+<td>Atomic coordinates (Å)</td>
+</tr>
+<tr>
+<td><code>numbers</code></td>
+<td><code>int64</code></td>
+<td><code>(N,)</code> or <code>(B, N)</code></td>
+<td>Atomic numbers</td>
+</tr>
+<tr>
+<td><code>charge</code></td>
+<td><code>float32</code></td>
+<td><code>(1,)</code> or <code>(B,)</code></td>
+<td>Molecular charge(s)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="optional-keys">Optional Keys<a class="headerlink" href="#optional-keys" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Shape</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mult</code></td>
+<td><code>float32</code></td>
+<td><code>(B,)</code></td>
+<td>Multiplicity</td>
+</tr>
+<tr>
+<td><code>mol_idx</code></td>
+<td><code>int64</code></td>
+<td><code>(N,)</code></td>
+<td>Molecule index per atom</td>
+</tr>
+<tr>
+<td><code>cell</code></td>
+<td><code>float32</code></td>
+<td><code>(3, 3)</code> or <code>(B, 3, 3)</code></td>
+<td>Unit cell vectors</td>
+</tr>
+<tr>
+<td><code>nbmat</code></td>
+<td><code>int64</code></td>
+<td><code>(N, max_nb)</code></td>
+<td>Pre-computed neighbor matrix</td>
+</tr>
+<tr>
+<td><code>nbmat_lr</code></td>
+<td><code>int64</code></td>
+<td><code>(N, max_nb)</code></td>
+<td>Long-range neighbor matrix</td>
+</tr>
+<tr>
+<td><code>nb_pad_mask</code></td>
+<td><code>bool</code></td>
+<td><code>(N, max_nb)</code></td>
+<td>Optional padding mask for <code>nbmat</code></td>
+</tr>
+<tr>
+<td><code>nb_pad_mask_lr</code></td>
+<td><code>bool</code></td>
+<td><code>(N, max_nb)</code></td>
+<td>Optional padding mask for <code>nbmat_lr</code></td>
+</tr>
+<tr>
+<td><code>shifts</code></td>
+<td><code>float32</code></td>
+<td><code>(N, max_nb, 3)</code></td>
+<td>PBC shifts for neighbors</td>
+</tr>
+<tr>
+<td><code>shifts_lr</code></td>
+<td><code>float32</code></td>
+<td><code>(N, max_nb, 3)</code></td>
+<td>PBC shifts for LR neighbors</td>
+</tr>
+</tbody>
+</table>
+<h3 id="input-conversion">Input Conversion<a class="headerlink" href="#input-conversion" title="Permanent link">&para;</a></h3>
+<p>The calculator automatically converts:</p>
+<ul>
+<li>NumPy arrays → PyTorch tensors</li>
+<li>Python lists → PyTorch tensors</li>
+<li>Scalar tensors → Shape <code>(1,)</code></li>
+<li>All tensors → Correct dtype and device</li>
+</ul>
+<p>Any keys not listed in required/optional tables are ignored during input conversion.</p>
+<h2 id="output-format">Output Format<a class="headerlink" href="#output-format" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Shape</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>energy</code></td>
+<td><code>(1,)</code> or <code>(B,)</code></td>
+<td>Total energy per molecule</td>
+</tr>
+<tr>
+<td><code>charges</code></td>
+<td><code>(N,)</code> or <code>(B, N)</code></td>
+<td>Atomic partial charges</td>
+</tr>
+<tr>
+<td><code>forces</code></td>
+<td><code>(N, 3)</code> or <code>(B, N, 3)</code></td>
+<td>Atomic forces (if requested)</td>
+</tr>
+<tr>
+<td><code>stress</code></td>
+<td><code>(3, 3)</code> or <code>(B, 3, 3)</code></td>
+<td>Stress tensor (if requested)</td>
+</tr>
+<tr>
+<td><code>hessian</code></td>
+<td><code>(N, 3, N, 3)</code></td>
+<td>Hessian matrix (if requested)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Notes:</strong></p>
+<ul>
+<li><code>forces</code> requires <code>forces=True</code> in <code>eval()</code></li>
+<li><code>stress</code> requires <code>stress=True</code> and <code>cell</code> in input</li>
+<li><code>hessian</code> requires <code>hessian=True</code>, only for single molecules</li>
+</ul>
+<h2 id="batching-and-neighbor-modes">Batching and Neighbor Modes<a class="headerlink" href="#batching-and-neighbor-modes" title="Permanent link">&para;</a></h2>
+<p>The calculator chooses between dense and sparse execution based on system size and device. The goal
+is to keep small GPU workloads fast while keeping large or CPU workloads linear in memory.</p>
+<h3 id="dense-mode-on2">Dense Mode (O(N²))<a class="headerlink" href="#dense-mode-on2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>When</strong>: <code>N &lt; nb_threshold</code> <strong>and</strong> CUDA is available</li>
+<li><strong>Input</strong>: 3D batched <code>(B, N, 3)</code></li>
+<li><strong>Behavior</strong>: No neighbor list; the model uses a fully connected graph</li>
+<li><strong>Tradeoff</strong>: Fast on GPU for small molecules, but quadratic memory</li>
+</ul>
+<h3 id="sparse-mode-on">Sparse Mode (O(N))<a class="headerlink" href="#sparse-mode-on" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>When</strong>: <code>N &gt; nb_threshold</code> <strong>or</strong> CPU execution</li>
+<li><strong>Input</strong>: Flattened 2D <code>(N_total, 3)</code> with <code>mol_idx</code></li>
+<li><strong>Behavior</strong>: Adaptive neighbor lists limit interactions to within <code>cutoff</code></li>
+<li><strong>Tradeoff</strong>: Linear memory with a small overhead for neighbor list construction</li>
+</ul>
+<h3 id="mode-2-batched-sparse-manual">Mode 2: Batched Sparse (manual)<a class="headerlink" href="#mode-2-batched-sparse-manual" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Input</strong>: 3D batched <code>(B, N, 3)</code> plus 3D neighbor matrix <code>(B, N, max_nb)</code></li>
+<li><strong>Note</strong>: Supported by the model, but not selected automatically. Use this mode by
+  supplying a 3D <code>nbmat</code> explicitly.</li>
+</ul>
+<h3 id="choosing-the-right-mode">Choosing the Right Mode<a class="headerlink" href="#choosing-the-right-mode" title="Permanent link">&para;</a></h3>
+<p>The calculator automatically selects between two execution modes:</p>
+<p><strong>Mode 0 (Dense, O(N²) fully connected):</strong> Every atom interacts with every other atom in an all-to-all manner. No neighbor list is constructed. This mode is only used for <strong>batches of small molecules with the same number of atoms on GPU</strong>. Specifically:</p>
+<ul>
+<li>Input must be 3D batched coordinates (B, N, 3)</li>
+<li>N ≤ nb_threshold (default 120 atoms per molecule)</li>
+<li>CUDA device available</li>
+<li>No periodic boundary conditions</li>
+</ul>
+<p>In this case, the O(N²) fully connected approach is more efficient than constructing neighbor lists.</p>
+<p><strong>Mode 1 (Sparse, O(N) with neighbor lists):</strong> Uses adaptive neighbor lists to limit interactions to atoms within cutoff distance. This mode is used in all other cases:</p>
+<ul>
+<li>Periodic boundary conditions (required for periodic images)</li>
+<li>CPU execution</li>
+<li>Large systems (N &gt; nb_threshold)</li>
+<li>Variable-sized molecules</li>
+</ul>
+<p><strong>Key Takeaways:</strong></p>
+<ul>
+<li>PBC always requires neighbor lists (Mode 1)</li>
+<li>CPU always uses neighbor lists (Mode 1)</li>
+<li>Small batched molecules on GPU use fully connected (Mode 0)</li>
+<li>Large systems use neighbor lists (Mode 1)</li>
+</ul>
+<h3 id="flattening-logic">Flattening Logic<a class="headerlink" href="#flattening-logic" title="Permanent link">&para;</a></h3>
+<p>For 3D batched inputs, <code>AIMNet2Calculator</code> decides whether to flatten based on <code>nb_threshold</code>:</p>
+<pre><code class="language-python"># nb_threshold default is 120
+if device == &quot;cpu&quot; or max_atoms &gt; nb_threshold:
+    # FLATTEN -&gt; Mode 1 (Sparse)
+    # Computes neighbor list
+else:
+    # KEEP 3D -&gt; Mode 0 (Dense)
+    # Implicit all-pairs
+</code></pre>
+<h2 id="periodic-boundary-conditions-pbc">Periodic Boundary Conditions (PBC)<a class="headerlink" href="#periodic-boundary-conditions-pbc" title="Permanent link">&para;</a></h2>
+<h3 id="input-requirements">Input Requirements<a class="headerlink" href="#input-requirements" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">data = {
+    &quot;coord&quot;: coords,
+    &quot;numbers&quot;: numbers,
+    &quot;charge&quot;: charge,
+    &quot;cell&quot;: cell,  # (3, 3) or (num_systems, 3, 3)
+}
+</code></pre>
+<h3 id="behavior">Behavior<a class="headerlink" href="#behavior" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Coordinates wrapped into unit cell via <code>move_coord_to_cell()</code></li>
+<li>Neighbor lists include periodic image shifts</li>
+<li>Coulomb method auto-switches to <code>"dsf"</code> if <code>"simple"</code> (with warning).
+   For legacy JIT models the embedded Coulomb method cannot be changed at runtime; the warning
+   indicates that only the calculator’s external setting was updated.</li>
+<li>Multiple molecules with PBC: raises <code>NotImplementedError</code></li>
+</ol>
+<h3 id="coulomb-method-for-pbc">Coulomb Method for PBC<a class="headerlink" href="#coulomb-method-for-pbc" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Initial Method</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>"simple"</code></td>
+<td>Auto-switch to <code>"dsf"</code> with warning</td>
+</tr>
+<tr>
+<td><code>"dsf"</code> / <code>"ewald"</code></td>
+<td>No change</td>
+</tr>
+</tbody>
+</table>
+<h2 id="neighbor-list-management">Neighbor List Management<a class="headerlink" href="#neighbor-list-management" title="Permanent link">&para;</a></h2>
+<h3 id="adaptive-neighbor-lists">Adaptive Neighbor Lists<a class="headerlink" href="#adaptive-neighbor-lists" title="Permanent link">&para;</a></h3>
+<p>The calculator uses <code>AdaptiveNeighborList</code> for automatic buffer management in <strong>Mode 1</strong>:</p>
+<ul>
+<li><strong>Initial sizing</strong>: Based on density estimate and cutoff</li>
+<li><strong>Overflow handling</strong>: Increases buffer by 1.5x and retries</li>
+<li><strong>Underutilization</strong>: Shrinks if utilization &lt; 2/3 of target (hysteresis)</li>
+<li><strong>Minimum buffer</strong>: 16 neighbors</li>
+<li><strong>Memory alignment</strong>: Rounded to multiples of 16</li>
+</ul>
+<h3 id="neighbor-list-format-and-padding">Neighbor List Format and Padding<a class="headerlink" href="#neighbor-list-format-and-padding" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Neighbor lists are stored as integer matrices <code>nbmat</code> with shape <code>(N_total, max_neighbors)</code>.</li>
+<li>Each row contains neighbor indices for a single atom.</li>
+<li>Rows are padded with a dummy index (typically <code>N_total</code>) when an atom has fewer neighbors than
+  <code>max_neighbors</code>.</li>
+<li>The buffer grows on overflow (×1.5) and shrinks when utilization drops well below target,
+  which helps performance remain stable as density changes.</li>
+</ul>
+<h3 id="module-suffix-fallback">Module Suffix Fallback<a class="headerlink" href="#module-suffix-fallback" title="Permanent link">&para;</a></h3>
+<p>LR modules prefer their specific neighbor list key, with fallback to <code>_lr</code>:</p>
+<ul>
+<li><strong>LRCoulomb (simple/dsf)</strong>: Tries <code>nbmat_coulomb</code>, falls back to <code>nbmat_lr</code></li>
+<li><strong>DFTD3/D3TS</strong>: Tries <code>nbmat_dftd3</code>, falls back to <code>nbmat_lr</code></li>
+</ul>
+<p><strong>Note:</strong> Ewald uses its own internal neighbor list and ignores calculator cutoffs.</p>
+<h2 id="device-handling">Device Handling<a class="headerlink" href="#device-handling" title="Permanent link">&para;</a></h2>
+<h3 id="automatic-selection">Automatic Selection<a class="headerlink" href="#automatic-selection" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">device = &quot;cuda&quot; if torch.cuda.is_available() else &quot;cpu&quot;
+</code></pre>
+<h3 id="placement">Placement<a class="headerlink" href="#placement" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Device</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Model</td>
+<td><code>self.device</code></td>
+</tr>
+<tr>
+<td>External LRCoulomb</td>
+<td><code>self.device</code></td>
+</tr>
+<tr>
+<td>External DFTD3</td>
+<td><code>self.device</code></td>
+</tr>
+<tr>
+<td>Input tensors</td>
+<td>Converted to <code>self.device</code></td>
+</tr>
+<tr>
+<td>Output tensors</td>
+<td>Remain on <code>self.device</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="external-lr-module-configuration">External LR Module Configuration<a class="headerlink" href="#external-lr-module-configuration" title="Permanent link">&para;</a></h2>
+<h3 id="lrcoulomb-setup">LRCoulomb Setup<a class="headerlink" href="#lrcoulomb-setup" title="Permanent link">&para;</a></h3>
+<p>When <code>needs_coulomb=True</code>:</p>
+<pre><code class="language-python">LRCoulomb(
+    key_in=&quot;charges&quot;,
+    key_out=&quot;energy&quot;,
+    method=&quot;simple&quot;,  # Default, changeable via set_lrcoulomb_method()
+    rc=metadata.get(&quot;coulomb_sr_rc&quot;, 4.6),
+    envelope=metadata.get(&quot;coulomb_sr_envelope&quot;, &quot;exp&quot;),
+    subtract_sr=not sr_embedded,  # Based on coulomb_mode
+)
+</code></pre>
+<h3 id="dftd3-setup">DFTD3 Setup<a class="headerlink" href="#dftd3-setup" title="Permanent link">&para;</a></h3>
+<p>When <code>needs_dispersion=True</code> and <code>d3_params</code> available:</p>
+<pre><code class="language-python">DFTD3(
+    s8=d3_params[&quot;s8&quot;],
+    a1=d3_params[&quot;a1&quot;],
+    a2=d3_params[&quot;a2&quot;],
+    s6=d3_params.get(&quot;s6&quot;, 1.0),
+)
+</code></pre>
+<h3 id="how-lr-modules-are-attached">How LR Modules Are Attached<a class="headerlink" href="#how-lr-modules-are-attached" title="Permanent link">&para;</a></h3>
+<p>External LR modules are attached based on model metadata unless overridden by constructor flags:</p>
+<ul>
+<li>If <code>needs_coulomb=True</code>, an external <code>LRCoulomb</code> is created.
+  If <code>coulomb_mode="sr_embedded"</code>, the model already subtracts SR Coulomb internally and the
+  external module adds full Coulomb on top.</li>
+<li>If <code>needs_dispersion=True</code> and <code>d3_params</code> are present, an external <code>DFTD3</code> is created.
+  If <code>d3_params</code> are missing, initialization raises <code>ValueError</code>.</li>
+</ul>
+<p>Explicit <code>needs_coulomb</code> / <code>needs_dispersion</code> flags override metadata.</p>
+<h3 id="cutoff-handling-for-lr-modules">Cutoff Handling for LR Modules<a class="headerlink" href="#cutoff-handling-for-lr-modules" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Coulomb</strong>: <code>set_lrcoulomb_method()</code> selects the method and updates the Coulomb cutoff
+  (<code>inf</code> for <code>"simple"</code>, finite for <code>"dsf"</code>, <code>None</code> for <code>"ewald"</code>).</li>
+<li><strong>DFTD3</strong>: <code>set_dftd3_cutoff()</code> updates the DFTD3 cutoff and smoothing window.</li>
+<li><strong>Unified control</strong>: <code>set_lr_cutoff()</code> sets both Coulomb and DFTD3 cutoffs to the same value.</li>
+<li><strong>Ewald</strong>: Uses its own internal neighbor list; calculator cutoffs do not apply.</li>
+</ul>
+<h2 id="default-values">Default Values<a class="headerlink" href="#default-values" title="Permanent link">&para;</a></h2>
+<h3 id="lr-module-defaults">LR Module Defaults<a class="headerlink" href="#lr-module-defaults" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>set_lrcoulomb_method(..., cutoff=15.0)</code></td>
+<td><code>15.0</code></td>
+<td>Default LR cutoff for DSF (Å)</td>
+</tr>
+<tr>
+<td><code>set_lrcoulomb_method(..., ewald_accuracy=1e-8)</code></td>
+<td><code>1e-8</code></td>
+<td>Default accuracy for Ewald summation</td>
+</tr>
+<tr>
+<td><code>set_dftd3_cutoff(..., smoothing_fraction=0.2)</code></td>
+<td><code>0.2</code></td>
+<td>DFTD3 smoothing width as fraction of cutoff</td>
+</tr>
+</tbody>
+</table>
+<h3 id="coulomb-defaults">Coulomb Defaults<a class="headerlink" href="#coulomb-defaults" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>coulomb_sr_rc</code></td>
+<td><code>4.6</code> Å</td>
+<td>Short-range Coulomb cutoff</td>
+</tr>
+<tr>
+<td><code>coulomb_sr_envelope</code></td>
+<td><code>"exp"</code></td>
+<td>Envelope function (<code>"exp"</code> or <code>"cosine"</code>)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="sr-coulomb-cutoff-constraint">SR Coulomb Cutoff Constraint<a class="headerlink" href="#sr-coulomb-cutoff-constraint" title="Permanent link">&para;</a></h4>
+<p><strong><code>coulomb_sr_rc</code> must be ≤ model <code>cutoff</code></strong></p>
+<p>The short-range Coulomb cutoff defines the distance within which SR Coulomb interactions are computed by the embedded <code>SRCoulomb</code> module. This cutoff must be less than or equal to the model's short-range cutoff because:</p>
+<ul>
+<li>SRCoulomb uses the same neighbor list as the neural network</li>
+<li>Atom pairs beyond the model cutoff are not visible to SRCoulomb</li>
+<li>Typical configuration: <code>coulomb_sr_rc=4.6</code> Å with model <code>cutoff=5.0</code> Å</li>
+</ul>
+<p>The envelope function (<code>"exp"</code> or <code>"cosine"</code>) determines how the SR interaction smoothly decays to zero at the cutoff boundary.</p>
+<h2 id="legacy-model-compatibility">Legacy Model Compatibility<a class="headerlink" href="#legacy-model-compatibility" title="Permanent link">&para;</a></h2>
+<p>Legacy JIT models (<code>.jpt</code>) have different behavior:</p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Legacy</th>
+<th>New Format</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Coulomb</td>
+<td>Embedded in model</td>
+<td>External module</td>
+</tr>
+<tr>
+<td>DFTD3/D3BJ</td>
+<td>Embedded in model</td>
+<td>External module</td>
+</tr>
+<tr>
+<td><code>set_lrcoulomb_method()</code></td>
+<td>Warning, no effect</td>
+<td>Updates method</td>
+</tr>
+<tr>
+<td><code>set_lr_cutoff()</code></td>
+<td>No effect on embedded modules</td>
+<td>Updates <code>cutoff_lr</code> for all LR modules</td>
+</tr>
+<tr>
+<td><code>set_dftd3_cutoff()</code></td>
+<td>No effect on embedded modules</td>
+<td>Updates smoothing for external DFTD3</td>
+</tr>
+<tr>
+<td><code>has_external_coulomb</code></td>
+<td><code>False</code></td>
+<td><code>True</code> (if applicable)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h2>
+<h3 id="common-errors">Common Errors<a class="headerlink" href="#common-errors" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Error</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Invalid model type</td>
+<td><code>TypeError</code></td>
+</tr>
+<tr>
+<td>Missing required input key</td>
+<td><code>KeyError</code></td>
+</tr>
+<tr>
+<td>Hessian with multiple molecules</td>
+<td><code>NotImplementedError</code></td>
+</tr>
+<tr>
+<td>PBC with multiple molecules</td>
+<td><code>NotImplementedError</code></td>
+</tr>
+<tr>
+<td>Invalid Coulomb method</td>
+<td><code>ValueError</code></td>
+</tr>
+<tr>
+<td><code>needs_dispersion=True</code> without <code>d3_params</code></td>
+<td><code>ValueError</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="warnings">Warnings<a class="headerlink" href="#warnings" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Warning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>set_lrcoulomb_method()</code> on legacy model</td>
+<td>Warns, no effect</td>
+</tr>
+<tr>
+<td>PBC with <code>"simple"</code> Coulomb</td>
+<td>Auto-switches to <code>"dsf"</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="complete-example">Complete Example<a class="headerlink" href="#complete-example" title="Permanent link">&para;</a></h2>
+<pre><code class="language-python">import torch
+from aimnet.calculators import AIMNet2Calculator
+
+# Create calculator
+calc = AIMNet2Calculator(&quot;aimnet2&quot;)
+
+# Check configuration
+print(f&quot;Device: {calc.device}&quot;)
+print(f&quot;Cutoff: {calc.cutoff}&quot;)
+print(f&quot;Has external Coulomb: {calc.has_external_coulomb}&quot;)
+print(f&quot;Coulomb method: {calc.coulomb_method}&quot;)
+
+# Configure for PBC
+calc.set_lrcoulomb_method(&quot;dsf&quot;, cutoff=12.0)
+
+# Prepare input
+data = {
+    &quot;coord&quot;: torch.randn(20, 3),
+    &quot;numbers&quot;: torch.randint(1, 10, (20,)),
+    &quot;charge&quot;: torch.tensor([0.0]),
+}
+
+# Run inference
+result = calc.eval(data, forces=True)
+
+print(f&quot;Energy: {result['energy']}&quot;)
+print(f&quot;Forces shape: {result['forces'].shape}&quot;)
+print(f&quot;Charges shape: {result['charges'].shape}&quot;)
+</code></pre>
+<h2 id="performance-tips">Performance Tips<a class="headerlink" href="#performance-tips" title="Permanent link">&para;</a></h2>
+<h3 id="hardware-acceleration">Hardware Acceleration<a class="headerlink" href="#hardware-acceleration" title="Permanent link">&para;</a></h3>
+<p><strong>Use GPU for best performance:</strong></p>
+<pre><code class="language-python"># Automatically uses CUDA if available
+calc = AIMNet2Calculator(&quot;aimnet2&quot;)
+print(calc.device)  # &quot;cuda&quot; or &quot;cpu&quot;
+</code></pre>
+<p>GPU provides 10-50x speedup over CPU for typical workloads.</p>
+<h3 id="compile-mode">Compile Mode<a class="headerlink" href="#compile-mode" title="Permanent link">&para;</a></h3>
+<p><strong>Use <code>compile_model=True</code> for additional speedup:</strong></p>
+<pre><code class="language-python"># Basic compilation
+calc = AIMNet2Calculator(&quot;aimnet2&quot;, compile_model=True)
+
+# With custom compile options
+calc = AIMNet2Calculator(
+    &quot;aimnet2&quot;,
+    compile_model=True,
+    compile_kwargs={&quot;mode&quot;: &quot;reduce-overhead&quot;}
+)
+</code></pre>
+<p><strong>Characteristics:</strong></p>
+<ul>
+<li>First call will be slow (compilation overhead)</li>
+<li>Subsequent calls are faster</li>
+<li>Works with both periodic and non-periodic systems</li>
+</ul>
+<p><strong>When to use:</strong></p>
+<ul>
+<li>Long MD trajectories</li>
+<li>Geometry optimization with many steps</li>
+<li>Repeated evaluation on same system size</li>
+</ul>
+<p><strong>When not to use:</strong></p>
+<ul>
+<li>Single evaluations (compilation overhead outweighs benefit)</li>
+<li>Varying system sizes (may trigger recompilation)</li>
+</ul>
+<h3 id="memory-management">Memory Management<a class="headerlink" href="#memory-management" title="Permanent link">&para;</a></h3>
+<p><strong>Tune <code>nb_threshold</code> for your workload:</strong></p>
+<pre><code class="language-python"># Conservative (less memory, earlier sparse mode)
+calc = AIMNet2Calculator(&quot;aimnet2&quot;, nb_threshold=80)
+
+# Aggressive (more memory, faster on GPU)
+calc = AIMNet2Calculator(&quot;aimnet2&quot;, nb_threshold=150)
+</code></pre>
+<p><strong>For large systems on GPU:</strong></p>
+<ul>
+<li>Lower <code>nb_threshold</code> to use sparse mode</li>
+<li>Reduces memory footprint</li>
+<li>Enables processing larger molecules</li>
+</ul>
+<p><strong>For many small molecules:</strong></p>
+<ul>
+<li>Higher <code>nb_threshold</code> to use dense mode longer</li>
+<li>Maximizes GPU parallelism</li>
+<li>Faster overall throughput</li>
+</ul>
+<h3 id="pre-compute-neighbor-lists">Pre-compute Neighbor Lists<a class="headerlink" href="#pre-compute-neighbor-lists" title="Permanent link">&para;</a></h3>
+<p><strong>Avoid recomputation by caching:</strong></p>
+<pre><code class="language-python"># First call: computes neighbor lists
+result1 = calc(data, forces=True)
+
+# If geometry unchanged, reuse same data dict
+# Calculator caches neighbor lists internally
+result2 = calc(data, forces=False)  # Reuses cached lists
+</code></pre>
+<p><strong>For custom workflows, provide nbmat explicitly:</strong></p>
+<pre><code class="language-python"># Compute once
+nbmat, _, shifts = compute_neighbor_list(coords, cutoff=5.0)
+
+# Use many times
+for _ in range(1000):
+    result = calc({
+        &quot;coord&quot;: coords,
+        &quot;numbers&quot;: numbers,
+        &quot;charge&quot;: 0.0,
+        &quot;nbmat&quot;: nbmat,
+        &quot;shifts&quot;: shifts,
+    }, forces=True)
+</code></pre>
+<h3 id="coulomb-method-selection">Coulomb Method Selection<a class="headerlink" href="#coulomb-method-selection" title="Permanent link">&para;</a></h3>
+<p><strong>Choose method for your system:</strong></p>
+<table>
+<thead>
+<tr>
+<th>System Type</th>
+<th>Method</th>
+<th>Parameter</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Small non-PBC</td>
+<td><code>"simple"</code></td>
+<td>N/A</td>
+<td>All pairs, exact</td>
+</tr>
+<tr>
+<td>Large non-PBC</td>
+<td><code>"dsf"</code></td>
+<td>cutoff=12-15 Å</td>
+<td>O(N) scaling</td>
+</tr>
+<tr>
+<td>PBC systems</td>
+<td><code>"dsf"</code></td>
+<td>cutoff=12-15 Å</td>
+<td>Recommended</td>
+</tr>
+<tr>
+<td>High-accuracy PBC</td>
+<td><code>"ewald"</code></td>
+<td>accuracy=1e-8</td>
+<td>Research-grade</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-python"># Fast for non-PBC
+calc.set_lrcoulomb_method(&quot;simple&quot;)
+
+# Efficient for PBC
+calc.set_lrcoulomb_method(&quot;dsf&quot;, cutoff=15.0)
+
+# High-accuracy for research
+calc.set_lrcoulomb_method(&quot;ewald&quot;, ewald_accuracy=1e-8)
+</code></pre>
+<h3 id="multi-threading-cpu">Multi-threading (CPU)<a class="headerlink" href="#multi-threading-cpu" title="Permanent link">&para;</a></h3>
+<p><strong>Set thread count for CPU execution:</strong></p>
+<pre><code class="language-python">import torch
+torch.set_num_threads(4)  # Use 4 CPU cores
+
+calc = AIMNet2Calculator(&quot;aimnet2&quot;)  # Will use CPU
+</code></pre>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../getting_started/" class="btn btn-neutral float-left" title="Getting Started"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../model_format/" class="btn btn-neutral float-right" title="Model Format">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/isayevlab/aimnetcentral" class="fa fa-code-fork" style="color: #fcfcfc"> isayevlab/aimnetcentral</a>
+        </span>
+    
+    
+      <span><a href="../getting_started/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../model_format/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

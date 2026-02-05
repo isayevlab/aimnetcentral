@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Roman Zubatyuk" /><link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/train/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Train - AIMNetCentral</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="../assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Train";
+        var mkdocs_page_input_path = "train.md";
+        var mkdocs_page_url = "/aimnetcentral/train/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> AIMNetCentral
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../getting_started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../calculator/">Calculator</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../model_format/">Model Format</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../long_range/">Long Range</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../cli/">CLI Reference</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Train</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#general-workflow">General workflow</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#dataset-preparation">Dataset preparation</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#training-configuration">Training Configuration</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#weights-biases-wb-logging">Weights &amp; Biases (W&amp;B) Logging</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#launching-training">Launching Training</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#model-export-for-distribution">Model Export for Distribution</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#converting-legacy-jit-models">Converting Legacy JIT Models</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#registry-migration-workflow">Registry Migration Workflow</a>
+    </li>
+        </ul>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">API Reference</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/">Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/calculators/">Calculators</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/modules/">Modules</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/data/">Data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api/config/">Config</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">AIMNetCentral</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Train</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/isayevlab/aimnetcentral/edit/main/docs/train.md">Edit on isayevlab/aimnetcentral</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="aimnet2-training-examples">AIMNet2 training examples.<a class="headerlink" href="#aimnet2-training-examples" title="Permanent link">&para;</a></h1>
+<h2 id="general-workflow">General workflow<a class="headerlink" href="#general-workflow" title="Permanent link">&para;</a></h2>
+<h3 id="dataset-preparation">Dataset preparation<a class="headerlink" href="#dataset-preparation" title="Permanent link">&para;</a></h3>
+<p>The training dataset must be formatted as an HDF5 file, with groups containing molecules of uniform size. For example, the dataset below contains 25,768 molecules with 28 atoms and 19,404 molecules with 29 atoms.</p>
+<pre><code>$ h5ls -r dataset.h5
+/028                     Group
+/028/charge              Dataset {25768}
+/028/charges             Dataset {25768, 28}
+/028/coord               Dataset {25768, 28, 3}
+/028/energy              Dataset {25768}
+/028/forces              Dataset {25768, 28, 3}
+/028/numbers             Dataset {25768, 28}
+/029                     Group
+/029/charge              Dataset {19404}
+/029/charges             Dataset {19404, 29}
+/029/coord               Dataset {19404, 29, 3}
+/029/energy              Dataset {19404}
+/029/forces              Dataset {19404, 29, 3}
+/029/numbers             Dataset {19404, 29}
+</code></pre>
+<p>Units should be based on Angstrom, electron-volt, and electron charge.</p>
+<h3 id="training-configuration">Training Configuration<a class="headerlink" href="#training-configuration" title="Permanent link">&para;</a></h3>
+<p>To access available options for the training script execute the following command:</p>
+<pre><code>$ aimnet train --help
+</code></pre>
+<p>Key components for initiating training include:</p>
+<ul>
+<li>
+<p><strong>Training Configuration:</strong> The base configuration file <code>aimnet/train/default_train.yaml</code> can be customized using command-line options or a separate YAML configuration file, which will override or extend default values. It is crucial to, at minimum, define the <code>run_name</code> and <code>data.train</code>.</p>
+</li>
+<li>
+<p><strong>Model Definition:</strong> By default, the model defined in <code>aimnet/models/aimnet2.yaml</code> is used.</p>
+</li>
+<li>
+<p><strong>Self-Atomic Energies File:</strong> This file can be generated using the following command:</p>
+</li>
+</ul>
+<pre><code>$ aimnet calc_sae dataset.h5 dataset_sae.yaml
+</code></pre>
+<h3 id="weights-biases-wb-logging">Weights &amp; Biases (W&amp;B) Logging<a class="headerlink" href="#weights-biases-wb-logging" title="Permanent link">&para;</a></h3>
+<p>The training script integrates with Weights &amp; Biases (W&amp;B), a platform for experiment tracking (free for personal and academic use). To monitor training progress, either a W&amp;B account or a local Docker-based W&amp;B server is necessary. By default, W&amp;B operates in offline mode.</p>
+<p><strong>Setting Up W&amp;B</strong></p>
+<ul>
+<li><strong>Online Account:</strong></li>
+</ul>
+<pre><code>$ wandb login
+</code></pre>
+<ul>
+<li><strong>Project and Entity Configuration:</strong> Create a configuration file (e.g., <code>extra_conf.yaml</code>) with your W&amp;B project and entity details:</li>
+</ul>
+<pre><code>wandb:
+  init:
+    mode: online
+    entity: your_username
+    project: your_project_name
+</code></pre>
+<p>Pass this configuration to the <code>aimnet train</code> command using the <code>--config</code> parameter.</p>
+<h3 id="launching-training">Launching Training<a class="headerlink" href="#launching-training" title="Permanent link">&para;</a></h3>
+<p>For optimal data loader performance, it is recommended to disable numpy multithreading:</p>
+<pre><code>$ export OMP_NUM_THREADS=1
+</code></pre>
+<p>By default, training will utilize all available GPUs in a single-node, distributed data-parallel mode. To restrict training to a specific GPU (e.g., GPU 0):</p>
+<pre><code>$ export CUDA_VISIBLE_DEVICES=0
+</code></pre>
+<p>Finally, initiate the training script with default parameters and the specified <code>run_name</code>:</p>
+<pre><code>$ aimnet train data.train=dataset.h5 data.sae.energy.file=dataset_sae.yaml run_name=firstrun
+</code></pre>
+<h3 id="model-export-for-distribution">Model Export for Distribution<a class="headerlink" href="#model-export-for-distribution" title="Permanent link">&para;</a></h3>
+<p>To export a trained model for distribution and use with AIMNet calculators:</p>
+<pre><code>$ aimnet export weights.pt model.pt --model config.yaml --sae model.sae
+</code></pre>
+<p>Arguments:</p>
+<ul>
+<li><code>weights.pt</code>: Raw PyTorch weights file from training</li>
+<li><code>model.pt</code>: Output model file</li>
+<li><code>--model</code>: Path to model YAML configuration file</li>
+<li><code>--sae</code>: Path to self-atomic energies file</li>
+</ul>
+<p>The export command creates a self-contained <code>.pt</code> file with:</p>
+<ul>
+<li>Model architecture configuration</li>
+<li>Trained weights with SAE baked into atomic shifts</li>
+<li>Metadata for Coulomb and dispersion handling</li>
+</ul>
+<p><strong>Model Format</strong></p>
+<p>The new model format separates the core neural network from long-range corrections:</p>
+<ul>
+<li>Core model computes NN energy minus short-range Coulomb</li>
+<li>Long-range Coulomb (LRCoulomb) is applied externally by the calculator</li>
+<li>DFTD3 dispersion is applied externally by the calculator</li>
+</ul>
+<p>This allows switching Coulomb methods (simple/DSF/Ewald) at inference time without re-exporting.</p>
+<p><strong>Metadata Schema</strong></p>
+<p>The v2 model format includes the following metadata fields:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>format_version</code></td>
+<td>int</td>
+<td>2 for new format</td>
+</tr>
+<tr>
+<td><code>cutoff</code></td>
+<td>float</td>
+<td>Model cutoff radius</td>
+</tr>
+<tr>
+<td><code>needs_coulomb</code></td>
+<td>bool</td>
+<td>True if calculator should add external Coulomb</td>
+</tr>
+<tr>
+<td><code>needs_dispersion</code></td>
+<td>bool</td>
+<td>True if calculator should add external DFTD3</td>
+</tr>
+<tr>
+<td><code>coulomb_mode</code></td>
+<td>str</td>
+<td>"sr_embedded" (has SRCoulomb) or "none"</td>
+</tr>
+<tr>
+<td><code>coulomb_sr_rc</code></td>
+<td>float?</td>
+<td>SR Coulomb cutoff (if coulomb_mode="sr_embedded")</td>
+</tr>
+<tr>
+<td><code>coulomb_sr_envelope</code></td>
+<td>str?</td>
+<td>"exp" or "cosine" (if coulomb_mode="sr_embedded")</td>
+</tr>
+<tr>
+<td><code>d3_params</code></td>
+<td>dict?</td>
+<td>D3 parameters {s6, s8, a1, a2} if needs_dispersion=True</td>
+</tr>
+<tr>
+<td><code>implemented_species</code></td>
+<td>list[int]</td>
+<td>Supported atomic numbers</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Runtime Configuration</strong></p>
+<p>For new-format models, the calculator provides methods to configure external modules:</p>
+<pre><code class="language-python">from aimnet.calculators import AIMNet2Calculator
+
+calc = AIMNet2Calculator(&quot;model.pt&quot;)
+
+# Switch Coulomb method (only if model uses external Coulomb)
+if calc.has_external_coulomb:
+    calc.set_lrcoulomb_method(&quot;dsf&quot;, cutoff=15.0)  # For PBC systems
+
+# Adjust DFTD3 cutoff (only if model uses external dispersion)
+if calc.has_external_dftd3:
+    calc.set_dftd3_cutoff(20.0, smoothing_fraction=0.8)
+</code></pre>
+<p><strong>Backward Compatibility</strong></p>
+<p>The calculator automatically detects and loads both formats:</p>
+<ul>
+<li>New <code>.pt</code> files with embedded metadata (format version 2)</li>
+<li>Legacy JIT-compiled <code>.jpt</code> files (format version 1)</li>
+</ul>
+<p>For legacy models, Coulomb and dispersion modules remain embedded in the model.</p>
+<h3 id="converting-legacy-jit-models">Converting Legacy JIT Models<a class="headerlink" href="#converting-legacy-jit-models" title="Permanent link">&para;</a></h3>
+<p>To convert existing <code>.jpt</code> models to the new format:</p>
+<pre><code>$ aimnet convert model.jpt config.yaml model_new.pt
+</code></pre>
+<p>Arguments:</p>
+<ul>
+<li><code>model.jpt</code>: Legacy JIT-compiled model file</li>
+<li><code>config.yaml</code>: Model YAML configuration file</li>
+<li><code>model_new.pt</code>: Output file in new format</li>
+</ul>
+<p>The conversion:</p>
+<ul>
+<li>Extracts model cutoff and D3 parameters from the JIT model</li>
+<li>Rebuilds the architecture from YAML with SRCoulomb embedded</li>
+<li>Loads weights from the JIT model</li>
+<li>Creates a new-format bundle with all necessary metadata</li>
+</ul>
+<h3 id="registry-migration-workflow">Registry Migration Workflow<a class="headerlink" href="#registry-migration-workflow" title="Permanent link">&para;</a></h3>
+<p>For maintainers migrating the model registry from legacy <code>.jpt</code> to new <code>.pt</code> format:</p>
+<ol>
+<li><strong>Convert each model:</strong></li>
+</ol>
+<p><code>bash
+   aimnet convert aimnet2_wb97m_d3_0.jpt aimnet/models/aimnet2_dftd3_wb97m.yaml aimnet2_wb97m_d3_0.pt</code></p>
+<ol>
+<li><strong>Validate conversion:</strong></li>
+</ol>
+<p><code>bash
+   python scripts/validate_conversion.py aimnet2_wb97m_d3_0.pt aimnet2_wb97m_d3_0.jpt \
+       --structure tests/data/caffeine.xyz</code></p>
+<p>The validation script compares energies and forces between formats and reports any discrepancies.</p>
+<ol>
+<li><strong>Upload to GCS:</strong></li>
+</ol>
+<p><code>bash
+   gsutil cp aimnet2_wb97m_d3_0.pt gs://aimnetcentral/AIMNet2/aimnet2_wb97m_d3_0.pt</code></p>
+<ol>
+<li><strong>Update model_registry.yaml:</strong>
+   <code>yaml
+   models:
+     aimnet2_wb97m_d3_0:
+       file: aimnet2_wb97m_d3_0.pt
+       url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_wb97m_d3_0.pt</code></li>
+</ol>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../cli/" class="btn btn-neutral float-left" title="CLI Reference"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../api/" class="btn btn-neutral float-right" title="Overview">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/isayevlab/aimnetcentral" class="fa fa-code-fork" style="color: #fcfcfc"> isayevlab/aimnetcentral</a>
+        </span>
+    
+    
+      <span><a href="../cli/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../api/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

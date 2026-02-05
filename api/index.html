@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Roman Zubatyuk" /><link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/api/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Overview - AIMNetCentral</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="../assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Overview";
+        var mkdocs_page_input_path = "api/index.md";
+        var mkdocs_page_url = "/aimnetcentral/api/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> AIMNetCentral
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../getting_started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../calculator/">Calculator</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../model_format/">Model Format</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../long_range/">Long Range</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../cli/">CLI Reference</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../train/">Train</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">API Reference</span></p>
+              <ul class="current">
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Overview</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#package-structure">Package Structure</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#quick-links">Quick Links</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#calculators">Calculators</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#command-line-interface">Command Line Interface</a>
+    </li>
+        </ul>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="calculators/">Calculators</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="modules/">Modules</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="data/">Data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="config/">Config</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">AIMNetCentral</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">API Reference</li>
+      <li class="breadcrumb-item active">Overview</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/isayevlab/aimnetcentral/edit/main/docs/api/index.md">Edit on isayevlab/aimnetcentral</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h1>
+<p>This section contains the complete API reference for AIMNet2.</p>
+<h2 id="package-structure">Package Structure<a class="headerlink" href="#package-structure" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong><a href="calculators/">Calculators</a></strong> - Calculator interfaces for molecular simulations</li>
+<li><strong><a href="modules/">Modules</a></strong> - Neural network modules and model components</li>
+<li><strong><a href="data/">Data</a></strong> - Dataset handling and data loading utilities</li>
+<li><strong><a href="config/">Config</a></strong> - Configuration and model building utilities</li>
+</ul>
+<h2 id="quick-links">Quick Links<a class="headerlink" href="#quick-links" title="Permanent link">&para;</a></h2>
+<h3 id="calculators">Calculators<a class="headerlink" href="#calculators" title="Permanent link">&para;</a></h3>
+<p>The main entry points for using AIMNet2:</p>
+<ul>
+<li><code>AIMNet2Calculator</code> - Core calculator for inference</li>
+<li><code>AIMNet2ASE</code> - ASE calculator interface (requires <code>aimnet[ase]</code>)</li>
+<li><code>AIMNet2Pysis</code> - PySisyphus calculator interface (requires <code>aimnet[pysis]</code>)</li>
+</ul>
+<h3 id="command-line-interface">Command Line Interface<a class="headerlink" href="#command-line-interface" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">aimnet --help
+</code></pre>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../train/" class="btn btn-neutral float-left" title="Train"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="calculators/" class="btn btn-neutral float-right" title="Calculators">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/isayevlab/aimnetcentral" class="fa fa-code-fork" style="color: #fcfcfc"> isayevlab/aimnetcentral</a>
+        </span>
+    
+    
+      <span><a href="../train/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="calculators/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

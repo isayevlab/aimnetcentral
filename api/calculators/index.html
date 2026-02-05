@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Roman Zubatyuk" /><link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/api/calculators/" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Calculators - AIMNetCentral</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="../../assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Calculators";
+        var mkdocs_page_input_path = "api/calculators.md";
+        var mkdocs_page_url = "/aimnetcentral/api/calculators/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> AIMNetCentral
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../..">Home</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../getting_started/">Getting Started</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../calculator/">Calculator</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../model_format/">Model Format</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../long_range/">Long Range</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../cli/">CLI Reference</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../train/">Train</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">API Reference</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../">Overview</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Calculators</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#aimnet2calculator">AIMNet2Calculator</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#key-features">Key Features</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator">AIMNet2Calculator</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator--parameters">Parameters</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator--attributes">Attributes</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator--notes">Notes</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.coulomb_cutoff">coulomb_cutoff</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.coulomb_cutoff--returns">Returns</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.coulomb_method">coulomb_method</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.coulomb_method--returns">Returns</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.dftd3_cutoff">dftd3_cutoff</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.dftd3_cutoff--returns">Returns</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.has_external_coulomb">has_external_coulomb</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.has_external_dftd3">has_external_dftd3</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.mol_flatten">mol_flatten</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.set_dftd3_cutoff">set_dftd3_cutoff</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.set_dftd3_cutoff--parameters">Parameters</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.set_dftd3_cutoff--notes">Notes</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.set_lr_cutoff">set_lr_cutoff</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.set_lr_cutoff--parameters">Parameters</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.set_lr_cutoff--notes">Notes</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.set_lrcoulomb_method">set_lrcoulomb_method</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.set_lrcoulomb_method--parameters">Parameters</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#aimnet.calculators.AIMNet2Calculator.set_lrcoulomb_method--notes">Notes</a>
+    </li>
+        </ul>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#aimnet2ase">AIMNet2ASE</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#usage-example">Usage Example</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#aimnet.calculators.aimnet2ase.AIMNet2ASE">AIMNet2ASE</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#aimnet2pysis">AIMNet2Pysis</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#aimnet.calculators.aimnet2pysis.AIMNet2Pysis">AIMNet2Pysis</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#model-registry">Model Registry</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#cli-command">CLI Command</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#aimnet.calculators.model_registry">model_registry</a>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../modules/">Modules</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data/">Data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../config/">Config</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">AIMNetCentral</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">API Reference</li>
+      <li class="breadcrumb-item active">Calculators</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/isayevlab/aimnetcentral/edit/main/docs/api/calculators.md">Edit on isayevlab/aimnetcentral</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="calculators">Calculators<a class="headerlink" href="#calculators" title="Permanent link">&para;</a></h1>
+<p>Calculator interfaces for molecular simulations using AIMNet2.</p>
+<h2 id="aimnet2calculator">AIMNet2Calculator<a class="headerlink" href="#aimnet2calculator" title="Permanent link">&para;</a></h2>
+<p>The core calculator for running AIMNet2 inference. It handles model loading, device management, and application of long-range interactions (Coulomb and Dispersion).</p>
+<h3 id="key-features">Key Features<a class="headerlink" href="#key-features" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Format Support</strong>: Loads both legacy <code>.jpt</code> models and new <code>.pt</code> format.</li>
+<li><strong>Long-Range Interactions</strong>: Automatically attaches <code>LRCoulomb</code> and <code>DFTD3</code> modules based on model metadata.</li>
+<li><strong>Overrides</strong>: You can force specific long-range behavior using <code>needs_coulomb</code> and <code>needs_dispersion</code> arguments.</li>
+<li><strong>Batching</strong>: Automatically batches large molecules/systems based on <code>nb_threshold</code>.</li>
+</ul>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="aimnet.calculators.AIMNet2Calculator" class="doc doc-heading">
+              <code class="highlight language-python"><span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s1">&#39;aimnet2&#39;</span><span class="p">,</span> <span class="n">nb_threshold</span><span class="o">=</span><span class="mi">120</span><span class="p">,</span> <span class="n">needs_coulomb</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">needs_dispersion</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">compile_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+
+<a href="#aimnet.calculators.AIMNet2Calculator" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+
+
+
+        <p>Generic AIMNet2 calculator.</p>
+<p>A helper class to load AIMNet2 models and perform inference.</p>
+<h4 id="aimnet.calculators.AIMNet2Calculator--parameters">Parameters<a class="headerlink" href="#aimnet.calculators.AIMNet2Calculator--parameters" title="Permanent link">&para;</a></h4>
+<p>model : str | nn.Module
+    Model name (from registry), path to model file, or nn.Module instance.
+nb_threshold : int
+    Threshold for neighbor list batching. Molecules larger than this use
+    flattened processing. Default is 120.
+needs_coulomb : bool | None
+    Whether to add external Coulomb module. If None (default), determined
+    from model metadata. If True/False, overrides metadata.
+needs_dispersion : bool | None
+    Whether to add external DFTD3 module. If None (default), determined
+    from model metadata. If True/False, overrides metadata.
+device : str | None
+    Device to run the model on ("cuda", "cpu", or specific like "cuda:0").
+    If None (default), auto-detects CUDA availability.
+compile_model : bool
+    Whether to compile the model with torch.compile(). Default is False.
+compile_kwargs : dict | None
+    Additional keyword arguments to pass to torch.compile(). Default is None.
+train : bool
+    Whether to enable training mode. Default is False (inference mode).
+    When False, all model parameters have requires_grad=False, which
+    improves torch.compile compatibility and reduces memory usage.
+    Set to True only when training the model.</p>
+<h4 id="aimnet.calculators.AIMNet2Calculator--attributes">Attributes<a class="headerlink" href="#aimnet.calculators.AIMNet2Calculator--attributes" title="Permanent link">&para;</a></h4>
+<p>model : nn.Module
+    The loaded AIMNet2 model.
+device : str
+    Device the model is running on ("cuda" or "cpu").
+cutoff : float
+    Short-range cutoff distance in Angstroms.
+cutoff_lr : float | None
+    Long-range cutoff distance, or None if no LR modules.
+external_coulomb : LRCoulomb | None
+    External Coulomb module if attached.
+external_dftd3 : DFTD3 | None
+    External DFTD3 module if attached.</p>
+<h4 id="aimnet.calculators.AIMNet2Calculator--notes">Notes<a class="headerlink" href="#aimnet.calculators.AIMNet2Calculator--notes" title="Permanent link">&para;</a></h4>
+<p>External LR module behavior:</p>
+<ul>
+<li>For file-loaded models (str): metadata is loaded from file</li>
+<li>For nn.Module: metadata is read from model.metadata attribute if available</li>
+<li>Explicit flags (needs_coulomb, needs_dispersion) override metadata</li>
+<li>If no metadata and no explicit flags, no external LR modules are added</li>
+</ul>
+
+
+
+
+
+
+
+                  <details class="quote">
+                    <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">216</span>
+<span class="normal">217</span>
+<span class="normal">218</span>
+<span class="normal">219</span>
+<span class="normal">220</span>
+<span class="normal">221</span>
+<span class="normal">222</span>
+<span class="normal">223</span>
+<span class="normal">224</span>
+<span class="normal">225</span>
+<span class="normal">226</span>
+<span class="normal">227</span>
+<span class="normal">228</span>
+<span class="normal">229</span>
+<span class="normal">230</span>
+<span class="normal">231</span>
+<span class="normal">232</span>
+<span class="normal">233</span>
+<span class="normal">234</span>
+<span class="normal">235</span>
+<span class="normal">236</span>
+<span class="normal">237</span>
+<span class="normal">238</span>
+<span class="normal">239</span>
+<span class="normal">240</span>
+<span class="normal">241</span>
+<span class="normal">242</span>
+<span class="normal">243</span>
+<span class="normal">244</span>
+<span class="normal">245</span>
+<span class="normal">246</span>
+<span class="normal">247</span>
+<span class="normal">248</span>
+<span class="normal">249</span>
+<span class="normal">250</span>
+<span class="normal">251</span>
+<span class="normal">252</span>
+<span class="normal">253</span>
+<span class="normal">254</span>
+<span class="normal">255</span>
+<span class="normal">256</span>
+<span class="normal">257</span>
+<span class="normal">258</span>
+<span class="normal">259</span>
+<span class="normal">260</span>
+<span class="normal">261</span>
+<span class="normal">262</span>
+<span class="normal">263</span>
+<span class="normal">264</span>
+<span class="normal">265</span>
+<span class="normal">266</span>
+<span class="normal">267</span>
+<span class="normal">268</span>
+<span class="normal">269</span>
+<span class="normal">270</span>
+<span class="normal">271</span>
+<span class="normal">272</span>
+<span class="normal">273</span>
+<span class="normal">274</span>
+<span class="normal">275</span>
+<span class="normal">276</span>
+<span class="normal">277</span>
+<span class="normal">278</span>
+<span class="normal">279</span>
+<span class="normal">280</span>
+<span class="normal">281</span>
+<span class="normal">282</span>
+<span class="normal">283</span>
+<span class="normal">284</span>
+<span class="normal">285</span>
+<span class="normal">286</span>
+<span class="normal">287</span>
+<span class="normal">288</span>
+<span class="normal">289</span>
+<span class="normal">290</span>
+<span class="normal">291</span>
+<span class="normal">292</span>
+<span class="normal">293</span>
+<span class="normal">294</span>
+<span class="normal">295</span>
+<span class="normal">296</span>
+<span class="normal">297</span>
+<span class="normal">298</span>
+<span class="normal">299</span>
+<span class="normal">300</span>
+<span class="normal">301</span>
+<span class="normal">302</span>
+<span class="normal">303</span>
+<span class="normal">304</span>
+<span class="normal">305</span>
+<span class="normal">306</span>
+<span class="normal">307</span>
+<span class="normal">308</span>
+<span class="normal">309</span>
+<span class="normal">310</span>
+<span class="normal">311</span>
+<span class="normal">312</span>
+<span class="normal">313</span>
+<span class="normal">314</span>
+<span class="normal">315</span>
+<span class="normal">316</span>
+<span class="normal">317</span>
+<span class="normal">318</span>
+<span class="normal">319</span>
+<span class="normal">320</span>
+<span class="normal">321</span>
+<span class="normal">322</span>
+<span class="normal">323</span>
+<span class="normal">324</span>
+<span class="normal">325</span>
+<span class="normal">326</span>
+<span class="normal">327</span>
+<span class="normal">328</span>
+<span class="normal">329</span>
+<span class="normal">330</span>
+<span class="normal">331</span>
+<span class="normal">332</span>
+<span class="normal">333</span>
+<span class="normal">334</span>
+<span class="normal">335</span>
+<span class="normal">336</span>
+<span class="normal">337</span>
+<span class="normal">338</span>
+<span class="normal">339</span>
+<span class="normal">340</span>
+<span class="normal">341</span>
+<span class="normal">342</span>
+<span class="normal">343</span>
+<span class="normal">344</span>
+<span class="normal">345</span>
+<span class="normal">346</span>
+<span class="normal">347</span>
+<span class="normal">348</span>
+<span class="normal">349</span>
+<span class="normal">350</span>
+<span class="normal">351</span>
+<span class="normal">352</span>
+<span class="normal">353</span>
+<span class="normal">354</span>
+<span class="normal">355</span>
+<span class="normal">356</span>
+<span class="normal">357</span>
+<span class="normal">358</span>
+<span class="normal">359</span>
+<span class="normal">360</span>
+<span class="normal">361</span>
+<span class="normal">362</span>
+<span class="normal">363</span>
+<span class="normal">364</span>
+<span class="normal">365</span>
+<span class="normal">366</span>
+<span class="normal">367</span>
+<span class="normal">368</span>
+<span class="normal">369</span>
+<span class="normal">370</span>
+<span class="normal">371</span>
+<span class="normal">372</span>
+<span class="normal">373</span>
+<span class="normal">374</span>
+<span class="normal">375</span>
+<span class="normal">376</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+    <span class="bp">self</span><span class="p">,</span>
+    <span class="n">model</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">=</span> <span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span>
+    <span class="n">nb_threshold</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">120</span><span class="p">,</span>
+    <span class="n">needs_coulomb</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">needs_dispersion</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">compile_model</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">compile_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">train</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="c1"># Device selection: use provided or auto-detect</span>
+    <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span><span class="p">:</span> <span class="n">LRCoulomb</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">external_dftd3</span><span class="p">:</span> <span class="n">DFTD3</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># Default cutoffs for LR modules</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_default_dsf_cutoff</span> <span class="o">=</span> <span class="mf">15.0</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_default_dftd3_cutoff</span> <span class="o">=</span> <span class="mf">15.0</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_default_dftd3_smoothing</span> <span class="o">=</span> <span class="mf">0.2</span>
+
+    <span class="c1"># Load model and get metadata</span>
+    <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">get_model_path</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">metadata</span> <span class="o">=</span> <span class="n">load_model</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;cutoff&quot;</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;cutoff&quot;</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">)</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;_metadata&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Invalid model type/name.&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Compile model if requested</span>
+    <span class="k">if</span> <span class="n">compile_model</span><span class="p">:</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="n">compile_kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="c1"># Resolve final flags (explicit overrides metadata)</span>
+    <span class="n">final_needs_coulomb</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">needs_coulomb</span>
+        <span class="k">if</span> <span class="n">needs_coulomb</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="p">(</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;needs_coulomb&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="k">if</span> <span class="n">metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">final_needs_dispersion</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">needs_dispersion</span>
+        <span class="k">if</span> <span class="n">needs_dispersion</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="p">(</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;needs_dispersion&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="k">if</span> <span class="n">metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Set up external Coulomb if needed</span>
+    <span class="k">if</span> <span class="n">final_needs_coulomb</span><span class="p">:</span>
+        <span class="n">sr_embedded</span> <span class="o">=</span> <span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;coulomb_mode&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;sr_embedded&quot;</span> <span class="k">if</span> <span class="n">metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">False</span>
+        <span class="c1"># For PBC, user can switch to DSF/Ewald via set_lrcoulomb_method()</span>
+        <span class="c1"># When sr_embedded=True: model has SRCoulomb which subtracts SR, so external</span>
+        <span class="c1"># should compute FULL (subtract_sr=False) to give: (NN - SR) + FULL = NN + LR</span>
+        <span class="c1"># When sr_embedded=False: model has no SR embedded, so external should compute</span>
+        <span class="c1"># LR only (subtract_sr=True) to avoid double-counting</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span> <span class="o">=</span> <span class="n">LRCoulomb</span><span class="p">(</span>
+            <span class="n">key_in</span><span class="o">=</span><span class="s2">&quot;charges&quot;</span><span class="p">,</span>
+            <span class="n">key_out</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span>
+            <span class="n">method</span><span class="o">=</span><span class="s2">&quot;simple&quot;</span><span class="p">,</span>
+            <span class="n">rc</span><span class="o">=</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;coulomb_sr_rc&quot;</span><span class="p">,</span> <span class="mf">4.6</span><span class="p">)</span> <span class="k">if</span> <span class="n">metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">4.6</span><span class="p">,</span>
+            <span class="n">envelope</span><span class="o">=</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;coulomb_sr_envelope&quot;</span><span class="p">,</span> <span class="s2">&quot;exp&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;exp&quot;</span><span class="p">,</span>
+            <span class="n">subtract_sr</span><span class="o">=</span><span class="ow">not</span> <span class="n">sr_embedded</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="c1"># Set up external DFTD3 if needed</span>
+    <span class="k">if</span> <span class="n">final_needs_dispersion</span><span class="p">:</span>
+        <span class="n">d3_params</span> <span class="o">=</span> <span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;d3_params&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">metadata</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">d3_params</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;needs_dispersion=True but d3_params not found in metadata. &quot;</span>
+                <span class="s2">&quot;Provide d3_params in model metadata or set needs_dispersion=False.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">external_dftd3</span> <span class="o">=</span> <span class="n">DFTD3</span><span class="p">(</span>
+            <span class="n">s8</span><span class="o">=</span><span class="n">d3_params</span><span class="p">[</span><span class="s2">&quot;s8&quot;</span><span class="p">],</span>
+            <span class="n">a1</span><span class="o">=</span><span class="n">d3_params</span><span class="p">[</span><span class="s2">&quot;a1&quot;</span><span class="p">],</span>
+            <span class="n">a2</span><span class="o">=</span><span class="n">d3_params</span><span class="p">[</span><span class="s2">&quot;a2&quot;</span><span class="p">],</span>
+            <span class="n">s6</span><span class="o">=</span><span class="n">d3_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;s6&quot;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">external_dftd3</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_dftd3</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="c1"># Determine if model has long-range modules (embedded or external)</span>
+    <span class="n">has_embedded_lr</span> <span class="o">=</span> <span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;has_embedded_lr&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="k">if</span> <span class="n">metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">False</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">lr</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;cutoff_lr&quot;</span><span class="p">)</span>
+        <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_dftd3</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="ow">or</span> <span class="n">has_embedded_lr</span>
+    <span class="p">)</span>
+    <span class="c1"># Set cutoff_lr based on model attribute or external modules</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;cutoff_lr&quot;</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cutoff_lr</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;cutoff_lr&quot;</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">))</span>
+    <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># For &quot;simple&quot; method, use inf (all pairs). For DSF, use dsf_cutoff.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;simple&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cutoff_lr</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cutoff_lr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_dsf_cutoff</span>
+    <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_dftd3</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cutoff_lr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_dftd3_cutoff</span>
+    <span class="k">elif</span> <span class="n">has_embedded_lr</span><span class="p">:</span>
+        <span class="c1"># Embedded LR modules (D3TS, SRCoulomb) need nbmat_lr</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cutoff_lr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_dftd3_cutoff</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cutoff_lr</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">nb_threshold</span> <span class="o">=</span> <span class="n">nb_threshold</span>
+
+    <span class="c1"># Create adaptive neighbor list instances</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_nblist</span> <span class="o">=</span> <span class="n">AdaptiveNeighborList</span><span class="p">(</span><span class="n">cutoff</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">)</span>
+
+    <span class="c1"># Track separate cutoffs for LR modules</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_coulomb_cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_dftd3_cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_dftd3_cutoff</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;simple&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_coulomb_cutoff</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;ewald&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_coulomb_cutoff</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Ewald manages its own cutoff</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_coulomb_cutoff</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span><span class="o">.</span><span class="n">dsf_rc</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_dftd3</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dftd3_cutoff</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_dftd3</span><span class="o">.</span><span class="n">smoothing_off</span>
+
+    <span class="c1"># Create long-range neighbor list(s) if LR modules present</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_nblist_lr</span><span class="p">:</span> <span class="n">AdaptiveNeighborList</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_nblist_dftd3</span><span class="p">:</span> <span class="n">AdaptiveNeighborList</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_nblist_coulomb</span><span class="p">:</span> <span class="n">AdaptiveNeighborList</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_update_lr_nblists</span><span class="p">()</span>
+
+    <span class="c1"># indicator if input was flattened</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_batch</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_max_mol_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="c1"># placeholder for tensors that require grad</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_saved_for_grad</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="c1"># set flag of current Coulomb method</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_coulomb_method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_coulomb_method</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span><span class="o">.</span><span class="n">method</span>
+    <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_embedded_coulomb</span><span class="p">():</span>
+        <span class="c1"># Legacy models have embedded Coulomb with &quot;simple&quot; method</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_coulomb_method</span> <span class="o">=</span> <span class="s2">&quot;simple&quot;</span>
+
+    <span class="c1"># Set training mode (default False for inference)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_train</span> <span class="o">=</span> <span class="n">train</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">train</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">train</span><span class="p">:</span>
+        <span class="c1"># Disable gradients on all parameters for inference mode</span>
+        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+            <span class="n">param</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+                <span class="n">param</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_dftd3</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_dftd3</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+                <span class="n">param</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+                  </details>
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="aimnet.calculators.AIMNet2Calculator.coulomb_cutoff" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">coulomb_cutoff</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#aimnet.calculators.AIMNet2Calculator.coulomb_cutoff" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Get the current Coulomb cutoff distance.</p>
+<h5 id="aimnet.calculators.AIMNet2Calculator.coulomb_cutoff--returns">Returns<a class="headerlink" href="#aimnet.calculators.AIMNet2Calculator.coulomb_cutoff--returns" title="Permanent link">&para;</a></h5>
+<p>float | None
+    The cutoff distance for Coulomb calculations, or None if not applicable.
+    For "simple" method, this is inf. For "ewald", this is None.
+    Use set_lrcoulomb_method() to change.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="aimnet.calculators.AIMNet2Calculator.coulomb_method" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">coulomb_method</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#aimnet.calculators.AIMNet2Calculator.coulomb_method" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Get the current Coulomb method.</p>
+<h5 id="aimnet.calculators.AIMNet2Calculator.coulomb_method--returns">Returns<a class="headerlink" href="#aimnet.calculators.AIMNet2Calculator.coulomb_method--returns" title="Permanent link">&para;</a></h5>
+<p>str | None
+    One of "simple", "dsf", "ewald", or None if no external Coulomb.
+    For legacy models with embedded Coulomb, returns None.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="aimnet.calculators.AIMNet2Calculator.dftd3_cutoff" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">dftd3_cutoff</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#aimnet.calculators.AIMNet2Calculator.dftd3_cutoff" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Get the current DFTD3 cutoff distance.</p>
+<h5 id="aimnet.calculators.AIMNet2Calculator.dftd3_cutoff--returns">Returns<a class="headerlink" href="#aimnet.calculators.AIMNet2Calculator.dftd3_cutoff--returns" title="Permanent link">&para;</a></h5>
+<p>float
+    The cutoff distance for DFTD3 calculations in Angstroms.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="aimnet.calculators.AIMNet2Calculator.has_external_coulomb" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">has_external_coulomb</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#aimnet.calculators.AIMNet2Calculator.has_external_coulomb" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Check if calculator has external Coulomb module attached.</p>
+<p>Returns True for new-format models that were trained with Coulomb
+and have it externalized. For legacy models, Coulomb is embedded
+in the model itself, so this returns False.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="aimnet.calculators.AIMNet2Calculator.has_external_dftd3" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">has_external_dftd3</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#aimnet.calculators.AIMNet2Calculator.has_external_dftd3" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Check if calculator has external DFTD3 module attached.</p>
+<p>Returns True for new-format models that were trained with DFTD3/D3BJ
+dispersion and have it externalized. For legacy models or D3TS models,
+dispersion is embedded in the model itself, so this returns False.</p>
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="aimnet.calculators.AIMNet2Calculator.mol_flatten" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">mol_flatten</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></code>
+
+<a href="#aimnet.calculators.AIMNet2Calculator.mol_flatten" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Flatten the input data for multiple molecules.
+Will not flatten for batched input and molecule size below threshold.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">742</span>
+<span class="normal">743</span>
+<span class="normal">744</span>
+<span class="normal">745</span>
+<span class="normal">746</span>
+<span class="normal">747</span>
+<span class="normal">748</span>
+<span class="normal">749</span>
+<span class="normal">750</span>
+<span class="normal">751</span>
+<span class="normal">752</span>
+<span class="normal">753</span>
+<span class="normal">754</span>
+<span class="normal">755</span>
+<span class="normal">756</span>
+<span class="normal">757</span>
+<span class="normal">758</span>
+<span class="normal">759</span>
+<span class="normal">760</span>
+<span class="normal">761</span>
+<span class="normal">762</span>
+<span class="normal">763</span>
+<span class="normal">764</span>
+<span class="normal">765</span>
+<span class="normal">766</span>
+<span class="normal">767</span>
+<span class="normal">768</span>
+<span class="normal">769</span>
+<span class="normal">770</span>
+<span class="normal">771</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">mol_flatten</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Flatten the input data for multiple molecules.</span>
+<span class="sd">    Will not flatten for batched input and molecule size below threshold.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ndim</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;coord&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">ndim</span>
+    <span class="k">if</span> <span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_batch</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="s2">&quot;mol_idx&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+            <span class="n">data</span><span class="p">[</span><span class="s2">&quot;mol_idx&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;coord&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_max_mol_size</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;coord&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;mol_idx&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_max_mol_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;mol_idx&quot;</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_max_mol_size</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;mol_idx&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">return_counts</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+
+    <span class="k">elif</span> <span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="n">B</span><span class="p">,</span> <span class="n">N</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;coord&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+        <span class="c1"># Force flattening for PBC (cell present) to ensure make_nbmat computes proper neighbor lists with shifts</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">nb_threshold</span> <span class="o">&lt;</span> <span class="n">N</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="s2">&quot;cpu&quot;</span> <span class="ow">or</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;cell&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_batch</span> <span class="o">=</span> <span class="n">B</span>
+            <span class="n">data</span><span class="p">[</span><span class="s2">&quot;mol_idx&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">repeat_interleave</span><span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">B</span><span class="p">,),</span> <span class="n">N</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">atom_feature_keys</span><span class="p">:</span>
+                    <span class="n">data</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_batch</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_mol_size</span> <span class="o">=</span> <span class="n">N</span>
+    <span class="k">return</span> <span class="n">data</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="aimnet.calculators.AIMNet2Calculator.set_dftd3_cutoff" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">set_dftd3_cutoff</span><span class="p">(</span><span class="n">cutoff</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">smoothing_fraction</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#aimnet.calculators.AIMNet2Calculator.set_dftd3_cutoff" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Set DFTD3 cutoff and smoothing.</p>
+<h5 id="aimnet.calculators.AIMNet2Calculator.set_dftd3_cutoff--parameters">Parameters<a class="headerlink" href="#aimnet.calculators.AIMNet2Calculator.set_dftd3_cutoff--parameters" title="Permanent link">&para;</a></h5>
+<p>cutoff : float | None
+    Cutoff distance in Angstroms for DFTD3 calculation.
+    Default is _default_dftd3_cutoff (15.0).
+smoothing_fraction : float | None
+    Fraction of cutoff used as smoothing width.
+    Default is _default_dftd3_smoothing (0.2).</p>
+<h5 id="aimnet.calculators.AIMNet2Calculator.set_dftd3_cutoff--notes">Notes<a class="headerlink" href="#aimnet.calculators.AIMNet2Calculator.set_dftd3_cutoff--notes" title="Permanent link">&para;</a></h5>
+<p>This method only affects external DFTD3 modules attached to
+new-format models. For legacy models with embedded DFTD3,
+the smoothing is fixed.</p>
+<p>Updates _dftd3_cutoff and rebuilds neighbor lists.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">653</span>
+<span class="normal">654</span>
+<span class="normal">655</span>
+<span class="normal">656</span>
+<span class="normal">657</span>
+<span class="normal">658</span>
+<span class="normal">659</span>
+<span class="normal">660</span>
+<span class="normal">661</span>
+<span class="normal">662</span>
+<span class="normal">663</span>
+<span class="normal">664</span>
+<span class="normal">665</span>
+<span class="normal">666</span>
+<span class="normal">667</span>
+<span class="normal">668</span>
+<span class="normal">669</span>
+<span class="normal">670</span>
+<span class="normal">671</span>
+<span class="normal">672</span>
+<span class="normal">673</span>
+<span class="normal">674</span>
+<span class="normal">675</span>
+<span class="normal">676</span>
+<span class="normal">677</span>
+<span class="normal">678</span>
+<span class="normal">679</span>
+<span class="normal">680</span>
+<span class="normal">681</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_dftd3_cutoff</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">smoothing_fraction</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Set DFTD3 cutoff and smoothing.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cutoff : float | None</span>
+<span class="sd">        Cutoff distance in Angstroms for DFTD3 calculation.</span>
+<span class="sd">        Default is _default_dftd3_cutoff (15.0).</span>
+<span class="sd">    smoothing_fraction : float | None</span>
+<span class="sd">        Fraction of cutoff used as smoothing width.</span>
+<span class="sd">        Default is _default_dftd3_smoothing (0.2).</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    This method only affects external DFTD3 modules attached to</span>
+<span class="sd">    new-format models. For legacy models with embedded DFTD3,</span>
+<span class="sd">    the smoothing is fixed.</span>
+
+<span class="sd">    Updates _dftd3_cutoff and rebuilds neighbor lists.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">cutoff</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">cutoff</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_dftd3_cutoff</span>
+    <span class="k">if</span> <span class="n">smoothing_fraction</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">smoothing_fraction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_dftd3_smoothing</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">_dftd3_cutoff</span> <span class="o">=</span> <span class="n">cutoff</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_dftd3</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">external_dftd3</span><span class="o">.</span><span class="n">set_smoothing</span><span class="p">(</span><span class="n">cutoff</span><span class="p">,</span> <span class="n">smoothing_fraction</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_update_lr_nblists</span><span class="p">()</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="aimnet.calculators.AIMNet2Calculator.set_lr_cutoff" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">set_lr_cutoff</span><span class="p">(</span><span class="n">cutoff</span><span class="p">)</span></code>
+
+<a href="#aimnet.calculators.AIMNet2Calculator.set_lr_cutoff" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Set the unified long-range cutoff for all LR modules.</p>
+<h5 id="aimnet.calculators.AIMNet2Calculator.set_lr_cutoff--parameters">Parameters<a class="headerlink" href="#aimnet.calculators.AIMNet2Calculator.set_lr_cutoff--parameters" title="Permanent link">&para;</a></h5>
+<p>cutoff : float
+    Cutoff distance in Angstroms for LR neighbor lists.</p>
+<h5 id="aimnet.calculators.AIMNet2Calculator.set_lr_cutoff--notes">Notes<a class="headerlink" href="#aimnet.calculators.AIMNet2Calculator.set_lr_cutoff--notes" title="Permanent link">&para;</a></h5>
+<p>This updates both _coulomb_cutoff and _dftd3_cutoff.
+Ewald uses its own internal neighbor list and ignores this cutoff.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">633</span>
+<span class="normal">634</span>
+<span class="normal">635</span>
+<span class="normal">636</span>
+<span class="normal">637</span>
+<span class="normal">638</span>
+<span class="normal">639</span>
+<span class="normal">640</span>
+<span class="normal">641</span>
+<span class="normal">642</span>
+<span class="normal">643</span>
+<span class="normal">644</span>
+<span class="normal">645</span>
+<span class="normal">646</span>
+<span class="normal">647</span>
+<span class="normal">648</span>
+<span class="normal">649</span>
+<span class="normal">650</span>
+<span class="normal">651</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_lr_cutoff</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Set the unified long-range cutoff for all LR modules.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cutoff : float</span>
+<span class="sd">        Cutoff distance in Angstroms for LR neighbor lists.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    This updates both _coulomb_cutoff and _dftd3_cutoff.</span>
+<span class="sd">    Ewald uses its own internal neighbor list and ignores this cutoff.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Update both cutoffs (but not for ewald which manages its own)</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_coulomb_method</span> <span class="o">!=</span> <span class="s2">&quot;ewald&quot;</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_coulomb_cutoff</span> <span class="o">=</span> <span class="n">cutoff</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_dftd3_cutoff</span> <span class="o">=</span> <span class="n">cutoff</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">cutoff_lr</span> <span class="o">=</span> <span class="n">cutoff</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_update_lr_nblists</span><span class="p">()</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="aimnet.calculators.AIMNet2Calculator.set_lrcoulomb_method" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">dsf_alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-08</span><span class="p">)</span></code>
+
+<a href="#aimnet.calculators.AIMNet2Calculator.set_lrcoulomb_method" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Set the long-range Coulomb method.</p>
+<h5 id="aimnet.calculators.AIMNet2Calculator.set_lrcoulomb_method--parameters">Parameters<a class="headerlink" href="#aimnet.calculators.AIMNet2Calculator.set_lrcoulomb_method--parameters" title="Permanent link">&para;</a></h5>
+<p>method : str
+    One of "simple", "dsf", or "ewald".
+cutoff : float
+    Cutoff distance for DSF neighbor list. Default is 15.0.
+    Not used for Ewald (which computes cutoffs from accuracy).
+dsf_alpha : float
+    Alpha parameter for DSF method. Default is 0.2.
+ewald_accuracy : float
+    Target accuracy for Ewald summation. Controls the real-space
+    and reciprocal-space cutoffs. Lower values give higher accuracy
+    but require more computation. Default is 1e-8.</p>
+<pre><code>The Ewald cutoffs are computed as:
+- eta = (V^2 / N)^(1/6) / sqrt(2*pi)
+- cutoff_real = sqrt(-2 * ln(accuracy)) * eta
+- cutoff_recip = sqrt(-2 * ln(accuracy)) / eta
+</code></pre>
+<h5 id="aimnet.calculators.AIMNet2Calculator.set_lrcoulomb_method--notes">Notes<a class="headerlink" href="#aimnet.calculators.AIMNet2Calculator.set_lrcoulomb_method--notes" title="Permanent link">&para;</a></h5>
+<p>For new-format models with external Coulomb, this updates the external module.
+For legacy models with embedded Coulomb, a warning is issued as those modules
+cannot be modified at runtime.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">560</span>
+<span class="normal">561</span>
+<span class="normal">562</span>
+<span class="normal">563</span>
+<span class="normal">564</span>
+<span class="normal">565</span>
+<span class="normal">566</span>
+<span class="normal">567</span>
+<span class="normal">568</span>
+<span class="normal">569</span>
+<span class="normal">570</span>
+<span class="normal">571</span>
+<span class="normal">572</span>
+<span class="normal">573</span>
+<span class="normal">574</span>
+<span class="normal">575</span>
+<span class="normal">576</span>
+<span class="normal">577</span>
+<span class="normal">578</span>
+<span class="normal">579</span>
+<span class="normal">580</span>
+<span class="normal">581</span>
+<span class="normal">582</span>
+<span class="normal">583</span>
+<span class="normal">584</span>
+<span class="normal">585</span>
+<span class="normal">586</span>
+<span class="normal">587</span>
+<span class="normal">588</span>
+<span class="normal">589</span>
+<span class="normal">590</span>
+<span class="normal">591</span>
+<span class="normal">592</span>
+<span class="normal">593</span>
+<span class="normal">594</span>
+<span class="normal">595</span>
+<span class="normal">596</span>
+<span class="normal">597</span>
+<span class="normal">598</span>
+<span class="normal">599</span>
+<span class="normal">600</span>
+<span class="normal">601</span>
+<span class="normal">602</span>
+<span class="normal">603</span>
+<span class="normal">604</span>
+<span class="normal">605</span>
+<span class="normal">606</span>
+<span class="normal">607</span>
+<span class="normal">608</span>
+<span class="normal">609</span>
+<span class="normal">610</span>
+<span class="normal">611</span>
+<span class="normal">612</span>
+<span class="normal">613</span>
+<span class="normal">614</span>
+<span class="normal">615</span>
+<span class="normal">616</span>
+<span class="normal">617</span>
+<span class="normal">618</span>
+<span class="normal">619</span>
+<span class="normal">620</span>
+<span class="normal">621</span>
+<span class="normal">622</span>
+<span class="normal">623</span>
+<span class="normal">624</span>
+<span class="normal">625</span>
+<span class="normal">626</span>
+<span class="normal">627</span>
+<span class="normal">628</span>
+<span class="normal">629</span>
+<span class="normal">630</span>
+<span class="normal">631</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_lrcoulomb_method</span><span class="p">(</span>
+    <span class="bp">self</span><span class="p">,</span>
+    <span class="n">method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;simple&quot;</span><span class="p">,</span> <span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="s2">&quot;ewald&quot;</span><span class="p">],</span>
+    <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">15.0</span><span class="p">,</span>
+    <span class="n">dsf_alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
+    <span class="n">ewald_accuracy</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-8</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Set the long-range Coulomb method.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    method : str</span>
+<span class="sd">        One of &quot;simple&quot;, &quot;dsf&quot;, or &quot;ewald&quot;.</span>
+<span class="sd">    cutoff : float</span>
+<span class="sd">        Cutoff distance for DSF neighbor list. Default is 15.0.</span>
+<span class="sd">        Not used for Ewald (which computes cutoffs from accuracy).</span>
+<span class="sd">    dsf_alpha : float</span>
+<span class="sd">        Alpha parameter for DSF method. Default is 0.2.</span>
+<span class="sd">    ewald_accuracy : float</span>
+<span class="sd">        Target accuracy for Ewald summation. Controls the real-space</span>
+<span class="sd">        and reciprocal-space cutoffs. Lower values give higher accuracy</span>
+<span class="sd">        but require more computation. Default is 1e-8.</span>
+
+<span class="sd">        The Ewald cutoffs are computed as:</span>
+<span class="sd">        - eta = (V^2 / N)^(1/6) / sqrt(2*pi)</span>
+<span class="sd">        - cutoff_real = sqrt(-2 * ln(accuracy)) * eta</span>
+<span class="sd">        - cutoff_recip = sqrt(-2 * ln(accuracy)) / eta</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    For new-format models with external Coulomb, this updates the external module.</span>
+<span class="sd">    For legacy models with embedded Coulomb, a warning is issued as those modules</span>
+<span class="sd">    cannot be modified at runtime.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">method</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;simple&quot;</span><span class="p">,</span> <span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="s2">&quot;ewald&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid method: </span><span class="si">{</span><span class="n">method</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Warn if model has embedded Coulomb (legacy models)</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_embedded_coulomb</span><span class="p">()</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;Model has embedded Coulomb module (legacy format). &quot;</span>
+            <span class="s2">&quot;set_lrcoulomb_method() only affects external Coulomb modules. &quot;</span>
+            <span class="s2">&quot;For legacy models, the Coulomb method cannot be changed at runtime.&quot;</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Update external LRCoulomb module if present</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span><span class="o">.</span><span class="n">method</span> <span class="o">=</span> <span class="n">method</span>
+        <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;dsf&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span><span class="o">.</span><span class="n">dsf_alpha</span> <span class="o">=</span> <span class="n">dsf_alpha</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span><span class="o">.</span><span class="n">dsf_rc</span> <span class="o">=</span> <span class="n">cutoff</span>
+        <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;ewald&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span><span class="o">.</span><span class="n">ewald_accuracy</span> <span class="o">=</span> <span class="n">ewald_accuracy</span>
+
+    <span class="c1"># Update _coulomb_cutoff based on method</span>
+    <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;simple&quot;</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_coulomb_cutoff</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;dsf&quot;</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_coulomb_cutoff</span> <span class="o">=</span> <span class="n">cutoff</span>
+    <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;ewald&quot;</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_coulomb_cutoff</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Ewald manages its own real-space cutoff</span>
+
+    <span class="c1"># Update cutoff_lr for backward compatibility</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_coulomb_cutoff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cutoff_lr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_coulomb_cutoff</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Ewald - use DFTD3 cutoff if available, else None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cutoff_lr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dftd3_cutoff</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_dftd3</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">_coulomb_method</span> <span class="o">=</span> <span class="n">method</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_update_lr_nblists</span><span class="p">()</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+
+</div><p>options:
+show_root_heading: true
+show_source: true</p>
+<h2 id="aimnet2ase">AIMNet2ASE<a class="headerlink" href="#aimnet2ase" title="Permanent link">&para;</a></h2>
+<p><a href="https://wiki.fysik.dtu.dk/ase/">ASE (Atomic Simulation Environment)</a> calculator interface.</p>
+<p>!!! note "Installation"
+Requires the <code>ase</code> extra: <code>pip install aimnet[ase]</code></p>
+<p>This calculator integrates with ASE's <code>Atoms</code> object, supporting energy, forces, stress, and dipole moment calculations. It operates in <strong>eV</strong> and <strong>Angstrom</strong>.</p>
+<h3 id="usage-example">Usage Example<a class="headerlink" href="#usage-example" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">from ase.io import read
+from aimnet.calculators import AIMNet2ASE
+
+atoms = read(&quot;molecule.xyz&quot;)
+atoms.calc = AIMNet2ASE(&quot;aimnet2&quot;)
+
+print(atoms.get_potential_energy())
+print(atoms.get_forces())
+</code></pre>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="aimnet.calculators.aimnet2ase.AIMNet2ASE" class="doc doc-heading">
+              <code class="highlight language-python"><span class="n">AIMNet2ASE</span><span class="p">(</span><span class="n">base_calc</span><span class="o">=</span><span class="s1">&#39;aimnet2&#39;</span><span class="p">,</span> <span class="n">charge</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">mult</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span></code>
+
+<a href="#aimnet.calculators.aimnet2ase.AIMNet2ASE" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="ase.calculators.calculator.Calculator">Calculator</span></code></p>
+
+
+
+
+
+
+
+
+
+                  <details class="quote">
+                    <summary>Source code in <code>aimnet/calculators/aimnet2ase.py</code></summary>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span>
+<span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span>
+<span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_calc</span><span class="p">:</span> <span class="n">AIMNet2Calculator</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">charge</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">mult</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">base_calc</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">base_calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="n">base_calc</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">base_calc</span> <span class="o">=</span> <span class="n">base_calc</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">charge</span> <span class="o">=</span> <span class="n">charge</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">mult</span> <span class="o">=</span> <span class="n">mult</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">update_tensors</span><span class="p">()</span>
+    <span class="c1"># list of implemented species</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">base_calc</span><span class="p">,</span> <span class="s2">&quot;implemented_species&quot;</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">implemented_species</span> <span class="o">=</span> <span class="n">base_calc</span><span class="o">.</span><span class="n">implemented_species</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>  <span class="c1"># type: ignore</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">implemented_species</span> <span class="o">=</span> <span class="kc">None</span>
+</code></pre></div></td></tr></table></div>
+                  </details>
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+
+</div><p>options:
+show_root_heading: true
+show_source: true</p>
+<h2 id="aimnet2pysis">AIMNet2Pysis<a class="headerlink" href="#aimnet2pysis" title="Permanent link">&para;</a></h2>
+<p><a href="https://pysisyphus.readthedocs.io/">PySisyphus</a> calculator interface.</p>
+<p>!!! note "Installation"
+Requires the <code>pysis</code> extra: <code>pip install aimnet[pysis]</code></p>
+<p>This interface adapts AIMNet2 for use with PySisyphus optimizers. It handles unit conversion automatically:</p>
+<ul>
+<li><strong>Input</strong>: Converts Angstrom (PySisyphus) to Angstrom (AIMNet2).</li>
+<li><strong>Output</strong>: Converts eV/Angstrom (AIMNet2) to <strong>Hartree/Bohr</strong> (PySisyphus).</li>
+</ul>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="aimnet.calculators.aimnet2pysis.AIMNet2Pysis" class="doc doc-heading">
+              <code class="highlight language-python"><span class="n">AIMNet2Pysis</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s1">&#39;aimnet2&#39;</span><span class="p">,</span> <span class="n">charge</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">mult</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></code>
+
+<a href="#aimnet.calculators.aimnet2pysis.AIMNet2Pysis" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="pysisyphus.calculators.Calculator.Calculator">Calculator</span></code></p>
+
+
+
+
+
+
+
+
+
+                  <details class="quote">
+                    <summary>Source code in <code>aimnet/calculators/aimnet2pysis.py</code></summary>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">AIMNet2Calculator</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">charge</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">mult</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">charge</span><span class="o">=</span><span class="n">charge</span><span class="p">,</span> <span class="n">mult</span><span class="o">=</span><span class="n">mult</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+</code></pre></div></td></tr></table></div>
+                  </details>
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+
+</div><p>options:
+show_root_heading: true
+show_source: true</p>
+<h2 id="model-registry">Model Registry<a class="headerlink" href="#model-registry" title="Permanent link">&para;</a></h2>
+<p>Utilities for loading pre-trained models. Models are automatically downloaded from the remote repository to a local cache (<code>aimnet/calculators/assets/</code>) upon first use.</p>
+<h3 id="cli-command">CLI Command<a class="headerlink" href="#cli-command" title="Permanent link">&para;</a></h3>
+<p>You can clear the local model cache using the CLI:</p>
+<pre><code class="language-bash">aimnet clear_model_cache
+</code></pre>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="aimnet.calculators.model_registry" class="doc doc-heading">
+            <code>model_registry</code>
+
+
+<a href="#aimnet.calculators.model_registry" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><p>options:
+show_root_heading: true
+show_source: true</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../" class="btn btn-neutral float-left" title="Overview"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../modules/" class="btn btn-neutral float-right" title="Modules">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/isayevlab/aimnetcentral" class="fa fa-code-fork" style="color: #fcfcfc"> isayevlab/aimnetcentral</a>
+        </span>
+    
+    
+      <span><a href="../" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../modules/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>
