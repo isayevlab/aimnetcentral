@@ -1,11 +1,149 @@
 """Shared pytest fixtures for AIMNet2 tests."""
 
+import contextlib
 import os
+import shutil
+import sys
+import tempfile
 import warnings
+from collections.abc import Generator
+from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 import torch
 from torch import Tensor
+
+# =============================================================================
+# Platform Detection
+# =============================================================================
+
+IS_WINDOWS = sys.platform == "win32"
+IS_LINUX = sys.platform.startswith("linux")
+IS_MACOS = sys.platform == "darwin"
+
+
+def _has_msvc_compiler() -> bool:
+    """Check if MSVC compiler (cl.exe) is available."""
+    return shutil.which("cl") is not None
+
+
+# =============================================================================
+# Pytest Configuration Hooks
+# =============================================================================
+
+
+def pytest_configure(config):
+    """Configure pytest - automatically disable torch.compile on Windows without MSVC."""
+    if IS_WINDOWS and not _has_msvc_compiler():
+        # torch.compile requires MSVC on Windows
+        os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
+        warnings.warn(
+            "MSVC compiler (cl.exe) not found. Disabling torch.compile for tests. "
+            "Install Visual Studio Build Tools for full torch.compile support.",
+            stacklevel=1,
+        )
+
+
+# =============================================================================
+# Cross-Platform Temp File Utilities
+# =============================================================================
+
+
+@contextmanager
+def temp_file(suffix: str = "", content: str | bytes | None = None) -> Generator[Path, None, None]:
+    """Cross-platform temporary file context manager.
+
+    Creates a temporary file that is properly closed before yielding the path,
+    allowing operations like torch.jit.save() to work on Windows where files
+    cannot be opened by multiple processes simultaneously.
+
+    Parameters
+    ----------
+    suffix : str
+        File suffix (e.g., ".yaml", ".pt")
+    content : str | bytes | None
+        Optional content to write to the file before yielding
+
+    Yields
+    ------
+    Path
+        Path to the temporary file (file is closed, can be opened by other processes)
+
+    Examples
+    --------
+    >>> with temp_file(suffix=".yaml", content="key: value") as path:
+    ...     data = yaml.safe_load(path.read_text())
+
+    >>> with temp_file(suffix=".pt") as path:
+    ...     torch.save(model, path)
+    ...     loaded = torch.load(path)
+    """
+    # Create temp file, write content if provided, then close it
+    fd, temp_path = tempfile.mkstemp(suffix=suffix)
+    path = Path(temp_path)
+    try:
+        if content is not None:
+            mode = "wb" if isinstance(content, bytes) else "w"
+            with open(fd, mode, closefd=True) as f:
+                f.write(content)
+        else:
+            os.close(fd)
+        yield path
+    finally:
+        # Clean up - ignore errors if file was already deleted
+        with contextlib.suppress(OSError, PermissionError):
+            path.unlink(missing_ok=True)
+
+
+@pytest.fixture
+def temp_yaml_file():
+    """Fixture that provides a temp_file factory for YAML files.
+
+    Returns
+    -------
+    callable
+        Factory function that creates temp YAML files
+
+    Examples
+    --------
+    >>> def test_something(temp_yaml_file):
+    ...     with temp_yaml_file("key: value") as path:
+    ...         result = load_yaml(path)
+    """
+
+    @contextmanager
+    def _factory(content: str) -> Generator[Path, None, None]:
+        with temp_file(suffix=".yaml", content=content) as path:
+            yield path
+
+    return _factory
+
+
+@pytest.fixture
+def temp_pt_file():
+    """Fixture that provides a temp_file factory for PyTorch files.
+
+    Returns
+    -------
+    callable
+        Factory function that creates temp .pt files
+
+    Examples
+    --------
+    >>> def test_something(temp_pt_file):
+    ...     with temp_pt_file() as path:
+    ...         torch.jit.save(model, path)
+    ...         loaded = torch.jit.load(path)
+    """
+
+    @contextmanager
+    def _factory() -> Generator[Path, None, None]:
+        with temp_file(suffix=".pt") as path:
+            yield path
+
+    return _factory
+
 
 # =============================================================================
 # Test Data Paths

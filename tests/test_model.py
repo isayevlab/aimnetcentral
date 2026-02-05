@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pytest
 import torch
-from conftest import add_dftd3_keys
+from conftest import add_dftd3_keys, temp_file
 from torch import nn
 
 from aimnet.calculators.model_registry import get_model_path
@@ -64,7 +64,7 @@ def test_aimnet2():
     atoms = ase.io.read(os.path.join(os.path.dirname(__file__), "data", "caffeine.xyz"), format="extxyz")
     ref_e = atoms.get_potential_energy()
     ref_f = atoms.get_forces()
-    ref_q = atoms.get_charges()
+    ref_q = atoms.arrays["initial_charges"]  # extxyz stores per-atom charges in arrays
 
     _in = {
         "coord": torch.as_tensor(atoms.get_positions()).unsqueeze(0),  # type: ignore
@@ -122,14 +122,12 @@ class TestTorchScript:
 
     def test_torchscript_save_load(self):
         """Test that scripted model can be saved and loaded."""
-        import tempfile
-
         model = build_model(aimnet2_d3_def)
         scripted = torch.jit.script(model)
 
-        with tempfile.NamedTemporaryFile(suffix=".pt", delete=True) as f:
-            torch.jit.save(scripted, f.name)
-            loaded = torch.jit.load(f.name)
+        with temp_file(suffix=".pt") as path:
+            torch.jit.save(scripted, str(path))
+            loaded = torch.jit.load(str(path))
 
         # Create simple input
         _in = {
@@ -255,16 +253,11 @@ class TestFromFile:
 
     def test_from_file_invalid_format_raises(self):
         """Test that invalid file format raises ValueError."""
-        import tempfile
-
         # Create a file with invalid format (just a tensor, not a model)
-        with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
-            torch.save({"invalid": "data"}, f.name)
-            try:
-                with pytest.raises(ValueError, match="Unknown model format"):
-                    load_model(f.name)
-            finally:
-                os.unlink(f.name)
+        with temp_file(suffix=".pt") as path:
+            torch.save({"invalid": "data"}, str(path))
+            with pytest.raises(ValueError, match="Unknown model format"):
+                load_model(str(path))
 
 
 class TestNewFormat:

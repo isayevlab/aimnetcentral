@@ -29,11 +29,9 @@ Tests cover:
 - Physical correctness
 """
 
-import tempfile
-
 import pytest
 import torch
-from conftest import add_dftd3_keys
+from conftest import add_dftd3_keys, temp_file
 
 from aimnet import nbops
 from aimnet.modules.lr import DFTD3
@@ -605,9 +603,9 @@ class TestDFTD3TorchScript:
         module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
         scripted = torch.jit.script(module)
 
-        with tempfile.NamedTemporaryFile(suffix=".pt", delete=True) as f:
-            torch.jit.save(scripted, f.name)
-            loaded = torch.jit.load(f.name)
+        with temp_file(suffix=".pt") as path:
+            torch.jit.save(scripted, str(path))
+            loaded = torch.jit.load(str(path))
 
         # Create test input
         coord = torch.tensor([[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]], device=device)

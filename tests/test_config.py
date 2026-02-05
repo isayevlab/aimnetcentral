@@ -1,10 +1,8 @@
 """Tests for aimnet.config - configuration and module loading utilities."""
 
-import os
-import tempfile
-
 import pytest
 import torch
+from conftest import temp_file
 
 from aimnet import config
 
@@ -103,17 +101,11 @@ class TestLoadYaml:
           params:
             size: 100
         """
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write(yaml_content)
-            f.flush()
-
-            try:
-                result = config.load_yaml(f.name)
-                assert "model" in result
-                assert result["model"]["type"] == "test"
-                assert result["model"]["params"]["size"] == 100
-            finally:
-                os.unlink(f.name)
+        with temp_file(suffix=".yaml", content=yaml_content) as path:
+            result = config.load_yaml(str(path))
+            assert "model" in result
+            assert result["model"]["type"] == "test"
+            assert result["model"]["params"]["size"] == 100
 
     def test_load_yaml_with_jinja2_template(self):
         """Test load_yaml with Jinja2 templating."""
@@ -124,17 +116,11 @@ class TestLoadYaml:
         """
         hyperpar = {"hidden_size": 256, "num_layers": 4}
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write(yaml_content)
-            f.flush()
-
-            try:
-                result = config.load_yaml(f.name, hyperpar)
-                # Jinja2 renders, then YAML parses - numbers stay as numbers
-                assert result["model"]["hidden_size"] == 256
-                assert result["model"]["layers"] == 4
-            finally:
-                os.unlink(f.name)
+        with temp_file(suffix=".yaml", content=yaml_content) as path:
+            result = config.load_yaml(str(path), hyperpar)
+            # Jinja2 renders, then YAML parses - numbers stay as numbers
+            assert result["model"]["hidden_size"] == 256
+            assert result["model"]["layers"] == 4
 
     def test_load_yaml_with_dict_hyperpar(self):
         """Test load_yaml with dict containing Jinja2 templates."""
@@ -145,32 +131,18 @@ class TestLoadYaml:
 
     def test_load_yaml_nested_yaml_include(self):
         """Test load_yaml with nested YAML file includes."""
-        # Create nested config
         nested_content = """
         nested_key: nested_value
         """
-
-        # Create main config that includes nested
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as nested_f:
-            nested_f.write(nested_content)
-            nested_f.flush()
-
+        with temp_file(suffix=".yaml", content=nested_content) as nested_path:
             main_content = f"""
-            main_key: main_value
-            included: {nested_f.name}
-            """
-
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as main_f:
-                main_f.write(main_content)
-                main_f.flush()
-
-                try:
-                    result = config.load_yaml(main_f.name)
-                    assert result["main_key"] == "main_value"
-                    assert result["included"]["nested_key"] == "nested_value"
-                finally:
-                    os.unlink(main_f.name)
-                    os.unlink(nested_f.name)
+        main_key: main_value
+        included: {nested_path}
+        """
+            with temp_file(suffix=".yaml", content=main_content) as main_path:
+                result = config.load_yaml(str(main_path))
+                assert result["main_key"] == "main_value"
+                assert result["included"]["nested_key"] == "nested_value"
 
     def test_load_yaml_hyperpar_from_file(self):
         """Test load_yaml with hyperparameters loaded from file."""
@@ -178,43 +150,29 @@ class TestLoadYaml:
         learning_rate: 0.001
         batch_size: 32
         """
-
         config_content = """
         training:
           lr: {{ learning_rate }}
           bs: {{ batch_size }}
         """
-
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as hp_f:
-            hp_f.write(hyperpar_content)
-            hp_f.flush()
-
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as cfg_f:
-                cfg_f.write(config_content)
-                cfg_f.flush()
-
-                try:
-                    result = config.load_yaml(cfg_f.name, hp_f.name)
-                    # YAML parses numbers as numbers
-                    assert result["training"]["lr"] == 0.001
-                    assert result["training"]["bs"] == 32
-                finally:
-                    os.unlink(hp_f.name)
-                    os.unlink(cfg_f.name)
+        with (
+            temp_file(suffix=".yaml", content=hyperpar_content) as hp_path,
+            temp_file(suffix=".yaml", content=config_content) as cfg_path,
+        ):
+            result = config.load_yaml(str(cfg_path), str(hp_path))
+            # YAML parses numbers as numbers
+            assert result["training"]["lr"] == 0.001
+            assert result["training"]["bs"] == 32
 
     def test_load_yaml_invalid_hyperpar_type(self):
         """Test that non-dict hyperpar from file raises TypeError."""
         hyperpar_content = "- item1\n- item2"  # YAML list, not dict
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as hp_f:
-            hp_f.write(hyperpar_content)
-            hp_f.flush()
-
-            try:
-                with pytest.raises(TypeError, match="Loaded hyperpar must be a dict"):
-                    config.load_yaml({"key": "value"}, hp_f.name)
-            finally:
-                os.unlink(hp_f.name)
+        with (
+            temp_file(suffix=".yaml", content=hyperpar_content) as hp_path,
+            pytest.raises(TypeError, match="Loaded hyperpar must be a dict"),
+        ):
+            config.load_yaml({"key": "value"}, str(hp_path))
 
 
 class TestBuildModule:
@@ -253,16 +211,10 @@ class TestBuildModule:
           in_features: 20
           out_features: 10
         """
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write(yaml_content)
-            f.flush()
-
-            try:
-                module = config.build_module(f.name)
-                assert isinstance(module, torch.nn.Linear)
-                assert module.in_features == 20
-            finally:
-                os.unlink(f.name)
+        with temp_file(suffix=".yaml", content=yaml_content) as path:
+            module = config.build_module(str(path))
+            assert isinstance(module, torch.nn.Linear)
+            assert module.in_features == 20
 
     def test_build_module_with_hyperpar(self):
         """Test building module with hyperparameters."""
@@ -284,17 +236,11 @@ class TestBuildModule:
         """
         hyperpar = {"in_size": 32, "out_size": 16}
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write(yaml_content)
-            f.flush()
-
-            try:
-                module = config.build_module(f.name, hyperpar)
-                assert isinstance(module, torch.nn.Linear)
-                assert module.in_features == 32
-                assert module.out_features == 16
-            finally:
-                os.unlink(f.name)
+        with temp_file(suffix=".yaml", content=yaml_content) as path:
+            module = config.build_module(str(path), hyperpar)
+            assert isinstance(module, torch.nn.Linear)
+            assert module.in_features == 32
+            assert module.out_features == 16
 
     def test_build_module_invalid_hyperpar_type(self):
         """Test that non-dict hyperpar raises TypeError."""
