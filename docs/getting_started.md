@@ -12,10 +12,10 @@ This guide will help you get up and running with AIMNet2 for molecular simulatio
 
 ### Basic Installation
 
-Install AIMNet2 from GitHub:
+Install AIMNet2 from PyPI:
 
 ```bash
-pip install git+https://github.com/isayevlab/aimnetcentral.git
+pip install aimnet
 ```
 
 ### With ASE Integration
@@ -23,7 +23,7 @@ pip install git+https://github.com/isayevlab/aimnetcentral.git
 For molecular dynamics and geometry optimization with ASE:
 
 ```bash
-pip install "aimnet[ase] @ git+https://github.com/isayevlab/aimnetcentral.git"
+pip install "aimnet[ase]"
 ```
 
 ### GPU Support

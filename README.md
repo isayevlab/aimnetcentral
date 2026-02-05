@@ -36,24 +36,25 @@ pip install torch --index-url https://download.pytorch.org/whl/cu124
 
 ## Available Models
 
-| Model                     | Alias           | Elements                                      | Description                                   |
-| ------------------------- | --------------- | --------------------------------------------- | --------------------------------------------- |
-| `aimnet2_wb97m_d3_X`      | `aimnet2`       | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | wB97M-D3 (default)                            |
-| `aimnet2_b973c_d3_X`      | `aimnet2_b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c functional                             |
-| `aimnet2_2025_b973c_d3_X` | `aimnet2_b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c + improved intermolecular interactions |
-| `aimnet2nse_X`            | `aimnet2nse`    | H, C, N, O, F, S, Cl                          | Open-shell chemistry                          |
-| `aimnet2-pd_X`            | `aimnet2pd`     | H, C, N, O, F, P, S, Cl, Pd                   | Palladium-containing systems                  |
+| Model          | Elements                                      | Description                                   |
+| -------------- | --------------------------------------------- | --------------------------------------------- |
+| `aimnet2`      | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | wB97M-D3 (default)                            |
+| `aimnet2_b973c`| H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c functional                             |
+| `aimnet2_2025` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c + improved intermolecular interactions |
+| `aimnet2nse`   | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | Open-shell chemistry                          |
+| `aimnet2pd`    | H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I | Palladium-containing systems                  |
+| `aimnet2_cpcm` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | CPCM implicit solvation                       |
 
-_X = 0-3 for ensemble members. Ensemble averaging recommended for production use._
+_Each model has ensemble members (append _0 to _3, or _0 to _7 for CPCM). Ensemble averaging recommended for production use._
 
 ## Installation
 
 ### Basic Installation
 
-Install from GitHub:
+Install from PyPI:
 
 ```bash
-pip install git+https://github.com/isayevlab/aimnetcentral.git
+pip install aimnet
 ```
 
 ### Optional Features
@@ -63,25 +64,25 @@ AIMNet2 provides optional extras for different use cases:
 **ASE Calculator** (for atomistic simulations with ASE):
 
 ```bash
-pip install "aimnet[ase] @ git+https://github.com/isayevlab/aimnetcentral.git"
+pip install "aimnet[ase]"
 ```
 
 **PySisyphus Calculator** (for reaction path calculations):
 
 ```bash
-pip install "aimnet[pysis] @ git+https://github.com/isayevlab/aimnetcentral.git"
+pip install "aimnet[pysis]"
 ```
 
 **Training** (for model training and development):
 
 ```bash
-pip install "aimnet[train] @ git+https://github.com/isayevlab/aimnetcentral.git"
+pip install "aimnet[train]"
 ```
 
 **All Features**:
 
 ```bash
-pip install "aimnet[ase,pysis,train] @ git+https://github.com/isayevlab/aimnetcentral.git"
+pip install "aimnet[ase,pysis,train]"
 ```
 
 ### Development Installation
