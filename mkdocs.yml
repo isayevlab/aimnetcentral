@@ -36,12 +36,7 @@ plugins:
                       merge_init_into_class: true
 
 theme:
-    name: material
-    palette:
-        primary: indigo
-        accent: indigo
-    icon:
-        repo: fontawesome/brands/github
+    name: readthedocs
 
 markdown_extensions:
     - toc:
