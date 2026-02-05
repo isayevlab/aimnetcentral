@@ -1,4 +1,3 @@
-import contextlib
 import os
 
 import numpy as np
@@ -65,22 +64,8 @@ def test_aimnet2():
     atoms = ase.io.read(os.path.join(os.path.dirname(__file__), "data", "caffeine.xyz"), format="extxyz")
     ref_e = atoms.get_potential_energy()
     ref_f = atoms.get_forces()
-    # ASE versions parse charge key differently depending on version
-    # Try multiple possible key names that ASE might use
-    charge_keys = ["initial_charges", "charge", "charges"]
-    ref_q = None
-    for key in charge_keys:
-        if key in atoms.arrays:
-            ref_q = atoms.arrays[key]
-            break
-    # Fallback: try ASE's get_initial_charges() method
-    # ASE raises different errors: KeyError, RuntimeError, or AssertionError depending on version
-    if ref_q is None and hasattr(atoms, "get_initial_charges"):
-        with contextlib.suppress(RuntimeError, KeyError, AssertionError):
-            ref_q = atoms.get_initial_charges()
-    if ref_q is None:
-        # Provide helpful error message for debugging
-        raise KeyError(f"Could not find charge data in atoms.arrays. Available keys: {list(atoms.arrays.keys())}")
+    # ASE stores charges from extxyz in calculator results, not atoms.arrays
+    ref_q = atoms.calc.results["charges"]
 
     _in = {
         "coord": torch.as_tensor(atoms.get_positions()).unsqueeze(0),  # type: ignore
