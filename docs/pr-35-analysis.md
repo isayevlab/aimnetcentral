@@ -1,7 +1,7 @@
 # Deep Analysis: PR #35 — Integrate nvalchemi-toolkit-ops and new model format
 
-**Author:** Roman Zubatyuk (@zubatyuk)  
-**Scope:** +11,272 / -1,498 lines across 51 files  
+**Author:** Roman Zubatyuk (@zubatyuk)
+**Scope:** +11,272 / -1,498 lines across 51 files
 **Branch:** `feature/alchemi-nblist-external-lr` → `main`
 
 ---
@@ -22,16 +22,17 @@ This PR is a major architectural overhaul of AIMNet2 that:
 
 ### 1.1 Neighbor List: Numba → nvalchemiops
 
-| Aspect | Before | After |
-|--------|--------|-------|
-| Implementation | `nbmat.py` + `nb_kernel_cpu.py` + `nb_kernel_cuda.py` (Numba) | `nvalchemiops.neighborlist.neighbor_list` |
-| Overflow handling | `TooManyNeighborsError` + manual `max_density` scaling | `NeighborOverflowError` + `AdaptiveNeighborList` with hysteresis |
-| PBC support | Single-cell only | Batched cells via `cell (B, 3, 3)`, `mol_idx` for atom→cell mapping |
-| Buffer sizing | Fixed `calc_max_nb(cutoff, density)` | Dynamic ~75% utilization, 16-aligned |
+| Aspect            | Before                                                        | After                                                               |
+| ----------------- | ------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Implementation    | `nbmat.py` + `nb_kernel_cpu.py` + `nb_kernel_cuda.py` (Numba) | `nvalchemiops.neighborlist.neighbor_list`                           |
+| Overflow handling | `TooManyNeighborsError` + manual `max_density` scaling        | `NeighborOverflowError` + `AdaptiveNeighborList` with hysteresis    |
+| PBC support       | Single-cell only                                              | Batched cells via `cell (B, 3, 3)`, `mol_idx` for atom→cell mapping |
+| Buffer sizing     | Fixed `calc_max_nb(cutoff, density)`                          | Dynamic ~75% utilization, 16-aligned                                |
 
 **Removed files:** `nbmat.py`, `nb_kernel_cpu.py`, `nb_kernel_cuda.py` (659 lines total)
 
 **New:** `AdaptiveNeighborList` in `calculator.py` wraps `nvalchemiops` with:
+
 - `_round_to_16()` for memory alignment
 - Retry loop on `NeighborOverflowError` (1.5x buffer increase)
 - Shrink when utilization < 2/3 of target (hysteresis to avoid thrashing)
@@ -48,17 +49,18 @@ This PR is a major architectural overhaul of AIMNet2 that:
 
 ### 1.3 Model Format: .jpt → .pt
 
-| Format | Structure | Loading |
-|--------|-----------|---------|
-| Legacy `.jpt` | JIT-compiled TorchScript | `torch.jit.load()` |
-| New `.pt` | `{state_dict, config_yaml, metadata}` | `load_model()` auto-detection |
+| Format        | Structure                             | Loading                       |
+| ------------- | ------------------------------------- | ----------------------------- |
+| Legacy `.jpt` | JIT-compiled TorchScript              | `torch.jit.load()`            |
+| New `.pt`     | `{state_dict, config_yaml, metadata}` | `load_model()` auto-detection |
 
 **New modules:**
+
 - `aimnet/models/utils.py` — `load_model()`, `ModelMetadata` TypedDict, inspection helpers
 - `aimnet/models/convert.py` — JIT → v2 conversion
 - `aimnet/train/export_model.py` — Export trained models
 
-**Registry:** All model URLs updated to `aimnet2v2/` path. New CPCM models added (`wb97m_cpcms_v2_0`–`7`).
+**Registry:** All model URLs updated to `aimnet2v2/` path.
 
 ---
 
@@ -73,6 +75,7 @@ This PR is a major architectural overhaul of AIMNet2 that:
 ### 2.2 Separate Neighbor Lists
 
 When Coulomb and DFTD3 cutoffs differ by >20%, separate `AdaptiveNeighborList` instances:
+
 - `_nblist_dftd3`, `_nblist_coulomb` (or shared `_nblist_lr`)
 - Data keys: `nbmat_lr`, `nbmat_coulomb`, `nbmat_dftd3`, `shifts_*`
 
@@ -89,6 +92,7 @@ When Coulomb and DFTD3 cutoffs differ by >20%, separate `AdaptiveNeighborList` i
 ### 3.1 move_coord_to_cell
 
 Extended for batched cells:
+
 - `cell (3, 3)` + `coord (N, 3)` or `(B, N, 3)` — existing behavior
 - `cell (B, 3, 3)` + flat `coord (N_total, 3)` — requires `mol_idx` for atom→cell mapping
 
@@ -106,13 +110,13 @@ Extended for batched cells:
 
 ## 4. Dependencies
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `nvalchemi-toolkit-ops` | ≥0.2 | Neighbor lists, DFT-D3 |
-| `warp-lang` | ≥1.11 | CUDA kernels for conv_sv_2d_sp |
-| `numba` | — | **Removed** from core deps |
-| `numpy` | — | Constraint `<3.0` removed (lock shows unconstrained) |
-| `ase` | 3.22.1 → 3.27.0 | Bumped in lock |
+| Package                 | Version         | Purpose                                              |
+| ----------------------- | --------------- | ---------------------------------------------------- |
+| `nvalchemi-toolkit-ops` | ≥0.2            | Neighbor lists, DFT-D3                               |
+| `warp-lang`             | ≥1.11           | CUDA kernels for conv_sv_2d_sp                       |
+| `numba`                 | —               | **Removed** from core deps                           |
+| `numpy`                 | —               | Constraint `<3.0` removed (lock shows unconstrained) |
+| `ase`                   | 3.22.1 → 3.27.0 | Bumped in lock                                       |
 
 **Note:** `nvalchemi-toolkit-ops` depends on `warp-lang`; both add ~120MB+ to install. Warp has platform-specific wheels (Linux x86_64, ARM64, macOS ARM64, Windows).
 
