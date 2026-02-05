@@ -42,9 +42,7 @@ def _maybe_download_asset(file: str, url: str) -> str:
 
 def get_model_path(s: str) -> str:
     # direct file path
-    if os.path.isfile(s):
-        print("Found model file:", s)
-    else:
+    if not os.path.isfile(s):
         s = get_registry_model_path(s)
     return s
 

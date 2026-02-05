@@ -36,13 +36,13 @@ pip install torch --index-url https://download.pytorch.org/whl/cu124
 
 ## Available Models
 
-| Model                | Alias           | Elements                                      | Description                  |
-| -------------------- | --------------- | --------------------------------------------- | ---------------------------- |
-| `aimnet2_wb97m_d3_X` | `aimnet2`       | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | wB97M-D3 (default)           |
-| `aimnet2_b973c_d3_X` | `aimnet2_b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c functional            |
-| `aimnet2_2025_b973c_d3_X` | `aimnet2_b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c + improved intermolecular interactions            |
-| `aimnet2nse_X`       | `aimnet2nse`    | H, C, N, O, F, S, Cl                          | Open-shell chemistry         |
-| `aimnet2-pd_X`       | `aimnet2pd`     | H, C, N, O, F, P, S, Cl, Pd                   | Palladium-containing systems |
+| Model                     | Alias           | Elements                                      | Description                                   |
+| ------------------------- | --------------- | --------------------------------------------- | --------------------------------------------- |
+| `aimnet2_wb97m_d3_X`      | `aimnet2`       | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | wB97M-D3 (default)                            |
+| `aimnet2_b973c_d3_X`      | `aimnet2_b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c functional                             |
+| `aimnet2_2025_b973c_d3_X` | `aimnet2_b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c + improved intermolecular interactions |
+| `aimnet2nse_X`            | `aimnet2nse`    | H, C, N, O, F, S, Cl                          | Open-shell chemistry                          |
+| `aimnet2-pd_X`            | `aimnet2pd`     | H, C, N, O, F, P, S, Cl, Pd                   | Palladium-containing systems                  |
 
 _X = 0-3 for ensemble members. Ensemble averaging recommended for production use._
 
@@ -169,7 +169,7 @@ Configure electrostatic interactions for large or periodic systems:
 calc.set_lrcoulomb_method("dsf", cutoff=15.0, dsf_alpha=0.2)
 
 # Ewald summation - for accurate periodic electrostatics
-calc.set_lrcoulomb_method("ewald", cutoff=15.0)
+calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-8)
 ```
 
 ### Performance Optimization
@@ -193,6 +193,23 @@ With `aimnet[train]` installed:
 ```bash
 aimnet train --config my_config.yaml --model aimnet2.yaml
 ```
+
+## Technical Details
+
+### Batching and Neighbor Lists
+
+The `AIMNet2Calculator` automatically selects the optimal strategy based on system size (`nb_threshold`, default 120 atoms) and hardware:
+
+1. **Dense Mode (O(N²))**: Used for small molecules on GPU. Input is kept in 3D batched format `(B, N, 3)`. No neighbor list is computed; the model uses a fully connected graph for maximum parallelism.
+2. **Sparse Mode (O(N))**: Used for large systems or CPU execution. Input is flattened to 2D `(N_total, 3)` with an adaptive neighbor list. This ensures linear memory scaling.
+
+### Adaptive Neighbor List
+
+In sparse mode, AIMNet2 uses an `AdaptiveNeighborList` that automatically resizes its buffer to maintain efficient utilization (~75%) while preventing overflows.
+
+- **Format**: The neighbor list is stored as a 2D integer matrix `nbmat` of shape `(N_total, max_neighbors)`. Each row `i` contains the indices of atoms neighboring atom `i`.
+- **Padding**: Rows with fewer neighbors than `max_neighbors` are padded with the index `N_total` (a dummy atom index).
+- **Buffer Management**: The buffer size `max_neighbors` is always a multiple of 16 for memory alignment. It dynamically expands (by 1.5x) on overflow and shrinks if utilization drops significantly below the target, ensuring robust performance during MD simulations where density fluctuates.
 
 ## Development
 

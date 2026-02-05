@@ -33,8 +33,9 @@ dynamic = ["version"]
 # Minimal core dependencies for inference
 dependencies = [
     "torch>=2.4",
-    "numpy<3.0",
-    "numba>=0.61.0",
+    "numpy",
+    "warp-lang>=1.11",
+    "nvalchemi-toolkit-ops>=0.2",
     "requests>=2.32.3",
     "click>=8.1.7",
     "pyyaml>=6.0.2",
@@ -45,7 +46,7 @@ dependencies = [
 [project.optional-dependencies]
 # ASE calculator integration
 ase = [
-    "ase==3.22.1",
+    "ase==3.27.0",
 ]
 
 # PySisyphus calculator integration

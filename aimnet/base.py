@@ -13,8 +13,24 @@ class AIMNet2Base(nn.Module):
 
     _required_keys: Final = ["coord", "numbers", "charge"]
     _required_keys_dtype: Final = [torch.float32, torch.int64, torch.float32]
-    _optional_keys: Final = ["mult", "nbmat", "nbmat_lr", "mol_idx", "shifts", "cell"]
-    _optional_keys_dtype: Final = [torch.float32, torch.int64, torch.int64, torch.int64, torch.float32, torch.float32]
+    _optional_keys: Final = [
+        "mult",
+        "nbmat",
+        "nbmat_lr",
+        "mol_idx",
+        "shifts",
+        "shifts_lr",
+        "cell",
+    ]
+    _optional_keys_dtype: Final = [
+        torch.float32,  # mult
+        torch.int64,  # nbmat
+        torch.int64,  # nbmat_lr
+        torch.int64,  # mol_idx
+        torch.float32,  # shifts
+        torch.float32,  # shifts_lr
+        torch.float32,  # cell
+    ]
     __constants__: ClassVar = ["_required_keys", "_required_keys_dtype", "_optional_keys", "_optional_keys_dtype"]
 
     def __init__(self):

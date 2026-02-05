@@ -14,14 +14,31 @@ def cli():
 cli.add_command(clear_assets, name="clear_model_cache")
 
 
-# Try to lazily register training commands
+# Register convert command (doesn't need heavy training dependencies)
+try:
+    from .models.convert import convert_legacy_jpt
+
+    cli.add_command(convert_legacy_jpt, name="convert")
+except ImportError:
+
+    @cli.command(name="convert")
+    def convert_stub():
+        """Convert legacy JIT model to new format (requires aimnet[train])"""
+        click.echo(
+            "Training dependencies not installed.\nInstall with: pip install aimnet[train]",
+            err=True,
+        )
+        sys.exit(1)
+
+
+# Try to lazily register training commands (requires ignite, etc.)
 try:
     from .train.calc_sae import calc_sae
-    from .train.pt2jpt import jitcompile
+    from .train.export_model import export_model
     from .train.train import train
 
     cli.add_command(train, name="train")
-    cli.add_command(jitcompile, name="jitcompile")
+    cli.add_command(export_model, name="export")
     cli.add_command(calc_sae, name="calc_sae")
 except ImportError:
     # If training dependencies are not available, register stub commands with helpful error messages
@@ -30,16 +47,16 @@ except ImportError:
     def train_stub():
         """Train AIMNet2 models (requires aimnet[train])"""
         click.echo(
-            "❌ Training dependencies not installed.\nInstall with: pip install aimnet[train]",
+            "Training dependencies not installed.\nInstall with: pip install aimnet[train]",
             err=True,
         )
         sys.exit(1)
 
-    @cli.command(name="jitcompile")
-    def jitcompile_stub():
-        """JIT compile models (requires aimnet[train])"""
+    @cli.command(name="export")
+    def export_stub():
+        """Export trained model to distributable format (requires aimnet[train])"""
         click.echo(
-            "❌ Training dependencies not installed.\nInstall with: pip install aimnet[train]",
+            "Training dependencies not installed.\nInstall with: pip install aimnet[train]",
             err=True,
         )
         sys.exit(1)
@@ -48,7 +65,7 @@ except ImportError:
     def calc_sae_stub():
         """Calculate SAE (requires aimnet[train])"""
         click.echo(
-            "❌ Training dependencies not installed.\nInstall with: pip install aimnet[train]",
+            "Training dependencies not installed.\nInstall with: pip install aimnet[train]",
             err=True,
         )
         sys.exit(1)

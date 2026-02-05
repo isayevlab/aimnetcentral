@@ -8,8 +8,12 @@ repo_name: isayevlab/aimnetcentral
 
 nav:
     - Home: index.md
+    - Getting Started: getting_started.md
+    - Calculator: calculator.md
+    - Model Format: model_format.md
+    - Long Range: long_range.md
+    - CLI Reference: cli.md
     - Train: train.md
-    - Reference: reference.md
     - API Reference:
           - Overview: api/index.md
           - Calculators: api/calculators.md

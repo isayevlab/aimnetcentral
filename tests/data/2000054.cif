@@ -1,0 +1,103 @@
+#------------------------------------------------------------------------------
+#$Date: 2025-08-19 01:52:38 +0300 (Tue, 19 Aug 2025) $
+#$Revision: 301791 $
+#$URL: svn://crystallography.net/cod/cif/2/00/00/2000054.cif $
+#------------------------------------------------------------------------------
+#
+# This file is available in the Crystallography Open Database (COD),
+# http://www.crystallography.net/
+#
+# All data on this site have been placed in the public domain by the
+# contributors.
+#
+data_2000054
+loop_
+_publ_author_name
+'Averbuch-Pouchot, M.-T.'
+'Durif, A.'
+'Renard, A.'
+'Kotera, M.'
+'Lhomme, J.'
+_publ_section_title
+;
+(3S,2R)-3-Hydroxy-2-hydroxymethyl-7,9-diazaspiro[4.5]decane-6,8,10-trione
+;
+_journal_issue                   3
+_journal_name_full               'Acta Crystallographica Section E'
+_journal_page_first              o256
+_journal_page_last               o258
+_journal_paper_doi               10.1107/S1600536802002337
+_journal_volume                  58
+_journal_year                    2002
+_chemical_formula_sum            'C9 H12 N2 O5'
+_chemical_melting_point          487
+_space_group_IT_number           4
+_symmetry_cell_setting           monoclinic
+_symmetry_space_group_name_Hall  'P 2yb'
+_symmetry_space_group_name_H-M   'P 1 21 1'
+_cell_angle_alpha                90
+_cell_angle_beta                 108.07(2)
+_cell_angle_gamma                90
+_cell_formula_units_Z            2
+_cell_length_a                   7.467(2)
+_cell_length_b                   6.802(1)
+_cell_length_c                   9.673(3)
+_cell_volume                     467.065
+_diffrn_ambient_temperature      293.0
+_exptl_crystal_colour            colorless
+_exptl_crystal_density_diffrn    1.623
+_refine_ls_R_factor_gt           0.0386
+_refine_ls_wR_factor_gt          0.0386
+_cod_original_sg_symbol_H-M      'P 21'
+_cod_database_code               2000054
+loop_
+_symmetry_equiv_pos_site_id
+_symmetry_equiv_pos_as_xyz
+1 x,y,z
+2 -x,1/2+y,-z
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+O1 O 0.7824(1) 0.35380 0.6125(1)
+O2 O 0.5675(2) -0.2227(2) 0.7783(2)
+O3 O -0.0661(2) -0.2172(2) 0.6421(1)
+O4 O 0.2232(2) 0.3681(2) 0.7248(2)
+O5 O 0.7784(2) 0.5336(2) 1.0048(1)
+N1 N 0.2531(2) -0.2161(2) 0.7162(1)
+N2 N 0.0841(2) 0.0764(2) 0.6633(1)
+C1 C 0.5145(2) 0.1639(2) 0.6213(1)
+C2 C 0.6546(2) 0.3235(2) 0.6934(1)
+C3 C 0.7449(2) 0.2422(2) 0.8470(1)
+C4 C 0.5742(2) 0.1718(2) 0.8875(1)
+C5 C 0.4305(2) 0.0959(2) 0.7430(1)
+C6 C 0.4234(2) -0.1261(2) 0.7470(2)
+C7 C 0.0810(2) -0.1249(2) 0.6717(1)
+C8 C 0.2408(2) 0.1914(2) 0.7133(2)
+C9 C 0.8744(2) 0.3826(3) 0.9555(1)
+H1 H 0.41860 0.21480 0.54000
+H2 H 0.57610 0.05780 0.59080
+H3 H 0.58960 0.44230 0.69790
+H4 H 0.83820 0.44520 0.63660
+H5 H 0.81680 0.12980 0.83940
+H6 H 0.60880 0.06870 0.95690
+H7 H 0.52130 0.27720 0.92630
+H8 H 0.25800 -0.34280 0.71910
+H9 H -0.02120 0.13520 0.64830
+H10 H 0.95710 0.44210 0.91040
+H11 H 0.94570 0.30870 1.03740
+H12 H 0.72030 0.59780 0.93430
+loop_
+_atom_type_symbol
+_atom_type_radius_bond
+C 0.68
+H 0.23
+N 0.68
+O 0.68
+loop_
+_cod_related_entry_id
+_cod_related_entry_database
+_cod_related_entry_code
+1 PubChem 10889649
