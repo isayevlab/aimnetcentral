@@ -111,6 +111,10 @@ def nse(
     data: dict[str, Tensor],
     epsilon: float = 1.0e-6,
 ) -> Tensor:
+    # Delegate to CQEq per-region equilibration if constraints are present
+    if "region_mask" in data and "region_charges" in data:
+        return constrained_nse(q_u, f_u, data, epsilon=epsilon)
+
     # Q and q_u and f_u must have last dimension size 1 or 2
     F_u = nbops.mol_sum(f_u, data)
     if epsilon > 0:
@@ -134,6 +138,115 @@ def nse(
     f = f_u / F_u
     q = q_u + f * dQ
     return q
+
+
+def constrained_nse(
+    q_u: Tensor,
+    f_u: Tensor,
+    data: dict[str, Tensor],
+    epsilon: float = 1.0e-6,
+) -> Tensor:
+    """Per-region charge equilibration for CQEq diabatic states.
+
+    Instead of enforcing a single total-charge constraint (as in ``nse``),
+    this function enforces separate charge constraints for each region
+    defined by ``data["region_mask"]``.  Within each region *R* the
+    redistribution follows the same NSE formula::
+
+        q_i = q_u_i + (f_u_i / F_u_R) * (Q_R - Q_u_R)
+
+    where *F_u_R = sum(f_u, region R)* and *Q_u_R = sum(q_u, region R)*.
+
+    Required keys in *data*:
+
+    * ``region_mask``   - ``LongTensor``, per-atom region ID.
+    * ``region_charges`` - ``Tensor``, target charge for each region.
+
+    Parameters
+    ----------
+    q_u : Tensor
+        Unconstrained per-atom charges.
+    f_u : Tensor
+        Per-atom flexibility weights (positive).
+    data : dict[str, Tensor]
+        Data dictionary (must contain ``region_mask`` and ``region_charges``).
+    epsilon : float
+        Small constant added to F_u to avoid division by zero.
+
+    Returns
+    -------
+    Tensor
+        Constrained per-atom charges satisfying per-region charge sums.
+    """
+    region_mask = data["region_mask"]
+    region_charges = data["region_charges"]
+    nb_mode = nbops.get_nb_mode(data)
+    num_regions = int(region_mask.max().item()) + 1
+
+    # Ensure region_charges has a trailing channel dim so it broadcasts
+    # correctly against Q_u which has shape (..., C).
+    rc = region_charges
+    if rc.ndim == 1:
+        rc = rc.unsqueeze(-1)  # (num_regions,) -> (num_regions, 1)
+
+    if nb_mode == 1:
+        # Flat mode: q_u (N,) or (N, C), region_mask (N,)
+        idx = region_mask
+        if q_u.ndim > 1:
+            idx = idx.unsqueeze(-1).expand_as(q_u)
+
+        F_u = torch.zeros(num_regions, *q_u.shape[1:], device=f_u.device, dtype=f_u.dtype)
+        F_u.scatter_add_(0, idx, f_u)
+        if epsilon > 0:
+            F_u = F_u + epsilon
+
+        Q_u = torch.zeros(num_regions, *q_u.shape[1:], device=q_u.device, dtype=q_u.dtype)
+        Q_u.scatter_add_(0, idx, q_u)
+
+        dQ = rc - Q_u
+        data["_dQ"] = dQ
+
+        return q_u + (f_u / F_u[region_mask]) * dQ[region_mask]
+
+    elif nb_mode in (0, 2):
+        # Batched mode: q_u (B, N, ...), region_mask (B, N) or (N,)
+        B, N = q_u.shape[:2]
+        rm = region_mask.expand(B, N) if region_mask.ndim == 1 else region_mask
+
+        # Build flat unique-per-batch region IDs: batch_b gets IDs [b*R .. (b+1)*R)
+        offsets = torch.arange(B, device=rm.device).unsqueeze(1) * num_regions
+        flat_rm = (rm + offsets).reshape(-1)  # (B*N,)
+        total_regions = B * num_regions
+
+        q_flat = q_u.reshape(-1, *q_u.shape[2:])
+        f_flat = f_u.reshape(-1, *f_u.shape[2:])
+
+        idx = flat_rm
+        if q_flat.ndim > 1:
+            idx = idx.unsqueeze(-1).expand_as(q_flat)
+
+        F_u = torch.zeros(total_regions, *q_flat.shape[1:], device=f_flat.device, dtype=f_flat.dtype)
+        F_u.scatter_add_(0, idx, f_flat)
+        if epsilon > 0:
+            F_u = F_u + epsilon
+
+        Q_u = torch.zeros(total_regions, *q_flat.shape[1:], device=q_flat.device, dtype=q_flat.dtype)
+        Q_u.scatter_add_(0, idx, q_flat)
+
+        # Broadcast rc to (total_regions, C): repeat per batch
+        if rc.shape[0] == num_regions:
+            rc_flat = rc.expand(B, *rc.shape).reshape(total_regions, *rc.shape[1:])
+        else:
+            rc_flat = rc.reshape(total_regions, *rc.shape[2:])
+
+        dQ = rc_flat - Q_u
+        data["_dQ"] = dQ.view(B, num_regions, *dQ.shape[1:])
+
+        q_out = q_flat + (f_flat / F_u[flat_rm]) * dQ[flat_rm]
+        return q_out.view_as(q_u)
+
+    else:
+        raise ValueError(f"Invalid neighbor mode: {nb_mode}")
 
 
 def coulomb_matrix_dsf(d_ij: Tensor, Rc: float, alpha: float, data: dict[str, Tensor]) -> Tensor:

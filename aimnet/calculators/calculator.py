@@ -694,6 +694,76 @@ class AIMNet2Calculator:
         data = self.process_output(data)
         return data
 
+    def eval_cqeq(
+        self,
+        data: dict[str, Any],
+        region_mask: Any,
+        region_charges: Any,
+        forces: bool = False,
+        stress: bool = False,
+    ) -> dict[str, Tensor]:
+        """Evaluate with CQEq per-region charge constraints for diabatic states.
+
+        Runs the model with constrained charge equilibration: instead of
+        enforcing a single total-charge constraint, separate constraints are
+        applied for each region defined by *region_mask*.  This enables
+        computation of diabatic-state energies and charges for charge-transfer
+        systems without retraining.
+
+        Parameters
+        ----------
+        data : dict
+            Standard input dictionary (coord, numbers, charge, ...).
+        region_mask : array-like
+            Integer region ID for each atom.  Shape must match the atom
+            dimension of ``data["coord"]``.  For example, ``[0,0,0,1,1,1]``
+            assigns the first three atoms to the donor and the last three
+            to the acceptor.
+        region_charges : array-like
+            Target total charge for each region.  Length equals the number
+            of distinct regions.  E.g. ``[0.0, 0.0]`` for the neutral
+            D^0 A^0 diabatic state, or ``[1.0, -1.0]`` for D^+ A^-.
+        forces : bool
+            Whether to compute forces.  Default is False.
+        stress : bool
+            Whether to compute stress.  Default is False.
+
+        Returns
+        -------
+        dict[str, Tensor]
+            Output dictionary with ``energy``, ``charges``, and optionally
+            ``forces`` / ``stress``.
+        """
+        # Convert region tensors early (before prepare_input filters keys)
+        rm = torch.as_tensor(region_mask, device=self.device, dtype=torch.long)
+        rc = torch.as_tensor(region_charges, device=self.device, dtype=torch.float)
+
+        data = self.prepare_input(data)
+
+        # After flattening / padding, the atom dimension may have grown by 1
+        # (padding atom).  Extend region_mask to cover it by assigning it to
+        # region 0 (its charge will be masked to zero anyway).
+        if data["coord"].ndim == 2 and rm.shape[0] < data["coord"].shape[0]:
+            pad_size = data["coord"].shape[0] - rm.shape[0]
+            rm = torch.cat([rm, torch.zeros(pad_size, device=self.device, dtype=torch.long)])
+
+        # Inject constraints into the data dict that the model will see
+        data["region_mask"] = rm
+        data["region_charges"] = rc
+
+        data = self.set_grad_tensors(data, forces=forces, stress=stress, hessian=False)
+        with torch.jit.optimized_execution(False):  # type: ignore
+            data = self.model(data)
+        data = self._run_external_modules(data, compute_stress=stress)
+        data = self.get_derivatives(data, forces=forces, stress=stress, hessian=False)
+
+        # Remove internal constraint keys before output filtering
+        data.pop("region_mask", None)
+        data.pop("region_charges", None)
+
+        data = self.process_output(data)
+        return data
+
     def _run_external_modules(self, data: dict[str, Tensor], compute_stress: bool = False) -> dict[str, Tensor]:
         """Run external Coulomb and DFTD3 modules if attached."""
         if self.external_coulomb is not None:
