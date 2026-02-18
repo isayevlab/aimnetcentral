@@ -131,7 +131,7 @@ Where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and
 - Splits Coulomb into real-space + reciprocal-space + self-energy terms
 - Configurable accuracy target (default 1e-8)
 - Automatically determines k-space vectors based on accuracy
-- O(N log N) to O(N^1.5) complexity depending on implementation
+- O(N^2) complexity (full pairwise Ewald sum)
 - Most accurate method for periodic systems
 
 **When Ewald matters:**
@@ -147,7 +147,7 @@ Where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and
 | ------ | ------------------------ | ----------- | ---------------------------- | ------------------------ |
 | Simple | O(N²) fully connected    | No          | Small molecules, quick tests | Auto-switches for PBC    |
 | DSF    | O(N) with neighbor lists | Yes         | Production MD, large systems | Recommended for PBC      |
-| Ewald  | O(N log N) to O(N^1.5)   | Yes         | High-accuracy benchmarks     | Research-grade precision |
+| Ewald  | O(N^2) full pairwise     | Yes         | High-accuracy benchmarks     | Research-grade precision |
 
 **Accuracy hierarchy:** Ewald > DSF > Simple (for PBC)
 
