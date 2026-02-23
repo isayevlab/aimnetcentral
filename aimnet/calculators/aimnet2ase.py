@@ -19,6 +19,7 @@ class AIMNet2ASE(Calculator):
         "charges",
         "stress",
         "dipole_moment",
+        "spin_charges",
     ]
 
     def __init__(self, base_calc: AIMNet2Calculator | str = "aimnet2", charge=0, mult=1):
@@ -71,6 +72,9 @@ class AIMNet2ASE(Calculator):
         positions = atoms.get_positions()
         return np.sum(charges * positions, axis=0)
 
+    def get_spin_charges(self, atoms=None):
+        return self.get_property("spin_charges", atoms)
+
     def calculate(self, atoms=None, properties=None, system_changes=all_changes):
         if properties is None:
             properties = ["energy"]
@@ -109,3 +113,5 @@ class AIMNet2ASE(Calculator):
             self.results["forces"] = results["forces"]
         if "stress" in properties:
             self.results["stress"] = results["stress"]
+        if "spin_charges" in results:
+            self.results["spin_charges"] = results["spin_charges"]

@@ -210,7 +210,7 @@ class AIMNet2Calculator:
         "shifts_lr": torch.float,
         "cell": torch.float,
     }
-    keys_out: ClassVar[list[str]] = ["energy", "charges", "forces", "hessian", "stress"]
+    keys_out: ClassVar[list[str]] = ["energy", "charges", "spin_charges", "forces", "hessian", "stress"]
     atom_feature_keys: ClassVar[list[str]] = ["coord", "numbers", "charges", "forces"]
 
     def __init__(
