@@ -15,9 +15,7 @@
 
 ## Step 1: Set Up the Calculator and Molecule
 
-The `AIMNet2ASE` class wraps `AIMNet2Calculator` for use with ASE's optimization
-and dynamics infrastructure. It translates between ASE's `Atoms` object and the
-tensor-based calculator interface.
+The `AIMNet2ASE` class wraps `AIMNet2Calculator` for use with ASE's optimization and dynamics infrastructure. It translates between ASE's `Atoms` object and the tensor-based calculator interface.
 
 ```python
 from ase import Atoms
@@ -43,10 +41,7 @@ print(f"Initial energy: {energy:.6f} eV")
 print(f"Max force: {abs(forces).max():.6f} eV/A")
 ```
 
-!!! tip "Accessing the underlying calculator"
-The ASE wrapper stores the `AIMNet2Calculator` as `calc.base_calc`. You can
-use this to configure model settings that are not exposed through the ASE
-interface:
+!!! tip "Accessing the underlying calculator" The ASE wrapper stores the `AIMNet2Calculator` as `calc.base_calc`. You can use this to configure model settings that are not exposed through the ASE interface:
 
     ```python
     # Switch long-range Coulomb method (for periodic systems)
@@ -58,9 +53,7 @@ interface:
 
 ## Step 2: Optimize a Drug Molecule
 
-Let's optimize aspirin (C9H8O4, 21 atoms) -- a small but realistic drug
-molecule. In practice, you would load coordinates from a file. Here we build
-the molecule directly to keep the tutorial self-contained.
+Let's optimize aspirin (C9H8O4, 21 atoms) -- a small but realistic drug molecule. In practice, you would load coordinates from a file. Here we build the molecule directly to keep the tutorial self-contained.
 
 ```python
 from ase import Atoms
@@ -101,22 +94,13 @@ print(f"Steps taken: {opt.nsteps}")
 write("aspirin_optimized.xyz", aspirin)
 ```
 
-The `fmax` parameter controls the convergence criterion: the optimization stops
-when the maximum atomic force magnitude (i.e., the largest per-atom force norm
-sqrt(fx^2+fy^2+fz^2)) drops below this threshold. A value of 0.01 eV/A is a
-reasonable default for most applications.
+The `fmax` parameter controls the convergence criterion: the optimization stops when the maximum atomic force magnitude (i.e., the largest per-atom force norm sqrt(fx^2+fy^2+fz^2)) drops below this threshold. A value of 0.01 eV/A is a reasonable default for most applications.
 
-!!! note "Why BFGS?"
-BFGS (Broyden--Fletcher--Goldfarb--Shanno) builds an approximate Hessian
-from force evaluations, giving superlinear convergence near the minimum.
-ASE also provides `LBFGS` (lower memory for large systems) and `FIRE`
-(robust for far-from-minimum starting geometries). For most molecules
-under ~200 atoms, `BFGS` is the best choice.
+!!! note "Why BFGS?" BFGS (Broyden--Fletcher--Goldfarb--Shanno) builds an approximate Hessian from force evaluations, giving superlinear convergence near the minimum. ASE also provides `LBFGS` (lower memory for large systems) and `FIRE` (robust for far-from-minimum starting geometries). For most molecules under ~200 atoms, `BFGS` is the best choice.
 
 ## Step 3: Monitor Convergence
 
-Inspecting the optimization trajectory helps verify that the optimization
-converged smoothly and didn't get stuck in a transition state or saddle point.
+Inspecting the optimization trajectory helps verify that the optimization converged smoothly and didn't get stuck in a transition state or saddle point.
 
 ```python
 from ase.io import read
@@ -132,12 +116,9 @@ for i, frame in enumerate(traj):
     print(f"{i:4d}  {e:14.6f}  {f_max:16.6f}")
 ```
 
-You should see the energy decrease monotonically (or nearly so) and the maximum
-force drop toward your `fmax` threshold.
+You should see the energy decrease monotonically (or nearly so) and the maximum force drop toward your `fmax` threshold.
 
-!!! warning "Convergence issues"
-If the optimization oscillates or takes more than ~100 steps for a molecule
-under 50 atoms, check:
+!!! warning "Convergence issues" If the optimization oscillates or takes more than ~100 steps for a molecule under 50 atoms, check:
 
     1. **Starting geometry**: Very distorted structures may need `FIRE` instead
        of `BFGS` for the first phase.
@@ -148,9 +129,7 @@ under 50 atoms, check:
 
 ## Step 4: Verify the Minimum with Frequency Analysis
 
-A structure is a true energy minimum only if all vibrational frequencies are
-real (positive). Imaginary frequencies indicate a saddle point or transition
-state. We compute frequencies from the Hessian matrix.
+A structure is a true energy minimum only if all vibrational frequencies are real (positive). Imaginary frequencies indicate a saddle point or transition state. We compute frequencies from the Hessian matrix.
 
 ```python
 import torch
@@ -213,17 +192,11 @@ else:
     print(f"\nWARNING: {n_imaginary} imaginary frequency(ies) found -> not a minimum")
 ```
 
-!!! warning "Hessian limitations"
-The Hessian calculation in AIMNet2 is limited to **single molecules** and
-scales as O(N^2) in memory. It is practical for molecules up to roughly
-200 atoms. For larger systems, use finite-difference approaches or
-specialized phonon tools.
+!!! warning "Hessian limitations" The Hessian calculation in AIMNet2 is limited to **single molecules** and scales as O(N^2) in memory. It is practical for molecules up to roughly 200 atoms. For larger systems, use finite-difference approaches or specialized phonon tools.
 
 ## Step 5: Thermochemistry from Frequencies
 
-Once you have confirmed a true minimum (all real frequencies), you can compute
-thermochemical quantities -- enthalpy and Gibbs free energy corrections -- using
-ASE's `IdealGasThermo` module.
+Once you have confirmed a true minimum (all real frequencies), you can compute thermochemical quantities -- enthalpy and Gibbs free energy corrections -- using ASE's `IdealGasThermo` module.
 
 ```python
 from ase.thermochemistry import IdealGasThermo
@@ -264,20 +237,15 @@ print(f"Thermal correction:    {(H - electronic_energy) * 23.0609:.2f} kcal/mol"
 print(f"-T*S contribution:     {(G - H) * 23.0609:.2f} kcal/mol")
 ```
 
-This workflow -- optimize, compute Hessian, extract thermochemistry -- is the
-standard approach for obtaining reaction enthalpies and free energies with
-AIMNet2.
+This workflow -- optimize, compute Hessian, extract thermochemistry -- is the standard approach for obtaining reaction enthalpies and free energies with AIMNet2.
 
-!!! tip "Thermochemistry for reactions"
-To compute a reaction enthalpy Delta_H, run this workflow for each reactant
-and product separately, then take the difference:
+!!! tip "Thermochemistry for reactions" To compute a reaction enthalpy Delta_H, run this workflow for each reactant and product separately, then take the difference:
 
     ```
     Delta_H = sum(H_products) - sum(H_reactants)
     ```
 
-    The same applies for Delta_G. Make sure all structures are true minima
-    (no imaginary frequencies) before computing differences.
+    The same applies for Delta_G. Make sure all structures are true minima (no imaginary frequencies) before computing differences.
 
 ## Step 6: Scaling Up -- Larger Molecules
 
@@ -302,10 +270,7 @@ calc = AIMNet2ASE(
 # opt.run(fmax=0.01)
 ```
 
-!!! note "Practical size limits" - **Geometry optimization** works well up to thousands of atoms. - **Hessian computation** is practical up to ~200 atoms due to O(N^2)
-memory scaling (the full Hessian for 200 atoms requires
-200 x 3 x 200 x 3 = 360,000 elements). - For larger systems needing frequencies, use finite-difference approaches
-with a displacement step.
+!!! note "Practical size limits" - **Geometry optimization** works well up to thousands of atoms. - **Hessian computation** is practical up to ~200 atoms due to O(N^2) memory scaling (the full Hessian for 200 atoms requires 200 x 3 x 200 x 3 = 360,000 elements). - For larger systems needing frequencies, use finite-difference approaches with a displacement step.
 
 ## What's Next
 

@@ -1,10 +1,6 @@
 # AIMNet2-2025
 
-!!! tip "Recommended B97-3c Model"
-AIMNet2-2025 is the **recommended B97-3c-level model** and supersedes the
-original [AIMNet2-B97-3c](aimnet2_b973c.md). It provides improved
-intermolecular interaction accuracy with no regression for intramolecular
-chemistry. Use this model for all new work requiring a B97-3c reference level.
+!!! tip "Recommended B97-3c Model" AIMNet2-2025 is the **recommended B97-3c-level model** and supersedes the original [AIMNet2-B97-3c](aimnet2_b973c.md). It provides improved intermolecular interaction accuracy with no regression for intramolecular chemistry. Use this model for all new work requiring a B97-3c reference level.
 
 ## Overview
 
@@ -28,14 +24,11 @@ AIMNet2-2025 is the **current-generation B97-3c model**, combining the cost-effe
 
 ### Limitations
 
-!!! warning "B97-3c base level"
-The underlying reference data is at the B97-3c level. While intermolecular interactions are improved through enhanced training, the base functional limitations for intramolecular thermochemistry (e.g., barrier heights) remain. For general thermochemistry, prefer [AIMNet2 (wB97M-D3)](aimnet2.md).
+!!! warning "B97-3c base level" The underlying reference data is at the B97-3c level. While intermolecular interactions are improved through enhanced training, the base functional limitations for intramolecular thermochemistry (e.g., barrier heights) remain. For general thermochemistry, prefer [AIMNet2 (wB97M-D3)](aimnet2.md).
 
-!!! warning "Non-covalent improvements may not transfer to all motifs"
-The improved intermolecular accuracy has been validated on common non-covalent interaction types. Unusual or exotic interaction motifs (e.g., halogen bonding with heavy halogens, aerogen bonding) may not benefit equally.
+!!! warning "Non-covalent improvements may not transfer to all motifs" The improved intermolecular accuracy has been validated on common non-covalent interaction types. Unusual or exotic interaction motifs (e.g., halogen bonding with heavy halogens, aerogen bonding) may not benefit equally.
 
-!!! warning "Same scope restrictions"
-No transition metals, closed-shell only, molecular training data. See the [AIMNet2 page](aimnet2.md) for the full list of limitations.
+!!! warning "Same scope restrictions" No transition metals, closed-shell only, molecular training data. See the [AIMNet2 page](aimnet2.md) for the full list of limitations.
 
 ## Typical Use Cases
 
@@ -98,8 +91,7 @@ print(f"Binding energy: {binding_energy * 1000:.1f} meV")
 print(f"Binding energy: {binding_energy * 23.0609:.2f} kcal/mol")
 ```
 
-!!! note "No BSSE correction needed"
-Unlike ab initio methods with finite basis sets, neural network potentials do not suffer from basis set superposition error (BSSE). The supramolecular approach (dimer minus monomers) directly gives the interaction energy without counterpoise correction.
+!!! note "No BSSE correction needed" Unlike ab initio methods with finite basis sets, neural network potentials do not suffer from basis set superposition error (BSSE). The supramolecular approach (dimer minus monomers) directly gives the interaction energy without counterpoise correction.
 
 ### ASE Integration
 

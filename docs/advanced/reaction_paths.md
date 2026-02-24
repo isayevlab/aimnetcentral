@@ -19,8 +19,7 @@
 
 Finding transition states with DFT typically requires hundreds to thousands of gradient evaluations, each taking minutes to hours. AIMNet2 provides near-DFT gradients in milliseconds, making reaction path calculations that would take days at the DFT level complete in minutes.
 
-!!! tip "Model selection for reaction paths"
-Use `aimnet2nse` for reactions involving bond breaking or forming, especially homolytic processes (radical mechanisms, H-atom abstractions). For heterolytic processes (SN2, proton transfers), the standard `aimnet2` model may also work, but `aimnet2nse` is the safer default because it handles both closed-shell and open-shell regions of the potential energy surface.
+!!! tip "Model selection for reaction paths" Use `aimnet2nse` for reactions involving bond breaking or forming, especially homolytic processes (radical mechanisms, H-atom abstractions). For heterolytic processes (SN2, proton transfers), the standard `aimnet2` model may also work, but `aimnet2nse` is the safer default because it handles both closed-shell and open-shell regions of the potential energy surface.
 
 ## PySisyphus Integration
 
@@ -215,8 +214,7 @@ ANG_TO_BOHR = 1.8897259886
 hessian_au = hessian_2d * EV_TO_HARTREE / (ANG_TO_BOHR ** 2)
 ```
 
-!!! warning "Hessian limitations"
-The Hessian computation is supported for **single molecules only**. If `mol_idx` indicates multiple molecules, the calculator raises `NotImplementedError`. The Hessian output has shape `(N, 3, N, 3)` and should be flattened to `(3N, 3N)` for eigenvalue analysis.
+!!! warning "Hessian limitations" The Hessian computation is supported for **single molecules only**. If `mol_idx` indicates multiple molecules, the calculator raises `NotImplementedError`. The Hessian output has shape `(N, 3, N, 3)` and should be flattened to `(3N, 3N)` for eigenvalue analysis.
 
 ### Vibrational Frequency Analysis
 
@@ -331,8 +329,7 @@ python -c "from aimnet.calculators.aimnet2pysis import run_pysis; run_pysis()" i
 
 PySisyphus outputs the IRC path as a series of geometries with energies, which can be plotted as a reaction energy profile.
 
-!!! warning "Zero-point energy corrections for barrier heights"
-Barrier heights computed from electronic energies alone (Delta E‡) do not include zero-point energy corrections. For quantitative comparison with experimental activation energies, compute the Hessian at each stationary point, extract ZPE (excluding the imaginary frequency at the TS), and apply corrections:
+!!! warning "Zero-point energy corrections for barrier heights" Barrier heights computed from electronic energies alone (Delta E‡) do not include zero-point energy corrections. For quantitative comparison with experimental activation energies, compute the Hessian at each stationary point, extract ZPE (excluding the imaginary frequency at the TS), and apply corrections:
 
     Delta E‡_0 = E(TS) - E(reactant) + ZPE(TS) - ZPE(reactant)
 
@@ -474,8 +471,7 @@ print("\nNEB config written to sn2_neb.yaml")
 print("Run with: python -c 'from aimnet.calculators.aimnet2pysis import run_pysis; run_pysis()' sn2_neb.yaml")
 ```
 
-!!! note "SN2 reactions and model choice"
-The SN2 reaction involves heterolytic bond breaking (the leaving group departs with both bonding electrons). For heterolytic processes like this, the standard `aimnet2` model may perform adequately. However, `aimnet2nse` is recommended as the default for all reaction path calculations because it handles mixed closed-shell/open-shell regions correctly and introduces no penalty for closed-shell species (`mult=1` reduces to standard behavior).
+!!! note "SN2 reactions and model choice" The SN2 reaction involves heterolytic bond breaking (the leaving group departs with both bonding electrons). For heterolytic processes like this, the standard `aimnet2` model may perform adequately. However, `aimnet2nse` is recommended as the default for all reaction path calculations because it handles mixed closed-shell/open-shell regions correctly and introduces no penalty for closed-shell species (`mult=1` reduces to standard behavior).
 
 ## Practical Tips
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-AIMNet2 is the **default general-purpose model** for organic and main-group molecular chemistry. It is trained against wB97M-D3/def2-TZVPPD reference data, a modern range-separated hybrid functional with DFT-D3 dispersion correction widely regarded as one of the most accurate for thermochemistry and non-covalent interactions.
+AIMNet2 is the **default general-purpose model** for organic and main-group molecular chemistry. It is trained against wB97M-D3/def2-TZVPP reference data, a modern range-separated hybrid functional with DFT-D3 dispersion correction widely regarded as one of the most accurate for thermochemistry and non-covalent interactions.
 
 **Supported elements:** H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I (14 elements)
 
@@ -24,20 +24,15 @@ If you are unsure which model to use, start here. AIMNet2 provides the best bala
 
 ### Limitations
 
-!!! warning "No transition metals"
-AIMNet2 does not support any transition metal elements. For palladium chemistry, use [AIMNet2-Pd](aimnet2pd.md).
+!!! warning "No transition metals" AIMNet2 does not support any transition metal elements. For palladium chemistry, use [AIMNet2-Pd](aimnet2pd.md).
 
-!!! warning "Molecular systems only"
-The training data consists of molecular (gas-phase) structures. While periodic boundary conditions are supported computationally, the model has not been validated for bulk materials, surfaces, or extended solids.
+!!! warning "Molecular systems only" The training data consists of molecular (gas-phase) structures. While periodic boundary conditions are supported computationally, the model has not been validated for bulk materials, surfaces, or extended solids.
 
-!!! warning "System size"
-Validated for systems up to approximately 100 heavy atoms. Larger systems may work but accuracy has not been systematically benchmarked beyond this range.
+!!! warning "System size" Validated for systems up to approximately 100 heavy atoms. Larger systems may work but accuracy has not been systematically benchmarked beyond this range.
 
-!!! warning "Closed-shell only"
-This model assumes closed-shell electronic structure. For radicals, triplet states, or any system with unpaired electrons, use [AIMNet2-NSE](aimnet2nse.md).
+!!! warning "Closed-shell only" This model assumes closed-shell electronic structure. For radicals, triplet states, or any system with unpaired electrons, use [AIMNet2-NSE](aimnet2nse.md).
 
-!!! warning "Single-reference DFT"
-Trained on single-determinant DFT data. Systems with strong multi-reference character (e.g., biradicals, stretched bonds near dissociation, certain transition states) may not be reliable.
+!!! warning "Single-reference DFT" Trained on single-determinant DFT data. Systems with strong multi-reference character (e.g., biradicals, stretched bonds near dissociation, certain transition states) may not be reliable.
 
 ## Typical Use Cases
 
@@ -116,7 +111,7 @@ print(f"Optimized energy: {atoms.get_potential_energy():.6f} eV")
 
 ### Training Data
 
-The model is trained on a diverse dataset of organic and main-group molecules computed at the wB97M-D3/def2-TZVPPD level of theory. The training set covers neutral and charged species, various conformations, and bond-breaking geometries.
+The model is trained on a diverse dataset of organic and main-group molecules computed at the wB97M-D3/def2-TZVPP level of theory. The training set covers neutral and charged species, various conformations, and bond-breaking geometries.
 
 ### Long-Range Corrections
 

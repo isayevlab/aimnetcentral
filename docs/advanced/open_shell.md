@@ -19,8 +19,7 @@
 
 Standard AIMNet2 models (`aimnet2`, `aimnet2_b973c`, `aimnet2_2025`) use a single charge channel internally (`num_charge_channels=1`). This means the model predicts one set of atomic partial charges and implicitly assumes all electrons are paired. When applied to a radical -- a species with one or more unpaired electrons -- the model has no mechanism to represent the spin density distribution and produces unreliable energies and forces.
 
-!!! warning "Do not use closed-shell models for open-shell systems"
-Applying `aimnet2` to a doublet radical or triplet state will silently produce results that look reasonable but have large systematic errors. Always use `aimnet2nse` when unpaired electrons are present.
+!!! warning "Do not use closed-shell models for open-shell systems" Applying `aimnet2` to a doublet radical or triplet state will silently produce results that look reasonable but have large systematic errors. Always use `aimnet2nse` when unpaired electrons are present.
 
 Common symptoms of using the wrong model:
 
@@ -34,7 +33,6 @@ Common symptoms of using the wrong model:
 AIMNet2-NSE extends the standard architecture with **two charge channels** (`num_charge_channels=2`). These represent alpha and beta electron populations separately:
 
 1. **Preprocessing**: The molecular charge and multiplicity are decomposed into alpha and beta channel inputs:
-
    - Alpha channel charge: `(charge/2) + (mult-1)/2`
    - Beta channel charge: `(charge/2) - (mult-1)/2`
 
@@ -85,8 +83,7 @@ calc = AIMNet2ASE("aimnet2nse", charge=0, mult=2)
 calc.set_mult(3)  # Switch to triplet
 ```
 
-!!! note "Default multiplicity"
-If `mult` is not provided, the calculator defaults to `mult=1` (singlet). For closed-shell molecules with `aimnet2nse`, this is correct and the model reduces to standard behavior. You do not need to switch models for closed-shell species.
+!!! note "Default multiplicity" If `mult` is not provided, the calculator defaults to `mult=1` (singlet). For closed-shell molecules with `aimnet2nse`, this is correct and the model reduces to standard behavior. You do not need to switch models for closed-shell species.
 
 ## Worked Example: C-H Bond Dissociation Energy
 
@@ -163,8 +160,7 @@ print(f"Benzylic C-H BDE:     {BDE_kcal:.1f} kcal/mol")
 # Expected: ~90 kcal/mol (experimental: 89.8 kcal/mol)
 ```
 
-!!! warning "Zero-point energy corrections"
-The BDE values computed above are purely electronic (Delta E_e). For thermochemically accurate results, include zero-point energy (ZPE) corrections by computing the Hessian at each optimized geometry and extracting harmonic frequencies. The ZPE-corrected BDE is:
+!!! warning "Zero-point energy corrections" The BDE values computed above are purely electronic (Delta E_e). For thermochemically accurate results, include zero-point energy (ZPE) corrections by computing the Hessian at each optimized geometry and extracting harmonic frequencies. The ZPE-corrected BDE is:
 
     BDE_0 = E(radical1) + E(radical2) - E(molecule) + ZPE(radical1) + ZPE(radical2) - ZPE(molecule)
 
@@ -256,8 +252,7 @@ print(f"aimnet2nse (open-shell): {E_nse:.4f} eV")
 print(f"Energy difference: {abs(E_closed - E_nse) * 23.0609:.1f} kcal/mol")
 ```
 
-!!! tip "When in doubt, use aimnet2nse"
-The NSE model handles closed-shell species correctly (mult=1 reduces to standard behavior). If your workflow involves a mix of closed-shell and open-shell species -- for example, computing BDEs -- use `aimnet2nse` throughout for consistent energetics.
+!!! tip "When in doubt, use aimnet2nse" The NSE model handles closed-shell species correctly (mult=1 reduces to standard behavior). If your workflow involves a mix of closed-shell and open-shell species -- for example, computing BDEs -- use `aimnet2nse` throughout for consistent energetics.
 
 ## When to Fall Back to Multi-Reference Methods
 
@@ -277,8 +272,7 @@ AIMNet2-NSE handles most radical chemistry well, but certain electronic structur
 - Energy differences between spin states are unexpectedly small
 - The system has low-lying excited states (check literature)
 
-!!! info "Recommendation"
-For routine radical chemistry -- organic radical stability, BDEs, H-atom abstractions, radical additions -- AIMNet2-NSE is reliable and orders of magnitude faster than DFT. Reserve multi-reference methods (CASSCF, CASPT2, MRCI, NEVPT2) for the specific pathological cases listed above. Note that standard DFT is also a single-reference method and will fail for the same multi-reference cases.
+!!! info "Recommendation" For routine radical chemistry -- organic radical stability, BDEs, H-atom abstractions, radical additions -- AIMNet2-NSE is reliable and orders of magnitude faster than DFT. Reserve multi-reference methods (CASSCF, CASPT2, MRCI, NEVPT2) for the specific pathological cases listed above. Note that standard DFT is also a single-reference method and will fail for the same multi-reference cases.
 
 ## What's Next
 

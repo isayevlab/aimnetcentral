@@ -10,7 +10,7 @@ AIMNet2-NSE (Neutral Spin Equilibrated) is the model for **open-shell molecular 
 
 **Ensemble members:** `aimnet2nse_0` through `aimnet2nse_3` (4 models)
 
-**DFT reference:** wB97M-D3/def2-TZVPPD (same functional as the default AIMNet2)
+**DFT reference:** wB97M-D3/def2-TZVPP (same functional as the default AIMNet2)
 
 ## Strengths and Limitations
 
@@ -24,8 +24,7 @@ AIMNet2-NSE (Neutral Spin Equilibrated) is the model for **open-shell molecular 
 
 ### Limitations
 
-!!! warning "Single-determinant DFT reference"
-AIMNet2-NSE is trained on unrestricted Kohn-Sham DFT data, which uses a single Slater determinant. It is **not reliable** for systems with genuine multi-reference character, including:
+!!! warning "Single-determinant DFT reference" AIMNet2-NSE is trained on unrestricted Kohn-Sham DFT data, which uses a single Slater determinant. It is **not reliable** for systems with genuine multi-reference character, including:
 
     - Biradicals with significant open-shell singlet character
     - Near-degenerate spin states in transition-metal-free systems
@@ -33,21 +32,19 @@ AIMNet2-NSE is trained on unrestricted Kohn-Sham DFT data, which uses a single S
 
     If you suspect multi-reference character, validate against CASSCF or MRCI calculations.
 
-!!! warning "Spin contamination"
-The underlying DFT reference data may contain spin contamination from unrestricted KS calculations. The model learns from this data as-is, so predictions for heavily spin-contaminated states should be treated with caution.
+!!! warning "Spin contamination" The underlying DFT reference data may contain spin contamination from unrestricted KS calculations. The model learns from this data as-is, so predictions for heavily spin-contaminated states should be treated with caution.
 
-!!! warning "Same element and system scope"
-No transition metals, molecular (gas-phase) training data only. For Pd-containing open-shell systems, neither this model nor [AIMNet2-Pd](aimnet2pd.md) is currently suitable -- use DFT directly.
+!!! warning "Same element and system scope" No transition metals, molecular (gas-phase) training data only. For Pd-containing open-shell systems, neither this model nor [AIMNet2-Pd](aimnet2pd.md) is currently suitable -- use DFT directly.
 
 ## How Spin Multiplicity Works
 
 AIMNet2-NSE accepts a `mult` parameter specifying the spin multiplicity (2S+1) of the system:
 
-| Multiplicity (`mult`) | Unpaired electrons | Example systems                              |
-| --------------------- | ------------------ | -------------------------------------------- |
-| 1 (singlet)           | 0                  | Closed-shell molecules, singlet carbenes     |
-| 2 (doublet)           | 1                  | Organic radicals, radical anions/cations     |
-| 3 (triplet)           | 2                  | Triplet oxygen, triplet carbenes, diradicals |
+| Multiplicity (`mult`) | Unpaired electrons | Example systems |
+| --- | --- | --- |
+| 1 (singlet) | 0 | Closed-shell molecules, singlet carbenes |
+| 2 (doublet) | 1 | Organic radicals, radical anions/cations |
+| 3 (triplet) | 2 | Triplet oxygen, triplet carbenes, diradicals |
 
 The multiplicity is passed as a floating-point tensor alongside the molecular charge:
 
@@ -166,7 +163,7 @@ print(f"Singlet-triplet gap: {gap:.4f} eV ({gap * 23.0609:.1f} kcal/mol)")
 
 ### Training Data
 
-AIMNet2-NSE is trained on unrestricted wB97M-D3/def2-TZVPPD calculations spanning singlet, doublet, and triplet states. The training set includes closed-shell molecules, organic radicals, and excited-state-like geometries to provide broad coverage of open-shell chemistry.
+AIMNet2-NSE is trained on unrestricted wB97M-D3/def2-TZVPP calculations spanning singlet, doublet, and triplet states. The training set includes closed-shell molecules, organic radicals, and excited-state-like geometries to provide broad coverage of open-shell chemistry.
 
 ### Architecture Difference
 
@@ -195,3 +192,5 @@ print(f"Energy: {energies.mean().item():.6f} +/- {energies.std().item():.6f} eV"
 ## References
 
 Anstine, D. M.; Zubatyuk, R.; Isayev, O. AIMNet2: A Neural Network Potential to Meet your Neutral, Charged, Organic, and Elemental-Organic Needs. _Chemical Science_ **2025**, _16_, 10228--10244. DOI: [10.1039/D4SC08572H](https://doi.org/10.1039/D4SC08572H)
+
+Anstine, D. M.; Zubatyuk, R.; Isayev, O. AIMNet2-NSE: A Neural Network Potential for Organic Radical Chemistry. _Angew. Chem. Int. Ed._ **2025**. DOI: [10.1002/anie.202516763](https://doi.org/10.1002/anie.202516763)
