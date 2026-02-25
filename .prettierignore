@@ -1,0 +1,3 @@
+# mkdocstrings directive blocks use indented YAML that prettier flattens,
+# breaking the docs build. Exclude API reference pages from formatting.
+docs/api/

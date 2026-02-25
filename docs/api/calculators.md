@@ -13,7 +13,10 @@ The core calculator for running AIMNet2 inference. It handles model loading, dev
 - **Overrides**: You can force specific long-range behavior using `needs_coulomb` and `needs_dispersion` arguments.
 - **Batching**: Automatically batches large molecules/systems based on `nb_threshold`.
 
-::: aimnet.calculators.AIMNet2Calculator options: show_root_heading: true show_source: true
+::: aimnet.calculators.AIMNet2Calculator
+    options:
+      show_root_heading: true
+      show_source: true
 
 ## AIMNet2ASE
 
@@ -36,7 +39,10 @@ print(atoms.get_potential_energy())
 print(atoms.get_forces())
 ```
 
-::: aimnet.calculators.aimnet2ase.AIMNet2ASE options: show_root_heading: true show_source: true
+::: aimnet.calculators.aimnet2ase.AIMNet2ASE
+    options:
+      show_root_heading: true
+      show_source: true
 
 ## AIMNet2Pysis
 
@@ -49,7 +55,10 @@ This interface adapts AIMNet2 for use with PySisyphus optimizers. It handles uni
 - **Input**: Converts Angstrom (PySisyphus) to Angstrom (AIMNet2).
 - **Output**: Converts eV/Angstrom (AIMNet2) to **Hartree/Bohr** (PySisyphus).
 
-::: aimnet.calculators.aimnet2pysis.AIMNet2Pysis options: show_root_heading: true show_source: true
+::: aimnet.calculators.aimnet2pysis.AIMNet2Pysis
+    options:
+      show_root_heading: true
+      show_source: true
 
 ## Model Registry
 
@@ -63,4 +72,7 @@ You can clear the local model cache using the CLI:
 aimnet clear_model_cache
 ```
 
-::: aimnet.calculators.model_registry options: show_root_heading: true show_source: true
+::: aimnet.calculators.model_registry
+    options:
+      show_root_heading: true
+      show_source: true
