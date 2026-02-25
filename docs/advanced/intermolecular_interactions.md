@@ -231,7 +231,7 @@ print(f"Benzene dimer (PD) interaction energy: {e_int:.2f} kcal/mol")
 
     ML potentials like AIMNet2 have **no basis set** and therefore **no BSSE** in the traditional sense. The interaction energy computed as `E(AB) - E(A) - E(B)` does not suffer from basis set incompleteness.
 
-    However, a subtlety remains: the DFT reference data used for training **was** computed with a finite basis set (def2-TZVPP). If the training data was not counterpoise-corrected, the model may have learned an implicit BSSE from the reference energies. For AIMNet2 models, the large def2-TZVPP basis set minimizes this effect, but it is not entirely absent.
+    However, a subtlety remains: the DFT reference data used for training **was** computed with a finite basis set (def2-TZVPP for `aimnet2`/`aimnet2nse`; def2-mTZVP for `aimnet2_2025`/`aimnet2_b973c`). If the training data was not counterpoise-corrected, the model may have learned an implicit BSSE from the reference energies. For AIMNet2 models, these basis sets minimize this effect, but it is not entirely absent.
 
     **In practice:** Do not apply counterpoise corrections to AIMNet2 results. The supramolecular approach (`E(AB) - E(A) - E(B)`) is the correct way to compute interaction energies with ML potentials.
 

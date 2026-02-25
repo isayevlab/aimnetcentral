@@ -44,7 +44,7 @@ pip install torch --index-url https://download.pytorch.org/whl/cu124
 | `aimnet2nse`    | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | Open-shell / radical chemistry                 |
 | `aimnet2pd`     | H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I | Pd systems with CPCM implicit solvation (THF)  |
 
-_Each model has ensemble members (append \_0 to \_3). Ensemble averaging recommended for production use._
+_Each model has ensemble members numbered 0–3 (e.g., `aimnet2_0` … `aimnet2_3`; `aimnet2pd` uses `aimnet2-pd_0` … `aimnet2-pd_3`). Ensemble averaging recommended for production use._
 
 ## Installation
 
