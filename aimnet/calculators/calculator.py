@@ -210,8 +210,8 @@ class AIMNet2Calculator:
         "shifts_lr": torch.float,
         "cell": torch.float,
     }
-    keys_out: ClassVar[list[str]] = ["energy", "charges", "forces", "hessian", "stress"]
-    atom_feature_keys: ClassVar[list[str]] = ["coord", "numbers", "charges", "forces"]
+    keys_out: ClassVar[list[str]] = ["energy", "charges", "spin_charges", "forces", "hessian", "stress"]
+    atom_feature_keys: ClassVar[list[str]] = ["coord", "numbers", "charges", "spin_charges", "forces"]
 
     def __init__(
         self,
@@ -397,6 +397,11 @@ class AIMNet2Calculator:
         dispersion is embedded in the model itself, so this returns False.
         """
         return self.external_dftd3 is not None
+
+    @property
+    def is_nse(self) -> bool:
+        """Return True if the model supports spin-polarized charges (NSE, num_charge_channels=2)."""
+        return getattr(self.model, "num_charge_channels", 1) == 2
 
     @property
     def coulomb_method(self) -> str | None:

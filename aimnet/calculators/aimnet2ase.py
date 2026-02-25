@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 try:
-    from ase.calculators.calculator import Calculator, all_changes  # type: ignore
+    from ase.calculators.calculator import Calculator, PropertyNotImplementedError, all_changes  # type: ignore
 except ImportError:
     raise ImportError("ASE is not installed. Please install ASE to use this module.") from None
 
@@ -26,6 +26,8 @@ class AIMNet2ASE(Calculator):
         if isinstance(base_calc, str):
             base_calc = AIMNet2Calculator(base_calc)
         self.base_calc = base_calc
+        if self.base_calc.is_nse:
+            self.implemented_properties = [*self.__class__.implemented_properties, "spin_charges"]
         self.reset()
         self.charge = charge
         self.mult = mult
@@ -71,6 +73,13 @@ class AIMNet2ASE(Calculator):
         positions = atoms.get_positions()
         return np.sum(charges * positions, axis=0)
 
+    def get_spin_charges(self, atoms=None):
+        if "spin_charges" not in self.results:
+            raise PropertyNotImplementedError(
+                "spin_charges is not available. Use an NSE model (e.g. 'aimnet2nse')."
+            )
+        return self.results["spin_charges"]
+
     def calculate(self, atoms=None, properties=None, system_changes=all_changes):
         if properties is None:
             properties = ["energy"]
@@ -109,3 +118,5 @@ class AIMNet2ASE(Calculator):
             self.results["forces"] = results["forces"]
         if "stress" in properties:
             self.results["stress"] = results["stress"]
+        if "spin_charges" in results:
+            self.results["spin_charges"] = results["spin_charges"]
