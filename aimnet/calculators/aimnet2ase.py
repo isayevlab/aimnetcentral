@@ -75,9 +75,7 @@ class AIMNet2ASE(Calculator):
 
     def get_spin_charges(self, atoms=None):
         if "spin_charges" not in self.results:
-            raise PropertyNotImplementedError(
-                "spin_charges is not available. Use an NSE model (e.g. 'aimnet2nse')."
-            )
+            raise PropertyNotImplementedError("spin_charges is not available. Use an NSE model (e.g. 'aimnet2nse').")
         return self.results["spin_charges"]
 
     def calculate(self, atoms=None, properties=None, system_changes=all_changes):
