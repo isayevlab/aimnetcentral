@@ -1,7 +1,6 @@
 # Long-Range Modules
 
-This page documents the long-range (LR) modules implemented in `aimnet/modules/lr.py`. All modules operate on
-the shared data dictionary and add their contributions to `data[key_out]` (usually `energy`).
+This page documents the long-range (LR) modules implemented in `aimnet/modules/lr.py`. All modules operate on the shared data dictionary and add their contributions to `data[key_out]` (usually `energy`).
 
 ## Choosing a Coulomb Method
 
@@ -60,10 +59,10 @@ calc.set_lrcoulomb_method("dsf", cutoff=15.0, dsf_alpha=0.2)
 
 **Parameters:**
 
-| Parameter   | Typical Range | Default | Notes                                             |
-| ----------- | ------------- | ------- | ------------------------------------------------- |
-| `cutoff`    | 12-20 Å       | 15.0 Å  | Larger = more accurate, more expensive            |
-| `dsf_alpha` | 0.1-0.3       | 0.2     | Damping strength; 0.2 works well for most systems |
+| Parameter | Typical Range | Default | Notes |
+| --- | --- | --- | --- |
+| `cutoff` | 12-20 Å | 15.0 Å | Larger = more accurate, more expensive |
+| `dsf_alpha` | 0.1-0.3 | 0.2 | Damping strength; 0.2 works well for most systems |
 
 **Tuning guidelines:**
 
@@ -110,28 +109,20 @@ calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-6)
 
 **Accuracy Parameter:**
 
-The `ewald_accuracy` parameter controls the real-space and reciprocal-space cutoffs.
-Lower values give higher precision but require more computation. The cutoffs are
-computed automatically based on system geometry:
+The `ewald_accuracy` parameter controls the real-space and reciprocal-space cutoffs. Lower values give higher precision but require more computation. The cutoffs are computed automatically based on system geometry:
 
-\[
-\eta = \frac{(V^2 / N)^{1/6}}{\sqrt{2\pi}}
-\]
+\[ \eta = \frac{(V^2 / N)^{1/6}}{\sqrt{2\pi}} \]
 
-\[
-r*{\text{cutoff}} = \sqrt{-2 \ln \varepsilon} \cdot \eta, \quad
-k*{\text{cutoff}} = \frac{\sqrt{-2 \ln \varepsilon}}{\eta}
-\]
+\[ r*{\text{cutoff}} = \sqrt{-2 \ln \varepsilon} \cdot \eta, \quad k*{\text{cutoff}} = \frac{\sqrt{-2 \ln \varepsilon}}{\eta} \]
 
-Where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and
-\(N\) is the number of atoms.
+Where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and \(N\) is the number of atoms.
 
 **Characteristics:**
 
 - Splits Coulomb into real-space + reciprocal-space + self-energy terms
 - Configurable accuracy target (default 1e-8)
 - Automatically determines k-space vectors based on accuracy
-- O(N log N) to O(N^1.5) complexity depending on implementation
+- O(N^2) complexity (full pairwise Ewald sum)
 - Most accurate method for periodic systems
 
 **When Ewald matters:**
@@ -143,11 +134,11 @@ Where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and
 
 ## Method Comparison
 
-| Method | Complexity               | PBC Support | Typical Use Case             | Notes                    |
-| ------ | ------------------------ | ----------- | ---------------------------- | ------------------------ |
-| Simple | O(N²) fully connected    | No          | Small molecules, quick tests | Auto-switches for PBC    |
-| DSF    | O(N) with neighbor lists | Yes         | Production MD, large systems | Recommended for PBC      |
-| Ewald  | O(N log N) to O(N^1.5)   | Yes         | High-accuracy benchmarks     | Research-grade precision |
+| Method | Complexity | PBC Support | Typical Use Case | Notes |
+| --- | --- | --- | --- | --- |
+| Simple | O(N²) fully connected | No | Small molecules, quick tests | Auto-switches for PBC |
+| DSF | O(N) with neighbor lists | Yes | Production MD, large systems | Recommended for PBC |
+| Ewald | O(N^2) full pairwise | Yes | High-accuracy benchmarks | Research-grade precision |
 
 **Accuracy hierarchy:** Ewald > DSF > Simple (for PBC)
 
@@ -162,18 +153,15 @@ Where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and
 - Coulomb modules prefer `nbmat_coulomb` and fall back to `nbmat_lr`.
 - Dispersion modules (`DFTD3`, `D3TS`) prefer `nbmat_dftd3` and fall back to `nbmat_lr`.
 
-This fallback behavior is implemented via `nbops.resolve_suffix`, and distance calculation is lazily computed
-with `ops.lazy_calc_dij`.
+This fallback behavior is implemented via `nbops.resolve_suffix`, and distance calculation is lazily computed with `ops.lazy_calc_dij`.
 
 **Distance and masking**
 
-Distances use `d_ij{suffix}` derived from `coord` (and `shifts{suffix}` when PBC is present). Padding/diagonal
-pairs are masked via `mask_ij{suffix}`. For DSF, pairs beyond `Rc` are also masked.
+Distances use `d_ij{suffix}` derived from `coord` (and `shifts{suffix}` when PBC is present). Padding/diagonal pairs are masked via `mask_ij{suffix}`. For DSF, pairs beyond `Rc` are also masked.
 
 ## LRCoulomb
 
-`LRCoulomb` computes a long-range Coulomb contribution, optionally subtracting the short-range (SR) part to
-avoid double counting.
+`LRCoulomb` computes a long-range Coulomb contribution, optionally subtracting the short-range (SR) part to avoid double counting.
 
 **Inputs**
 
@@ -207,8 +195,7 @@ If `subtract_sr=True`, the SR term is subtracted.
 
 3. **Ewald**
 
-Uses `ops.coulomb_matrix_ewald`, which implements real-space + reciprocal-space + self terms with
-fixed accuracy (`1e-8`). This path requires a single molecule with `coord.ndim == 2` and `cell.ndim == 2`.
+Uses `ops.coulomb_matrix_ewald`, which implements real-space + reciprocal-space + self terms with fixed accuracy (`1e-8`). This path requires a single molecule with `coord.ndim == 2` and `cell.ndim == 2`.
 
 If `subtract_sr=True`, the SR term is subtracted.
 
@@ -225,9 +212,7 @@ The SR contribution is summed per molecule and subtracted from `key_out` when `s
 
 ## SRCoulomb
 
-`SRCoulomb` subtracts the SR Coulomb contribution from `key_out`. It uses the same SR formula as `LRCoulomb`
-(envelope + cutoff) and is typically embedded in models trained with SR Coulomb so that external LR methods
-can add the full Coulomb energy without double counting.
+`SRCoulomb` subtracts the SR Coulomb contribution from `key_out`. It uses the same SR formula as `LRCoulomb` (envelope + cutoff) and is typically embedded in models trained with SR Coulomb so that external LR methods can add the full Coulomb energy without double counting.
 
 ## DispParam
 
@@ -282,10 +267,10 @@ smoothing_off = cutoff
 
 **Parameters:**
 
-| Parameter            | Typical Value | Default | Effect                                          |
-| -------------------- | ------------- | ------- | ----------------------------------------------- |
-| `cutoff`             | 15-20 Å       | 15.0 Å  | Interaction cutoff distance                     |
-| `smoothing_fraction` | 0.1-0.3       | 0.2     | Width of smoothing region as fraction of cutoff |
+| Parameter | Typical Value | Default | Effect |
+| --- | --- | --- | --- |
+| `cutoff` | 15-20 Å | 15.0 Å | Interaction cutoff distance |
+| `smoothing_fraction` | 0.1-0.3 | 0.2 | Width of smoothing region as fraction of cutoff |
 
 **Example:** With cutoff=15.0 Å and smoothing_fraction=0.2:
 
@@ -314,8 +299,7 @@ calc.set_dftd3_cutoff(cutoff=20.0, smoothing_fraction=0.15)
 - Default (0.2): Good balance for most systems
 - Larger (0.3): Smoother transition, more conservative
 
-**Validation:**
-Test energy convergence by varying cutoff. Dispersion energy should change by < 0.05 kcal/mol when cutoff increases by 2 Å.
+**Validation:** Test energy convergence by varying cutoff. Dispersion energy should change by < 0.05 kcal/mol when cutoff increases by 2 Å.
 
 ### Forces
 
@@ -438,8 +422,7 @@ print(f"DFTD3 cutoff: {calc.dftd3_cutoff} Å")
 
 `AIMNet2Calculator` attaches external LR modules based on model metadata:
 
-- External `LRCoulomb` is created when `needs_coulomb=True`. If `coulomb_mode="sr_embedded"`,
-  the model already subtracts SR Coulomb, so the external module adds the full Coulomb energy.
+- External `LRCoulomb` is created when `needs_coulomb=True`. If `coulomb_mode="sr_embedded"`, the model already subtracts SR Coulomb, so the external module adds the full Coulomb energy.
 - External `DFTD3` is created when `needs_dispersion=True` and `d3_params` are present.
 
 See [calculator.md](calculator.md) for attachment logic and runtime configuration methods.

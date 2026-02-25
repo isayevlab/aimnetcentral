@@ -9,11 +9,34 @@ repo_name: isayevlab/aimnetcentral
 nav:
     - Home: index.md
     - Getting Started: getting_started.md
-    - Calculator: calculator.md
-    - Model Format: model_format.md
-    - Long Range: long_range.md
-    - CLI Reference: cli.md
-    - Train: train.md
+    - Models:
+          - Selection Guide: models/guide.md
+          - Architecture: models/architecture.md
+          - AIMNet2 (wB97M-D3): models/aimnet2.md
+          - AIMNet2-B97-3c: models/aimnet2_b973c.md
+          - AIMNet2-2025: models/aimnet2_2025.md
+          - AIMNet2-NSE: models/aimnet2nse.md
+          - AIMNet2-Pd: models/aimnet2pd.md
+    - Tutorials:
+          - First Calculation: tutorials/single_point.md
+          - Geometry Optimization: tutorials/geometry_optimization.md
+          - Molecular Dynamics: tutorials/molecular_dynamics.md
+          - Periodic Systems: tutorials/periodic_systems.md
+          - Batch Processing: tutorials/batch_processing.md
+          - Performance Tuning: tutorials/performance.md
+    - Advanced Use Cases:
+          - Open-Shell Chemistry: advanced/open_shell.md
+          - Conformer Search: advanced/conformer_search.md
+          - Reaction Paths & TS: advanced/reaction_paths.md
+          - Non-Covalent Interactions: advanced/intermolecular_interactions.md
+          - Pd Catalysis: advanced/transition_metal_catalysis.md
+          - Charged Systems: advanced/charged_systems.md
+    - Reference:
+          - Calculator API: calculator.md
+          - Long-Range Methods: long_range.md
+          - Model Format: model_format.md
+          - Training: train.md
+          - CLI Tools: cli.md
     - API Reference:
           - Overview: api/index.md
           - Calculators: api/calculators.md
@@ -36,8 +59,42 @@ plugins:
                       merge_init_into_class: true
 
 theme:
-    name: readthedocs
+    name: material
+    palette:
+        - media: "(prefers-color-scheme: light)"
+          scheme: default
+          primary: indigo
+          accent: indigo
+          toggle:
+              icon: material/brightness-7
+              name: Switch to dark mode
+        - media: "(prefers-color-scheme: dark)"
+          scheme: slate
+          primary: indigo
+          accent: indigo
+          toggle:
+              icon: material/brightness-4
+              name: Switch to light mode
+    features:
+        - navigation.instant
+        - navigation.top
+        - navigation.sticky
+        - search.highlight
+        - search.suggest
+        - content.code.copy
 
 markdown_extensions:
     - toc:
           permalink: true
+    - admonition
+    - pymdownx.details
+    - pymdownx.superfences
+    - pymdownx.tabbed:
+          alternate_style: true
+    - pymdownx.snippets
+    - pymdownx.arithmatex:
+          generic: true
+
+extra_javascript:
+    - javascripts/mathjax.js
+    - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js

@@ -125,17 +125,17 @@ This allows switching Coulomb methods (simple/DSF/Ewald) at inference time witho
 
 The v2 model format includes the following metadata fields:
 
-| Field                 | Type      | Description                                             |
-| --------------------- | --------- | ------------------------------------------------------- |
-| `format_version`      | int       | 2 for new format                                        |
-| `cutoff`              | float     | Model cutoff radius                                     |
-| `needs_coulomb`       | bool      | True if calculator should add external Coulomb          |
-| `needs_dispersion`    | bool      | True if calculator should add external DFTD3            |
-| `coulomb_mode`        | str       | "sr_embedded" (has SRCoulomb) or "none"                 |
-| `coulomb_sr_rc`       | float?    | SR Coulomb cutoff (if coulomb_mode="sr_embedded")       |
-| `coulomb_sr_envelope` | str?      | "exp" or "cosine" (if coulomb_mode="sr_embedded")       |
-| `d3_params`           | dict?     | D3 parameters {s6, s8, a1, a2} if needs_dispersion=True |
-| `implemented_species` | list[int] | Supported atomic numbers                                |
+| Field | Type | Description |
+| --- | --- | --- |
+| `format_version` | int | 2 for new format |
+| `cutoff` | float | Model cutoff radius |
+| `needs_coulomb` | bool | True if calculator should add external Coulomb |
+| `needs_dispersion` | bool | True if calculator should add external DFTD3 |
+| `coulomb_mode` | str | "sr_embedded" (has SRCoulomb) or "none" |
+| `coulomb_sr_rc` | float? | SR Coulomb cutoff (if coulomb_mode="sr_embedded") |
+| `coulomb_sr_envelope` | str? | "exp" or "cosine" (if coulomb_mode="sr_embedded") |
+| `d3_params` | dict? | D3 parameters {s6, s8, a1, a2} if needs_dispersion=True |
+| `implemented_species` | list[int] | Supported atomic numbers |
 
 **Runtime Configuration**
 

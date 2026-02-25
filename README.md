@@ -26,7 +26,7 @@ AIMNet2 requires **Python 3.11 or 3.12**.
 AIMNet2 works on CPU out of the box. For GPU acceleration:
 
 - **CUDA GPU**: Install PyTorch with CUDA support from [pytorch.org](https://pytorch.org/get-started/locally/)
-- **compile_mode**: Requires CUDA for ~5x MD speedup (see Performance Optimization)
+- **compile_model**: Requires CUDA for ~5x MD speedup (see Performance Optimization)
 
 Example PyTorch installation with CUDA 12.4:
 
@@ -36,15 +36,15 @@ pip install torch --index-url https://download.pytorch.org/whl/cu124
 
 ## Available Models
 
-| Model           | Elements                                      | Description                                   |
-| --------------- | --------------------------------------------- | --------------------------------------------- |
-| `aimnet2`       | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | wB97M-D3 (default)                            |
-| `aimnet2_b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c functional                             |
-| `aimnet2_2025`  | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c + improved intermolecular interactions |
-| `aimnet2nse`    | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | Open-shell chemistry                          |
-| `aimnet2pd`     | H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I | Palladium-containing systems                  |
+| Model           | Elements                                      | Description                                    |
+| --------------- | --------------------------------------------- | ---------------------------------------------- |
+| `aimnet2`       | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | wB97M-D3 (default)                             |
+| `aimnet2_2025`  | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c + improved intermolecular (recommended) |
+| `aimnet2_b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c (superseded by aimnet2_2025)            |
+| `aimnet2nse`    | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | Open-shell / radical chemistry                 |
+| `aimnet2pd`     | H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I | Pd systems with CPCM implicit solvation (THF)  |
 
-_Each model has ensemble members (append \_0 to \_3). Ensemble averaging recommended for production use._
+_Each model has ensemble members numbered 0–3 (e.g., `aimnet2_0` … `aimnet2_3`; `aimnet2pd` uses `aimnet2-pd_0` … `aimnet2-pd_3`). Ensemble averaging recommended for production use._
 
 ## Installation
 
@@ -137,10 +137,11 @@ With `aimnet[ase]` installed:
 
 ```python
 from ase.io import read
-from aimnet.calculators import AIMNet2ASE
+from aimnet.calculators import AIMNet2ASE, AIMNet2Calculator
 
+base_calc = AIMNet2Calculator("aimnet2")
 atoms = read("molecule.xyz")
-atoms.calc = AIMNet2ASE("aimnet2")
+atoms.calc = AIMNet2ASE(base_calc, charge=0)
 
 energy = atoms.get_potential_energy()
 forces = atoms.get_forces()
@@ -174,16 +175,16 @@ calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-8)
 
 ### Performance Optimization
 
-For molecular dynamics simulations, use `compile_mode` for ~5x speedup:
+For molecular dynamics simulations, use `compile_model` for ~5x speedup:
 
 ```python
-calc = AIMNet2Calculator("aimnet2", compile_mode=True)
+calc = AIMNet2Calculator("aimnet2", compile_model=True)
 ```
 
 Requirements:
 
 - CUDA GPU required
-- Not compatible with periodic boundary conditions
+- Only the NN forward pass is compiled (not neighbor lists or Coulomb/DFTD3 modules)
 - Best for repeated inference on similar-sized systems
 
 ### Training
