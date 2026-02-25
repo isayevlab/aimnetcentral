@@ -15,8 +15,7 @@
 
 ## Step 1: Quick Warmup --- Water Molecule
 
-Start with the smallest useful system: a water molecule (3 atoms). This lets you
-verify your installation and understand the API before moving to larger molecules.
+Start with the smallest useful system: a water molecule (3 atoms). This lets you verify your installation and understand the API before moving to larger molecules.
 
 ```python
 import torch
@@ -48,12 +47,10 @@ print(f"Forces (eV/A):\n{result['forces']}")
 print(f"Partial charges (e): {result['charges']}")
 ```
 
-!!! note "First-run warmup"
-The very first calculation triggers two one-time costs:
+!!! note "First-run warmup" The very first calculation triggers two one-time costs:
 
     1. **Warp kernel JIT compilation** (10--30 seconds): AIMNet2 uses NVIDIA Warp
-       for GPU-accelerated neighbor list and kernel operations. These kernels are
-       compiled on first use and cached for subsequent runs.
+       for GPU-accelerated neighbor list and kernel operations. These kernels are compiled on first use and cached for subsequent runs.
     2. **Model weight download**: If this is your first time using a model name,
        the weights are downloaded from the model registry.
 
@@ -61,9 +58,7 @@ The very first calculation triggers two one-time costs:
 
 ## Step 2: A Real-World Example --- Aspirin
 
-Water is useful for testing, but let's work with something more relevant:
-aspirin (acetylsalicylic acid, C9H8O4, 21 atoms). This is a typical
-drug-like molecule that AIMNet2 handles routinely.
+Water is useful for testing, but let's work with something more relevant: aspirin (acetylsalicylic acid, C9H8O4, 21 atoms). This is a typical drug-like molecule that AIMNet2 handles routinely.
 
 ```python
 # Aspirin (C9H8O4) - 21 atoms
@@ -121,16 +116,15 @@ print(f"Hessian shape: {result['hessian'].shape}")
 
 ## Step 3: Understanding the Output Dictionary
 
-Every call to the calculator returns a dictionary of PyTorch tensors. Here is
-what each key means and when it appears:
+Every call to the calculator returns a dictionary of PyTorch tensors. Here is what each key means and when it appears:
 
-| Key       | Shape                | Units  | When present                               |
-| --------- | -------------------- | ------ | ------------------------------------------ |
-| `energy`  | `(1,)` or `(B,)`     | eV     | Always                                     |
-| `charges` | `(N,)` or `(B,N)`    | e      | Always                                     |
-| `forces`  | `(N,3)` or `(B,N,3)` | eV/A   | When `forces=True`                         |
-| `stress`  | `(3,3)` or `(B,3,3)` | eV/A^3 | When `stress=True` (requires `cell`)       |
-| `hessian` | `(N,3,N,3)`          | eV/A^2 | When `hessian=True` (single molecule only) |
+| Key | Shape | Units | When present |
+| --- | --- | --- | --- |
+| `energy` | `(1,)` or `(B,)` | eV | Always |
+| `charges` | `(N,)` or `(B,N)` | e | Always |
+| `forces` | `(N,3)` or `(B,N,3)` | eV/A | When `forces=True` |
+| `stress` | `(3,3)` or `(B,3,3)` | eV/A^3 | When `stress=True` (requires `cell`) |
+| `hessian` | `(N,3,N,3)` | eV/A^2 | When `hessian=True` (single molecule only) |
 
 Where `N` is the number of atoms and `B` is the batch size.
 
@@ -160,17 +154,11 @@ hessian = result["hessian"]
 print(f"Hessian shape: {hessian.shape}")  # (21, 3, 21, 3) for aspirin
 ```
 
-!!! tip "When to request each property"
-Only request what you need. Computing forces adds one backward pass.
-Computing the hessian adds `3N` backward passes (one per force component),
-so it becomes expensive for large molecules. The hessian is also limited to
-single-molecule calculations.
+!!! tip "When to request each property" Only request what you need. Computing forces adds one backward pass. Computing the hessian adds `3N` backward passes (one per force component), so it becomes expensive for large molecules. The hessian is also limited to single-molecule calculations.
 
 ## Step 4: Comparing Models
 
-AIMNet2 provides several models trained on different DFT functionals.
-Each is suitable for different chemistry. You can compare them on the same
-molecule to understand how model choice affects predictions:
+AIMNet2 provides several models trained on different DFT functionals. Each is suitable for different chemistry. You can compare them on the same molecule to understand how model choice affects predictions:
 
 ```python
 model_names = ["aimnet2", "aimnet2_b973c", "aimnet2_2025"]
@@ -192,11 +180,7 @@ for name in model_names:
     print(f"{name:<20} {e:>14.6f} {f_max:>18.6f}")
 ```
 
-!!! warning "Absolute energies differ between models"
-Different models use different DFT functionals as training targets, so their
-absolute energy scales are not comparable. **Relative** energies (e.g.,
-conformer energy differences, reaction energies) are meaningful within the
-same model but should not be mixed across models.
+!!! warning "Absolute energies differ between models" Different models use different DFT functionals as training targets, so their absolute energy scales are not comparable. **Relative** energies (e.g., conformer energy differences, reaction energies) are meaningful within the same model but should not be mixed across models.
 
 The available model aliases are:
 
@@ -208,14 +192,11 @@ The available model aliases are:
 | `aimnet2nse`    | wB97M-D3          | Open-shell / radical systems |
 | `aimnet2pd`     | wB97M-D3          | Palladium-containing systems |
 
-Each alias points to ensemble member `_0` by default. For uncertainty
-estimation, you can load all four ensemble members (e.g., `aimnet2_wb97m_d3_0`
-through `aimnet2_wb97m_d3_3`) and compare their predictions.
+Each alias points to ensemble member `_0` by default. For uncertainty estimation, you can load all four ensemble members (e.g., `aimnet2_wb97m_d3_0` through `aimnet2_wb97m_d3_3`) and compare their predictions.
 
 ## Step 5: Using `compile_model` for Repeated Calculations
 
-If you plan to run many calculations on similar-sized molecules (e.g., scanning
-a potential energy surface), enable model compilation for a significant speedup:
+If you plan to run many calculations on similar-sized molecules (e.g., scanning a potential energy surface), enable model compilation for a significant speedup:
 
 ```python
 import time
@@ -246,11 +227,7 @@ t1 = time.perf_counter()
 print(f"Average over 100 calls: {(t1 - t0) / 100 * 1000:.2f} ms")
 ```
 
-!!! note "What `compile_model=True` does"
-This wraps the neural network forward pass with `torch.compile()`. It does
-**not** compile the neighbor list construction or the external Coulomb/DFTD3
-modules. The benefit is greatest for repeated evaluations on the same
-system size, such as MD trajectories or geometry optimizations.
+!!! note "What `compile_model=True` does" This wraps the neural network forward pass with `torch.compile()`. It does **not** compile the neighbor list construction or the external Coulomb/DFTD3 modules. The benefit is greatest for repeated evaluations on the same system size, such as MD trajectories or geometry optimizations.
 
 ## What's Next
 

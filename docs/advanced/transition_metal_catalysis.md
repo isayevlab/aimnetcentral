@@ -21,15 +21,11 @@ The `aimnet2pd` model extends AIMNet2 to palladium-containing organometallic sys
 
 !!! warning "No Arsenic"
 
-    The Pd model replaces As with Pd in the element set. You **cannot** use
-    AsPh3 ligands or any arsenic-containing species with `aimnet2pd`. Common
-    phosphine ligands (PPh3, PMe3, etc.) are fully supported.
+    The Pd model replaces As with Pd in the element set. You **cannot** use AsPh3 ligands or any arsenic-containing species with `aimnet2pd`. Common phosphine ligands (PPh3, PMe3, etc.) are fully supported.
 
 !!! warning "Palladium Only"
 
-    `aimnet2pd` supports Pd as the only transition metal. It does **not**
-    cover Ni, Cu, Fe, Ru, Rh, Ir, or any other transition metals. For
-    reactions catalyzed by other metals, DFT remains necessary.
+    `aimnet2pd` supports Pd as the only transition metal. It does **not** cover Ni, Cu, Fe, Ru, Rh, Ir, or any other transition metals. For reactions catalyzed by other metals, DFT remains necessary.
 
 ## Loading the Pd Model
 
@@ -47,9 +43,7 @@ ase_calc = AIMNet2ASE(base_calc, charge=0)
 
 ## Pd Coordination Geometries
 
-Pd(II) complexes typically adopt square planar geometry, while Pd(0) prefers
-linear or trigonal coordination. Comparing the relative stability of different
-coordination arrangements is a useful validation test.
+Pd(II) complexes typically adopt square planar geometry, while Pd(0) prefers linear or trigonal coordination. Comparing the relative stability of different coordination arrangements is a useful validation test.
 
 ```python
 import torch
@@ -81,8 +75,7 @@ print(f"Max force: {result_sq['forces'].abs().max().item():.4f} eV/A")
 
 !!! tip "Optimize Before Comparing"
 
-    Starting geometries from textbook bond lengths and angles are approximate.
-    Always optimize structures before comparing energies:
+    Starting geometries from textbook bond lengths and angles are approximate. Always optimize structures before comparing energies:
 
     ```python
     from ase import Atoms
@@ -100,15 +93,13 @@ print(f"Max force: {result_sq['forces'].abs().max().item():.4f} eV/A")
 
 ## Suzuki Coupling: Oxidative Addition
 
-The Suzuki cross-coupling reaction is one of the most important Pd-catalyzed
-reactions in synthetic chemistry. The catalytic cycle involves:
+The Suzuki cross-coupling reaction is one of the most important Pd-catalyzed reactions in synthetic chemistry. The catalytic cycle involves:
 
 1. **Oxidative addition** of aryl halide to Pd(0)
 2. Transmetalation with organoboron
 3. Reductive elimination to form C-C bond
 
-Here we model the oxidative addition step: the reaction of bromobenzene
-with a Pd(0)-phosphine complex.
+Here we model the oxidative addition step: the reaction of bromobenzene with a Pd(0)-phosphine complex.
 
 ### Step 1: Build and Optimize the Pd(0) Complex
 
@@ -244,24 +235,15 @@ print(f"Oxidative addition energy: {e_rxn_kcal:.1f} kcal/mol")
 
 !!! tip "CPCM solvation is built in"
 
-    Unlike other AIMNet2 models, `aimnet2pd` is trained on wB97M-D3/CPCM
-    reference data with **THF as the implicit solvent**. All predicted
-    energetics include continuum solvent stabilization effects appropriate
-    for homogeneous catalysis in THF or similar non-polar aprotic solvents.
+    Unlike other AIMNet2 models, `aimnet2pd` is trained on wB97M-D3/CPCM reference data with **THF as the implicit solvent**. All predicted energetics include continuum solvent stabilization effects appropriate for homogeneous catalysis in THF or similar non-polar aprotic solvents.
 
-    For reactions in very different solvent environments (e.g., water, DMSO,
-    DMF), the THF solvation model may not capture the correct solvent
-    effects. In those cases, additional solvation corrections or explicit
-    solvent modeling may be needed.
+    For reactions in very different solvent environments (e.g., water, DMSO, DMF), the THF solvation model may not capture the correct solvent effects. In those cases, additional solvation corrections or explicit solvent modeling may be needed.
 
 ### Limited Oxidation States
 
 !!! note "Training Data Coverage"
 
-    The training data covers common Pd oxidation states (Pd(0) and Pd(II))
-    in typical organometallic coordination environments. Less common oxidation
-    states (Pd(I), Pd(IV)) or unusual coordination geometries may fall outside
-    the training domain.
+    The training data covers common Pd oxidation states (Pd(0) and Pd(II)) in typical organometallic coordination environments. Less common oxidation states (Pd(I), Pd(IV)) or unusual coordination geometries may fall outside the training domain.
 
     Use ensemble uncertainty to identify potentially unreliable predictions:
 
@@ -280,36 +262,26 @@ print(f"Oxidative addition energy: {e_rxn_kcal:.1f} kcal/mol")
 
 ### Ligand Considerations
 
-- **Phosphines** (PR3): Well represented in training data. PH3, PMe3, PPh3-like
-  ligands are expected to be reliable.
-- **N-heterocyclic carbenes** (NHC): May be less well represented. Validate
-  with ensemble uncertainty.
+- **Phosphines** (PR3): Well represented in training data. PH3, PMe3, PPh3-like ligands are expected to be reliable.
+- **N-heterocyclic carbenes** (NHC): May be less well represented. Validate with ensemble uncertainty.
 - **Halides** (F, Cl, Br, I): Supported as ligands and substrates.
-- **Boron compounds**: Supported (B is in the element set), relevant for
-  Suzuki coupling transmetalation steps.
+- **Boron compounds**: Supported (B is in the element set), relevant for Suzuki coupling transmetalation steps.
 
 !!! warning "No AsPh3 or Arsenic Ligands"
 
-    Arsenic is **not** in the `aimnet2pd` element set. Triphenylarsine (AsPh3)
-    and other As-containing ligands cannot be used. Use the standard `aimnet2`
-    model for As-containing systems (but without Pd).
+    Arsenic is **not** in the `aimnet2pd` element set. Triphenylarsine (AsPh3) and other As-containing ligands cannot be used. Use the standard `aimnet2` model for As-containing systems (but without Pd).
 
 ## Tips for Catalytic Cycle Modeling
 
-1. **Start simple.** Use small model ligands (PH3 instead of PPh3) to
-   test the reaction profile before scaling up to realistic ligands.
+1. **Start simple.** Use small model ligands (PH3 instead of PPh3) to test the reaction profile before scaling up to realistic ligands.
 
-2. **Optimize each species.** Always perform geometry optimization (BFGS to
-   fmax < 0.01 eV/A) before comparing energies.
+2. **Optimize each species.** Always perform geometry optimization (BFGS to fmax < 0.01 eV/A) before comparing energies.
 
-3. **Check spin states.** Pd(0) is typically d10 singlet, Pd(II) is d8 singlet
-   (square planar). Set `charge` appropriately for charged intermediates.
+3. **Check spin states.** Pd(0) is typically d10 singlet, Pd(II) is d8 singlet (square planar). Set `charge` appropriately for charged intermediates.
 
-4. **Validate with DFT.** For key stationary points (reactants, products,
-   transition states), compare AIMNet2-Pd energies with DFT to gauge accuracy.
+4. **Validate with DFT.** For key stationary points (reactants, products, transition states), compare AIMNet2-Pd energies with DFT to gauge accuracy.
 
-5. **Use ensemble uncertainty.** Large ensemble variance flags potentially
-   unreliable structures.
+5. **Use ensemble uncertainty.** Large ensemble variance flags potentially unreliable structures.
 
 ## What's Next
 

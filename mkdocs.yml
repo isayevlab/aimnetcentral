@@ -59,7 +59,29 @@ plugins:
                       merge_init_into_class: true
 
 theme:
-    name: readthedocs
+    name: material
+    palette:
+        - media: "(prefers-color-scheme: light)"
+          scheme: default
+          primary: indigo
+          accent: indigo
+          toggle:
+              icon: material/brightness-7
+              name: Switch to dark mode
+        - media: "(prefers-color-scheme: dark)"
+          scheme: slate
+          primary: indigo
+          accent: indigo
+          toggle:
+              icon: material/brightness-4
+              name: Switch to light mode
+    features:
+        - navigation.instant
+        - navigation.top
+        - navigation.sticky
+        - search.highlight
+        - search.suggest
+        - content.code.copy
 
 markdown_extensions:
     - toc:
@@ -72,3 +94,7 @@ markdown_extensions:
     - pymdownx.snippets
     - pymdownx.arithmatex:
           generic: true
+
+extra_javascript:
+    - javascripts/mathjax.js
+    - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js

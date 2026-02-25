@@ -51,8 +51,7 @@ def interaction_energy(coords_ab, numbers_ab, charge_ab,
 
 ## Worked Example: Water Dimer Binding Curve
 
-The water dimer is the classic benchmark for hydrogen bonding. We scan the
-O...O distance from 2.0 to 6.0 Angstrom while keeping monomer geometries fixed.
+The water dimer is the classic benchmark for hydrogen bonding. We scan the O...O distance from 2.0 to 6.0 Angstrom while keeping monomer geometries fixed.
 
 ```python
 import torch
@@ -126,8 +125,7 @@ print(f"Interaction energy = {energies_kcal[min_idx]:.2f} kcal/mol")
 
 ## Comparing Models on the Water Dimer
 
-The `aimnet2_2025` model shows improved accuracy over the original `aimnet2`
-for intermolecular interactions. You can compare them directly:
+The `aimnet2_2025` model shows improved accuracy over the original `aimnet2` for intermolecular interactions. You can compare them directly:
 
 ```python
 import torch
@@ -169,8 +167,7 @@ for name, calc in [("aimnet2", calc_orig), ("aimnet2_2025", calc_2025)]:
 
 ## Benzene Dimer: Parallel-Displaced Configuration
 
-The benzene dimer is the classic pi-stacking benchmark. The global minimum is the
-parallel-displaced (PD) geometry, not the sandwich or T-shaped configurations.
+The benzene dimer is the classic pi-stacking benchmark. The global minimum is the parallel-displaced (PD) geometry, not the sandwich or T-shaped configurations.
 
 ```python
 import torch
@@ -224,38 +221,23 @@ print(f"Benzene dimer (PD) interaction energy: {e_int:.2f} kcal/mol")
 
 !!! tip "Optimizing Dimer Geometries"
 
-    For a more rigorous treatment, optimize the dimer geometry while keeping
-    monomers rigid (rigid-body optimization) or allow full relaxation. The
-    fixed-monomer approach shown here is standard for benchmarking but may
-    not capture full relaxation effects.
+    For a more rigorous treatment, optimize the dimer geometry while keeping monomers rigid (rigid-body optimization) or allow full relaxation. The fixed-monomer approach shown here is standard for benchmarking but may not capture full relaxation effects.
 
 ## BSSE in ML Potentials
 
 !!! note "No Basis Set Superposition Error in the Traditional Sense"
 
-    In quantum chemistry, BSSE arises because the basis functions of monomer A
-    artificially improve the description of monomer B (and vice versa) when
-    computing the dimer energy. The counterpoise correction removes this artifact.
+    In quantum chemistry, BSSE arises because the basis functions of monomer A artificially improve the description of monomer B (and vice versa) when computing the dimer energy. The counterpoise correction removes this artifact.
 
-    ML potentials like AIMNet2 have **no basis set** and therefore **no BSSE**
-    in the traditional sense. The interaction energy computed as
-    `E(AB) - E(A) - E(B)` does not suffer from basis set incompleteness.
+    ML potentials like AIMNet2 have **no basis set** and therefore **no BSSE** in the traditional sense. The interaction energy computed as `E(AB) - E(A) - E(B)` does not suffer from basis set incompleteness.
 
-    However, a subtlety remains: the DFT reference data used for training
-    **was** computed with a finite basis set (def2-TZVPPD). If the training
-    data was not counterpoise-corrected, the model may have learned an
-    implicit BSSE from the reference energies. For AIMNet2 models, the large
-    def2-TZVPPD basis set minimizes this effect, but it is not entirely absent.
+    However, a subtlety remains: the DFT reference data used for training **was** computed with a finite basis set (def2-TZVPP). If the training data was not counterpoise-corrected, the model may have learned an implicit BSSE from the reference energies. For AIMNet2 models, the large def2-TZVPP basis set minimizes this effect, but it is not entirely absent.
 
-    **In practice:** Do not apply counterpoise corrections to AIMNet2 results.
-    The supramolecular approach (`E(AB) - E(A) - E(B)`) is the correct way
-    to compute interaction energies with ML potentials.
+    **In practice:** Do not apply counterpoise corrections to AIMNet2 results. The supramolecular approach (`E(AB) - E(A) - E(B)`) is the correct way to compute interaction energies with ML potentials.
 
 ## Long-Range Method Guidance
 
-Non-covalent interactions are sensitive to the treatment of long-range
-electrostatics. The default "simple" (all-pairs) Coulomb method is
-appropriate for gas-phase dimers and clusters.
+Non-covalent interactions are sensitive to the treatment of long-range electrostatics. The default "simple" (all-pairs) Coulomb method is appropriate for gas-phase dimers and clusters.
 
 For larger aggregates or periodic systems with non-covalent contacts:
 
@@ -274,10 +256,7 @@ calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-8)
 
 !!! warning "Dispersion Cutoff for Large Systems"
 
-    For large molecular clusters or periodic systems with significant
-    dispersion contributions (e.g., molecular crystals), ensure the DFT-D3
-    cutoff is large enough. The default 15.0 Angstrom is adequate for most
-    cases, but van der Waals dominated systems may benefit from a larger cutoff:
+    For large molecular clusters or periodic systems with significant dispersion contributions (e.g., molecular crystals), ensure the DFT-D3 cutoff is large enough. The default 15.0 Angstrom is adequate for most cases, but van der Waals dominated systems may benefit from a larger cutoff:
 
     ```python
     calc.set_dftd3_cutoff(cutoff=20.0, smoothing_fraction=0.2)
@@ -289,24 +268,20 @@ calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-8)
 
 AIMNet2 models handle several classes of non-covalent interactions:
 
-| Interaction Type | Example                     | Typical Strength | Model Recommendation |
-| ---------------- | --------------------------- | ---------------- | -------------------- |
-| Hydrogen bonding | Water dimer, DNA base pairs | 3-20 kcal/mol    | `aimnet2_2025`       |
-| pi-pi stacking   | Benzene dimer, nucleobases  | 1-5 kcal/mol     | `aimnet2_2025`       |
-| CH-pi            | Methane-benzene             | 0.5-2 kcal/mol   | `aimnet2_2025`       |
-| Halogen bonding  | R-X...Y (X = Cl, Br, I)     | 2-10 kcal/mol    | `aimnet2_2025`       |
-| Dispersion (vdW) | Alkane dimers               | 0.5-3 kcal/mol   | `aimnet2_2025`       |
+| Interaction Type | Example | Typical Strength | Model Recommendation |
+| --- | --- | --- | --- |
+| Hydrogen bonding | Water dimer, DNA base pairs | 3-20 kcal/mol | `aimnet2_2025` |
+| pi-pi stacking | Benzene dimer, nucleobases | 1-5 kcal/mol | `aimnet2_2025` |
+| CH-pi | Methane-benzene | 0.5-2 kcal/mol | `aimnet2_2025` |
+| Halogen bonding | R-X...Y (X = Cl, Br, I) | 2-10 kcal/mol | `aimnet2_2025` |
+| Dispersion (vdW) | Alkane dimers | 0.5-3 kcal/mol | `aimnet2_2025` |
 
 !!! note "Accuracy Expectations"
 
-    For well-represented interaction types (hydrogen bonds, pi-stacking),
-    AIMNet2-2025 typically achieves errors of 0.3-0.5 kcal/mol compared to
-    CCSD(T)/CBS references. Larger errors may occur for interaction types
-    or geometries that are underrepresented in the training data.
+    For well-represented interaction types (hydrogen bonds, pi-stacking), AIMNet2-2025 typically achieves errors of 0.3-0.5 kcal/mol compared to CCSD(T)/CBS references. Larger errors may occur for interaction types or geometries that are underrepresented in the training data.
 
 ## What's Next
 
-- [Charged Systems](charged_systems.md) -- handling ions and charged complexes
-  in non-covalent assemblies
+- [Charged Systems](charged_systems.md) -- handling ions and charged complexes in non-covalent assemblies
 - [Model Selection Guide](../models/guide.md) -- comparing all available models
 - [Long-Range Methods](../long_range.md) -- details on DSF and Ewald methods

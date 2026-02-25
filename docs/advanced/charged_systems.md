@@ -15,17 +15,13 @@
 
 ## Relevant Models
 
-Charge handling is universal across all AIMNet2 models. The examples in this
-guide work with any model variant (`aimnet2`, `aimnet2_2025`, `aimnet2nse`,
-`aimnet2pd`, `aimnet2_b973c`). Choose the model based on your chemistry, not
-your charge state.
+Charge handling is universal across all AIMNet2 models. The examples in this guide work with any model variant (`aimnet2`, `aimnet2_2025`, `aimnet2nse`, `aimnet2pd`, `aimnet2_b973c`). Choose the model based on your chemistry, not your charge state.
 
 ## Setting the Charge
 
 ### Direct Calculator
 
-With `AIMNet2Calculator`, the charge is passed in the input dictionary as a
-scalar or tensor:
+With `AIMNet2Calculator`, the charge is passed in the input dictionary as a scalar or tensor:
 
 ```python
 import torch
@@ -57,8 +53,7 @@ result = calc({
 
 ### Batched Calculations
 
-When computing multiple molecules in a single batch using `mol_idx`, provide
-the charge as a 1D tensor with one value per molecule:
+When computing multiple molecules in a single batch using `mol_idx`, provide the charge as a 1D tensor with one value per molecule:
 
 ```python
 import torch
@@ -95,10 +90,7 @@ ase_calc = AIMNet2ASE("aimnet2", charge=1)
 
 !!! warning "Always Set the Correct Charge"
 
-    The charge parameter directly affects predicted partial atomic charges and
-    total energy. An incorrect charge will produce incorrect results without
-    raising an error. The model constrains partial charges to sum to the
-    specified total charge.
+    The charge parameter directly affects predicted partial atomic charges and total energy. An incorrect charge will produce incorrect results without raising an error. The model constrains partial charges to sum to the specified total charge.
 
 ## Worked Examples
 
@@ -164,9 +156,7 @@ print(f"Charge sum: {result['charges'].sum().item():.4f}")
 
 ### Amino Acid Zwitterion (Glycine)
 
-Amino acids exist as zwitterions at physiological pH, with a protonated amine
-(NH3+) and deprotonated carboxylate (COO-). The overall charge is zero, but
-the internal charge separation is large.
+Amino acids exist as zwitterions at physiological pH, with a protonated amine (NH3+) and deprotonated carboxylate (COO-). The overall charge is zero, but the internal charge separation is large.
 
 ```python
 import torch
@@ -206,8 +196,7 @@ for i, (z, q) in enumerate(zip(numbers, result['charges'].flatten())):
 
 ## Dipole Moment Caveats
 
-AIMNet2 computes the dipole moment classically from the predicted partial
-atomic charges:
+AIMNet2 computes the dipole moment classically from the predicted partial atomic charges:
 
 ```
 mu = sum_i(q_i * r_i)
@@ -217,20 +206,11 @@ where `q_i` is the partial charge on atom `i` and `r_i` is its position vector.
 
 !!! warning "Origin Dependence for Charged Species"
 
-    For a **neutral** molecule (total charge = 0), the dipole moment is
-    independent of the coordinate origin. This is the standard physical
-    definition.
+    For a **neutral** molecule (total charge = 0), the dipole moment is independent of the coordinate origin. This is the standard physical definition.
 
-    For a **charged** species (total charge != 0), the dipole moment depends
-    on the choice of coordinate origin. Shifting all coordinates by a constant
-    vector `d` changes the dipole by `Q_total * d`, where `Q_total` is the
-    total charge. This is a fundamental property of multipole expansions,
-    not a limitation of AIMNet2.
+    For a **charged** species (total charge != 0), the dipole moment depends on the choice of coordinate origin. Shifting all coordinates by a constant vector `d` changes the dipole by `Q_total * d`, where `Q_total` is the total charge. This is a fundamental property of multipole expansions, not a limitation of AIMNet2.
 
-    **Practical consequence:** Dipole moments are only physically meaningful
-    for neutral molecules. For charged species, compare dipoles only if all
-    geometries use the same coordinate convention (e.g., center of mass at
-    the origin).
+    **Practical consequence:** Dipole moments are only physically meaningful for neutral molecules. For charged species, compare dipoles only if all geometries use the same coordinate convention (e.g., center of mass at the origin).
 
 ```python
 from ase import Atoms
@@ -255,10 +235,7 @@ print(f"Water dipole: {np.linalg.norm(dipole):.3f} e*A")
 
 !!! warning "Atomic Charges Are Not Conserved Across MD Frames"
 
-    In AIMNet2, atomic partial charges are **predicted independently for each
-    frame** during molecular dynamics. The model predicts charges that sum to
-    the specified total charge, but the distribution among atoms can fluctuate
-    from frame to frame.
+    In AIMNet2, atomic partial charges are **predicted independently for each frame** during molecular dynamics. The model predicts charges that sum to the specified total charge, but the distribution among atoms can fluctuate from frame to frame.
 
     This means:
 
@@ -268,24 +245,17 @@ print(f"Water dipole: {np.linalg.norm(dipole):.3f} e*A")
     - This is physically reasonable (charge redistribution happens in real
       molecules) but differs from fixed-charge force fields
 
-    For applications requiring smooth charge evolution (e.g., computing
-    current from charge fluxes), consider post-processing to smooth the
-    charge trajectory.
+    For applications requiring smooth charge evolution (e.g., computing current from charge fluxes), consider post-processing to smooth the charge trajectory.
 
 ## Ewald for Periodic Charged Systems
 
 ### Single Molecule in a Periodic Box
 
-For a single charged molecule in a periodic box, Ewald summation handles
-the long-range electrostatics exactly. However, note that the current Ewald
-implementation uses a full N x N interaction matrix, not a neighbor-list
-approach:
+For a single charged molecule in a periodic box, Ewald summation handles the long-range electrostatics exactly. However, note that the current Ewald implementation uses a full N x N interaction matrix, not a neighbor-list approach:
 
 !!! warning "Ewald Scaling"
 
-    The Ewald implementation builds a full N x N Coulomb matrix, making it
-    suitable for **single molecules** in periodic boxes but expensive for
-    large systems. For large periodic systems, prefer DSF.
+    The Ewald implementation builds a full N x N Coulomb matrix, making it suitable for **single molecules** in periodic boxes but expensive for large systems. For large periodic systems, prefer DSF.
 
 ```python
 import torch
@@ -311,8 +281,7 @@ result = calc({
 
 ### Automatic Method Switching for PBC
 
-When periodic boundary conditions are detected (a `cell` is provided), the
-calculator automatically switches from the "simple" Coulomb method to DSF:
+When periodic boundary conditions are detected (a `cell` is provided), the calculator automatically switches from the "simple" Coulomb method to DSF:
 
 ```python
 import torch
@@ -337,8 +306,7 @@ result = calc({
 # A warning is issued: "Switching to DSF Coulomb for PBC"
 ```
 
-To avoid the warning, set the method explicitly before the first periodic
-calculation:
+To avoid the warning, set the method explicitly before the first periodic calculation:
 
 ```python
 calc.set_lrcoulomb_method("dsf", cutoff=15.0)
@@ -346,8 +314,7 @@ calc.set_lrcoulomb_method("dsf", cutoff=15.0)
 
 ## Protonation and Deprotonation Energetics
 
-A common application is computing protonation/deprotonation energies. Since
-AIMNet2 is gas-phase only, these are **gas-phase proton affinities**:
+A common application is computing protonation/deprotonation energies. Since AIMNet2 is gas-phase only, these are **gas-phase proton affinities**:
 
 ```python
 import torch
@@ -404,16 +371,10 @@ print(f"Deprotonation energy (gas phase): {-delta_e:.1f} kcal/mol")
 
 !!! note "Gas-Phase vs Solution"
 
-    Gas-phase proton affinities differ substantially from solution-phase pKa
-    values. Solvation stabilization of charged species is typically 50-80
-    kcal/mol for ions in water. Do not directly compare AIMNet2 gas-phase
-    energetics with experimental solution-phase data without solvation
-    corrections.
+    Gas-phase proton affinities differ substantially from solution-phase pKa values. Solvation stabilization of charged species is typically 50-80 kcal/mol for ions in water. Do not directly compare AIMNet2 gas-phase energetics with experimental solution-phase data without solvation corrections.
 
 ## What's Next
 
-- [Non-Covalent Interactions](intermolecular_interactions.md) -- binding energies
-  of charged and neutral complexes
+- [Non-Covalent Interactions](intermolecular_interactions.md) -- binding energies of charged and neutral complexes
 - [Long-Range Methods](../long_range.md) -- detailed DSF and Ewald configuration
-- [Model Selection Guide](../models/guide.md) -- choosing the right model for
-  your chemistry
+- [Model Selection Guide](../models/guide.md) -- choosing the right model for your chemistry

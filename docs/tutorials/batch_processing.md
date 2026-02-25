@@ -15,10 +15,7 @@
 
 ## Step 1: Understanding the Flat Coordinate Format
 
-When processing multiple molecules together, AIMNet2 uses a **flat coordinate format**.
-Instead of padding all molecules to the same size, you concatenate all atomic
-coordinates into a single `(N_total, 3)` tensor and use `mol_idx` to indicate which
-molecule each atom belongs to:
+When processing multiple molecules together, AIMNet2 uses a **flat coordinate format**. Instead of padding all molecules to the same size, you concatenate all atomic coordinates into a single `(N_total, 3)` tensor and use `mol_idx` to indicate which molecule each atom belongs to:
 
 ```python
 import torch
@@ -60,21 +57,13 @@ print(f"Energies: {result['energy']}")
 print(f"Forces shape: {result['forces'].shape}")
 ```
 
-!!! warning "mol_idx must be sorted in non-decreasing order"
-The `mol_idx` tensor **must** be sorted: all atoms for molecule 0 come first,
-then all atoms for molecule 1, and so on. Values like `[0, 1, 0, 1]` will
-produce incorrect results. Always use `[0, 0, 1, 1]`.
+!!! warning "mol_idx must be sorted in non-decreasing order" The `mol_idx` tensor **must** be sorted: all atoms for molecule 0 come first, then all atoms for molecule 1, and so on. Values like `[0, 1, 0, 1]` will produce incorrect results. Always use `[0, 0, 1, 1]`.
 
-!!! warning "charge shape must match number of molecules"
-When using `mol_idx`, the `charge` tensor must have shape `(num_molecules,)` with
-one charge value per molecule. A scalar charge only works for single-molecule
-calculations.
+!!! warning "charge shape must match number of molecules" When using `mol_idx`, the `charge` tensor must have shape `(num_molecules,)` with one charge value per molecule. A scalar charge only works for single-molecule calculations.
 
 ## Step 2: Processing a Multi-Frame XYZ File
 
-A common workflow is reading conformers or trajectory frames from an XYZ file and
-processing them in batches. Here is how to do it with ASE for reading and the
-low-level calculator for batched inference:
+A common workflow is reading conformers or trajectory frames from an XYZ file and processing them in batches. Here is how to do it with ASE for reading and the low-level calculator for batched inference:
 
 ```python
 import torch
@@ -94,8 +83,7 @@ n_frames = len(frames)
 
 ### Same-Size Molecules (3D Batched Input)
 
-When all molecules have the same number of atoms (e.g., conformers of one molecule),
-you can use the simpler 3D batched format:
+When all molecules have the same number of atoms (e.g., conformers of one molecule), you can use the simpler 3D batched format:
 
 ```python
 # Stack into (B, N, 3) tensor
@@ -116,11 +104,7 @@ relative = energies - energies.min()
 print(f"Relative energies (eV): {relative}")
 ```
 
-!!! tip
-For conformers of the same molecule, the 3D batched format `(B, N, 3)` is more
-convenient than flat coordinates with `mol_idx`. The calculator automatically
-decides between dense mode (small molecules on GPU) and sparse mode (large
-molecules or CPU).
+!!! tip For conformers of the same molecule, the 3D batched format `(B, N, 3)` is more convenient than flat coordinates with `mol_idx`. The calculator automatically decides between dense mode (small molecules on GPU) and sparse mode (large molecules or CPU).
 
 ### Different-Size Molecules (Flat Format with mol_idx)
 
@@ -155,8 +139,7 @@ result = calc({
 
 ## Step 3: Chunked Processing for Large Datasets
 
-For datasets with thousands of structures, processing everything at once may exceed
-GPU memory. Break the dataset into chunks:
+For datasets with thousands of structures, processing everything at once may exceed GPU memory. Break the dataset into chunks:
 
 ```python
 import torch
@@ -198,16 +181,11 @@ forces = torch.cat(all_forces)
 print(f"Processed {len(energies)} structures")
 ```
 
-!!! tip "Memory management"
-Calling `.cpu()` on result tensors moves them off the GPU immediately. Combined
-with `torch.cuda.empty_cache()`, this prevents GPU memory from growing
-unboundedly across batches. This is especially important when processing thousands
-of structures.
+!!! tip "Memory management" Calling `.cpu()` on result tensors moves them off the GPU immediately. Combined with `torch.cuda.empty_cache()`, this prevents GPU memory from growing unboundedly across batches. This is especially important when processing thousands of structures.
 
 ## Step 4: Worked Example -- Conformer Ranking
 
-Here is a complete example that reads conformers, computes energies in batches, and
-ranks them by relative energy:
+Here is a complete example that reads conformers, computes energies in batches, and ranks them by relative energy:
 
 ```python
 import torch
@@ -265,8 +243,7 @@ print(f"Conformers within 2 kcal/mol: {(relative_kcal < 2.0).sum().item()}")
 
 ## Step 5: Processing Mixed Datasets with Different Charges
 
-When your dataset contains molecules with different charges, build the `mol_idx`
-and `charge` tensors carefully:
+When your dataset contains molecules with different charges, build the `mol_idx` and `charge` tensors carefully:
 
 ```python
 import torch

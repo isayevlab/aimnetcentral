@@ -12,12 +12,12 @@ pip install "aimnet[train] @ git+https://github.com/isayevlab/aimnetcentral.git"
 
 ## Commands Overview
 
-| Command           | Purpose                                    | Typical Use           |
-| ----------------- | ------------------------------------------ | --------------------- |
-| `aimnet train`    | Train a model                              | Training from scratch |
-| `aimnet export`   | Export trained weights to inference format | After training        |
-| `aimnet convert`  | Convert legacy .jpt to new .pt format      | Migrating old models  |
-| `aimnet calc_sae` | Calculate self-atomic energies             | Before training       |
+| Command | Purpose | Typical Use |
+| --- | --- | --- |
+| `aimnet train` | Train a model | Training from scratch |
+| `aimnet export` | Export trained weights to inference format | After training |
+| `aimnet convert` | Convert legacy .jpt to new .pt format | Migrating old models |
+| `aimnet calc_sae` | Calculate self-atomic energies | Before training |
 
 ## aimnet train
 

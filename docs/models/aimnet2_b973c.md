@@ -1,11 +1,6 @@
 # AIMNet2-B97-3c
 
-!!! warning "Superseded by AIMNet2-2025"
-This model has been superseded by [AIMNet2-2025](aimnet2_2025.md), which
-provides improved intermolecular interaction accuracy with no regression
-for intramolecular chemistry. **Use `aimnet2_2025` for all new work.**
-The original `aimnet2_b973c` is retained only for reproducing previously
-published results.
+!!! warning "Superseded by AIMNet2-2025" This model has been superseded by [AIMNet2-2025](aimnet2_2025.md), which provides improved intermolecular interaction accuracy with no regression for intramolecular chemistry. **Use `aimnet2_2025` for all new work.** The original `aimnet2_b973c` is retained only for reproducing previously published results.
 
 ## Overview
 
@@ -28,24 +23,18 @@ AIMNet2-B97-3c is the **original B97-3c screening model** trained against B97-3c
 
 ### Limitations
 
-!!! warning "Lower reference accuracy"
-B97-3c is a GGA-level composite method. It is systematically less accurate than wB97M-D3 for barrier heights, reaction energies involving significant electron correlation changes, and non-covalent interaction energies. For higher accuracy, use [AIMNet2 (wB97M-D3)](aimnet2.md).
+!!! warning "Lower reference accuracy" B97-3c is a GGA-level composite method. It is systematically less accurate than wB97M-D3 for barrier heights, reaction energies involving significant electron correlation changes, and non-covalent interaction energies. For higher accuracy, use [AIMNet2 (wB97M-D3)](aimnet2.md).
 
-!!! warning "Barrier heights"
-GGA functionals tend to underestimate reaction barriers. If accurate transition state energies are important, prefer the wB97M-D3 model or use [AIMNet2-NSE](aimnet2nse.md) for open-shell transition states.
+!!! warning "Barrier heights" GGA functionals tend to underestimate reaction barriers. If accurate transition state energies are important, prefer the wB97M-D3 model or use [AIMNet2-NSE](aimnet2nse.md) for open-shell transition states.
 
-!!! warning "Same scope restrictions as AIMNet2"
-No transition metals, closed-shell only, molecular (gas-phase) training data. See the [AIMNet2 page](aimnet2.md) for the full list of limitations.
+!!! warning "Same scope restrictions as AIMNet2" No transition metals, closed-shell only, molecular (gas-phase) training data. See the [AIMNet2 page](aimnet2.md) for the full list of limitations.
 
 ## Typical Use Cases
 
 - **Reproducing published results** -- use when replicating calculations from papers that used `aimnet2_b973c`
 - **Cross-validation** -- compare B97-3c and wB97M-D3 predictions to gauge sensitivity to the reference method
 
-!!! tip "For new projects, use AIMNet2-2025"
-For high-throughput screening, conformer ranking, and any new B97-3c-level
-work, switch to [`aimnet2_2025`](aimnet2_2025.md) which provides strictly
-better accuracy for the same computational cost.
+!!! tip "For new projects, use AIMNet2-2025" For high-throughput screening, conformer ranking, and any new B97-3c-level work, switch to [`aimnet2_2025`](aimnet2_2025.md) which provides strictly better accuracy for the same computational cost.
 
 ## Quick Example
 

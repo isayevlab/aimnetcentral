@@ -15,9 +15,7 @@
 
 ## Step 1: Prepare the System
 
-Always start MD from an optimized structure. Running dynamics from a
-poorly relaxed geometry wastes equilibration time and can cause numerical
-instabilities from large initial forces.
+Always start MD from an optimized structure. Running dynamics from a poorly relaxed geometry wastes equilibration time and can cause numerical instabilities from large initial forces.
 
 ```python
 from ase import Atoms
@@ -53,23 +51,17 @@ opt.run(fmax=0.01)
 print(f"Optimized energy: {ethanol.get_potential_energy():.4f} eV")
 ```
 
-!!! note "What `compile_model=True` actually compiles"
-The `compile_model=True` flag wraps **only the neural network forward pass**
-with `torch.compile()`. The neighbor list construction, external Coulomb
-module, and external DFT-D3 module are **not** compiled. This means:
+!!! note "What `compile_model=True` actually compiles" The `compile_model=True` flag wraps **only the neural network forward pass** with `torch.compile()`. The neighbor list construction, external Coulomb module, and external DFT-D3 module are **not** compiled. This means:
 
     - The NN evaluation (the most expensive part) gets compiled and optimized
     - Neighbor lists are rebuilt every step as normal
     - External long-range corrections run uncompiled
 
-    The speedup is typically 1.5--3x for the overall step, depending on
-    system size and what fraction of time is spent in the NN.
+    The speedup is typically 1.5--3x for the overall step, depending on system size and what fraction of time is spent in the NN.
 
 ## Step 2: NVT Simulation with Langevin Thermostat
 
-NVT (constant number, volume, temperature) is the most common ensemble for
-studying molecular motion in vacuum or implicit solvent. ASE's Langevin
-thermostat couples the system to a heat bath with a friction term.
+NVT (constant number, volume, temperature) is the most common ensemble for studying molecular motion in vacuum or implicit solvent. ASE's Langevin thermostat couples the system to a heat bath with a friction term.
 
 ```python
 import time
@@ -127,23 +119,16 @@ print(f"\nCompleted 1000 steps in {wall_time:.1f} s "
 traj.close()
 ```
 
-!!! warning "First-step warmup"
-The very first MD step is significantly slower than subsequent steps because
-of two one-time costs:
+!!! warning "First-step warmup" The very first MD step is significantly slower than subsequent steps because of two one-time costs:
 
     1. **Warp kernel JIT compilation** (10--30 s): NVIDIA Warp compiles GPU
        kernels on first use. These are cached on disk for future sessions.
     2. **torch.compile warmup** (if `compile_model=True`): The first forward
-       pass through the compiled model triggers tracing and optimization.
-       This adds 5--30 s depending on model size.
+       pass through the compiled model triggers tracing and optimization. This adds 5--30 s depending on model size.
 
-    After the first step, typical step times for a 9-atom molecule on a modern
-    GPU are 1--5 ms. Do not include the first step in performance benchmarks.
+    After the first step, typical step times for a 9-atom molecule on a modern GPU are 1--5 ms. Do not include the first step in performance benchmarks.
 
-!!! tip "Timestep selection for ML potentials"
-ML potentials like AIMNet2 have smooth, continuous energy surfaces, so they
-tolerate slightly larger timesteps than ab initio MD. However, the safe
-range depends on the dynamics:
+!!! tip "Timestep selection for ML potentials" ML potentials like AIMNet2 have smooth, continuous energy surfaces, so they tolerate slightly larger timesteps than ab initio MD. However, the safe range depends on the dynamics:
 
     - **0.5 fs**: Conservative. Good starting point for any system.
     - **1.0 fs**: Suitable for equilibrium sampling of organic molecules when
@@ -151,18 +136,13 @@ range depends on the dynamics:
     - **> 1.0 fs**: Not recommended without careful validation. ML potentials
       do not have the constraint machinery of classical force fields.
 
-    When in doubt, run a short trajectory at 0.5 fs and check energy
-    conservation in NVE (see below).
+    When in doubt, run a short trajectory at 0.5 fs and check energy conservation in NVE (see below).
 
 ## Step 3: NPT Simulation with Berendsen Barostat
 
-NPT (constant pressure) is needed for condensed-phase simulations where the
-volume should fluctuate. ASE provides the `NPT` integrator for this purpose.
+NPT (constant pressure) is needed for condensed-phase simulations where the volume should fluctuate. ASE provides the `NPT` integrator for this purpose.
 
-!!! note "NPT requires periodic boundary conditions"
-The Berendsen barostat adjusts the unit cell dimensions, which only makes
-sense for periodic systems. For an isolated molecule in vacuum, use NVT
-instead.
+!!! note "NPT requires periodic boundary conditions" The Berendsen barostat adjusts the unit cell dimensions, which only makes sense for periodic systems. For an isolated molecule in vacuum, use NVT instead.
 
 ```python
 from ase.md.npt import NPT as NPTIntegrator
@@ -201,23 +181,18 @@ from ase import units
 # traj.close()
 ```
 
-!!! tip "Equilibration strategy for condensed-phase systems"
-For reliable results, follow a two-phase protocol:
+!!! tip "Equilibration strategy for condensed-phase systems" For reliable results, follow a two-phase protocol:
 
     1. **NVT equilibration** (1--5 ps): Let the temperature stabilize before
-       coupling the barostat. This prevents large pressure spikes from
-       an initial geometry that is far from the equilibrium density.
+       coupling the barostat. This prevents large pressure spikes from an initial geometry that is far from the equilibrium density.
     2. **NPT production** (10+ ps): Collect data for analysis after the
        volume has stabilized.
 
-    Monitor both temperature and volume/density over time to verify
-    equilibration before collecting production data.
+    Monitor both temperature and volume/density over time to verify equilibration before collecting production data.
 
 ## Step 4: Validate Energy Conservation (NVE Check)
 
-Before trusting production results, verify that your timestep conserves energy
-in an NVE (microcanonical) ensemble. Energy drift should be small compared to
-the thermal energy fluctuations.
+Before trusting production results, verify that your timestep conserves energy in an NVE (microcanonical) ensemble. Energy drift should be small compared to the thermal energy fluctuations.
 
 ```python
 from ase.md.verlet import VelocityVerlet
@@ -250,14 +225,11 @@ print(f"Energy fluctuation (std): {fluctuation * 1000:.2f} meV")
 print(f"Drift/fluctuation ratio: {abs(drift_per_step) / fluctuation:.4f}")
 ```
 
-A drift-to-fluctuation ratio below 0.01 indicates good energy conservation.
-If the drift is too large, reduce the timestep.
+A drift-to-fluctuation ratio below 0.01 indicates good energy conservation. If the drift is too large, reduce the timestep.
 
 ## Step 5: Trajectory Analysis -- Radial Distribution Function
 
-The radial distribution function (RDF) characterizes the average structure of
-a system by measuring how atom density varies as a function of distance from
-a reference atom. ASE provides tools for computing the RDF from trajectories.
+The radial distribution function (RDF) characterizes the average structure of a system by measuring how atom density varies as a function of distance from a reference atom. ASE provides tools for computing the RDF from trajectories.
 
 ```python
 import numpy as np
@@ -295,10 +267,7 @@ print(f"  Mean distance: {all_distances.mean():.2f} A")
 # rdf = ana.get_rdf(rmax=10.0, nbins=200, elements=("O", "H"))
 ```
 
-!!! tip "For periodic systems"
-The simplified distance histogram above works for isolated molecules. For
-proper RDF analysis of periodic (condensed-phase) systems, use the ASE
-`Analysis` class which correctly handles periodic images:
+!!! tip "For periodic systems" The simplified distance histogram above works for isolated molecules. For proper RDF analysis of periodic (condensed-phase) systems, use the ASE `Analysis` class which correctly handles periodic images:
 
     ```python
     from ase.geometry.analysis import Analysis
@@ -335,9 +304,7 @@ print(f"Throughput: {ns_per_day:.1f} ns/day")
 
 ### Compilation Modes
 
-The default `torch.compile()` behavior is a good starting point. For lower
-per-step latency (at the cost of longer initial compilation), try
-`reduce-overhead` mode:
+The default `torch.compile()` behavior is a good starting point. For lower per-step latency (at the cost of longer initial compilation), try `reduce-overhead` mode:
 
 ```python
 base_calc = AIMNet2Calculator(
@@ -348,28 +315,23 @@ base_calc = AIMNet2Calculator(
 calc = AIMNet2ASE(base_calc)
 ```
 
-| Compile mode         | Warmup time | Per-step time  | Best for                  |
-| -------------------- | ----------- | -------------- | ------------------------- |
-| `False` (no compile) | None        | Baseline       | Single-point calculations |
-| `True` (default)     | 5--30 s     | ~0.7x baseline | Most MD simulations       |
-| `reduce-overhead`    | 10--60 s    | ~0.5x baseline | Long production runs      |
+| Compile mode | Warmup time | Per-step time | Best for |
+| --- | --- | --- | --- |
+| `False` (no compile) | None | Baseline | Single-point calculations |
+| `True` (default) | 5--30 s | ~0.7x baseline | Most MD simulations |
+| `reduce-overhead` | 10--60 s | ~0.5x baseline | Long production runs |
 
-!!! warning "Compilation and system size changes"
-`torch.compile` traces the computation graph for a specific tensor shape.
-If the system size changes (e.g., atoms are added or removed), the model
-will be recompiled. For MD of a fixed system this is not an issue, but
-avoid using `compile_model=True` for workflows that process molecules of
-varying sizes.
+!!! warning "Compilation and system size changes" `torch.compile` traces the computation graph for a specific tensor shape. If the system size changes (e.g., atoms are added or removed), the model will be recompiled. For MD of a fixed system this is not an issue, but avoid using `compile_model=True` for workflows that process molecules of varying sizes.
 
 ## Practical Recommendations
 
 ### Timestep Guidelines
 
-| System type                | Recommended timestep | Notes                              |
-| -------------------------- | -------------------- | ---------------------------------- |
-| Small organic (< 50 atoms) | 0.5--1.0 fs          | Validate with NVE check            |
-| Large biomolecule          | 0.5 fs               | Hydrogen vibrations limit timestep |
-| Condensed phase            | 0.5 fs               | Start conservative, validate       |
+| System type | Recommended timestep | Notes |
+| --- | --- | --- |
+| Small organic (< 50 atoms) | 0.5--1.0 fs | Validate with NVE check |
+| Large biomolecule | 0.5 fs | Hydrogen vibrations limit timestep |
+| Condensed phase | 0.5 fs | Start conservative, validate |
 
 ### Thermostat Parameters
 
@@ -386,8 +348,7 @@ varying sizes.
 2. Initialize velocities with `MaxwellBoltzmannDistribution`
 3. Run NVT for 1--5 ps to stabilize temperature
 4. (If NPT) Switch to NPT for another 1--5 ps to stabilize volume
-5. Verify equilibration by checking that temperature and energy fluctuate
-   around stable mean values
+5. Verify equilibration by checking that temperature and energy fluctuate around stable mean values
 6. Begin production run and collect data
 
 ## What's Next
