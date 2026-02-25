@@ -1,8 +1,4 @@
-[![Release](https://img.shields.io/github/v/release/isayevlab/aimnetcentral)](https://github.com/isayevlab/aimnetcentral/releases)
-[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](https://www.python.org/)
-[![Build status](https://img.shields.io/github/actions/workflow/status/isayevlab/aimnetcentral/main.yml?branch=main)](https://github.com/isayevlab/aimnetcentral/actions/workflows/main.yml?query=branch%3Amain)
-[![codecov](https://codecov.io/gh/isayevlab/aimnetcentral/branch/main/graph/badge.svg)](https://codecov.io/gh/isayevlab/aimnetcentral)
-[![License](https://img.shields.io/github/license/isayevlab/aimnetcentral)](https://github.com/isayevlab/aimnetcentral/blob/main/LICENSE)
+[![Release](https://img.shields.io/github/v/release/isayevlab/aimnetcentral)](https://github.com/isayevlab/aimnetcentral/releases) [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](https://www.python.org/) [![Build status](https://img.shields.io/github/actions/workflow/status/isayevlab/aimnetcentral/main.yml?branch=main)](https://github.com/isayevlab/aimnetcentral/actions/workflows/main.yml?query=branch%3Amain) [![codecov](https://codecov.io/gh/isayevlab/aimnetcentral/branch/main/graph/badge.svg)](https://codecov.io/gh/isayevlab/aimnetcentral) [![License](https://img.shields.io/github/license/isayevlab/aimnetcentral)](https://github.com/isayevlab/aimnetcentral/blob/main/LICENSE)
 
 - **Github repository**: <https://github.com/isayevlab/aimnetcentral/>
 - **Documentation** <https://isayevlab.github.io/aimnetcentral/>
@@ -36,13 +32,13 @@ pip install torch --index-url https://download.pytorch.org/whl/cu124
 
 ## Available Models
 
-| Model           | Elements                                      | Description                                    |
-| --------------- | --------------------------------------------- | ---------------------------------------------- |
-| `aimnet2`       | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | wB97M-D3 (default)                             |
-| `aimnet2_2025`  | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c + improved intermolecular (recommended) |
-| `aimnet2_b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c (superseded by aimnet2_2025)            |
-| `aimnet2nse`    | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | Open-shell / radical chemistry                 |
-| `aimnet2pd`     | H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I | Pd systems with CPCM implicit solvation (THF)  |
+| Model | Elements | Description |
+| --- | --- | --- |
+| `aimnet2` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | wB97M-D3 (default) |
+| `aimnet2_2025` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c + improved intermolecular (recommended) |
+| `aimnet2_b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c (superseded by aimnet2_2025) |
+| `aimnet2nse` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | Open-shell / radical chemistry |
+| `aimnet2pd` | H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I | Pd systems with CPCM implicit solvation (THF) |
 
 _Each model has ensemble members numbered 0–3 (e.g., `aimnet2_0` … `aimnet2_3`; `aimnet2pd` uses `aimnet2-pd_0` … `aimnet2-pd_3`). Ensemble averaging recommended for production use._
 

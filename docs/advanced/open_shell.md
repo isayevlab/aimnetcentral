@@ -33,6 +33,7 @@ Common symptoms of using the wrong model:
 AIMNet2-NSE extends the standard architecture with **two charge channels** (`num_charge_channels=2`). These represent alpha and beta electron populations separately:
 
 1. **Preprocessing**: The molecular charge and multiplicity are decomposed into alpha and beta channel inputs:
+
    - Alpha channel charge: `(charge/2) + (mult-1)/2`
    - Beta channel charge: `(charge/2) - (mult-1)/2`
 

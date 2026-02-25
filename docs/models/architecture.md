@@ -84,6 +84,7 @@ Given atomic features `a` (shape `(N, nchannel)` or `(N, nchannel, nshifts)` for
    ```
 
 3. **Split scalar and vector parts:**
+
    - `avf_s` -- Scalar part (d=0), flattened to `(nchannel * nshifts_s,)`.
    - `avf_v` -- Vector part (d=1,2,3), processed through learned linear combinations via the `agh` parameter tensor, then squared and summed over the spatial dimension to produce rotationally invariant features. Output: `(nchannel * ncomb_v,)`.
 
