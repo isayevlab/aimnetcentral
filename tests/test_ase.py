@@ -323,3 +323,53 @@ class TestSpinCharges:
         assert sc.shape == (2,)
         assert np.isfinite(sc).all()
         assert abs(sc.sum() - 1.0) < 1e-3
+
+
+class TestAtomsInfoChargeSpin:
+    def test_atoms_info_updates_cached_charge_and_spin_and_triggers_recalc(self):
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase import Atoms
+
+        from aimnet.calculators import AIMNet2ASE
+
+        atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]])
+        atoms.calc = AIMNet2ASE(NSE_MODEL, charge=0, mult=1)
+
+        atoms.info["charge"] = 1
+        atoms.info["spin"] = 2
+        atoms.get_potential_energy()
+
+        assert atoms.calc.charge == 1
+        assert atoms.calc.mult == 2
+        assert float(atoms.calc._t_charge) == pytest.approx(1.0)
+        assert float(atoms.calc._t_mult) == pytest.approx(2.0)
+
+        # Changing only atoms.info should invalidate ASE cache and update inputs.
+        atoms.info["charge"] = -1
+        atoms.info["spin"] = 1
+        assert "info" in atoms.calc.check_state(atoms)
+        atoms.get_potential_energy()
+
+        assert atoms.calc.charge == -1
+        assert atoms.calc.mult == 1
+        assert float(atoms.calc._t_charge) == pytest.approx(-1.0)
+        assert float(atoms.calc._t_mult) == pytest.approx(1.0)
+
+    def test_atoms_info_none_uses_cached_charge_and_spin(self):
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase import Atoms
+
+        from aimnet.calculators import AIMNet2ASE
+
+        atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]])
+        atoms.info["charge"] = None
+        atoms.info["spin"] = None
+        atoms.calc = AIMNet2ASE(NSE_MODEL, charge=1, mult=2)
+
+        atoms.get_potential_energy()
+
+        assert atoms.calc.charge == 1
+        assert atoms.calc.mult == 2
+        assert float(atoms.calc._t_charge) == pytest.approx(1.0)
+        assert float(atoms.calc._t_mult) == pytest.approx(2.0)
+        assert abs(atoms.calc.get_spin_charges().sum() - 1.0) < 1e-3

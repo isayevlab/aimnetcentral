@@ -50,6 +50,12 @@ class AIMNet2ASE(Calculator):
         self.reset()
         self.atoms = atoms
 
+    def check_state(self, atoms, tol=1e-15):
+        state = super().check_state(atoms, tol=tol)
+        if (not state) and getattr(self, "atoms", None) is not None and self.atoms.info != atoms.info:
+            state.append("info")
+        return state
+
     def set_charge(self, charge):
         self.charge = charge
         self._t_charge = None
@@ -59,6 +65,23 @@ class AIMNet2ASE(Calculator):
         self.mult = mult
         self._t_mult = None
         self.update_tensors()
+
+    def _update_charge_spin_from_info(self):
+        atoms = getattr(self, "atoms", None)
+        if atoms is None:
+            return
+        info = getattr(atoms, "info", {})
+
+        charge = info.get("charge")
+        if charge is not None and charge != self.charge:
+            self.charge = charge
+            self._t_charge = None
+
+        if self.base_calc.is_nse:
+            spin = info.get("spin")
+            if spin is not None and spin != self.mult:
+                self.mult = spin
+                self._t_mult = None
 
     def update_tensors(self):
         if self._t_numbers is None and getattr(self, "atoms", None):
@@ -82,6 +105,7 @@ class AIMNet2ASE(Calculator):
         if properties is None:
             properties = ["energy"]
         super().calculate(atoms, properties, system_changes)
+        self._update_charge_spin_from_info()
         self.update_tensors()
 
         cell = self.atoms.cell.array if self.atoms.cell is not None and self.atoms.pbc.any() else None
