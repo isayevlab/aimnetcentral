@@ -323,3 +323,89 @@ class TestSpinCharges:
         assert sc.shape == (2,)
         assert np.isfinite(sc).all()
         assert abs(sc.sum() - 1.0) < 1e-3
+
+
+class TestAtomsInfoChargeSpin:
+    """Tests for charge/spin multiplicity in Atoms.info."""
+
+    def test_atoms_info_updates_charge_and_spin_and_triggers_recalc(self):
+        """Changing info['charge'] or info['spin'] must invalidate ASE cache and recalculate."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase import Atoms
+
+        from aimnet.calculators import AIMNet2ASE
+
+        atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]])
+        atoms.calc = AIMNet2ASE(NSE_MODEL, charge=0, mult=1)
+
+        # Initial calculation
+        atoms.info["charge"] = 1
+        atoms.info["spin"] = 2
+        e1 = atoms.get_potential_energy()
+
+        assert atoms.calc.charge == 1
+        assert atoms.calc.mult == 2
+        assert float(atoms.calc._t_charge) == pytest.approx(1.0)
+        assert float(atoms.calc._t_mult) == pytest.approx(2.0)
+
+        # Invalidate cache by changing only atoms.info in-place
+        atoms.info["charge"] = -1
+        atoms.info["mult"] = 1  # Using 'mult' key also works
+        assert "info" in atoms.calc.check_state(atoms)
+
+        e2 = atoms.get_potential_energy()
+        assert e2 != e1
+
+        assert atoms.calc.charge == -1
+        assert atoms.calc.mult == 1
+        assert float(atoms.calc._t_charge) == pytest.approx(-1.0)
+        assert float(atoms.calc._t_mult) == pytest.approx(1.0)
+
+    def test_atoms_info_none_uses_cached_charge_and_spin(self):
+        """Null values in info must fall back to the calculator's current state."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase import Atoms
+
+        from aimnet.calculators import AIMNet2ASE
+
+        atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]])
+        atoms.info["charge"] = None
+        atoms.info["spin"] = None
+        atoms.calc = AIMNet2ASE(NSE_MODEL, charge=1, mult=2)
+
+        atoms.get_potential_energy()
+
+        assert atoms.calc.charge == 1
+        assert atoms.calc.mult == 2
+        assert float(atoms.calc._t_charge) == pytest.approx(1.0)
+        assert float(atoms.calc._t_mult) == pytest.approx(2.0)
+        assert abs(atoms.calc.get_spin_charges().sum() - 1.0) < 1e-3
+
+    def test_robustness_with_tensors_in_info(self):
+        """Dictionary comparison must not crash when info contains complex types like Tensors or Arrays."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        import torch
+        from ase import Atoms
+
+        from aimnet.calculators import AIMNet2ASE
+
+        atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]])
+        # Adding a large tensor to info would cause dictionary comparison to fail in Python
+        atoms.info["data"] = torch.randn(10, 10)
+        atoms.calc = AIMNet2ASE(NSE_MODEL)
+
+        # First calculation (must not crash)
+        atoms.get_potential_energy()
+
+        # Update unrelated key in info
+        atoms.info["step"] = 1
+        # Should NOT trigger recalculation as charge/mult did not change
+        assert "info" not in atoms.calc.check_state(atoms)
+
+        # Update charge in info
+        atoms.info["charge"] = 1.0
+        # MUST trigger recalculation
+        assert "info" in atoms.calc.check_state(atoms)
+        atoms.get_potential_energy()
+
+        assert atoms.calc.charge == 1.0

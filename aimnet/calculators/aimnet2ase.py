@@ -50,6 +50,25 @@ class AIMNet2ASE(Calculator):
         self.reset()
         self.atoms = atoms
 
+    def check_state(self, atoms, tol=1e-15):
+        state = super().check_state(atoms, tol=tol)
+        if (not state) and getattr(self, "atoms", None) is not None:
+            # Check for specific keys in info that affect the calculation
+            old_info = getattr(self.atoms, "info", {})
+            new_info = getattr(atoms, "info", {})
+
+            # Check charge
+            if old_info.get("charge") != new_info.get("charge"):
+                state.append("info")
+
+            # Check spin/multiplicity (NSE models only)
+            elif self.base_calc.is_nse:
+                old_spin = old_info.get("spin", old_info.get("mult"))
+                new_spin = new_info.get("spin", new_info.get("mult"))
+                if old_spin != new_spin:
+                    state.append("info")
+        return state
+
     def set_charge(self, charge):
         self.charge = charge
         self._t_charge = None
@@ -59,6 +78,28 @@ class AIMNet2ASE(Calculator):
         self.mult = mult
         self._t_mult = None
         self.update_tensors()
+
+    def _update_charge_spin_from_info(self):
+        atoms = getattr(self, "atoms", None)
+        if atoms is None:
+            return
+        info = getattr(atoms, "info", {})
+
+        # Order of precedence for charge:
+        # 1. atoms.info['charge']
+        # 2. calculator.charge (passed to constructor or set_charge)
+        charge = info.get("charge")
+        if charge is not None and charge != self.charge:
+            self.charge = charge
+            self._t_charge = None
+
+        if self.base_calc.is_nse:
+            # Support both "mult" (AIMNet2 style) and "spin" (MACE style)
+            # Both represent multiplicity (2S+1)
+            mult = info.get("mult", info.get("spin"))
+            if mult is not None and mult != self.mult:
+                self.mult = mult
+                self._t_mult = None
 
     def update_tensors(self):
         if self._t_numbers is None and getattr(self, "atoms", None):
@@ -82,6 +123,7 @@ class AIMNet2ASE(Calculator):
         if properties is None:
             properties = ["energy"]
         super().calculate(atoms, properties, system_changes)
+        self._update_charge_spin_from_info()
         self.update_tensors()
 
         cell = self.atoms.cell.array if self.atoms.cell is not None and self.atoms.pbc.any() else None
