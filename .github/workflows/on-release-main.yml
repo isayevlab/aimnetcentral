@@ -35,6 +35,8 @@ jobs:
 
             - name: Set up the environment
               uses: ./.github/actions/setup-uv-env
+              with:
+                  groups: "dev,docs"
 
             - name: Deploy documentation
               run: uv run mkdocs gh-deploy --force
