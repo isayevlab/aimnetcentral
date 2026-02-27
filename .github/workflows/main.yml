@@ -152,7 +152,15 @@ jobs:
 
     deploy-docs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        needs: [quality, tests-core, tests-ase, tests-train, tests-pysis, check-docs]
+        needs:
+            [
+                quality,
+                tests-core,
+                tests-ase,
+                tests-train,
+                tests-pysis,
+                check-docs,
+            ]
         runs-on: ubuntu-latest
         steps:
             - name: Check out
