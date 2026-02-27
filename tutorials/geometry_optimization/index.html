@@ -1,0 +1,1999 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="AIMNet Machine Learned Interatomic Potential">
+      
+      
+        <meta name="author" content="Roman Zubatyuk">
+      
+      
+        <link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/tutorials/geometry_optimization/">
+      
+      
+        <link rel="prev" href="../single_point/">
+      
+      
+        <link rel="next" href="../molecular_dynamics/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+    
+    
+      
+        <title>Geometry Optimization - AIMNetCentral</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#geometry-optimization" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="AIMNetCentral" class="md-header__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AIMNetCentral
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Geometry Optimization
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/isayevlab/aimnetcentral" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    isayevlab/aimnetcentral
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="AIMNetCentral" class="md-nav__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    AIMNetCentral
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/isayevlab/aimnetcentral" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    isayevlab/aimnetcentral
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Models
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Models
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Selection Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/aimnet2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AIMNet2 (wB97M-D3)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/aimnet2_b973c/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AIMNet2-B97-3c
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/aimnet2_2025/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AIMNet2-2025
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/aimnet2nse/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AIMNet2-NSE
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/aimnet2pd/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AIMNet2-Pd
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../single_point/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    First Calculation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geometry Optimization
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geometry Optimization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-youll-learn" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What You'll Learn
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-1-set-up-the-calculator-and-molecule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Set Up the Calculator and Molecule
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-2-optimize-a-drug-molecule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Optimize a Drug Molecule
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-3-monitor-convergence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Monitor Convergence
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-4-verify-the-minimum-with-frequency-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Verify the Minimum with Frequency Analysis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-5-thermochemistry-from-frequencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5: Thermochemistry from Frequencies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-6-scaling-up-larger-molecules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6: Scaling Up -- Larger Molecules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#whats-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What's Next
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../molecular_dynamics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Molecular Dynamics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../periodic_systems/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Periodic Systems
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../batch_processing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance Tuning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Advanced Use Cases
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Advanced Use Cases
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/open_shell/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Open-Shell Chemistry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/conformer_search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conformer Search
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/reaction_paths/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reaction Paths & TS
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/intermolecular_interactions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Non-Covalent Interactions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/transition_metal_catalysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pd Catalysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/charged_systems/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Charged Systems
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../calculator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calculator API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../long_range/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Long-Range Methods
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../model_format/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model Format
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../train/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Training
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/calculators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calculators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/modules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modules
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-youll-learn" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What You'll Learn
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-1-set-up-the-calculator-and-molecule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Set Up the Calculator and Molecule
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-2-optimize-a-drug-molecule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Optimize a Drug Molecule
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-3-monitor-convergence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Monitor Convergence
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-4-verify-the-minimum-with-frequency-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Verify the Minimum with Frequency Analysis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-5-thermochemistry-from-frequencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5: Thermochemistry from Frequencies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-6-scaling-up-larger-molecules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6: Scaling Up -- Larger Molecules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#whats-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What's Next
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="geometry-optimization">Geometry Optimization<a class="headerlink" href="#geometry-optimization" title="Permanent link">&para;</a></h1>
+<h2 id="what-youll-learn">What You'll Learn<a class="headerlink" href="#what-youll-learn" title="Permanent link">&para;</a></h2>
+<ul>
+<li>How to relax molecular structures to their energy minimum using ASE and AIMNet2</li>
+<li>How to monitor optimization convergence and inspect trajectories</li>
+<li>How to compute vibrational frequencies from the Hessian to confirm a true minimum</li>
+<li>How to obtain thermochemical quantities (enthalpy, Gibbs free energy) from frequency data</li>
+</ul>
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<ul>
+<li>AIMNet2 installed with ASE support: <code>pip install "aimnet[ase]"</code></li>
+<li>Familiarity with <a href="../single_point/">Your First Calculation</a> (loading models, interpreting output)</li>
+<li>A CUDA-capable GPU (recommended; CPU works but is slower)</li>
+</ul>
+<h2 id="step-1-set-up-the-calculator-and-molecule">Step 1: Set Up the Calculator and Molecule<a class="headerlink" href="#step-1-set-up-the-calculator-and-molecule" title="Permanent link">&para;</a></h2>
+<p>The <code>AIMNet2ASE</code> class wraps <code>AIMNet2Calculator</code> for use with ASE's optimization and dynamics infrastructure. It translates between ASE's <code>Atoms</code> object and the tensor-based calculator interface.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase</span><span class="w"> </span><span class="kn">import</span> <span class="n">Atoms</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ase.optimize</span><span class="w"> </span><span class="kn">import</span> <span class="n">BFGS</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2ASE</span>
+
+<span class="c1"># Create the ASE calculator wrapper.</span>
+<span class="c1"># This loads the default aimnet2 model (wB97M-D3 functional).</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2ASE</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>
+
+<span class="c1"># Build a water molecule to verify the setup</span>
+<span class="n">water</span> <span class="o">=</span> <span class="n">Atoms</span><span class="p">(</span><span class="s2">&quot;OH2&quot;</span><span class="p">,</span> <span class="n">positions</span><span class="o">=</span><span class="p">[</span>
+    <span class="p">[</span><span class="mf">0.000</span><span class="p">,</span>  <span class="mf">0.000</span><span class="p">,</span>  <span class="mf">0.119</span><span class="p">],</span>
+    <span class="p">[</span><span class="mf">0.000</span><span class="p">,</span>  <span class="mf">0.763</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.477</span><span class="p">],</span>
+    <span class="p">[</span><span class="mf">0.000</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.763</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.477</span><span class="p">],</span>
+<span class="p">])</span>
+<span class="n">water</span><span class="o">.</span><span class="n">calc</span> <span class="o">=</span> <span class="n">calc</span>
+
+<span class="c1"># Check that the calculator works</span>
+<span class="n">energy</span> <span class="o">=</span> <span class="n">water</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span>
+<span class="n">forces</span> <span class="o">=</span> <span class="n">water</span><span class="o">.</span><span class="n">get_forces</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Initial energy: </span><span class="si">{</span><span class="n">energy</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Max force: </span><span class="si">{</span><span class="nb">abs</span><span class="p">(</span><span class="n">forces</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> eV/A&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>!!! tip "Accessing the underlying calculator" The ASE wrapper stores the <code>AIMNet2Calculator</code> as <code>calc.base_calc</code>. You can use this to configure model settings that are not exposed through the ASE interface:</p>
+<pre><code>```python
+# Switch long-range Coulomb method (for periodic systems)
+calc.base_calc.set_lrcoulomb_method("dsf")
+
+# Check what device the model is running on
+print(calc.base_calc.device)
+```
+</code></pre>
+<h2 id="step-2-optimize-a-drug-molecule">Step 2: Optimize a Drug Molecule<a class="headerlink" href="#step-2-optimize-a-drug-molecule" title="Permanent link">&para;</a></h2>
+<p>Let's optimize aspirin (C9H8O4, 21 atoms) -- a small but realistic drug molecule. In practice, you would load coordinates from a file. Here we build the molecule directly to keep the tutorial self-contained.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase</span><span class="w"> </span><span class="kn">import</span> <span class="n">Atoms</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ase.optimize</span><span class="w"> </span><span class="kn">import</span> <span class="n">BFGS</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ase.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">write</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2ASE</span>
+
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2ASE</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>
+
+<span class="c1"># Aspirin from an approximate (not optimized) geometry.</span>
+<span class="c1"># In practice you would load from a file: atoms = read(&quot;aspirin.xyz&quot;)</span>
+<span class="n">aspirin</span> <span class="o">=</span> <span class="n">Atoms</span><span class="p">(</span>
+    <span class="n">numbers</span><span class="o">=</span><span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+    <span class="n">positions</span><span class="o">=</span><span class="p">[</span>
+        <span class="p">[</span><span class="o">-</span><span class="mf">2.326</span><span class="p">,</span>  <span class="mf">0.489</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.038</span><span class="p">],</span> <span class="p">[</span><span class="o">-</span><span class="mf">1.726</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.754</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.153</span><span class="p">],</span>
+        <span class="p">[</span><span class="o">-</span><span class="mf">0.338</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.819</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.128</span><span class="p">],</span> <span class="p">[</span> <span class="mf">0.441</span><span class="p">,</span>  <span class="mf">0.318</span><span class="p">,</span>  <span class="mf">0.011</span><span class="p">],</span>
+        <span class="p">[</span><span class="o">-</span><span class="mf">0.153</span><span class="p">,</span>  <span class="mf">1.562</span><span class="p">,</span>  <span class="mf">0.127</span><span class="p">],</span> <span class="p">[</span><span class="o">-</span><span class="mf">1.538</span><span class="p">,</span>  <span class="mf">1.633</span><span class="p">,</span>  <span class="mf">0.100</span><span class="p">],</span>
+        <span class="p">[</span><span class="o">-</span><span class="mf">2.304</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.926</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.300</span><span class="p">],</span> <span class="p">[</span><span class="o">-</span><span class="mf">3.788</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.827</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.317</span><span class="p">],</span>
+        <span class="p">[</span><span class="o">-</span><span class="mf">1.812</span><span class="p">,</span> <span class="o">-</span><span class="mf">3.028</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.402</span><span class="p">],</span> <span class="p">[</span> <span class="mf">1.869</span><span class="p">,</span>  <span class="mf">0.211</span><span class="p">,</span>  <span class="mf">0.041</span><span class="p">],</span>
+        <span class="p">[</span> <span class="mf">2.488</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.894</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.315</span><span class="p">],</span> <span class="p">[</span> <span class="mf">2.530</span><span class="p">,</span>  <span class="mf">1.267</span><span class="p">,</span>  <span class="mf">0.468</span><span class="p">],</span>
+        <span class="p">[</span><span class="o">-</span><span class="mf">4.421</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.669</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.174</span><span class="p">],</span> <span class="p">[</span><span class="o">-</span><span class="mf">3.846</span><span class="p">,</span>  <span class="mf">0.406</span><span class="p">,</span>  <span class="mf">0.002</span><span class="p">],</span>
+        <span class="p">[</span><span class="o">-</span><span class="mf">5.883</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.823</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.211</span><span class="p">],</span> <span class="p">[</span><span class="o">-</span><span class="mf">3.393</span><span class="p">,</span>  <span class="mf">0.519</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.059</span><span class="p">],</span>
+        <span class="p">[</span> <span class="mf">0.111</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.796</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.219</span><span class="p">],</span> <span class="p">[</span> <span class="mf">0.445</span><span class="p">,</span>  <span class="mf">2.463</span><span class="p">,</span>  <span class="mf">0.233</span><span class="p">],</span>
+        <span class="p">[</span><span class="o">-</span><span class="mf">1.992</span><span class="p">,</span>  <span class="mf">2.612</span><span class="p">,</span>  <span class="mf">0.188</span><span class="p">],</span> <span class="p">[</span><span class="o">-</span><span class="mf">6.144</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.863</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.395</span><span class="p">],</span>
+        <span class="p">[</span><span class="o">-</span><span class="mf">6.350</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.163</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.947</span><span class="p">],</span>
+    <span class="p">],</span>
+<span class="p">)</span>
+<span class="n">aspirin</span><span class="o">.</span><span class="n">calc</span> <span class="o">=</span> <span class="n">calc</span>
+
+<span class="c1"># Run BFGS optimization, saving trajectory for inspection</span>
+<span class="n">opt</span> <span class="o">=</span> <span class="n">BFGS</span><span class="p">(</span><span class="n">aspirin</span><span class="p">,</span> <span class="n">trajectory</span><span class="o">=</span><span class="s2">&quot;aspirin_opt.traj&quot;</span><span class="p">)</span>
+<span class="n">opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">fmax</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>  <span class="c1"># Converge until max force &lt; 0.01 eV/A</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Optimized energy: </span><span class="si">{</span><span class="n">aspirin</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Steps taken: </span><span class="si">{</span><span class="n">opt</span><span class="o">.</span><span class="n">nsteps</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Save the optimized structure</span>
+<span class="n">write</span><span class="p">(</span><span class="s2">&quot;aspirin_optimized.xyz&quot;</span><span class="p">,</span> <span class="n">aspirin</span><span class="p">)</span>
+</code></pre></div>
+<p>The <code>fmax</code> parameter controls the convergence criterion: the optimization stops when the maximum atomic force magnitude (i.e., the largest per-atom force norm sqrt(fx^2+fy^2+fz^2)) drops below this threshold. A value of 0.01 eV/A is a reasonable default for most applications.</p>
+<p>!!! note "Why BFGS?" BFGS (Broyden--Fletcher--Goldfarb--Shanno) builds an approximate Hessian from force evaluations, giving superlinear convergence near the minimum. ASE also provides <code>LBFGS</code> (lower memory for large systems) and <code>FIRE</code> (robust for far-from-minimum starting geometries). For most molecules under ~200 atoms, <code>BFGS</code> is the best choice.</p>
+<h2 id="step-3-monitor-convergence">Step 3: Monitor Convergence<a class="headerlink" href="#step-3-monitor-convergence" title="Permanent link">&para;</a></h2>
+<p>Inspecting the optimization trajectory helps verify that the optimization converged smoothly and didn't get stuck in a transition state or saddle point.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">read</span>
+
+<span class="c1"># Read all frames from the trajectory</span>
+<span class="n">traj</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="s2">&quot;aspirin_opt.traj&quot;</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="s2">&quot;:&quot;</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;Step&#39;</span><span class="si">:</span><span class="s2">&gt;4</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="s1">&#39;Energy (eV)&#39;</span><span class="si">:</span><span class="s2">&gt;14</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="s1">&#39;Max Force (eV/A)&#39;</span><span class="si">:</span><span class="s2">&gt;16</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-&quot;</span> <span class="o">*</span> <span class="mi">40</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">frame</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">traj</span><span class="p">):</span>
+    <span class="n">e</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span>
+    <span class="n">f_max</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">frame</span><span class="o">.</span><span class="n">get_forces</span><span class="p">())</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s2">4d</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="n">e</span><span class="si">:</span><span class="s2">14.6f</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="n">f_max</span><span class="si">:</span><span class="s2">16.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>You should see the energy decrease monotonically (or nearly so) and the maximum force drop toward your <code>fmax</code> threshold.</p>
+<p>!!! warning "Convergence issues" If the optimization oscillates or takes more than ~100 steps for a molecule under 50 atoms, check:</p>
+<pre><code>1. **Starting geometry**: Very distorted structures may need `FIRE` instead
+   of `BFGS` for the first phase.
+2. **Charge**: An incorrect net charge leads to wrong forces. Verify with
+   `calc.charge`.
+3. **Multiplicity**: For open-shell systems, use `AIMNet2ASE("aimnet2nse")`
+   and set `mult` appropriately.
+</code></pre>
+<h2 id="step-4-verify-the-minimum-with-frequency-analysis">Step 4: Verify the Minimum with Frequency Analysis<a class="headerlink" href="#step-4-verify-the-minimum-with-frequency-analysis" title="Permanent link">&para;</a></h2>
+<p>A structure is a true energy minimum only if all vibrational frequencies are real (positive). Imaginary frequencies indicate a saddle point or transition state. We compute frequencies from the Hessian matrix.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ase.units</span><span class="w"> </span><span class="kn">import</span> <span class="n">invcm</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
+
+<span class="c1"># Use the base calculator directly for the Hessian calculation.</span>
+<span class="c1"># The ASE wrapper does not expose hessian=True, so we call the</span>
+<span class="c1"># underlying calculator with the optimized coordinates.</span>
+<span class="n">base_calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>
+
+<span class="c1"># Get optimized coordinates from the ASE Atoms object</span>
+<span class="n">coords</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">aspirin</span><span class="o">.</span><span class="n">get_positions</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+<span class="n">numbers</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">aspirin</span><span class="o">.</span><span class="n">get_atomic_numbers</span><span class="p">())</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">base_calc</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">coords</span><span class="p">,</span>
+        <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="n">numbers</span><span class="p">,</span>
+        <span class="s2">&quot;charge&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">hessian</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># The Hessian has shape (N, 3, N, 3). Reshape to (3N, 3N) for diagonalization.</span>
+<span class="n">N</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">aspirin</span><span class="p">)</span>
+<span class="n">hessian</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;hessian&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span> <span class="o">*</span> <span class="n">N</span><span class="p">,</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">N</span><span class="p">)</span>
+
+<span class="c1"># Mass-weight the Hessian: H_mw[i,j] = H[i,j] / sqrt(m_i * m_j)</span>
+<span class="n">masses</span> <span class="o">=</span> <span class="n">aspirin</span><span class="o">.</span><span class="n">get_masses</span><span class="p">()</span>  <span class="c1"># atomic mass units</span>
+<span class="n">mass_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">masses</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>  <span class="c1"># one per Cartesian coordinate</span>
+<span class="n">mass_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">mass_weights</span><span class="p">,</span> <span class="n">mass_weights</span><span class="p">))</span>
+<span class="n">hessian_mw</span> <span class="o">=</span> <span class="n">hessian</span> <span class="o">/</span> <span class="n">mass_matrix</span>
+
+<span class="c1"># Diagonalize to get eigenvalues (proportional to frequency^2)</span>
+<span class="n">eigenvalues</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">eigh</span><span class="p">(</span><span class="n">hessian_mw</span><span class="p">)</span>
+
+<span class="c1"># Convert eigenvalues to frequencies in cm^-1</span>
+<span class="c1"># eigenvalue units: eV / (A^2 * amu) -&gt; need conversion factors</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ase.units</span><span class="w"> </span><span class="kn">import</span> <span class="n">_hbar</span><span class="p">,</span> <span class="n">_e</span><span class="p">,</span> <span class="n">_amu</span>
+
+<span class="c1"># omega^2 = eigenvalue * eV / (A^2 * amu), convert to cm^-1</span>
+<span class="n">factor</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">_e</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">_amu</span> <span class="o">*</span> <span class="mf">1e-20</span><span class="p">))</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="mf">2.998e10</span><span class="p">)</span>
+<span class="n">frequencies</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="n">eigenvalues</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">eigenvalues</span><span class="p">))</span> <span class="o">*</span> <span class="n">factor</span>
+
+<span class="c1"># First 6 values should be near-zero (translations + rotations)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Lowest 10 frequencies (cm^-1):&quot;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">freq</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">frequencies</span><span class="p">)[:</span><span class="mi">10</span><span class="p">]):</span>
+    <span class="n">label</span> <span class="o">=</span> <span class="s2">&quot;TR&quot;</span> <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">6</span> <span class="k">else</span> <span class="s2">&quot;vib&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  </span><span class="si">{</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="si">:</span><span class="s2">3d</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">freq</span><span class="si">:</span><span class="s2">10.1f</span><span class="si">}</span><span class="s2">  (</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+
+<span class="c1"># Check for imaginary frequencies (true minimum has none)</span>
+<span class="n">vibrational</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">frequencies</span><span class="p">)[</span><span class="mi">6</span><span class="p">:]</span>  <span class="c1"># skip translations/rotations</span>
+<span class="n">n_imaginary</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">vibrational</span> <span class="k">if</span> <span class="n">f</span> <span class="o">&lt;</span> <span class="o">-</span><span class="mi">10</span><span class="p">)</span>  <span class="c1"># threshold for numerical noise</span>
+<span class="k">if</span> <span class="n">n_imaginary</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">All vibrational frequencies are real -&gt; confirmed minimum!&quot;</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">WARNING: </span><span class="si">{</span><span class="n">n_imaginary</span><span class="si">}</span><span class="s2"> imaginary frequency(ies) found -&gt; not a minimum&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>!!! warning "Hessian limitations" The Hessian calculation in AIMNet2 is limited to <strong>single molecules</strong> and scales as O(N^2) in memory. It is practical for molecules up to roughly 200 atoms. For larger systems, use finite-difference approaches or specialized phonon tools.</p>
+<h2 id="step-5-thermochemistry-from-frequencies">Step 5: Thermochemistry from Frequencies<a class="headerlink" href="#step-5-thermochemistry-from-frequencies" title="Permanent link">&para;</a></h2>
+<p>Once you have confirmed a true minimum (all real frequencies), you can compute thermochemical quantities -- enthalpy and Gibbs free energy corrections -- using ASE's <code>IdealGasThermo</code> module.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase.thermochemistry</span><span class="w"> </span><span class="kn">import</span> <span class="n">IdealGasThermo</span>
+
+<span class="c1"># Get the electronic energy (potential energy at the minimum)</span>
+<span class="n">electronic_energy</span> <span class="o">=</span> <span class="n">aspirin</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span>  <span class="c1"># eV</span>
+
+<span class="c1"># Filter out translations/rotations (keep only vibrational modes)</span>
+<span class="c1"># Use absolute values and filter small near-zero modes</span>
+<span class="n">vib_energies</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">freq</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">frequencies</span><span class="p">)[</span><span class="mi">6</span><span class="p">:]:</span>
+    <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">freq</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">10</span><span class="p">:</span>  <span class="c1"># Skip near-zero modes (numerical noise)</span>
+        <span class="c1"># Convert cm^-1 to eV: E = h * c * nu</span>
+        <span class="n">energy_ev</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">freq</span><span class="p">)</span> <span class="o">*</span> <span class="n">invcm</span>
+        <span class="n">vib_energies</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">energy_ev</span><span class="p">)</span>
+
+<span class="c1"># Create the thermochemistry object</span>
+<span class="n">thermo</span> <span class="o">=</span> <span class="n">IdealGasThermo</span><span class="p">(</span>
+    <span class="n">vib_energies</span><span class="o">=</span><span class="n">vib_energies</span><span class="p">,</span>
+    <span class="n">potentialenergy</span><span class="o">=</span><span class="n">electronic_energy</span><span class="p">,</span>
+    <span class="n">atoms</span><span class="o">=</span><span class="n">aspirin</span><span class="p">,</span>
+    <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;nonlinear&quot;</span><span class="p">,</span>
+    <span class="n">symmetrynumber</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>  <span class="c1"># aspirin has no rotational symmetry (C1)</span>
+    <span class="n">spin</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>            <span class="c1"># singlet ground state</span>
+<span class="p">)</span>
+
+<span class="c1"># Compute thermochemical properties at 298.15 K and 1 atm</span>
+<span class="n">T</span> <span class="o">=</span> <span class="mf">298.15</span>  <span class="c1"># K</span>
+<span class="n">p</span> <span class="o">=</span> <span class="mi">101325</span>  <span class="c1"># Pa (1 atm)</span>
+
+<span class="n">H</span> <span class="o">=</span> <span class="n">thermo</span><span class="o">.</span><span class="n">get_enthalpy</span><span class="p">(</span><span class="n">temperature</span><span class="o">=</span><span class="n">T</span><span class="p">)</span>
+<span class="n">G</span> <span class="o">=</span> <span class="n">thermo</span><span class="o">.</span><span class="n">get_gibbs_energy</span><span class="p">(</span><span class="n">temperature</span><span class="o">=</span><span class="n">T</span><span class="p">,</span> <span class="n">pressure</span><span class="o">=</span><span class="n">p</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Electronic energy:     </span><span class="si">{</span><span class="n">electronic_energy</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Enthalpy (H, 298 K):   </span><span class="si">{</span><span class="n">H</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Gibbs free energy (G): </span><span class="si">{</span><span class="n">G</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Thermal correction:    </span><span class="si">{</span><span class="p">(</span><span class="n">H</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">electronic_energy</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">23.0609</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> kcal/mol&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;-T*S contribution:     </span><span class="si">{</span><span class="p">(</span><span class="n">G</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">H</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">23.0609</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> kcal/mol&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>This workflow -- optimize, compute Hessian, extract thermochemistry -- is the standard approach for obtaining reaction enthalpies and free energies with AIMNet2.</p>
+<p>!!! tip "Thermochemistry for reactions" To compute a reaction enthalpy Delta_H, run this workflow for each reactant and product separately, then take the difference:</p>
+<pre><code>```
+Delta_H = sum(H_products) - sum(H_reactants)
+```
+
+The same applies for Delta_G. Make sure all structures are true minima (no imaginary frequencies) before computing differences.
+</code></pre>
+<h2 id="step-6-scaling-up-larger-molecules">Step 6: Scaling Up -- Larger Molecules<a class="headerlink" href="#step-6-scaling-up-larger-molecules" title="Permanent link">&para;</a></h2>
+<p>For molecules approaching 100+ atoms, consider these adjustments:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">read</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ase.optimize</span><span class="w"> </span><span class="kn">import</span> <span class="n">LBFGS</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2ASE</span><span class="p">,</span> <span class="n">AIMNet2Calculator</span>
+
+<span class="c1"># For large molecules, compile the model for faster force evaluations</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2ASE</span><span class="p">(</span>
+    <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="c1"># Load a large molecule (e.g., Taxol with 113 atoms)</span>
+<span class="c1"># atoms = read(&quot;taxol.xyz&quot;)</span>
+<span class="c1"># atoms.calc = calc</span>
+
+<span class="c1"># Use LBFGS for lower memory footprint on large systems</span>
+<span class="c1"># opt = LBFGS(atoms, trajectory=&quot;taxol_opt.traj&quot;)</span>
+<span class="c1"># opt.run(fmax=0.01)</span>
+</code></pre></div>
+<p>!!! note "Practical size limits" - <strong>Geometry optimization</strong> works well up to thousands of atoms. - <strong>Hessian computation</strong> is practical up to ~200 atoms due to O(N^2) memory scaling (the full Hessian for 200 atoms requires 200 x 3 x 200 x 3 = 360,000 elements). - For larger systems needing frequencies, use finite-difference approaches with a displacement step.</p>
+<h2 id="whats-next">What's Next<a class="headerlink" href="#whats-next" title="Permanent link">&para;</a></h2>
+<p>With optimized structures in hand, you can proceed to:</p>
+<ul>
+<li><strong><a href="../molecular_dynamics/">Molecular Dynamics</a></strong> -- Run NVT and NPT simulations starting from your optimized geometry</li>
+<li><strong><a href="../periodic_systems/">Periodic Systems</a></strong> -- Optimize crystal structures with unit cell relaxation</li>
+<li><strong><a href="../../advanced/conformer_search/">Conformer Search</a></strong> -- Systematically explore conformational space</li>
+<li><strong><a href="../../advanced/reaction_paths/">Reaction Paths</a></strong> -- Find transition states and compute reaction barriers</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["search.highlight", "search.suggest", "content.code.copy"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,2487 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="AIMNet Machine Learned Interatomic Potential">
+      
+      
+        <meta name="author" content="Roman Zubatyuk">
+      
+      
+        <link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/tutorials/performance/">
+      
+      
+        <link rel="prev" href="../batch_processing/">
+      
+      
+        <link rel="next" href="../../advanced/open_shell/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+    
+    
+      
+        <title>Performance Tuning - AIMNetCentral</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#performance-tuning-maximum-speed" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="AIMNetCentral" class="md-header__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AIMNetCentral
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Performance Tuning
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/isayevlab/aimnetcentral" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    isayevlab/aimnetcentral
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="AIMNetCentral" class="md-nav__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    AIMNetCentral
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/isayevlab/aimnetcentral" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    isayevlab/aimnetcentral
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Models
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Models
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Selection Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/aimnet2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AIMNet2 (wB97M-D3)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/aimnet2_b973c/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AIMNet2-B97-3c
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/aimnet2_2025/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AIMNet2-2025
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/aimnet2nse/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AIMNet2-NSE
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/aimnet2pd/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AIMNet2-Pd
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../single_point/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    First Calculation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../geometry_optimization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geometry Optimization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../molecular_dynamics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Molecular Dynamics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../periodic_systems/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Periodic Systems
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../batch_processing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance Tuning
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance Tuning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-youll-learn" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What You'll Learn
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-1-understanding-startup-costs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Understanding Startup Costs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 1: Understanding Startup Costs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#warp-initialization-2-5-seconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Warp Initialization (2-5 seconds)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kernel-jit-compilation-10-30-seconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Kernel JIT Compilation (10-30 seconds)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-2-using-torchcompile-compile_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Using torch.compile (compile_model)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 2: Using torch.compile (compile_model)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-gets-compiled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Gets Compiled
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-to-use-compile_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to Use compile_model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compile-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compile Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-3-dense-vs-sparse-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Dense vs Sparse Mode
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 3: Dense vs Sparse Mode">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mode-selection-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mode Selection Rules
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tuning-nb_threshold" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tuning nb_threshold
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-4-gpu-memory-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: GPU Memory Considerations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 4: GPU Memory Considerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#adaptive-neighbor-list-growth" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adaptive Neighbor List Growth
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hessian-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hessian Memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#synchronization-points" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Synchronization Points
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-5-benchmarking-correctly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5: Benchmarking Correctly
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 5: Benchmarking Correctly">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rule-1-warmup-before-timing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rule 1: Warmup Before Timing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rule-2-synchronize-the-gpu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rule 2: Synchronize the GPU
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rule-3-use-realistic-inputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rule 3: Use Realistic Inputs
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-6-things-to-avoid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6: Things to Avoid
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 6: Things to Avoid">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#do-not-use-torchautocast" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Do Not Use torch.autocast
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#do-not-set-traintrue-for-inference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Do Not Set train=True for Inference
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#do-not-use-multiple-gpus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Do Not Use Multiple GPUs
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Checklist
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#whats-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What's Next
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Advanced Use Cases
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Advanced Use Cases
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/open_shell/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Open-Shell Chemistry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/conformer_search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conformer Search
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/reaction_paths/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reaction Paths & TS
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/intermolecular_interactions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Non-Covalent Interactions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/transition_metal_catalysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pd Catalysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/charged_systems/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Charged Systems
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../calculator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calculator API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../long_range/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Long-Range Methods
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../model_format/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model Format
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../train/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Training
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/calculators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calculators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/modules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modules
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-youll-learn" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What You'll Learn
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-1-understanding-startup-costs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Understanding Startup Costs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 1: Understanding Startup Costs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#warp-initialization-2-5-seconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Warp Initialization (2-5 seconds)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kernel-jit-compilation-10-30-seconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Kernel JIT Compilation (10-30 seconds)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-2-using-torchcompile-compile_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Using torch.compile (compile_model)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 2: Using torch.compile (compile_model)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-gets-compiled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Gets Compiled
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-to-use-compile_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to Use compile_model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compile-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compile Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-3-dense-vs-sparse-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Dense vs Sparse Mode
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 3: Dense vs Sparse Mode">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mode-selection-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mode Selection Rules
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tuning-nb_threshold" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tuning nb_threshold
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-4-gpu-memory-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: GPU Memory Considerations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 4: GPU Memory Considerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#adaptive-neighbor-list-growth" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adaptive Neighbor List Growth
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hessian-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hessian Memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#synchronization-points" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Synchronization Points
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-5-benchmarking-correctly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5: Benchmarking Correctly
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 5: Benchmarking Correctly">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rule-1-warmup-before-timing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rule 1: Warmup Before Timing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rule-2-synchronize-the-gpu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rule 2: Synchronize the GPU
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rule-3-use-realistic-inputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rule 3: Use Realistic Inputs
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-6-things-to-avoid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6: Things to Avoid
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 6: Things to Avoid">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#do-not-use-torchautocast" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Do Not Use torch.autocast
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#do-not-set-traintrue-for-inference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Do Not Set train=True for Inference
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#do-not-use-multiple-gpus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Do Not Use Multiple GPUs
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Checklist
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#whats-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What's Next
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="performance-tuning-maximum-speed">Performance Tuning: Maximum Speed<a class="headerlink" href="#performance-tuning-maximum-speed" title="Permanent link">&para;</a></h1>
+<h2 id="what-youll-learn">What You'll Learn<a class="headerlink" href="#what-youll-learn" title="Permanent link">&para;</a></h2>
+<ul>
+<li>What happens during Warp kernel compilation and how to manage warmup costs</li>
+<li>How <code>compile_model</code> works and what it does (and does not) compile</li>
+<li>How to choose between dense and sparse execution modes via <code>nb_threshold</code></li>
+<li>How to benchmark correctly and avoid common performance pitfalls</li>
+</ul>
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<ul>
+<li>AIMNet2 installed with GPU support (<code>pip install aimnet</code> + CUDA-enabled PyTorch)</li>
+<li>Familiarity with AIMNet2 calculator usage (see <a href="../single_point/">First Calculation</a>)</li>
+<li>A CUDA-capable GPU (performance tuning is primarily relevant for GPU execution)</li>
+</ul>
+<h2 id="step-1-understanding-startup-costs">Step 1: Understanding Startup Costs<a class="headerlink" href="#step-1-understanding-startup-costs" title="Permanent link">&para;</a></h2>
+<p>AIMNet2 uses NVIDIA Warp for GPU-accelerated kernels. There are two one-time costs you will encounter:</p>
+<h3 id="warp-initialization-2-5-seconds">Warp Initialization (2-5 seconds)<a class="headerlink" href="#warp-initialization-2-5-seconds" title="Permanent link">&para;</a></h3>
+<p>The first time any AIMNet2 module imports the Warp kernels, <code>wp.init()</code> runs automatically. This initializes the Warp runtime and detects available GPUs:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">aimnet</span>  <span class="c1"># Triggers wp.init() on first kernel import: ~2-5 seconds</span>
+</code></pre></div>
+<p>This cost is paid once per Python process.</p>
+<h3 id="kernel-jit-compilation-10-30-seconds">Kernel JIT Compilation (10-30 seconds)<a class="headerlink" href="#kernel-jit-compilation-10-30-seconds" title="Permanent link">&para;</a></h3>
+<p>The first GPU calculation triggers just-in-time (JIT) compilation of Warp CUDA kernels. Compiled kernels are cached on disk, so subsequent runs of the same Python environment start faster:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>
+
+<span class="c1"># First call: triggers kernel JIT compilation (~10-30s)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">calc</span><span class="p">({</span>
+    <span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+    <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>
+    <span class="s2">&quot;charge&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+<span class="p">},</span> <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># Second call: fast (~milliseconds)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">calc</span><span class="p">({</span>
+    <span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+    <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>
+    <span class="s2">&quot;charge&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+<span class="p">},</span> <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+<p>!!! note Warp caches compiled kernels in <code>~/.cache/warp/</code> (or the directory set by <code>WARP_CACHE_PATH</code>). If you delete this cache, the next run will recompile.</p>
+<h2 id="step-2-using-torchcompile-compile_model">Step 2: Using torch.compile (compile_model)<a class="headerlink" href="#step-2-using-torchcompile-compile_model" title="Permanent link">&para;</a></h2>
+<p>The <code>compile_model=True</code> parameter applies <code>torch.compile()</code> to the neural network forward pass:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Without compilation</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>
+
+<span class="c1"># With compilation</span>
+<span class="n">calc_compiled</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="what-gets-compiled">What Gets Compiled<a class="headerlink" href="#what-gets-compiled" title="Permanent link">&para;</a></h3>
+<p><code>torch.compile()</code> optimizes <strong>only the neural network forward pass</strong> (the model itself). It does <strong>not</strong> compile:</p>
+<ul>
+<li>Neighbor list construction (adaptive neighbor lists)</li>
+<li>External Coulomb calculations (LRCoulomb, DSF, Ewald)</li>
+<li>External DFTD3 dispersion corrections</li>
+<li>Input preprocessing and output postprocessing</li>
+</ul>
+<p>This means the speedup from compilation depends on what fraction of total compute time is spent in the NN forward pass vs. these other components.</p>
+<h3 id="when-to-use-compile_model">When to Use compile_model<a class="headerlink" href="#when-to-use-compile_model" title="Permanent link">&para;</a></h3>
+<p><strong>Good candidates for compilation:</strong></p>
+<ul>
+<li>Long MD trajectories (hundreds to thousands of steps)</li>
+<li>Geometry optimization (many force evaluations on similar-sized systems)</li>
+<li>Repeated evaluation on the same molecular system</li>
+</ul>
+<p><strong>Poor candidates for compilation:</strong></p>
+<ul>
+<li>Single-point energy calculations (compilation overhead exceeds savings)</li>
+<li>Processing datasets with varying molecule sizes (may trigger recompilation)</li>
+<li>Quick exploratory calculations</li>
+</ul>
+<h3 id="compile-options">Compile Options<a class="headerlink" href="#compile-options" title="Permanent link">&para;</a></h3>
+<p>You can pass additional arguments to <code>torch.compile()</code> via <code>compile_kwargs</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Default compilation (recommended starting point)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># With max-autotune for maximum optimization (longer compile time)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span>
+    <span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span>
+    <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">compile_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;max-autotune&quot;</span><span class="p">},</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>!!! warning "Do not use reduce-overhead with varying input sizes" The <code>reduce-overhead</code> mode uses CUDA graphs, which record a fixed execution pattern. If your input sizes vary between calls (different numbers of atoms or neighbors), this causes <strong>graph breaks</strong> and can actually slow things down or produce errors. Only use <code>reduce-overhead</code> when the system size is truly constant.</p>
+<pre><code>```python
+# AVOID for varying sizes
+calc = AIMNet2Calculator(
+    "aimnet2",
+    compile_model=True,
+    compile_kwargs={"mode": "reduce-overhead"},  # Bad for varying sizes
+)
+
+# SAFE default
+calc = AIMNet2Calculator("aimnet2", compile_model=True)
+```
+</code></pre>
+<h2 id="step-3-dense-vs-sparse-mode">Step 3: Dense vs Sparse Mode<a class="headerlink" href="#step-3-dense-vs-sparse-mode" title="Permanent link">&para;</a></h2>
+<p>The calculator automatically chooses between two execution modes based on system size, device, and PBC. Understanding this choice is key to performance tuning.</p>
+<h3 id="mode-selection-rules">Mode Selection Rules<a class="headerlink" href="#mode-selection-rules" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Mode</th>
+<th>Complexity</th>
+<th>Neighbor Lists</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>N &lt;= <code>nb_threshold</code> AND CUDA AND non-PBC</td>
+<td><strong>Dense</strong></td>
+<td>O(N^2)</td>
+<td>No (all-pairs)</td>
+</tr>
+<tr>
+<td>N &gt; <code>nb_threshold</code></td>
+<td><strong>Sparse</strong></td>
+<td>O(N)</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>CPU (any size)</td>
+<td><strong>Sparse</strong></td>
+<td>O(N)</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>PBC (any size)</td>
+<td><strong>Sparse</strong></td>
+<td>O(N)</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Dense mode</strong> treats every atom pair as interacting (fully connected graph). This is fast on GPU for small molecules because it avoids the overhead of neighbor list construction, and GPU parallelism handles the O(N^2) interactions efficiently.</p>
+<p><strong>Sparse mode</strong> uses adaptive neighbor lists to limit interactions to atoms within a cutoff distance. This scales linearly with system size and is required for large systems, CPU execution, and periodic boundary conditions.</p>
+<h3 id="tuning-nb_threshold">Tuning nb_threshold<a class="headerlink" href="#tuning-nb_threshold" title="Permanent link">&para;</a></h3>
+<p>The default <code>nb_threshold=120</code> works well for most use cases. Adjust it based on your hardware:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Memory-constrained GPU (e.g., 8 GB) -- switch to sparse earlier</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">nb_threshold</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span>
+
+<span class="c1"># High-memory GPU (e.g., 40+ GB) -- stay in dense mode longer</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">nb_threshold</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
+</code></pre></div>
+<p>!!! warning "Avoid crossing the dense/sparse boundary with torch.compile" If you use <code>compile_model=True</code>, make sure all your inputs consistently land in the same mode (all dense or all sparse). Crossing the boundary (e.g., some calls with 100 atoms in dense mode, others with 150 atoms in sparse mode) causes recompilation each time, negating the benefits. Set <code>nb_threshold</code> so that your typical workload stays in one mode.</p>
+<h2 id="step-4-gpu-memory-considerations">Step 4: GPU Memory Considerations<a class="headerlink" href="#step-4-gpu-memory-considerations" title="Permanent link">&para;</a></h2>
+<h3 id="adaptive-neighbor-list-growth">Adaptive Neighbor List Growth<a class="headerlink" href="#adaptive-neighbor-list-growth" title="Permanent link">&para;</a></h3>
+<p>The <code>AdaptiveNeighborList</code> starts with a buffer sized from an initial density estimate. If the actual number of neighbors exceeds the buffer, it <strong>grows by 1.5x</strong> and retries. This means:</p>
+<ul>
+<li>First calculations on dense systems may trigger one or two buffer growths</li>
+<li>Once the buffer stabilizes, subsequent calculations reuse the same allocation</li>
+<li>Buffer shrinks automatically when utilization drops below 50% of target</li>
+</ul>
+<h3 id="hessian-memory">Hessian Memory<a class="headerlink" href="#hessian-memory" title="Permanent link">&para;</a></h3>
+<p>Hessian calculation requires O(N^2) memory because the full second-derivative matrix has shape <code>(N, 3, N, 3)</code>. For a 100-atom molecule, this is 100 x 3 x 100 x 3 = 90,000 float values (~360 KB in float32), and for 1000 atoms it becomes 1000 x 3 x 1000 x 3 = 9,000,000 values (~36 MB in float32).</p>
+<p>!!! warning Hessian computation is limited to <strong>single molecules</strong> and scales quadratically with atom count. For molecules larger than ~200 atoms, you may run out of GPU memory. Consider computing the Hessian on a CPU for large systems, or using finite-difference approaches for specific vibrational modes.</p>
+<h3 id="synchronization-points">Synchronization Points<a class="headerlink" href="#synchronization-points" title="Permanent link">&para;</a></h3>
+<p>The adaptive neighbor list contains one GPU-CPU synchronization point: <code>num_neighbors.max().item()</code> is called to determine the actual maximum neighbor count for trimming. This is a single <code>.item()</code> call per neighbor list computation (not per atom). For most workloads, this overhead is negligible compared to the NN forward pass.</p>
+<h2 id="step-5-benchmarking-correctly">Step 5: Benchmarking Correctly<a class="headerlink" href="#step-5-benchmarking-correctly" title="Permanent link">&para;</a></h2>
+<p>Incorrect benchmarking is the most common performance pitfall. Follow these rules:</p>
+<h3 id="rule-1-warmup-before-timing">Rule 1: Warmup Before Timing<a class="headerlink" href="#rule-1-warmup-before-timing" title="Permanent link">&para;</a></h3>
+<p>The first 1-2 calls are always slower due to kernel compilation, memory allocation, and <code>torch.compile</code> tracing. Always discard warmup calls:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
+
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">50</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">),</span>
+    <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="p">(</span><span class="mi">50</span><span class="p">,),</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">),</span>
+    <span class="s2">&quot;charge&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">0.0</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">),</span>
+<span class="p">}</span>
+
+<span class="c1"># Warmup (discard timing)</span>
+<span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>
+    <span class="n">calc</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># Synchronize GPU before timing</span>
+<span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+<span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+
+<span class="n">n_iterations</span> <span class="o">=</span> <span class="mi">100</span>
+<span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_iterations</span><span class="p">):</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">calc</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># Synchronize GPU after timing</span>
+<span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+<span class="n">elapsed</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Average time: </span><span class="si">{</span><span class="n">elapsed</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">n_iterations</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1000</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> ms/call&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="rule-2-synchronize-the-gpu">Rule 2: Synchronize the GPU<a class="headerlink" href="#rule-2-synchronize-the-gpu" title="Permanent link">&para;</a></h3>
+<p>GPU operations are asynchronous. Without <code>torch.cuda.synchronize()</code>, you measure only the time to <strong>launch</strong> operations, not the time to <strong>complete</strong> them:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># WRONG -- measures launch time only</span>
+<span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">calc</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">elapsed</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span>  <span class="c1"># Misleadingly fast</span>
+
+<span class="c1"># CORRECT -- measures actual compute time</span>
+<span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+<span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">calc</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+<span class="n">elapsed</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span>  <span class="c1"># True wall time</span>
+</code></pre></div>
+<h3 id="rule-3-use-realistic-inputs">Rule 3: Use Realistic Inputs<a class="headerlink" href="#rule-3-use-realistic-inputs" title="Permanent link">&para;</a></h3>
+<p>Benchmark with inputs representative of your actual workload. System size, atom types, and whether PBC is active all affect performance characteristics.</p>
+<h2 id="step-6-things-to-avoid">Step 6: Things to Avoid<a class="headerlink" href="#step-6-things-to-avoid" title="Permanent link">&para;</a></h2>
+<h3 id="do-not-use-torchautocast">Do Not Use torch.autocast<a class="headerlink" href="#do-not-use-torchautocast" title="Permanent link">&para;</a></h3>
+<p>AIMNet2 models are trained in float32 and expect float32 inputs. Mixed-precision via <code>torch.autocast</code> can produce incorrect results:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># WRONG -- may produce incorrect results</span>
+<span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">autocast</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">):</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">calc</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># CORRECT -- use default float32</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">calc</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="do-not-set-traintrue-for-inference">Do Not Set train=True for Inference<a class="headerlink" href="#do-not-set-traintrue-for-inference" title="Permanent link">&para;</a></h3>
+<p>The <code>train</code> parameter controls whether gradients are tracked on model parameters. Setting <code>train=True</code> for inference wastes memory and slows computation:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># WRONG for inference</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># CORRECT for inference (default)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>  <span class="c1"># train=False by default</span>
+</code></pre></div>
+<p>!!! note <code>train=False</code> (the default) disables <code>requires_grad</code> on all model parameters. This reduces memory usage and improves <code>torch.compile</code> compatibility. The calculator still computes forces and Hessians correctly via autograd on the input coordinates.</p>
+<h3 id="do-not-use-multiple-gpus">Do Not Use Multiple GPUs<a class="headerlink" href="#do-not-use-multiple-gpus" title="Permanent link">&para;</a></h3>
+<p>AIMNet2 does not support multi-GPU execution (DataParallel or DistributedDataParallel). Use a single GPU per calculator instance. If you have multiple GPUs, run independent processes on each:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Process 1</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
+
+<span class="c1"># Process 2 (separate Python process)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:1&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="performance-checklist">Performance Checklist<a class="headerlink" href="#performance-checklist" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Recommended</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Device</td>
+<td><code>"cuda"</code> (auto-detected)</td>
+<td>10-50x speedup over CPU</td>
+</tr>
+<tr>
+<td><code>compile_model</code></td>
+<td><code>True</code> for repeated evals</td>
+<td>Skip for single-point calculations</td>
+</tr>
+<tr>
+<td><code>compile_kwargs</code></td>
+<td><code>{}</code> (default)</td>
+<td>Avoid <code>reduce-overhead</code> with varying sizes</td>
+</tr>
+<tr>
+<td><code>nb_threshold</code></td>
+<td><code>120</code> (default)</td>
+<td>Lower for memory-constrained GPUs</td>
+</tr>
+<tr>
+<td><code>train</code></td>
+<td><code>False</code> (default)</td>
+<td>Only <code>True</code> when actually training</td>
+</tr>
+<tr>
+<td>Warmup</td>
+<td>2 calls before timing</td>
+<td>First calls include compilation overhead</td>
+</tr>
+<tr>
+<td>Sync</td>
+<td><code>torch.cuda.synchronize()</code></td>
+<td>Required for accurate GPU timing</td>
+</tr>
+</tbody>
+</table>
+<h2 id="whats-next">What's Next<a class="headerlink" href="#whats-next" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../batch_processing/">Batch Processing</a> -- Combine batching with performance tuning</li>
+<li><a href="../periodic_systems/">Periodic Systems</a> -- PBC-specific performance considerations</li>
+<li><a href="../../calculator/">Calculator API</a> -- Full reference for all constructor parameters</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["search.highlight", "search.suggest", "content.code.copy"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

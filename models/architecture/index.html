@@ -1,0 +1,2329 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="AIMNet Machine Learned Interatomic Potential">
+      
+      
+        <meta name="author" content="Roman Zubatyuk">
+      
+      
+        <link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/models/architecture/">
+      
+      
+        <link rel="prev" href="../guide/">
+      
+      
+        <link rel="next" href="../aimnet2/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+    
+    
+      
+        <title>Architecture - AIMNetCentral</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#model-architecture" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="AIMNetCentral" class="md-header__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AIMNetCentral
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Architecture
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/isayevlab/aimnetcentral" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    isayevlab/aimnetcentral
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="AIMNetCentral" class="md-nav__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    AIMNetCentral
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/isayevlab/aimnetcentral" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    isayevlab/aimnetcentral
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Models
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Models
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Selection Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aev-descriptors-aevsv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AEV Descriptors (AEVSV)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AEV Descriptors (AEVSV)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#radial-basis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Radial Basis
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scalar-vector-decomposition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scalar + Vector Decomposition
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#convsv-convolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ConvSV Convolution
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ConvSV Convolution">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mechanism" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mechanism
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-pass-charge-equilibration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-Pass Charge Equilibration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Multi-Pass Charge Equilibration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pass-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass Structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#charge-conservation-nse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Charge Conservation (NSE)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#open-shell-extension-num_charge_channels2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Open-Shell Extension (num_charge_channels=2)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#output-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Pipeline
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Output Pipeline">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-output-mlp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Output MLP
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-atomicshift-self-atomic-energies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. AtomicShift (Self-Atomic Energies)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-atomicsum" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. AtomicSum
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-long-range-corrections" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Long-Range Corrections
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-flow-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data Flow Summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#glossary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Glossary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-source-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Source Files
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../aimnet2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AIMNet2 (wB97M-D3)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../aimnet2_b973c/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AIMNet2-B97-3c
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../aimnet2_2025/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AIMNet2-2025
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../aimnet2nse/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AIMNet2-NSE
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../aimnet2pd/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AIMNet2-Pd
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/single_point/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    First Calculation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/geometry_optimization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geometry Optimization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/molecular_dynamics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Molecular Dynamics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/periodic_systems/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Periodic Systems
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/batch_processing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance Tuning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Advanced Use Cases
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Advanced Use Cases
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/open_shell/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Open-Shell Chemistry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/conformer_search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conformer Search
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/reaction_paths/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reaction Paths & TS
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/intermolecular_interactions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Non-Covalent Interactions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/transition_metal_catalysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pd Catalysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/charged_systems/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Charged Systems
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../calculator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calculator API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../long_range/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Long-Range Methods
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../model_format/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model Format
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../train/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Training
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/calculators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calculators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/modules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modules
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aev-descriptors-aevsv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AEV Descriptors (AEVSV)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AEV Descriptors (AEVSV)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#radial-basis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Radial Basis
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scalar-vector-decomposition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scalar + Vector Decomposition
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#convsv-convolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ConvSV Convolution
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ConvSV Convolution">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mechanism" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mechanism
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-pass-charge-equilibration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-Pass Charge Equilibration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Multi-Pass Charge Equilibration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pass-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass Structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#charge-conservation-nse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Charge Conservation (NSE)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#open-shell-extension-num_charge_channels2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Open-Shell Extension (num_charge_channels=2)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#output-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Pipeline
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Output Pipeline">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-output-mlp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Output MLP
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-atomicshift-self-atomic-energies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. AtomicShift (Self-Atomic Energies)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-atomicsum" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. AtomicSum
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-long-range-corrections" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Long-Range Corrections
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-flow-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data Flow Summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#glossary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Glossary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-source-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Source Files
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="model-architecture">Model Architecture<a class="headerlink" href="#model-architecture" title="Permanent link">&para;</a></h1>
+<p>This page describes the internal architecture of AIMNet2 models for ML researchers and developers. For model selection and usage, see the <a href="../guide/">Model Selection Guide</a>.</p>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>AIMNet2 is an atom-centered neural network potential. The forward pass proceeds through these stages:</p>
+<ol>
+<li><strong>AEV Computation</strong> -- Expand interatomic distances and directions into a symmetry-adapted descriptor (Atomic Environment Vectors).</li>
+<li><strong>Multi-Pass Charge Equilibration</strong> -- Iteratively refine per-atom charges using ConvSV convolutions and MLPs, enforcing total charge conservation.</li>
+<li><strong>Output Pipeline</strong> -- Map final atomic features to per-atom energies, apply self-atomic energy shifts, sum to molecular energy, and add long-range corrections (Coulomb, DFT-D3).</li>
+</ol>
+<div class="highlight"><pre><span></span><code>coordinates ──&gt; AEV (AEVSV) ──&gt; [MLP_0] ──&gt; [MLP_1] ──&gt; ... ──&gt; [MLP_final]
+   |                 |              |            |                     |
+   |            g_sv (radial +   initial     refine               AIM vector
+   |             directional)   charges      charges
+   |                                                                  |
+   |                                                           Output + AtomicShift
+   |                                                                  |
+   |                                                             AtomicSum
+   |                                                                  |
+   +--------- LRCoulomb (external) -----&gt; molecular energy &lt;--- DFTD3 (external)
+</code></pre></div>
+<h2 id="aev-descriptors-aevsv">AEV Descriptors (AEVSV)<a class="headerlink" href="#aev-descriptors-aevsv" title="Permanent link">&para;</a></h2>
+<p>The Atomic Environment Vector module (<code>AEVSV</code> in <code>aimnet/modules/aev.py</code>) encodes the local geometry around each atom as a fixed-length descriptor.</p>
+<h3 id="radial-basis">Radial Basis<a class="headerlink" href="#radial-basis" title="Permanent link">&para;</a></h3>
+<p>Interatomic distances are expanded over a set of shifted Gaussian basis functions:</p>
+<div class="arithmatex">\[
+g_s(r_{ij}) = \exp\bigl(-\eta\,(r_{ij} - r_s)^2\bigr) \cdot f_c(r_{ij})
+\]</div>
+<p>Default parameters:</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rc_s</code></td>
+<td>5.0 A</td>
+<td>Cutoff radius</td>
+</tr>
+<tr>
+<td><code>nshifts_s</code></td>
+<td>16</td>
+<td>Number of Gaussian shifts</td>
+</tr>
+<tr>
+<td><code>rmin</code></td>
+<td>0.8 A</td>
+<td>Minimum distance for shifts</td>
+</tr>
+<tr>
+<td><code>eta</code></td>
+<td>Auto</td>
+<td>Width, computed as <code>1 / ((rc - rmin) / nshifts)^2</code></td>
+</tr>
+</tbody>
+</table>
+<p>The shifts are placed at equal intervals between <code>rmin</code> and <code>rc_s</code>. A cosine cutoff envelope <code>f_c(r)</code> smoothly brings the basis functions to zero at the cutoff radius.</p>
+<h3 id="scalar-vector-decomposition">Scalar + Vector Decomposition<a class="headerlink" href="#scalar-vector-decomposition" title="Permanent link">&para;</a></h3>
+<p>AIMNet2 decomposes the AEV into scalar (radial) and vector (directional) components. For each neighbor <code>j</code> of atom <code>i</code>:</p>
+<ul>
+<li><strong>Scalar component:</strong> The Gaussian-expanded distance weighted by the cutoff envelope. Shape: <code>(nshifts,)</code> per neighbor.</li>
+<li><strong>Vector component:</strong> The scalar component multiplied by the unit direction vector <code>r_ij / |r_ij|</code>. Shape: <code>(nshifts, 3)</code> per neighbor.</li>
+</ul>
+<p>These are concatenated into a single tensor <code>g_sv</code> of shape <code>(num_neighbors, nshifts, 4)</code> -- one scalar channel plus three vector channels.</p>
+<div class="admonition note">
+<p class="admonition-title">Why Scalar + Vector?</p>
+<p>Separating scalar and vector parts allows the network to learn both distance-dependent features (radial symmetry functions) and orientation- dependent features (angular information) within a unified framework, without requiring explicit angular symmetry functions.</p>
+</div>
+<h2 id="convsv-convolution">ConvSV Convolution<a class="headerlink" href="#convsv-convolution" title="Permanent link">&para;</a></h2>
+<p>The <code>ConvSV</code> module (<code>aimnet/modules/aev.py</code>) is the core convolution operation that combines local geometry (from the AEV) with atomic features. It appears twice in AIMNet2: once for atomic features (<code>conv_a</code>) and once for charge features (<code>conv_q</code>).</p>
+<h3 id="mechanism">Mechanism<a class="headerlink" href="#mechanism" title="Permanent link">&para;</a></h3>
+<p>Given atomic features <code>a</code> (shape <code>(N, nchannel)</code> or <code>(N, nchannel, nshifts)</code> for 2D features) and the AEV descriptor <code>g_sv</code> (shape <code>(N, num_neighbors, nshifts, 4)</code>):</p>
+<ol>
+<li>
+<p><strong>Gather neighbor features:</strong> Collect features <code>a_j</code> for all neighbors of each atom using the neighbor list (<code>nbmat</code>).</p>
+</li>
+<li>
+<p><strong>Contract features with geometry via einsum:</strong></p>
+</li>
+</ol>
+<p>For 1D features:</p>
+<div class="highlight"><pre><span></span><code>avf_sv[i, a, g, d] = sum_j  a_j[i, m, a] * g_sv[i, m, g, d]
+</code></pre></div>
+<p>For 2D features (d2features=True):</p>
+<div class="highlight"><pre><span></span><code>avf_sv[i, a, g, d] = sum_j  a_j[i, m, a, g] * g_sv[i, m, g, d]
+</code></pre></div>
+<ol>
+<li>
+<p><strong>Split scalar and vector parts:</strong></p>
+</li>
+<li>
+<p><code>avf_s</code> -- Scalar part (d=0), flattened to <code>(nchannel * nshifts_s,)</code>.</p>
+</li>
+<li>
+<p><code>avf_v</code> -- Vector part (d=1,2,3), processed through learned linear combinations via the <code>agh</code> parameter tensor, then squared and summed over the spatial dimension to produce rotationally invariant features. Output: <code>(nchannel * ncomb_v,)</code>.</p>
+</li>
+<li>
+<p><strong>Concatenate:</strong> The scalar and vector outputs are concatenated into a single feature vector of size <code>nchannel * nshifts_s + nchannel * ncomb_v</code>.</p>
+</li>
+</ol>
+<div class="admonition info">
+<p class="admonition-title">GPU Acceleration</p>
+<p>When 2D features are used on CUDA, ConvSV dispatches to a custom Warp kernel (<code>conv_sv_2d_sp</code>) for sparse gather-and-contract, avoiding the memory overhead of materializing the full neighbor feature tensor.</p>
+</div>
+<h2 id="multi-pass-charge-equilibration">Multi-Pass Charge Equilibration<a class="headerlink" href="#multi-pass-charge-equilibration" title="Permanent link">&para;</a></h2>
+<p>The core of AIMNet2 is an iterative charge equilibration loop. The model runs <code>N</code> MLP passes (typically 3), each refining the atomic charges while updating atomic features.</p>
+<h3 id="pass-structure">Pass Structure<a class="headerlink" href="#pass-structure" title="Permanent link">&para;</a></h3>
+<p><strong>Pass 0 (initialization):</strong></p>
+<ul>
+<li>Input: <code>ConvSV(a)</code> -- convolution of initial atomic embeddings with geometry.</li>
+<li>Output: Initial charges <code>q</code>, charge flexibility <code>f</code>, and feature update <code>delta_a</code>.</li>
+<li>Charges are set directly (not added to previous values).</li>
+</ul>
+<p><strong>Passes 1 to N-2 (refinement):</strong></p>
+<ul>
+<li>Input: <code>ConvSV(a) + ConvSV(q)</code> -- convolution of both atomic and charge features.</li>
+<li>Output: Charge correction <code>delta_q</code>, updated flexibility <code>f</code>, feature update <code>delta_a</code>.</li>
+<li>Charges are updated as <code>q = q + delta_q</code>.</li>
+</ul>
+<p><strong>Pass N-1 (final):</strong></p>
+<ul>
+<li>Input: Same as refinement passes.</li>
+<li>Output: AIM vector (Atomic Interaction Model) -- the final per-atom representation passed to the output pipeline.</li>
+</ul>
+<h3 id="charge-conservation-nse">Charge Conservation (NSE)<a class="headerlink" href="#charge-conservation-nse" title="Permanent link">&para;</a></h3>
+<p>After each pass, charges are redistributed to enforce total charge conservation using the NSE (Neutral Spin Equilibrated) scheme:</p>
+<div class="arithmatex">\[
+q_i^{\text{final}} = q_i^{\text{raw}} + f_i \cdot \frac{Q_{\text{total}} - \sum_j q_j^{\text{raw}}}{\sum_j f_j + \epsilon}
+\]</div>
+<p>where:</p>
+<ul>
+<li><code>q_i^raw</code> is the unconstrained per-atom charge from the MLP.</li>
+<li><code>f_i</code> is the per-atom charge flexibility (always positive, via squaring).</li>
+<li><code>Q_total</code> is the target total charge.</li>
+<li>The ratio redistributes the charge deficit proportionally to each atom's flexibility.</li>
+</ul>
+<p>This ensures exact charge conservation at every pass without constraining the network outputs directly.</p>
+<h3 id="open-shell-extension-num_charge_channels2">Open-Shell Extension (num_charge_channels=2)<a class="headerlink" href="#open-shell-extension-num_charge_channels2" title="Permanent link">&para;</a></h3>
+<p>For the NSE model (<code>aimnet2nse</code>), charges have two channels: alpha-spin and beta-spin. The model sets <code>num_charge_channels=2</code>.</p>
+<p><strong>Preprocessing:</strong> The total charge <code>Q</code> and multiplicity <code>M</code> are converted to two-channel targets:</p>
+<div class="highlight"><pre><span></span><code>Q_alpha = 0.5 * (Q + (M - 1))
+Q_beta  = 0.5 * (Q - (M - 1))
+</code></pre></div>
+<p><strong>During equilibration:</strong> Both channels are equilibrated independently using the same NSE formula, maintaining conservation for each spin channel.</p>
+<p><strong>Postprocessing:</strong> The two channels are combined:</p>
+<ul>
+<li><code>charges = q_alpha + q_beta</code> (total charge per atom)</li>
+<li><code>spin_charges = q_alpha - q_beta</code> (spin density per atom)</li>
+</ul>
+<h2 id="output-pipeline">Output Pipeline<a class="headerlink" href="#output-pipeline" title="Permanent link">&para;</a></h2>
+<p>After the multi-pass loop produces the AIM vector, the output pipeline converts it to physical observables:</p>
+<h3 id="1-output-mlp">1. Output MLP<a class="headerlink" href="#1-output-mlp" title="Permanent link">&para;</a></h3>
+<p>An <code>Output</code> module applies a final MLP to the AIM vector to produce per-atom raw energies:</p>
+<div class="highlight"><pre><span></span><code>aim_vector (per atom) --[MLP]--&gt; per-atom energy (scalar)
+</code></pre></div>
+<h3 id="2-atomicshift-self-atomic-energies">2. AtomicShift (Self-Atomic Energies)<a class="headerlink" href="#2-atomicshift-self-atomic-energies" title="Permanent link">&para;</a></h3>
+<p><code>AtomicShift</code> adds element-specific energy offsets (SAE values) to the per-atom energies. These are stored as a learnable <code>nn.Embedding</code> indexed by atomic number:</p>
+<div class="highlight"><pre><span></span><code>e_atom = e_raw + SAE[atomic_number]
+</code></pre></div>
+<p>The SAE values are stored in float64 precision to avoid numerical issues when computing energy differences between large molecules.</p>
+<h3 id="3-atomicsum">3. AtomicSum<a class="headerlink" href="#3-atomicsum" title="Permanent link">&para;</a></h3>
+<p><code>AtomicSum</code> sums per-atom energies within each molecule to produce molecular energies:</p>
+<div class="highlight"><pre><span></span><code>E_mol = sum_i  e_atom_i    (for atoms i in molecule)
+</code></pre></div>
+<h3 id="4-long-range-corrections">4. Long-Range Corrections<a class="headerlink" href="#4-long-range-corrections" title="Permanent link">&para;</a></h3>
+<p>Two external modules add long-range physics that the short-range NN cannot capture:</p>
+<p><strong>LRCoulomb</strong> -- Electrostatic energy from predicted charges. Three methods:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Use Case</th>
+<th>Neighbor List</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>simple</code></td>
+<td>Non-periodic, small systems</td>
+<td>All pairs</td>
+</tr>
+<tr>
+<td><code>dsf</code></td>
+<td>Periodic systems</td>
+<td>Finite cutoff (default 15 A)</td>
+</tr>
+<tr>
+<td><code>ewald</code></td>
+<td>Periodic, high accuracy</td>
+<td>Computed from accuracy target</td>
+</tr>
+</tbody>
+</table>
+<p>The Coulomb module uses the charges predicted by the equilibration loop and subtracts the short-range Coulomb component (already learned by the NN) to avoid double-counting.</p>
+<p><strong>DFTD3</strong> -- Grimme's DFT-D3 dispersion correction with BJ damping. Uses reference C6 coefficients and coordination-number-dependent interpolation. Applied with a smoothed cutoff at 15 A (default).</p>
+<h2 id="data-flow-summary">Data Flow Summary<a class="headerlink" href="#data-flow-summary" title="Permanent link">&para;</a></h2>
+<p>The complete data flow through the model:</p>
+<div class="highlight"><pre><span></span><code>Input: coord, numbers, charge [, mult]
+  |
+  v
+AEV (AEVSV): coord + nbmat --&gt; g_sv (N, nnb, nshifts, 4)
+  |
+  v
+Embedding: numbers --&gt; a (N, nfeature [, nshifts])
+  |
+  v
+Pass 0: ConvSV(a, g_sv) --&gt; MLP --&gt; q_initial, f, delta_a
+  |                                    |
+  |                               NSE(Q, q, f)
+  v
+Pass 1: ConvSV(a, g_sv) + ConvSV(q, g_sv) --&gt; MLP --&gt; delta_q, f, delta_a
+  |                                                      |
+  |                                                 NSE(Q, q+dq, f)
+  v
+Pass 2 (final): ConvSV(a, g_sv) + ConvSV(q, g_sv) --&gt; MLP --&gt; aim_vector
+  |
+  v
+Output MLP: aim --&gt; e_atom_raw
+  |
+  v
+AtomicShift: e_atom_raw + SAE[Z] --&gt; e_atom
+  |
+  v
+AtomicSum: sum(e_atom) --&gt; E_mol
+  |
+  v
+LRCoulomb(charges) + DFTD3(coord) --&gt; E_total
+</code></pre></div>
+<h2 id="glossary">Glossary<a class="headerlink" href="#glossary" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Full Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>AEV</strong></td>
+<td>Atomic Environment Vector</td>
+<td>Fixed-length descriptor encoding the local geometry around each atom via Gaussian radial basis functions and directional components.</td>
+</tr>
+<tr>
+<td><strong>NSE</strong></td>
+<td>Neutral Spin Equilibrated</td>
+<td>Charge redistribution scheme that enforces total charge (and optionally spin) conservation by distributing the deficit proportionally to per-atom flexibility values.</td>
+</tr>
+<tr>
+<td><strong>SAE</strong></td>
+<td>Self-Atomic Energy</td>
+<td>Element-specific energy offset (a.k.a. atomic reference energy). Stored as a learnable embedding and added to per-atom NN outputs before summation.</td>
+</tr>
+<tr>
+<td><strong>DSF</strong></td>
+<td>Damped Shifted Force</td>
+<td>Electrostatic method for periodic systems. Applies a damping function and shift to the Coulomb potential at a finite cutoff, avoiding the need for Ewald summation.</td>
+</tr>
+<tr>
+<td><strong>SRCoulomb</strong></td>
+<td>Short-Range Coulomb</td>
+<td>The portion of Coulomb interaction within the NN cutoff radius (5.0 A). When using external Coulomb methods (DSF, Ewald), this component is subtracted to avoid double-counting with the NN.</td>
+</tr>
+<tr>
+<td><strong>nb_threshold</strong></td>
+<td>Neighbor Threshold</td>
+<td>Atom count threshold (default 120) that controls whether molecules are processed in dense batched mode (small systems) or sparse flattened mode (large systems).</td>
+</tr>
+<tr>
+<td><strong>ConvSV</strong></td>
+<td>Scalar-Vector Convolution</td>
+<td>Custom convolution combining neighbor atomic features with AEV geometry descriptors via einsum, producing rotationally invariant output through vector squaring.</td>
+</tr>
+<tr>
+<td><strong>AIM</strong></td>
+<td>Atomic Interaction Model</td>
+<td>The final per-atom feature vector produced by the last MLP pass, which encodes all information needed to predict atomic properties.</td>
+</tr>
+<tr>
+<td><strong>D3TS</strong></td>
+<td>D3 with Tkatchenko-Scheffler combination rule</td>
+<td>Embedded dispersion variant using TS mixing rules for C6 coefficients instead of standard D3 interpolation.</td>
+</tr>
+<tr>
+<td><strong>BJ damping</strong></td>
+<td>Becke-Johnson damping</td>
+<td>Damping function for DFT-D3 that uses element-pair-specific cutoff radii to avoid divergence at short distances.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="key-source-files">Key Source Files<a class="headerlink" href="#key-source-files" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>aimnet/models/aimnet2.py</code></td>
+<td><code>AIMNet2</code> model class with multi-pass forward loop</td>
+</tr>
+<tr>
+<td><code>aimnet/models/base.py</code></td>
+<td><code>AIMNet2Base</code> class, input preprocessing, <code>load_model()</code></td>
+</tr>
+<tr>
+<td><code>aimnet/modules/aev.py</code></td>
+<td><code>AEVSV</code> (AEV computation) and <code>ConvSV</code> (convolution)</td>
+</tr>
+<tr>
+<td><code>aimnet/modules/core.py</code></td>
+<td><code>Output</code>, <code>AtomicShift</code>, <code>AtomicSum</code>, <code>MLP</code>, <code>Embedding</code></td>
+</tr>
+<tr>
+<td><code>aimnet/modules/lr.py</code></td>
+<td><code>LRCoulomb</code>, <code>SRCoulomb</code>, <code>DFTD3</code>, <code>D3TS</code></td>
+</tr>
+<tr>
+<td><code>aimnet/ops.py</code></td>
+<td><code>nse()</code> charge equilibration function</td>
+</tr>
+<tr>
+<td><code>aimnet/calculators/calculator.py</code></td>
+<td><code>AIMNet2Calculator</code> inference wrapper</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["search.highlight", "search.suggest", "content.code.copy"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
