@@ -12,7 +12,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Check out
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
 
             - uses: actions/cache@v5
               with:
@@ -38,7 +38,7 @@ jobs:
                 shell: bash
         steps:
             - name: Check out
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
 
             - name: Set up the environment
               uses: ./.github/actions/setup-uv-env
@@ -64,7 +64,7 @@ jobs:
                 shell: bash
         steps:
             - name: Check out
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
 
             - name: Set up the environment
               uses: ./.github/actions/setup-uv-env
@@ -87,7 +87,7 @@ jobs:
                 shell: bash
         steps:
             - name: Check out
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
 
             - name: Set up the environment
               uses: ./.github/actions/setup-uv-env
@@ -117,7 +117,7 @@ jobs:
                 shell: bash
         steps:
             - name: Check out
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
 
             - name: Set up the environment
               uses: ./.github/actions/setup-uv-env
@@ -140,7 +140,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Check out
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
 
             - name: Set up the environment
               uses: ./.github/actions/setup-uv-env
@@ -164,7 +164,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Check out
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
               with:
                   fetch-depth: 0 # Fetch all history and tags for hatch-vcs
 
