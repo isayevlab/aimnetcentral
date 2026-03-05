@@ -14,16 +14,15 @@ The core calculator for running AIMNet2 inference. It handles model loading, dev
 - **Batching**: Automatically batches large molecules/systems based on `nb_threshold`.
 
 ::: aimnet.calculators.AIMNet2Calculator
-options:
-show_root_heading: true
-show_source: true
+    options:
+      show_root_heading: true
+      show_source: true
 
 ## AIMNet2ASE
 
 [ASE (Atomic Simulation Environment)](https://wiki.fysik.dtu.dk/ase/) calculator interface.
 
-!!! note "Installation"
-Requires the `ase` extra: `pip install aimnet[ase]`
+!!! note "Installation" Requires the `ase` extra: `pip install aimnet[ase]`
 
 This calculator integrates with ASE's `Atoms` object, supporting energy, forces, stress, and dipole moment calculations. It operates in **eV** and **Angstrom**.
 
@@ -41,16 +40,15 @@ print(atoms.get_forces())
 ```
 
 ::: aimnet.calculators.aimnet2ase.AIMNet2ASE
-options:
-show_root_heading: true
-show_source: true
+    options:
+      show_root_heading: true
+      show_source: true
 
 ## AIMNet2Pysis
 
 [PySisyphus](https://pysisyphus.readthedocs.io/) calculator interface.
 
-!!! note "Installation"
-Requires the `pysis` extra: `pip install aimnet[pysis]`
+!!! note "Installation" Requires the `pysis` extra: `pip install aimnet[pysis]`
 
 This interface adapts AIMNet2 for use with PySisyphus optimizers. It handles unit conversion automatically:
 
@@ -58,9 +56,9 @@ This interface adapts AIMNet2 for use with PySisyphus optimizers. It handles uni
 - **Output**: Converts eV/Angstrom (AIMNet2) to **Hartree/Bohr** (PySisyphus).
 
 ::: aimnet.calculators.aimnet2pysis.AIMNet2Pysis
-options:
-show_root_heading: true
-show_source: true
+    options:
+      show_root_heading: true
+      show_source: true
 
 ## Model Registry
 
@@ -75,6 +73,6 @@ aimnet clear_model_cache
 ```
 
 ::: aimnet.calculators.model_registry
-options:
-show_root_heading: true
-show_source: true
+    options:
+      show_root_heading: true
+      show_source: true

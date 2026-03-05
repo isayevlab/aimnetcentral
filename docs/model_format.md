@@ -1,16 +1,15 @@
 # Model Format and Conversion
 
-This document describes the AIMNet2 model format, metadata structure, and conversion between legacy and new formats.
-It reflects the current implementation in `aimnet.models.base`, `aimnet.models.utils`, and `aimnet.calculators.calculator`.
+This document describes the AIMNet2 model format, metadata structure, and conversion between legacy and new formats. It reflects the current implementation in `aimnet.models.base`, `aimnet.models.utils`, and `aimnet.calculators.calculator`.
 
 ## Model Formats
 
 AIMNet2 supports two model formats:
 
-| Format | Extension | Version | Description                                             |
-| ------ | --------- | ------- | ------------------------------------------------------- |
-| Legacy | `.jpt`    | 1       | TorchScript JIT-compiled model with embedded LR modules |
-| New    | `.pt`     | 2       | State dict with embedded YAML config and metadata       |
+| Format | Extension | Version | Description |
+| --- | --- | --- | --- |
+| Legacy | `.jpt` | 1 | TorchScript JIT-compiled model with embedded LR modules |
+| New | `.pt` | 2 | State dict with embedded YAML config and metadata |
 
 ### Format Detection
 
@@ -21,45 +20,44 @@ When loading a model via `load_model()`, the format is automatically detected:
 
 ## Metadata Structure
 
-Model metadata is returned by `load_model()` as a `ModelMetadata` TypedDict.
-For early v2 bundles that predate `format_version`, `load_model()` defaults to `format_version=2`.
+Model metadata is returned by `load_model()` as a `ModelMetadata` TypedDict. For early v2 bundles that predate `format_version`, `load_model()` defaults to `format_version=2`.
 
 ### Core Fields
 
-| Field                 | Type        | Description                                                       |
-| --------------------- | ----------- | ----------------------------------------------------------------- |
-| `format_version`      | `int`       | `1` = legacy JIT, `2` = new format (default for early v2 bundles) |
-| `cutoff`              | `float`     | Model short-range cutoff radius (Å)                               |
-| `implemented_species` | `list[int]` | Supported atomic numbers                                          |
+| Field | Type | Description |
+| --- | --- | --- |
+| `format_version` | `int` | `1` = legacy JIT, `2` = new format (default for early v2 bundles) |
+| `cutoff` | `float` | Model short-range cutoff radius (Å) |
+| `implemented_species` | `list[int]` | Supported atomic numbers |
 
 ### Coulomb Configuration
 
-| Field                 | Type   | Description                                                      |
-| --------------------- | ------ | ---------------------------------------------------------------- | -------------------------------------------------------- |
-| `needs_coulomb`       | `bool` | If `True`, calculator should add external Coulomb                |
-| `coulomb_mode`        | `str`  | What's embedded: `"sr_embedded"`, `"full_embedded"`, or `"none"` |
-| `coulomb_sr_rc`       | `float | None`                                                            | SR Coulomb cutoff (only if `coulomb_mode="sr_embedded"`) |
-| `coulomb_sr_envelope` | `str   | None`                                                            | Envelope function: `"exp"` (mollifier) or `"cosine"`     |
+| Field | Type | Description |
+| --- | --- | --- | --- |
+| `needs_coulomb` | `bool` | If `True`, calculator should add external Coulomb |
+| `coulomb_mode` | `str` | What's embedded: `"sr_embedded"`, `"full_embedded"`, or `"none"` |
+| `coulomb_sr_rc` | `float | None` | SR Coulomb cutoff (only if `coulomb_mode="sr_embedded"`) |
+| `coulomb_sr_envelope` | `str | None` | Envelope function: `"exp"` (mollifier) or `"cosine"` |
 
 ### Dispersion Configuration
 
-| Field              | Type   | Description                                     |
-| ------------------ | ------ | ----------------------------------------------- | --------------------------------- |
+| Field | Type | Description |
+| --- | --- | --- | --- |
 | `needs_dispersion` | `bool` | If `True`, calculator should add external DFTD3 |
-| `d3_params`        | `dict  | None`                                           | D3 parameters: `{s6, s8, a1, a2}` |
+| `d3_params` | `dict | None` | D3 parameters: `{s6, s8, a1, a2}` |
 
 ## Which Format Should I Use?
 
 ### Decision Matrix
 
-| Scenario                     | Format    | Model Type                | Notes                     |
-| ---------------------------- | --------- | ------------------------- | ------------------------- |
-| Training new model           | v2 (.pt)  | Export after training     | Flexible, modern          |
-| Need runtime Coulomb control | v2 (.pt)  | Convert from v1 if needed | Switch simple/DSF/Ewald   |
-| Production inference         | v2 (.pt)  | Preferred                 | Smaller, more flexible    |
-| Legacy deployment            | v1 (.jpt) | Keep as-is                | If compatibility required |
-| Experimenting with methods   | v2 (.pt)  | Required                  | Runtime reconfiguration   |
-| Fixed pipeline               | Either    | Use what works            | No strong preference      |
+| Scenario | Format | Model Type | Notes |
+| --- | --- | --- | --- |
+| Training new model | v2 (.pt) | Export after training | Flexible, modern |
+| Need runtime Coulomb control | v2 (.pt) | Convert from v1 if needed | Switch simple/DSF/Ewald |
+| Production inference | v2 (.pt) | Preferred | Smaller, more flexible |
+| Legacy deployment | v1 (.jpt) | Keep as-is | If compatibility required |
+| Experimenting with methods | v2 (.pt) | Required | Runtime reconfiguration |
+| Fixed pipeline | Either | Use what works | No strong preference |
 
 ### Quick Selection Guide
 
@@ -167,8 +165,7 @@ The envelope function defines how the SR interaction decays at the cutoff:
 - Calculator creates external DFTD3 module
 - Cutoff can be configured via `set_dftd3_cutoff()` for external DFTD3 only
 
-**Note:** DFTD3 cutoff/smoothing values are not currently stored in metadata. External DFTD3
-defaults to 15.0 Å cutoff and 0.8 smoothing fraction unless overridden at runtime.
+**Note:** DFTD3 cutoff/smoothing values are not currently stored in metadata. External DFTD3 defaults to 15.0 Å cutoff and 0.8 smoothing fraction unless overridden at runtime.
 
 ### Embedded D3TS
 
@@ -291,18 +288,18 @@ print(metadata["coulomb_mode"])
 
 ## Metadata Behavior Summary
 
-| Model Type          | `needs_coulomb` | `coulomb_mode`    | Calculator Behavior     |
-| ------------------- | --------------- | ----------------- | ----------------------- |
-| New with Coulomb    | `True`          | `"sr_embedded"`   | Adds external LRCoulomb |
-| New without Coulomb | `False`         | `"none"`          | No external Coulomb     |
-| Legacy JIT          | `False`         | `"full_embedded"` | Coulomb embedded in JIT |
+| Model Type | `needs_coulomb` | `coulomb_mode` | Calculator Behavior |
+| --- | --- | --- | --- |
+| New with Coulomb | `True` | `"sr_embedded"` | Adds external LRCoulomb |
+| New without Coulomb | `False` | `"none"` | No external Coulomb |
+| Legacy JIT | `False` | `"full_embedded"` | Coulomb embedded in JIT |
 
-| Model Type             | `needs_dispersion` | Calculator Behavior                                   |
-| ---------------------- | ------------------ | ----------------------------------------------------- |
-| New with DFTD3/D3BJ    | `True`             | Adds external DFTD3                                   |
-| New with D3TS          | `False`            | D3TS embedded                                         |
-| New without dispersion | `False`            | No dispersion                                         |
-| Legacy with DFTD3      | `False`            | Embedded in JIT (d3_params extracted for diagnostics) |
+| Model Type | `needs_dispersion` | Calculator Behavior |
+| --- | --- | --- |
+| New with DFTD3/D3BJ | `True` | Adds external DFTD3 |
+| New with D3TS | `False` | D3TS embedded |
+| New without dispersion | `False` | No dispersion |
+| Legacy with DFTD3 | `False` | Embedded in JIT (d3_params extracted for diagnostics) |
 
 ## API Reference
 

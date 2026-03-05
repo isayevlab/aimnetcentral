@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 try:
-    from ase.calculators.calculator import Calculator, all_changes  # type: ignore
+    from ase.calculators.calculator import Calculator, PropertyNotImplementedError, all_changes  # type: ignore
 except ImportError:
     raise ImportError("ASE is not installed. Please install ASE to use this module.") from None
 
@@ -30,6 +30,8 @@ class AIMNet2ASE(Calculator):
         if isinstance(base_calc, str):
             base_calc = AIMNet2Calculator(base_calc)
         self.base_calc = base_calc
+        if self.base_calc.is_nse:
+            self.implemented_properties = [*self.__class__.implemented_properties, "spin_charges"]
         self.reset()
         self.charge = charge
         self.mult = mult
@@ -57,6 +59,25 @@ class AIMNet2ASE(Calculator):
         self.reset()
         self.atoms = atoms
 
+    def check_state(self, atoms, tol=1e-15):
+        state = super().check_state(atoms, tol=tol)
+        if (not state) and getattr(self, "atoms", None) is not None:
+            # Check for specific keys in info that affect the calculation
+            old_info = getattr(self.atoms, "info", {})
+            new_info = getattr(atoms, "info", {})
+
+            # Check charge
+            if old_info.get("charge") != new_info.get("charge"):
+                state.append("info")
+
+            # Check spin/multiplicity (NSE models only)
+            elif self.base_calc.is_nse:
+                old_spin = old_info.get("spin", old_info.get("mult"))
+                new_spin = new_info.get("spin", new_info.get("mult"))
+                if old_spin != new_spin:
+                    state.append("info")
+        return state
+
     def set_charge(self, charge):
         self.charge = charge
         self._t_charge = None
@@ -66,6 +87,28 @@ class AIMNet2ASE(Calculator):
         self.mult = mult
         self._t_mult = None
         self.update_tensors()
+
+    def _update_charge_spin_from_info(self):
+        atoms = getattr(self, "atoms", None)
+        if atoms is None:
+            return
+        info = getattr(atoms, "info", {})
+
+        # Order of precedence for charge:
+        # 1. atoms.info['charge']
+        # 2. calculator.charge (passed to constructor or set_charge)
+        charge = info.get("charge")
+        if charge is not None and charge != self.charge:
+            self.charge = charge
+            self._t_charge = None
+
+        if self.base_calc.is_nse:
+            # Support both "mult" (AIMNet2 style) and "spin" (MACE style)
+            # Both represent multiplicity (2S+1)
+            mult = info.get("mult", info.get("spin"))
+            if mult is not None and mult != self.mult:
+                self.mult = mult
+                self._t_mult = None
 
     def update_tensors(self):
         if self._t_numbers is None and getattr(self, "atoms", None):
@@ -80,10 +123,16 @@ class AIMNet2ASE(Calculator):
         positions = atoms.get_positions()
         return np.sum(charges * positions, axis=0)
 
+    def get_spin_charges(self, atoms=None):
+        if "spin_charges" not in self.results:
+            raise PropertyNotImplementedError("spin_charges is not available. Use an NSE model (e.g. 'aimnet2nse').")
+        return self.results["spin_charges"]
+
     def calculate(self, atoms=None, properties=None, system_changes=all_changes):
         if properties is None:
             properties = ["energy"]
         super().calculate(atoms, properties, system_changes)
+        self._update_charge_spin_from_info()
         self.update_tensors()
 
         cell = self.atoms.cell.array if self.atoms.cell is not None and self.atoms.pbc.any() else None
@@ -126,8 +175,9 @@ class AIMNet2ASE(Calculator):
             self.results["forces"] = results["forces"]
         if "stress" in properties:
             self.results["stress"] = results["stress"]
-
-
+        if "spin_charges" in results:
+            self.results["spin_charges"] = results["spin_charges"]
+      
 class CQEQAimNet2ASE(Calculator):
     """AIMNet2ASE Calculator using CQEq constrained charge equilibration.
 
@@ -214,3 +264,5 @@ class CQEQAimNet2ASE(Calculator):
         self.results["charges"] = results["charges"]
         if need_forces and "forces" in results:
             self.results["forces"] = results["forces"]
+        if "spin_charges" in results:
+            self.results["spin_charges"] = results["spin_charges"]

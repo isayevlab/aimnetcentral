@@ -1,5 +1,6 @@
 docs/source
 aimnet/calculators/assets/
+_tmp/
 
 
 
@@ -157,6 +158,9 @@ cython_debug/
 
 # Claude Code
 .claude/
+
+# Git worktrees
+.worktrees/
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
