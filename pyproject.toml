@@ -46,7 +46,7 @@ dependencies = [
 [project.optional-dependencies]
 # ASE calculator integration
 ase = [
-    "ase==3.27.0",
+    "ase==3.28.0",
 ]
 
 # PySisyphus calculator integration
