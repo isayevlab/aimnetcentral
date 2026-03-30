@@ -441,30 +441,44 @@ class AIMNet2Calculator:
         """
         return self._dftd3_cutoff
 
+#    def _has_embedded_dispersion(self) -> bool:
+#        """Check if model has embedded dispersion (not externalized).
+#
+#        Uses model metadata when available, otherwise returns False (unknown).
+#
+#        Returns
+#        -------
+#        bool
+#            True if model has embedded dispersion module (D3TS or legacy DFTD3).
+#        """
+#        meta = getattr(self.model, "_metadata", None)
+#        if meta is None:
+#            return False  # Unknown, assume no embedded dispersion
+#
+#        # New format: Check for embedded D3TS via has_embedded_lr
+#        # If has_embedded_lr=True and coulomb_mode != "sr_embedded", it's D3TS
+#        if meta.get("has_embedded_lr", False):
+#            coulomb_mode = meta.get("coulomb_mode", "none")
+#            if coulomb_mode != "sr_embedded":
+#                return True  # Must be D3TS (embedded dispersion)
+#
+#        # Legacy format: If needs_dispersion=False and d3_params exist, dispersion is embedded
+#        # (legacy JIT models have dispersion embedded)
+#        return not meta.get("needs_dispersion", False) and meta.get("d3_params") is not None
+
     def _has_embedded_dispersion(self) -> bool:
-        """Check if model has embedded dispersion (not externalized).
+        """Check if model has embedded dispersion."""
 
-        Uses model metadata when available, otherwise returns False (unknown).
+        # Best way to check: inspect actual model modules
+        if any(m.__class__.__name__ == "D3TS" for m in self.model.modules()):
+            return True
 
-        Returns
-        -------
-        bool
-            True if model has embedded dispersion module (D3TS or legacy DFTD3).
-        """
+        # Fallback for older exported / legacy models
         meta = getattr(self.model, "_metadata", None)
         if meta is None:
-            return False  # Unknown, assume no embedded dispersion
+            return False
 
-        # New format: Check for embedded D3TS via has_embedded_lr
-        # If has_embedded_lr=True and coulomb_mode != "sr_embedded", it's D3TS
-        if meta.get("has_embedded_lr", False):
-            coulomb_mode = meta.get("coulomb_mode", "none")
-            if coulomb_mode != "sr_embedded":
-                return True  # Must be D3TS (embedded dispersion)
-
-        # Legacy format: If needs_dispersion=False and d3_params exist, dispersion is embedded
-        # (legacy JIT models have dispersion embedded)
-        return not meta.get("needs_dispersion", False) and meta.get("d3_params") is not None
+        return (not meta.get("needs_dispersion", False)) and (meta.get("d3_params") is not None)
 
     def _has_embedded_coulomb(self) -> bool:
         """Check if model has embedded Coulomb (not externalized).
