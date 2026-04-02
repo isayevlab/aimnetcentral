@@ -79,7 +79,7 @@ def calc_distances(data: dict[str, Tensor], suffix: str = "", pad_value: float =
 def center_coordinates(coord: Tensor, data: dict[str, Tensor], masses: Tensor | None = None) -> Tensor:
     if masses is not None:
         masses = masses.unsqueeze(-1)
-        center = nbops.mol_sum(coord * masses, data) / nbops.mol_sum(masses, data) / data["mol_sizes"].unsqueeze(-1)
+        center = nbops.mol_sum(coord * masses, data) / nbops.mol_sum(masses, data)
     else:
         center = nbops.mol_sum(coord, data) / data["mol_sizes"]
     nb_mode = nbops.get_nb_mode(data)
