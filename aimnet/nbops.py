@@ -48,14 +48,11 @@ def calc_masks(data: dict[str, Tensor]) -> dict[str, Tensor]:
         for suffix in ("", "_lr", "_coulomb", "_dftd3"):
             nbmat_key = f"nbmat{suffix}"
             if nbmat_key in data:
-                if not torch.jit.is_scripting():
-                    # data_ptr() not supported in TorchScript
-                    ptr = data[nbmat_key].data_ptr()
-                    if ptr in processed:
-                        # Same array - reuse existing mask
-                        data[f"mask_ij{suffix}"] = data[f"mask_ij{processed[ptr]}"]
-                        continue
-                    processed[ptr] = suffix
+                ptr = data[nbmat_key].data_ptr()
+                if ptr in processed:
+                    data[f"mask_ij{suffix}"] = data[f"mask_ij{processed[ptr]}"]
+                    continue
+                processed[ptr] = suffix
                 data[f"mask_ij{suffix}"] = data[nbmat_key] == data["numbers"].shape[0] - 1
         data["_input_padded"] = torch.tensor(True)
         data["mol_sizes"] = torch.bincount(data["mol_idx"])
@@ -70,14 +67,11 @@ def calc_masks(data: dict[str, Tensor]) -> dict[str, Tensor]:
         for suffix in ("", "_lr", "_coulomb", "_dftd3"):
             nbmat_key = f"nbmat{suffix}"
             if nbmat_key in data:
-                if not torch.jit.is_scripting():
-                    # data_ptr() not supported in TorchScript
-                    ptr = data[nbmat_key].data_ptr()
-                    if ptr in processed:
-                        # Same array - reuse existing mask
-                        data[f"mask_ij{suffix}"] = data[f"mask_ij{processed[ptr]}"]
-                        continue
-                    processed[ptr] = suffix
+                ptr = data[nbmat_key].data_ptr()
+                if ptr in processed:
+                    data[f"mask_ij{suffix}"] = data[f"mask_ij{processed[ptr]}"]
+                    continue
+                processed[ptr] = suffix
                 data[f"mask_ij{suffix}"] = torch.isin(data[nbmat_key], pad_idx)
         data["_input_padded"] = torch.tensor(True)
         data["mol_sizes"] = (~data["mask_i"]).sum(-1)

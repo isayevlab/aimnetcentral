@@ -45,7 +45,7 @@ The Pd model replaces As with Pd:
 | **AIMNet2-2025** | **`aimnet2_2025`** | **B97-3c (improved)** | **General-purpose B97-3c** | **Recommended B97-3c model; supersedes B97-3c** |
 | AIMNet2-B97-3c | `aimnet2_b973c` | B97-3c | Legacy B97-3c screening | Superseded by AIMNet2-2025 |
 | AIMNet2-NSE | `aimnet2nse` | wB97M-D3 | Open-shell systems | Radicals, triplet states, bond dissociation |
-| AIMNet2-Pd | `aimnet2pd` | wB97M-D3/CPCM (THF) | Pd catalysis | Pd organometallics with implicit THF solvation |
+| AIMNet2-Pd | `aimnet2pd` | B97-3c/CPCM (THF) | Pd catalysis | Pd organometallics with implicit THF solvation |
 
 ## Decision Flowchart
 
