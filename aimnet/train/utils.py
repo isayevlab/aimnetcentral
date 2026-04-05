@@ -326,12 +326,6 @@ def build_engine(model, optimizer, scheduler, loss_fn, metrics, cfg, loader_val)
             s.append(f"{k}: {v[1]:.4f}")
         s = " ".join(s)
         logging.info(s)
-        if loss_fn.weights is not None:
-            s = []
-            for k, v in loss_fn.weights.items():
-                s.append(f"{k}: {v:.4f}")
-            s = " ".join(s)
-            logging.info(s)
 
     trainer.add_event_handler(Events.EPOCH_STARTED, log_loss_weights)
 
