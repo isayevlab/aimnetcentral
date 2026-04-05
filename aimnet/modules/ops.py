@@ -21,16 +21,14 @@
 """
 DFT-D3 Custom Op for PyTorch.
 
-This module provides a TorchScript-compatible custom op for DFT-D3 dispersion
-energy computation using nvalchemiops GPU-accelerated kernels.
+This module provides a custom op for DFT-D3 dispersion energy computation
+using nvalchemiops GPU-accelerated kernels.
 
-TorchScript Compatibility
--------------------------
-- torch.jit.script(): SUPPORTED - Models using this op can be scripted
-- torch.jit.save(): SUPPORTED - Uses torch.autograd.Function pattern for serialization
+The implementation wraps nvalchemiops calls in torch.autograd.Function classes
+with torch.library custom op registration for torch.compile compatibility.
 
-The implementation wraps nvalchemiops calls in torch.autograd.Function classes,
-which enables proper serialization with TorchScript.
+Note: Creating new TorchScript modules via torch.jit.script() is no longer
+supported. Loading legacy .jpt files remains functional.
 
 Stress Sign Convention
 ----------------------
@@ -56,7 +54,7 @@ ASE and standard MD conventions.
 from typing import Any
 
 import torch
-from nvalchemiops.interactions.dispersion.dftd3 import dftd3
+from nvalchemiops.torch.interactions.dispersion import dftd3
 from torch import Tensor
 from torch.autograd import Function
 
@@ -71,7 +69,7 @@ class _DFTD3Function(Function):
     """Autograd Function for DFT-D3 dispersion energy computation.
 
     This class wraps the nvalchemiops dftd3 implementation with proper
-    autograd support, enabling both gradient computation and TorchScript
+    autograd support, enabling gradient computation and custom op
     serialization.
 
     Notes
@@ -194,7 +192,7 @@ class _DFTD3Function(Function):
         # Cauchy stress = -virial / volume, so dE/dcell = -virial @ inv(cell).T
         grad_cell = None
         if has_cell and compute_virial and virial.numel() > 0:
-            cell_inv_t = torch.linalg.inv(cell_bohr).transpose(-1, -2)
+            cell_inv_t = torch.linalg.inv(cell_bohr).mT
             dE_dcell_bohr = -virial @ cell_inv_t  # Negative sign for Cauchy stress
             dE_dcell_ang = dE_dcell_bohr * constants.Hartree * constants.Bohr_inv
             grad_cell = dE_dcell_ang * grad_energy.view(-1, 1, 1)
@@ -382,7 +380,7 @@ def _dftd3_backward(
     # Cauchy stress = -virial / volume, so dE/dcell = -virial @ inv(cell).T
     grad_cell = None
     if has_cell and compute_virial and virial.numel() > 0:
-        cell_inv_t = torch.linalg.inv(cell_bohr).transpose(-1, -2)
+        cell_inv_t = torch.linalg.inv(cell_bohr).mT
         dE_dcell_bohr = -virial @ cell_inv_t  # Negative sign for Cauchy stress
         dE_dcell_ang = dE_dcell_bohr * constants.Hartree * constants.Bohr_inv
         grad_cell = dE_dcell_ang * grad_energy.view(-1, 1, 1)

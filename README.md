@@ -1,33 +1,76 @@
 [![Release](https://img.shields.io/github/v/release/isayevlab/aimnetcentral)](https://github.com/isayevlab/aimnetcentral/releases) [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](https://www.python.org/) [![Build status](https://img.shields.io/github/actions/workflow/status/isayevlab/aimnetcentral/main.yml?branch=main)](https://github.com/isayevlab/aimnetcentral/actions/workflows/main.yml?query=branch%3Amain) [![codecov](https://codecov.io/gh/isayevlab/aimnetcentral/branch/main/graph/badge.svg)](https://codecov.io/gh/isayevlab/aimnetcentral) [![License](https://img.shields.io/github/license/isayevlab/aimnetcentral)](https://github.com/isayevlab/aimnetcentral/blob/main/LICENSE)
 
-- **Github repository**: <https://github.com/isayevlab/aimnetcentral/>
-- **Documentation** <https://isayevlab.github.io/aimnetcentral/>
+- **Documentation**: <https://isayevlab.github.io/aimnetcentral/>
+- **Repository**: <https://github.com/isayevlab/aimnetcentral/>
 
-# AIMNet2 : ML interatomic potential for fast and accurate atomistic simulations
+# AIMNet2 : ML Interatomic Potential for Fast and Accurate Atomistic Simulations
+
+AIMNet2 is a neural network interatomic potential that predicts energies, forces, atomic charges, stress tensors, and Hessians for organic and elemental-organic molecules. It supports 14 elements (H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I) with specialized models for open-shell chemistry and palladium catalysis.
 
 ## Key Features
 
-- Accurate and Versatile: AIMNet2 excels at modeling neutral, charged, organic, and elemental-organic systems.
-- Flexible Interfaces: Use AIMNet2 through convenient calculators for popular simulation packages like ASE and PySisyphus.
-- Flexible Long-Range Interactions: Optionally employ the Damped-Shifted Force (DSF) or Ewald summation Coulomb models for accurate calculations in large or periodic systems.
+- Accurate for neutral, charged, organic, and elemental-organic systems
+- GPU-accelerated with NVIDIA Warp CUDA kernels and `torch.compile` support
+- ASE and PySisyphus calculator interfaces
+- Periodic boundary conditions with DSF and Ewald Coulomb methods
+- DFT-D3 dispersion corrections (BJ damping, GPU-accelerated)
+- Adaptive neighbor lists with automatic dense/sparse mode selection
 
-## Requirements
+## Installation
 
-### Python Version
+### Requirements
 
-AIMNet2 requires **Python 3.11 or 3.12**.
+- **Python** 3.11+
+- **PyTorch** 2.8+ ([pytorch.org](https://pytorch.org/get-started/locally/))
 
-### GPU Support (Optional)
-
-AIMNet2 works on CPU out of the box. For GPU acceleration:
-
-- **CUDA GPU**: Install PyTorch with CUDA support from [pytorch.org](https://pytorch.org/get-started/locally/)
-- **compile_model**: Requires CUDA for ~5x MD speedup (see Performance Optimization)
-
-Example PyTorch installation with CUDA 12.4:
+### Using pip
 
 ```bash
-pip install torch --index-url https://download.pytorch.org/whl/cu124
+# Install PyTorch first (with CUDA if you have a GPU)
+pip install torch --index-url https://download.pytorch.org/whl/cu126
+
+# Install AIMNet2
+pip install aimnet
+
+# Install GPU-accelerated neighbor lists and dispersion kernels
+pip install 'nvalchemi-toolkit-ops[torch]'
+```
+
+### Using uv (recommended for fast installs)
+
+```bash
+# Install PyTorch + AIMNet2 in one step
+uv pip install torch --index-url https://download.pytorch.org/whl/cu126
+uv pip install aimnet 'nvalchemi-toolkit-ops[torch]'
+```
+
+### Using conda/mamba
+
+```bash
+# Create environment with PyTorch from conda-forge
+mamba create -n aimnet python=3.12 pytorch pytorch-cuda=12.6 -c pytorch -c nvidia -c conda-forge
+mamba activate aimnet
+
+# Install AIMNet2 and GPU kernels via pip (not yet on conda-forge)
+pip install aimnet 'nvalchemi-toolkit-ops[torch]'
+```
+
+### Optional Extras
+
+```bash
+pip install "aimnet[ase]"             # ASE calculator interface
+pip install "aimnet[pysis]"           # PySisyphus reaction path calculator
+pip install "aimnet[train]"           # Training pipeline (W&B, ignite)
+pip install "aimnet[ase,pysis,train]" # All extras
+```
+
+### Development Setup
+
+```bash
+git clone https://github.com/isayevlab/aimnetcentral.git
+cd aimnetcentral
+make install        # Creates venv, installs all extras + dev tools
+source .venv/bin/activate
 ```
 
 ## Available Models
@@ -38,114 +81,40 @@ pip install torch --index-url https://download.pytorch.org/whl/cu124
 | `aimnet2_2025` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c + improved intermolecular (recommended) |
 | `aimnet2_b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c (superseded by aimnet2_2025) |
 | `aimnet2nse` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | Open-shell / radical chemistry |
-| `aimnet2pd` | H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I | Pd systems with CPCM implicit solvation (THF) |
+| `aimnet2pd` | H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I | Pd systems with CPCM solvation (THF) |
 
-_Each model has ensemble members numbered 0–3 (e.g., `aimnet2_0` … `aimnet2_3`; `aimnet2pd` uses `aimnet2-pd_0` … `aimnet2-pd_3`). Ensemble averaging recommended for production use._
-
-## Installation
-
-### Basic Installation
-
-Install from PyPI:
-
-```bash
-pip install aimnet
-```
-
-### Optional Features
-
-AIMNet2 provides optional extras for different use cases:
-
-**ASE Calculator** (for atomistic simulations with ASE):
-
-```bash
-pip install "aimnet[ase]"
-```
-
-**PySisyphus Calculator** (for reaction path calculations):
-
-```bash
-pip install "aimnet[pysis]"
-```
-
-**Training** (for model training and development):
-
-```bash
-pip install "aimnet[train]"
-```
-
-**All Features**:
-
-```bash
-pip install "aimnet[ase,pysis,train]"
-```
-
-### Development Installation
-
-For contributors, use [uv](https://docs.astral.sh/uv/) for fast dependency management:
-
-```bash
-git clone https://github.com/isayevlab/aimnetcentral.git
-cd aimnetcentral
-make install
-source .venv/bin/activate
-```
+Each model has 4 ensemble members (0-3). Models are auto-downloaded on first use.
 
 ## Quick Start
 
-### Basic Usage (Core)
+### Core Calculator
 
 ```python
 from aimnet.calculators import AIMNet2Calculator
 
-# Load a pre-trained model
 calc = AIMNet2Calculator("aimnet2")
 
-# Prepare input
-data = {
-    "coord": coordinates,  # Nx3 array
-    "numbers": atomic_numbers,  # N array
-    "charge": 0.0,
-}
-
-# Run inference
-results = calc(data, forces=True)
+results = calc(
+    {"coord": coordinates, "numbers": atomic_numbers, "charge": 0.0},
+    forces=True,
+)
 print(results["energy"], results["forces"])
 ```
 
-### Output Data
-
-The calculator returns a dictionary with the following keys:
-
-| Key       | Shape                   | Description                          |
-| --------- | ----------------------- | ------------------------------------ |
-| `energy`  | `(,)` or `(B,)`         | Total energy in eV                   |
-| `charges` | `(N,)` or `(B, N)`      | Atomic partial charges in e          |
-| `forces`  | `(N, 3)` or `(B, N, 3)` | Atomic forces in eV/A (if requested) |
-| `hessian` | `(N, 3, N, 3)`          | Second derivatives (if requested)    |
-| `stress`  | `(3, 3)`                | Stress tensor for PBC (if requested) |
-
-_B = batch size, N = number of atoms_
-
 ### ASE Integration
-
-With `aimnet[ase]` installed:
 
 ```python
 from ase.io import read
-from aimnet.calculators import AIMNet2ASE, AIMNet2Calculator
+from aimnet.calculators import AIMNet2ASE
 
-base_calc = AIMNet2Calculator("aimnet2")
 atoms = read("molecule.xyz")
-atoms.calc = AIMNet2ASE(base_calc, charge=0)
+atoms.calc = AIMNet2ASE("aimnet2", charge=0)
 
 energy = atoms.get_potential_energy()
 forces = atoms.get_forces()
 ```
 
-### Periodic Boundary Conditions
-
-For periodic systems, provide a unit cell:
+### Periodic Systems
 
 ```python
 data = {
@@ -155,75 +124,80 @@ data = {
     "cell": cell_vectors,  # 3x3 array in Angstrom
 }
 results = calc(data, forces=True, stress=True)
-```
 
-### Long-Range Coulomb Methods
-
-Configure electrostatic interactions for large or periodic systems:
-
-```python
-# Damped-Shifted Force (DSF) - recommended for periodic systems
+# Configure Coulomb method for periodic systems
 calc.set_lrcoulomb_method("dsf", cutoff=15.0, dsf_alpha=0.2)
-
-# Ewald summation - for accurate periodic electrostatics
+# or Ewald summation for high accuracy
 calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-8)
 ```
 
-### Performance Optimization
+### Performance: torch.compile
 
-For molecular dynamics simulations, use `compile_model` for ~5x speedup:
+For molecular dynamics, `compile_model=True` gives ~5x speedup (requires CUDA):
 
 ```python
 calc = AIMNet2Calculator("aimnet2", compile_model=True)
 ```
 
-Requirements:
+### Output Reference
 
-- CUDA GPU required
-- Only the NN forward pass is compiled (not neighbor lists or Coulomb/DFTD3 modules)
-- Best for repeated inference on similar-sized systems
+| Key       | Shape                   | Description                          |
+| --------- | ----------------------- | ------------------------------------ |
+| `energy`  | `(,)` or `(B,)`         | Total energy in eV                   |
+| `charges` | `(N,)` or `(B, N)`      | Atomic partial charges in e          |
+| `forces`  | `(N, 3)` or `(B, N, 3)` | Atomic forces in eV/A (if requested) |
+| `hessian` | `(N, 3, N, 3)`          | Second derivatives (if requested)    |
+| `stress`  | `(3, 3)`                | Stress tensor for PBC (if requested) |
 
-### Training
+## How It Works
 
-With `aimnet[train]` installed:
+### Architecture
+
+AIMNet2 uses a message-passing neural network with iterative charge equilibration:
+
+1. **AEVSV** - Gaussian basis expansion of pairwise distances and displacement vectors
+2. **ConvSV** - Sparse indexed convolution combining atomic features with local geometry (GPU-accelerated via NVIDIA Warp kernels)
+3. **MLP passes** - Iterative refinement with charge prediction and Coulomb-aware features
+4. **Output modules** - Energy, forces (via autograd), charges, stress, Hessian
+
+### Dense vs Sparse Mode
+
+The calculator automatically selects the optimal strategy:
+
+- **Dense mode (O(N^2))** - Small molecules on GPU. Fully connected graph, maximum parallelism.
+- **Sparse mode (O(N))** - Large systems or CPU. Adaptive neighbor lists with ~75% buffer utilization, 16-byte aligned allocations, automatic overflow handling.
+
+The threshold is configurable via `nb_threshold` (default: 120 atoms).
+
+### Long-Range Corrections
+
+- **DFT-D3** dispersion with BJ damping (GPU-accelerated via nvalchemiops)
+- **Coulomb**: Simple (all-pairs), DSF (damped-shifted force), or Ewald summation
+- All long-range modules are differentiable and support stress tensor computation
+
+## Training
 
 ```bash
+pip install "aimnet[train]"
 aimnet train --config my_config.yaml --model aimnet2.yaml
 ```
 
-## Technical Details
-
-### Batching and Neighbor Lists
-
-The `AIMNet2Calculator` automatically selects the optimal strategy based on system size (`nb_threshold`, default 120 atoms) and hardware:
-
-1. **Dense Mode (O(N²))**: Used for small molecules on GPU. Input is kept in 3D batched format `(B, N, 3)`. No neighbor list is computed; the model uses a fully connected graph for maximum parallelism.
-2. **Sparse Mode (O(N))**: Used for large systems or CPU execution. Input is flattened to 2D `(N_total, 3)` with an adaptive neighbor list. This ensures linear memory scaling.
-
-### Adaptive Neighbor List
-
-In sparse mode, AIMNet2 uses an `AdaptiveNeighborList` that automatically resizes its buffer to maintain efficient utilization (~75%) while preventing overflows.
-
-- **Format**: The neighbor list is stored as a 2D integer matrix `nbmat` of shape `(N_total, max_neighbors)`. Each row `i` contains the indices of atoms neighboring atom `i`.
-- **Padding**: Rows with fewer neighbors than `max_neighbors` are padded with the index `N_total` (a dummy atom index).
-- **Buffer Management**: The buffer size `max_neighbors` is always a multiple of 16 for memory alignment. It dynamically expands (by 1.5x) on overflow and shrinks if utilization drops significantly below the target, ensuring robust performance during MD simulations where density fluctuates.
+See the [training documentation](https://isayevlab.github.io/aimnetcentral/train/) for dataset preparation, configuration, and W&B integration.
 
 ## Development
 
-Common development tasks using `make`:
-
 ```bash
-make check       # Run linters and code quality checks
-make test        # Run tests with coverage
-make docs        # Build and serve documentation
-make build       # Build distribution packages
+make check       # Linters and code quality (ruff, markdownlint, prettier)
+make test        # Tests with coverage (pytest, parallel)
+make docs        # Build and serve documentation (mkdocs)
+make docs-test   # Validate docs build
 ```
 
 ## Citation
 
-If you use AIMNet2 in your research, please cite the appropriate paper:
+If you use AIMNet2 in your research, please cite:
 
-**AIMNet2 (main model):**
+**AIMNet2:**
 
 ```bibtex
 @article{aimnet2,

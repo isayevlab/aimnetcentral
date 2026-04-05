@@ -10,7 +10,7 @@ AIMNet2-Pd extends AIMNet2 to **palladium-catalyzed organometallic chemistry**. 
 
 **Ensemble members:** `aimnet2-pd_0` through `aimnet2-pd_3` (4 models)
 
-**DFT reference:** wB97M-D3 with CPCM implicit solvation (THF solvent)
+**DFT reference:** B97-3c with CPCM implicit solvation (THF solvent)
 
 !!! warning "Element coverage difference" AIMNet2-Pd replaces **As** (arsenic) with **Pd** (palladium) compared to the standard AIMNet2 element set. Arsenic is **not supported** by this model.
 
@@ -31,7 +31,7 @@ AIMNet2-Pd extends AIMNet2 to **palladium-catalyzed organometallic chemistry**. 
 
 !!! warning "No arsenic" Arsenic (As) is excluded from the element set. If your Pd complex contains arsine ligands (AsR3), this model cannot be used.
 
-!!! tip "Implicit solvation included" Unlike other AIMNet2 models, AIMNet2-Pd is trained on wB97M-D3/CPCM reference data with **THF as the implicit solvent**. This means solvent stabilization effects relevant to homogeneous catalysis in THF or similar non-polar aprotic solvents are captured directly. For reactions in very different solvent environments (e.g., water, DMSO), additional solvation corrections may still be needed.
+!!! tip "Implicit solvation included" Unlike other AIMNet2 models, AIMNet2-Pd is trained on B97-3c/CPCM reference data with **THF as the implicit solvent**. This means solvent stabilization effects relevant to homogeneous catalysis in THF or similar non-polar aprotic solvents are captured directly. For reactions in very different solvent environments (e.g., water, DMSO), additional solvation corrections may still be needed.
 
 !!! warning "Closed-shell only" AIMNet2-Pd assumes closed-shell electronic structure. Open-shell Pd intermediates (e.g., Pd(I) species, radical mechanisms) require DFT treatment. For organic radical chemistry without Pd, use [AIMNet2-NSE](aimnet2nse.md).
 
@@ -128,7 +128,7 @@ print(f"Ligand binding energy: {binding_energy * 23.0609:.1f} kcal/mol")
 
 ### Training Data
 
-AIMNet2-Pd is trained on wB97M-D3/CPCM (THF solvent) reference data for diverse Pd-containing molecular complexes. The implicit CPCM solvation model for THF is baked into the training data, so all predicted energetics include continuum solvent effects appropriate for THF and similar non-polar aprotic solvents. The training set covers:
+AIMNet2-Pd is trained on B97-3c/CPCM (THF solvent) reference data for diverse Pd-containing molecular complexes. The implicit CPCM solvation model for THF is baked into the training data, so all predicted energetics include continuum solvent effects appropriate for THF and similar non-polar aprotic solvents. The training set covers:
 
 - Pd(0) and Pd(II) oxidation states
 - Common ligand types: phosphines, amines, halides, N-heterocyclic carbenes

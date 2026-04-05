@@ -90,7 +90,7 @@ class TestCUDANeighborList:
 
     def test_nbmat_cuda_vs_cpu(self):
         """Test that CUDA and CPU neighbor lists produce same results."""
-        from nvalchemiops.neighborlist import neighbor_list
+        from nvalchemiops.torch.neighbors import neighbor_list
 
         torch.manual_seed(42)
         N = 50
@@ -309,7 +309,7 @@ class TestCPUGPUConsistency:
 
     def test_neighborlist_cpu_vs_gpu_with_pbc(self):
         """Verify PBC neighborlist and shifts match between devices."""
-        from nvalchemiops.neighborlist import neighbor_list
+        from nvalchemiops.torch.neighbors import neighbor_list
 
         torch.manual_seed(123)
         N = 20

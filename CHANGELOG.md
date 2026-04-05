@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-04-05
+
+### Breaking Changes
+
+- Minimum PyTorch version raised from 2.4 to **2.8**
+- Minimum `nvalchemi-toolkit-ops` version raised from 0.2 to **0.3**
+- Creating new TorchScript modules via `torch.jit.script()` is **no longer supported**; loading legacy `.jpt` files remains fully functional
+
+### Changed
+
+- Modernized nvalchemiops import paths for v0.3 API (`nvalchemiops.torch.neighbors`, `nvalchemiops.torch.interactions.dispersion`)
+- Replaced deprecated `torch.inverse()` with `torch.linalg.inv()`
+- Replaced `.transpose(-1, -2)` with `.mT` for matrix transpose operations
+- Made `torch.jit.optimized_execution()` conditional on `ScriptModule` (preserves legacy `.jpt` inference, no-op for eager/compiled models)
+- Removed `torch.jit.is_scripting()` guards from neighbor mask computation and DFTD3 force calculation
+- Relaxed ASE dependency from `==3.27.0` to `>=3.27.0,<4`
+- Bumped `codecov/codecov-action` from v5 to v6 in CI
+
+### Fixed
+
+- Corrected AIMNet2-Pd DFT reference from wB97M-D3/CPCM to **B97-3c/CPCM** (THF) in documentation
+- Model loading now uses `weights_only=True` by default, falling back to full deserialization only for legacy `.jpt` TorchScript archives
+- Model download validates HTTP response status before writing to disk
+
+### Documentation
+
+- Modernized README with prominent install instructions (pip, uv, conda/mamba) and `nvalchemi-toolkit-ops[torch]` install guidance
+- Updated TorchScript compatibility notes across documentation and docstrings
+
 ## [0.1.0] - 2026-02-04
 
 Initial public wheel of AIMNet2.

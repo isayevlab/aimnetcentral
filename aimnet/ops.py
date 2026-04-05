@@ -166,7 +166,7 @@ def get_shifts_within_cutoff(cell: Tensor, cutoff: Tensor) -> Tensor:
     which is a single-molecule calculation.
     """
     assert cell.ndim == 2 and cell.shape == (3, 3), "Batched cells not supported for Ewald summation"
-    cell_inv = torch.inverse(cell).mT
+    cell_inv = torch.linalg.inv(cell).mT
     inv_distances = cell_inv.norm(p=2, dim=-1)
     num_repeats = torch.ceil(cutoff * inv_distances).to(torch.long)
     device = cell.device
@@ -225,7 +225,7 @@ def coulomb_matrix_ewald(coord: Tensor, cell: Tensor, accuracy: float = 1e-8) ->
     e_real_matrix = e_real_matrix_aug.sum(dim=0)
 
     # reciprocal space
-    recip = 2 * math.pi * torch.transpose(torch.linalg.inv(cell), 0, 1)
+    recip = 2 * math.pi * torch.linalg.inv(cell).mT
     _grad_mode = torch.is_grad_enabled()
     torch.set_grad_enabled(False)
     shifts = get_shifts_within_cutoff(recip, cutoff_recip)

@@ -15,7 +15,7 @@
 
 ## Spotlight Model: AIMNet2-Pd
 
-The `aimnet2pd` model extends AIMNet2 to palladium-containing organometallic systems. It is trained on wB97M-D3/CPCM reference data with **THF implicit solvation**, so predicted energetics include continuum solvent effects relevant to homogeneous catalysis. This enables rapid exploration of catalytic reaction profiles at near-DFT accuracy with solvent stabilization built in.
+The `aimnet2pd` model extends AIMNet2 to palladium-containing organometallic systems. It is trained on B97-3c/CPCM reference data with **THF implicit solvation**, so predicted energetics include continuum solvent effects relevant to homogeneous catalysis. This enables rapid exploration of catalytic reaction profiles at near-DFT accuracy with solvent stabilization built in.
 
 **Supported elements:** H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I (14 elements)
 
@@ -235,7 +235,7 @@ print(f"Oxidative addition energy: {e_rxn_kcal:.1f} kcal/mol")
 
 !!! tip "CPCM solvation is built in"
 
-    Unlike other AIMNet2 models, `aimnet2pd` is trained on wB97M-D3/CPCM reference data with **THF as the implicit solvent**. All predicted energetics include continuum solvent stabilization effects appropriate for homogeneous catalysis in THF or similar non-polar aprotic solvents.
+    Unlike other AIMNet2 models, `aimnet2pd` is trained on B97-3c/CPCM reference data with **THF as the implicit solvent**. All predicted energetics include continuum solvent stabilization effects appropriate for homogeneous catalysis in THF or similar non-polar aprotic solvents.
 
     For reactions in very different solvent environments (e.g., water, DMSO, DMF), the THF solvation model may not capture the correct solvent effects. In those cases, additional solvation corrections or explicit solvent modeling may be needed.
 
