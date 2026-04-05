@@ -34,8 +34,9 @@ def _maybe_download_asset(file: str, url: str) -> str:
     filename = os.path.join(os.path.dirname(__file__), "assets", file)
     if not os.path.exists(filename):
         print(f"Downloading {url} -> {filename}")
+        response = requests.get(url, timeout=60)
+        response.raise_for_status()
         with open(filename, "wb") as f:
-            response = requests.get(url, timeout=60)
             f.write(response.content)
     return filename
 

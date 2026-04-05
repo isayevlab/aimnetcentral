@@ -32,10 +32,10 @@ dynamic = ["version"]
 
 # Minimal core dependencies for inference
 dependencies = [
-    "torch>=2.4",
+    "torch>=2.8",
     "numpy",
     "warp-lang>=1.11",
-    "nvalchemi-toolkit-ops>=0.2",
+    "nvalchemi-toolkit-ops>=0.3",
     "requests>=2.32.3",
     "click>=8.1.7",
     "pyyaml>=6.0.2",
@@ -46,7 +46,7 @@ dependencies = [
 [project.optional-dependencies]
 # ASE calculator integration
 ase = [
-    "ase==3.27.0",
+    "ase>=3.27.0,<4",
 ]
 
 # PySisyphus calculator integration
@@ -113,6 +113,8 @@ docs = [
     "mkdocs>=1.4.2",
     "mkdocs-material>=9.2.7",
     "mkdocstrings[python]>=0.26.1",
+    "griffe<2",
+    "pygments<2.20",
 ]
 
 # Ruff configuration

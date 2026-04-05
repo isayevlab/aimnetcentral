@@ -3,8 +3,8 @@ import warnings
 from typing import Any, ClassVar, Literal
 
 import torch
-from nvalchemiops.neighborlist import neighbor_list
-from nvalchemiops.neighborlist.neighbor_utils import NeighborOverflowError
+from nvalchemiops.neighbors import NeighborOverflowError
+from nvalchemiops.torch.neighbors import neighbor_list
 from torch import Tensor, nn
 
 from aimnet.models.base import load_model
@@ -16,7 +16,7 @@ from .model_registry import get_model_path
 class AdaptiveNeighborList:
     """Adaptive neighbor list with automatic buffer sizing.
 
-    Wraps nvalchemiops.neighborlist.neighbor_list with automatic max_neighbors adjustment.
+    Wraps nvalchemiops.torch.neighbors.neighbor_list with automatic max_neighbors adjustment.
     Maintains ~75% utilization to balance memory and recomputation.
 
     Parameters
@@ -691,7 +691,10 @@ class AIMNet2Calculator:
         if hessian and "mol_idx" in data and data["mol_idx"][-1] > 0:
             raise NotImplementedError("Hessian calculation is not supported for multiple molecules")
         data = self.set_grad_tensors(data, forces=forces, stress=stress, hessian=hessian)
-        with torch.jit.optimized_execution(False):  # type: ignore
+        if isinstance(self.model, torch.jit.ScriptModule):
+            with torch.jit.optimized_execution(False):  # type: ignore
+                data = self.model(data)
+        else:
             data = self.model(data)
         # Run external modules if present
         data = self._run_external_modules(data, compute_stress=stress)

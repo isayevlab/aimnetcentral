@@ -358,7 +358,7 @@ class DFTD3(nn.Module):
 
     BJ damping, C6 and C8 terms, without 3-body term.
 
-    This implementation uses nvalchemiops.interactions.dispersion.dftd3 for
+    This implementation uses nvalchemiops.torch.interactions.dispersion.dftd3 for
     GPU-accelerated computation of dispersion energies and forces. It is
     differentiable through a custom autograd function.
 
@@ -591,7 +591,7 @@ class DFTD3(nn.Module):
 
         # Optionally compute and add forces to data dict
         # Compute forces via autograd (will use saved forces from DFTD3Function)
-        if self.compute_forces and not torch.jit.is_scripting() and coord_flat.requires_grad:
+        if self.compute_forces and coord_flat.requires_grad:
             # Forces are -grad of energy
             forces_flat = torch.autograd.grad(
                 energy_ev.sum(),
@@ -624,7 +624,7 @@ class DFTD3(nn.Module):
         num_systems: int,
         fill_value: int,
     ) -> Tensor:
-        """Compute DFT-D3 energy using custom op for differentiability and TorchScript."""
+        """Compute DFT-D3 energy using custom op for automatic differentiation."""
         return dftd3_energy(
             coord=coord,
             cell=cell,

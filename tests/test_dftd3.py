@@ -31,7 +31,7 @@ Tests cover:
 
 import pytest
 import torch
-from conftest import add_dftd3_keys, temp_file
+from conftest import add_dftd3_keys
 
 from aimnet import nbops
 from aimnet.modules.lr import DFTD3
@@ -566,80 +566,6 @@ class TestDFTD3Autograd:
         # Only first molecule should have non-zero gradients
         assert not torch.allclose(coord.grad[0], torch.zeros_like(coord.grad[0]))
         assert torch.allclose(coord.grad[1], torch.zeros_like(coord.grad[1]))
-
-
-# =============================================================================
-# TorchScript Tests
-# =============================================================================
-
-
-@pytest.mark.gpu
-class TestDFTD3TorchScript:
-    """Tests for TorchScript compatibility."""
-
-    def test_script_module(self, device):
-        """Test that DFTD3 module can be scripted."""
-        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
-        scripted = torch.jit.script(module)
-
-        # Create test input
-        coord = torch.tensor([[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]], device=device)
-        numbers = torch.tensor([[8, 1, 1]], device=device)
-
-        data = {"coord": coord, "numbers": numbers}
-        data = add_dftd3_keys(data, device)
-        data = nbops.set_nb_mode(data)
-        data = nbops.calc_masks(data)
-
-        # Compare eager vs scripted
-        with torch.no_grad():
-            eager_result = module(data.copy())
-            scripted_result = scripted(data.copy())
-
-        torch.testing.assert_close(eager_result["energy"], scripted_result["energy"], rtol=1e-5, atol=1e-6)
-
-    def test_script_save_load(self, device):
-        """Test that scripted DFTD3 module can be saved and loaded."""
-        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
-        scripted = torch.jit.script(module)
-
-        with temp_file(suffix=".pt") as path:
-            torch.jit.save(scripted, str(path))
-            loaded = torch.jit.load(str(path))
-
-        # Create test input
-        coord = torch.tensor([[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]], device=device)
-        numbers = torch.tensor([[8, 1, 1]], device=device)
-
-        data = {"coord": coord, "numbers": numbers}
-        data = add_dftd3_keys(data, device)
-        data = nbops.set_nb_mode(data)
-        data = nbops.calc_masks(data)
-
-        with torch.no_grad():
-            original_result = scripted(data.copy())
-            loaded_result = loaded(data.copy())
-
-        torch.testing.assert_close(original_result["energy"], loaded_result["energy"])
-
-    def test_trace_module(self, device):
-        """Test that DFTD3 forward can be traced (for subset of functionality)."""
-        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
-
-        # Create example input
-        coord = torch.tensor([[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]], device=device)
-        numbers = torch.tensor([[8, 1, 1]], device=device)
-
-        data = {"coord": coord, "numbers": numbers}
-        data = add_dftd3_keys(data, device)
-        data = nbops.set_nb_mode(data)
-        data = nbops.calc_masks(data)
-
-        # Module can be called without error
-        with torch.no_grad():
-            result = module(data)
-
-        assert result["energy"].shape == (1,)
 
 
 # =============================================================================
