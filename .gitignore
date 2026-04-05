@@ -155,9 +155,18 @@ cython_debug/
 
 # Cursor IDE
 .cursor/
+.cursorrules
 
 # Claude Code
 .claude/
+CLAUDE.md
+
+# Other AI assistants
+AGENTS.md
+GEMINI.md
+copilot-instructions.md
+.github/copilot-instructions.md
+.copilot/
 
 # Git worktrees
 .worktrees/
