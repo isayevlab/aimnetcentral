@@ -1,4 +1,5 @@
 import math
+import os
 import warnings
 from typing import Any, ClassVar, Literal
 
@@ -239,9 +240,30 @@ class AIMNet2Calculator:
         # Load model and get metadata
         metadata: dict | None = None
         if isinstance(model, str):
-            p = get_model_path(model)
-            self.model, metadata = load_model(p, device=self.device)
-            self.cutoff = metadata["cutoff"]
+            # Check for HF repo ID or local HF-style directory
+            # (lazy import to keep safetensors/huggingface_hub optional)
+            _is_hf_dir = os.path.isdir(model)
+            _has_slash = "/" in model
+            if _has_slash or _is_hf_dir:
+                try:
+                    from aimnet.calculators.hf_hub import is_hf_repo_id, load_from_hf_repo
+                except ImportError:
+                    raise ImportError(
+                        f"Loading from HF repo '{model}' requires optional dependencies. "
+                        "Install with: pip install aimnet[hf]"
+                    ) from None
+                if is_hf_repo_id(model) or _is_hf_dir:
+                    _model, metadata = load_from_hf_repo(model, device=self.device)
+                    self.model = _model
+                    self.cutoff = metadata["cutoff"]
+                else:
+                    p = get_model_path(model)
+                    self.model, metadata = load_model(p, device=self.device)
+                    self.cutoff = metadata["cutoff"]
+            else:
+                p = get_model_path(model)
+                self.model, metadata = load_model(p, device=self.device)
+                self.cutoff = metadata["cutoff"]
         elif isinstance(model, nn.Module):
             self.model = model.to(self.device)
             self.cutoff = getattr(self.model, "cutoff", 5.0)
