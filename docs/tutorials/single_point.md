@@ -154,7 +154,18 @@ hessian = result["hessian"]
 print(f"Hessian shape: {hessian.shape}")  # (21, 3, 21, 3) for aspirin
 ```
 
-!!! tip "When to request each property" Only request what you need. Computing forces adds one backward pass. Computing the hessian adds `3N` backward passes (one per force component), so it becomes expensive for large molecules. The hessian is also limited to single-molecule calculations.
+!!! tip "When to request each property"
+    Only request what you need. Computing forces adds one backward pass. Computing the hessian adds `3N` backward passes (one per force component), so it becomes expensive for large molecules. The hessian is also limited to single-molecule calculations.
+
+    If you need to differentiate through the calculator from **outside** (e.g., wrapping it in an optimizer or computing a Hessian via `torch.autograd.functional.hessian`), pass `coord` as a tensor with `requires_grad=True` and use `forces=False`:
+
+    ```python
+    def energy_fn(x):
+        out = calc({"coord": x.unsqueeze(0), "numbers": numbers, "charge": charge}, forces=False)
+        return out["energy"][0]
+
+    H = torch.autograd.functional.hessian(energy_fn, coords)
+    ```
 
 ## Step 4: Comparing Models
 
