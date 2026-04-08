@@ -411,6 +411,34 @@ The calculator automatically converts:
 
 Any keys not listed in required/optional tables are ignored during input conversion.
 
+### Autograd Graph Preservation
+
+When `coord` is passed as a PyTorch tensor with `requires_grad=True`, the calculator preserves the full autograd graph from `coord` to the output energy. This allows external higher-order differentiation — for example, computing a Hessian via `torch.autograd.functional.hessian()` without using the built-in `hessian=True` flag:
+
+```python
+import torch
+from aimnet.calculators import AIMNet2Calculator
+
+calc = AIMNet2Calculator("aimnet2")
+numbers = torch.tensor([[8, 1, 1]])
+charge = torch.tensor([0.0])
+
+coords = torch.tensor([[0.0, 0.0, 0.1], [0.0, 0.76, -0.47], [0.0, -0.76, -0.47]])
+
+def energy_fn(x):
+    out = calc({"coord": x.unsqueeze(0), "numbers": numbers, "charge": charge}, forces=False)
+    return out["energy"][0]
+
+H = torch.autograd.functional.hessian(energy_fn, coords)  # shape (N, 3, N, 3)
+```
+
+!!! note "Use `forces=False` for external Hessians"
+    When computing higher-order derivatives from outside the calculator, pass `forces=False`.
+    Requesting `forces=True` triggers an internal backward pass that frees intermediate activations,
+    preventing a second differentiation through the graph.
+
+When `coord` does **not** have `requires_grad=True` (the default), inputs are detached as before — optimization loops that call the calculator repeatedly incur no graph accumulation overhead.
+
 ## Output Format
 
 | Key       | Shape                   | Description                   |
