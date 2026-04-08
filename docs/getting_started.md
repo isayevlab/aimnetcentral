@@ -26,6 +26,17 @@ For molecular dynamics and geometry optimization with ASE:
 pip install "aimnet[ase]"
 ```
 
+### With Hugging Face Hub
+
+To load models directly from [Hugging Face](https://huggingface.co/isayevlab)
+(`isayevlab/aimnet2-wb97m-d3`, etc.):
+
+```bash
+pip install "aimnet[hf]"
+```
+
+See the [Hugging Face tutorial](tutorials/hugging_face.md) for details.
+
 ### GPU Support
 
 AIMNet2 works on CPU by default. For GPU acceleration, install PyTorch with CUDA:

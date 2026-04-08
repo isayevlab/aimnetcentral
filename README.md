@@ -151,7 +151,8 @@ calc = AIMNet2Calculator("aimnet2", compile_model=True)
 
 ### Loading from Hugging Face
 
-AIMNet2 models are available on [Hugging Face](https://huggingface.co/isayevlab):
+AIMNet2 models are available on [Hugging Face](https://huggingface.co/isayevlab).
+Install the optional HF extras:
 
 ```bash
 pip install "aimnet[hf]"
@@ -160,17 +161,27 @@ pip install "aimnet[hf]"
 ```python
 from aimnet.calculators import AIMNet2Calculator
 
-# Load from Hugging Face (downloads and caches automatically)
+# Load from Hugging Face — downloads and caches automatically
 calc = AIMNet2Calculator("isayevlab/aimnet2-wb97m-d3")
 
-# Available models:
-# - isayevlab/aimnet2-wb97m-d3  (general purpose, wB97M-D3)
-# - isayevlab/aimnet2-2025      (improved intermolecular, B97-3c)
-# - isayevlab/aimnet2-nse       (open-shell / radicals)
-# - isayevlab/aimnet2-pd        (palladium chemistry)
+# All available HF repos:
+# isayevlab/aimnet2-wb97m-d3   general purpose (wB97M-D3)
+# isayevlab/aimnet2-2025       improved intermolecular (B97-3c)
+# isayevlab/aimnet2-nse        open-shell / radicals
+# isayevlab/aimnet2-pd         palladium chemistry
 
-# Existing registry names still work (no HF deps needed):
-calc_legacy = AIMNet2Calculator("aimnet2")  # Downloads from GCS
+# Load a specific ensemble member (0–3) or a pinned revision:
+calc = AIMNet2Calculator("isayevlab/aimnet2-wb97m-d3", ensemble_member=2)
+calc = AIMNet2Calculator("isayevlab/aimnet2-wb97m-d3", revision="v1.0")
+
+# Private repos — pass a HF token:
+calc = AIMNet2Calculator("myorg/private-model", token="hf_...")
+
+# Local directory in HF repo layout (config.json + ensemble_N.safetensors):
+calc = AIMNet2Calculator("/path/to/local/repo")
+
+# Existing registry aliases still work without any HF deps:
+calc = AIMNet2Calculator("aimnet2")
 ```
 
 Try the [interactive demo](https://huggingface.co/spaces/isayevlab/aimnet2-demo)!

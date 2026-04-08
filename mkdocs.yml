@@ -24,6 +24,7 @@ nav:
           - Periodic Systems: tutorials/periodic_systems.md
           - Batch Processing: tutorials/batch_processing.md
           - Performance Tuning: tutorials/performance.md
+          - Loading from Hugging Face: tutorials/hugging_face.md
     - Advanced Use Cases:
           - Open-Shell Chemistry: advanced/open_shell.md
           - Conformer Search: advanced/conformer_search.md
