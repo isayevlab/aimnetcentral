@@ -254,6 +254,80 @@ class TestDerivatives:
         diff = (hess_flat - hess_flat.T).abs().max()
         assert diff.item() < 1e-4
 
+    def test_external_autograd_graph_preserved(self):
+        """External autograd graph must be preserved when coord.requires_grad=True.
+
+        Regression test for issue #54: to_input_tensors() was unconditionally
+        detaching coord, breaking any caller that needed to differentiate through
+        the calculator (e.g. external Hessian via torch.autograd.functional.hessian).
+        """
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        nums = torch.tensor([[8, 1, 1]])
+        charge = torch.tensor([0.0])
+        coords = torch.tensor(
+            [[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]],
+            dtype=torch.float32,
+            requires_grad=True,
+        )
+
+        with torch.enable_grad():
+            out = calc({"coord": coords, "numbers": nums, "charge": charge}, forces=False)
+            (g,) = torch.autograd.grad(out["energy"].sum(), coords, allow_unused=True)
+
+        assert g is not None, "Autograd graph was broken — coord gradient is None"
+        assert g.shape == coords.shape
+
+    def test_external_hessian_nonzero(self):
+        """External Hessian via torch.autograd.functional.hessian must be non-zero.
+
+        Regression test for issue #54.
+        """
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        nums = torch.tensor([[8, 1, 1]])
+        charge = torch.tensor([0.0])
+        coords = torch.tensor(
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            dtype=torch.float32,
+        )
+
+        def energy_fn(x):
+            out = calc({"coord": x.unsqueeze(0), "numbers": nums, "charge": charge}, forces=False)
+            return out["energy"][0]
+
+        H = torch.autograd.functional.hessian(energy_fn, coords)
+        assert H.abs().max().item() > 0, "External Hessian is all-zeros — autograd graph broken"
+
+    def test_external_hessian_matches_internal(self, device):
+        """External Hessian must agree with the calculator's own hessian=True output."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, device=device)
+        coords_batch = torch.tensor(
+            [[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]],
+            dtype=torch.float32,
+            device=device,
+        )
+        nums = torch.tensor([[8, 1, 1]], device=device)
+        charge = torch.tensor([0.0], device=device)
+
+        H_internal = calc({"coord": coords_batch.clone(), "numbers": nums, "charge": charge}, hessian=True)["hessian"]
+
+        def energy_fn(x):
+            out = calc({"coord": x.unsqueeze(0), "numbers": nums, "charge": charge}, forces=False)
+            return out["energy"][0]
+
+        H_ext = torch.autograd.functional.hessian(energy_fn, coords_batch.squeeze(0))
+        assert (H_internal - H_ext).abs().max().item() < 5e-3
+
+    def test_requires_grad_false_still_works(self):
+        """Backward-compat: forces=True still works when coord has no requires_grad."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        data = {
+            "coord": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            "numbers": [8, 1, 1],
+            "charge": 0.0,
+        }
+        res = calc(data, forces=True)
+        assert "forces" in res and res["forces"].shape[-2:] == torch.Size([3, 3])
+
     def test_hessian_multiple_molecules_raises(self):
         """Test that Hessian with multiple molecules raises NotImplementedError."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
