@@ -61,6 +61,12 @@ train = [
     "pytorch-ignite>=0.5.1",
 ]
 
+# Hugging Face Hub integration
+hf = [
+    "huggingface_hub>=0.20",
+    "safetensors>=0.4",
+]
+
 [project.scripts]
 aimnet = "aimnet.cli:cli"
 aimnet2pysis = "aimnet.calculators.aimnet2pysis:run_pysis"
