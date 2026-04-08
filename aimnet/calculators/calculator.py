@@ -736,11 +736,18 @@ class AIMNet2Calculator:
         for k in self.keys_in:
             if k not in data:
                 raise KeyError(f"Missing key {k} in the input data")
-            # Detach from computation graph to prevent gradient accumulation
-            ret[k] = torch.as_tensor(data[k], device=self.device, dtype=self.keys_in[k]).detach()
+            t = torch.as_tensor(data[k], device=self.device, dtype=self.keys_in[k])
+            # Preserve autograd graph when caller sets requires_grad=True (e.g. for external Hessian computation).
+            # Otherwise detach to prevent unintended gradient accumulation in optimization loops.
+            if not (isinstance(data[k], Tensor) and data[k].requires_grad):
+                t = t.detach()
+            ret[k] = t
         for k in self.keys_in_optional:
             if k in data and data[k] is not None:
-                ret[k] = torch.as_tensor(data[k], device=self.device, dtype=self.keys_in_optional[k]).detach()
+                t = torch.as_tensor(data[k], device=self.device, dtype=self.keys_in_optional[k])
+                if not (isinstance(data[k], Tensor) and data[k].requires_grad):
+                    t = t.detach()
+                ret[k] = t
         # Ensure all tensors have at least 1D shape for consistent batch processing
         for k, v in ret.items():
             if v.ndim == 0:
