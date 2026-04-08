@@ -120,10 +120,12 @@ def _fetch_pt_metadata_from_registry(
         family_name = config.get("family_name") or Path(repo_id_or_path).name
         member_name = None
         try:
-            from aimnet.calculators.model_registry import MODEL_REGISTRY
+            from aimnet.calculators.model_registry import load_model_registry
 
+            registry = load_model_registry()
             family_slug = family_name.replace("-", "_")
-            candidates = [k for k in MODEL_REGISTRY if family_slug in k]
+            all_models = list(registry.get("models", {}).keys())
+            candidates = [k for k in all_models if family_slug in k]
             if candidates:
                 member_name = candidates[ensemble_member] if ensemble_member < len(candidates) else candidates[0]
         except (ImportError, KeyError, IndexError):
@@ -146,10 +148,8 @@ def _fetch_pt_metadata_from_registry(
     from aimnet.calculators.model_registry import get_model_path
 
     pt_path = get_model_path(member_name)
-    import warnings as _w
-
-    with _w.catch_warnings():
-        _w.filterwarnings("ignore", ".*weights_only.*")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", ".*weights_only.*")
         data = torch.load(pt_path, map_location="cpu", weights_only=False)
     if "model_yaml" not in data:
         raise ValueError(f"GCS .pt file for '{member_name}' also lacks 'model_yaml'. Cannot reconstruct model.")

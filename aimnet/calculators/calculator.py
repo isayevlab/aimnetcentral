@@ -1,5 +1,6 @@
 import math
 import os
+import re
 import warnings
 from typing import Any, ClassVar, Literal
 
@@ -239,12 +240,15 @@ class AIMNet2Calculator:
 
         # Load model and get metadata
         metadata: dict | None = None
+        # Inline org/name pattern — exactly one slash, both segments alphanumeric+._-
+        # This avoids importing optional HF deps for ordinary file paths containing slashes.
+        _HF_ID_RE = re.compile(r"^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$")
         if isinstance(model, str):
             # Check for HF repo ID or local HF-style directory
             # (lazy import to keep safetensors/huggingface_hub optional)
             _is_hf_dir = os.path.isdir(model)
-            _has_slash = "/" in model
-            if _has_slash or _is_hf_dir:
+            _looks_like_hf = bool(_HF_ID_RE.match(model))
+            if _looks_like_hf or _is_hf_dir:
                 try:
                     from aimnet.calculators.hf_hub import is_hf_repo_id, load_from_hf_repo
                 except ImportError:
