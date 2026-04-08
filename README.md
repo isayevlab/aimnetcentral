@@ -151,8 +151,7 @@ calc = AIMNet2Calculator("aimnet2", compile_model=True)
 
 ### Loading from Hugging Face
 
-AIMNet2 models are available on [Hugging Face](https://huggingface.co/isayevlab).
-Install the optional HF extras:
+AIMNet2 models are available on [Hugging Face](https://huggingface.co/isayevlab). Install the optional HF extras:
 
 ```bash
 pip install "aimnet[hf]"

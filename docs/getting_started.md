@@ -28,8 +28,7 @@ pip install "aimnet[ase]"
 
 ### With Hugging Face Hub
 
-To load models directly from [Hugging Face](https://huggingface.co/isayevlab)
-(`isayevlab/aimnet2-wb97m-d3`, etc.):
+To load models directly from [Hugging Face](https://huggingface.co/isayevlab) (`isayevlab/aimnet2-wb97m-d3`, etc.):
 
 ```bash
 pip install "aimnet[hf]"

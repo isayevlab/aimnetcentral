@@ -225,6 +225,9 @@ class AIMNet2Calculator:
         compile_model: bool = False,
         compile_kwargs: dict | None = None,
         train: bool = False,
+        ensemble_member: int = 0,
+        revision: str | None = None,
+        token: str | None = None,
     ):
         # Device selection: use provided or auto-detect
         if device is not None:
@@ -257,12 +260,14 @@ class AIMNet2Calculator:
                         "Install with: pip install aimnet[hf]"
                     ) from None
                 if is_hf_repo_id(model) or _is_hf_dir:
-                    _model, metadata = load_from_hf_repo(model, device=self.device)
+                    _model, metadata = load_from_hf_repo(
+                        model,
+                        ensemble_member=ensemble_member,
+                        device=self.device,
+                        revision=revision,
+                        token=token,
+                    )
                     self.model = _model
-                    self.cutoff = metadata["cutoff"]
-                else:
-                    p = get_model_path(model)
-                    self.model, metadata = load_model(p, device=self.device)
                     self.cutoff = metadata["cutoff"]
             else:
                 p = get_model_path(model)
