@@ -1,4 +1,6 @@
 import math
+import os
+import re
 import warnings
 from typing import Any, ClassVar, Literal
 
@@ -223,6 +225,9 @@ class AIMNet2Calculator:
         compile_model: bool = False,
         compile_kwargs: dict | None = None,
         train: bool = False,
+        ensemble_member: int = 0,
+        revision: str | None = None,
+        token: str | None = None,
     ):
         # Device selection: use provided or auto-detect
         if device is not None:
@@ -238,10 +243,36 @@ class AIMNet2Calculator:
 
         # Load model and get metadata
         metadata: dict | None = None
+        # Inline org/name pattern — exactly one slash, both segments alphanumeric+._-
+        # This avoids importing optional HF deps for ordinary file paths containing slashes.
+        _HF_ID_RE = re.compile(r"^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$")
         if isinstance(model, str):
-            p = get_model_path(model)
-            self.model, metadata = load_model(p, device=self.device)
-            self.cutoff = metadata["cutoff"]
+            # Check for HF repo ID or local HF-style directory
+            # (lazy import to keep safetensors/huggingface_hub optional)
+            _is_hf_dir = os.path.isdir(model)
+            _looks_like_hf = bool(_HF_ID_RE.match(model))
+            if _looks_like_hf or _is_hf_dir:
+                try:
+                    from aimnet.calculators.hf_hub import is_hf_repo_id, load_from_hf_repo
+                except ImportError:
+                    raise ImportError(
+                        f"Loading from HF repo '{model}' requires optional dependencies. "
+                        "Install with: pip install aimnet[hf]"
+                    ) from None
+                if is_hf_repo_id(model) or _is_hf_dir:
+                    _model, metadata = load_from_hf_repo(
+                        model,
+                        ensemble_member=ensemble_member,
+                        device=self.device,
+                        revision=revision,
+                        token=token,
+                    )
+                    self.model = _model
+                    self.cutoff = metadata["cutoff"]
+            else:
+                p = get_model_path(model)
+                self.model, metadata = load_model(p, device=self.device)
+                self.cutoff = metadata["cutoff"]
         elif isinstance(model, nn.Module):
             self.model = model.to(self.device)
             self.cutoff = getattr(self.model, "cutoff", 5.0)
