@@ -12,11 +12,13 @@
         <meta name="author" content="Roman Zubatyuk">
       
       
-        <link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/api/config/">
+        <link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/tutorials/hugging_face/">
       
       
-        <link rel="prev" href="../data/">
+        <link rel="prev" href="../performance/">
       
+      
+        <link rel="next" href="../../advanced/open_shell/">
       
       
         
@@ -27,7 +29,7 @@
     
     
       
-        <title>Config - AIMNetCentral</title>
+        <title>Loading from Hugging Face - AIMNetCentral</title>
       
     
     
@@ -80,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#config" class="md-skip">
+        <a href="#loading-models-from-hugging-face" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Config
+              Loading from Hugging Face
             
           </span>
         </div>
@@ -565,18 +567,20 @@
       
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
           <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
@@ -597,7 +601,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -615,7 +619,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/single_point/" class="md-nav__link">
+      <a href="../single_point/" class="md-nav__link">
         
   
   
@@ -643,7 +647,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/geometry_optimization/" class="md-nav__link">
+      <a href="../geometry_optimization/" class="md-nav__link">
         
   
   
@@ -671,7 +675,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/molecular_dynamics/" class="md-nav__link">
+      <a href="../molecular_dynamics/" class="md-nav__link">
         
   
   
@@ -699,7 +703,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/periodic_systems/" class="md-nav__link">
+      <a href="../periodic_systems/" class="md-nav__link">
         
   
   
@@ -727,7 +731,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/batch_processing/" class="md-nav__link">
+      <a href="../batch_processing/" class="md-nav__link">
         
   
   
@@ -755,7 +759,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/performance/" class="md-nav__link">
+      <a href="../performance/" class="md-nav__link">
         
   
   
@@ -780,10 +784,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../tutorials/hugging_face/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Loading from Hugging Face
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -799,6 +830,170 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#basic-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Basic Usage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#available-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Available Models
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ensemble-member" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ensemble member
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pinned-revision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinned revision
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#private-repos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Private repos
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#local-directory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Local directory
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mixing-hf-and-registry-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mixing HF and Registry Models
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#expected-repo-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Expected Repo Layout
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Expected Repo Layout">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configjson-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        config.json fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interactive-demo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interactive Demo
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1231,20 +1426,18 @@
       
   
   
-    
   
   
-  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
         
           
           <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
@@ -1265,7 +1458,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1283,7 +1476,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../../api/" class="md-nav__link">
         
   
   
@@ -1311,7 +1504,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../calculators/" class="md-nav__link">
+      <a href="../../api/calculators/" class="md-nav__link">
         
   
   
@@ -1339,7 +1532,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../modules/" class="md-nav__link">
+      <a href="../../api/modules/" class="md-nav__link">
         
   
   
@@ -1367,7 +1560,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../data/" class="md-nav__link">
+      <a href="../../api/data/" class="md-nav__link">
         
   
   
@@ -1392,37 +1585,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Config
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../api/config/" class="md-nav__link">
         
   
   
@@ -1438,48 +1604,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#build-module" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Build Module
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#aimnet.config.build_module" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        build_module
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1519,10 +1643,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#build-module" class="md-nav__link">
+  <a href="#installation" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Build Module
+        Installation
       
     </span>
   </a>
@@ -1530,10 +1654,132 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#aimnet.config.build_module" class="md-nav__link">
+  <a href="#basic-usage" class="md-nav__link">
     <span class="md-ellipsis">
       
-        build_module
+        Basic Usage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#available-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Available Models
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ensemble-member" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ensemble member
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pinned-revision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinned revision
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#private-repos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Private repos
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#local-directory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Local directory
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mixing-hf-and-registry-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mixing HF and Registry Models
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#expected-repo-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Expected Repo Layout
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Expected Repo Layout">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configjson-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        config.json fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interactive-demo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interactive Demo
       
     </span>
   </a>
@@ -1560,198 +1806,146 @@
   
 
 
-<h1 id="config">Config<a class="headerlink" href="#config" title="Permanent link">&para;</a></h1>
-<p>Configuration and model building utilities.</p>
-<h2 id="build-module">Build Module<a class="headerlink" href="#build-module" title="Permanent link">&para;</a></h2>
+<h1 id="loading-models-from-hugging-face">Loading Models from Hugging Face<a class="headerlink" href="#loading-models-from-hugging-face" title="Permanent link">&para;</a></h1>
+<p>AIMNet2 models are published on <a href="https://huggingface.co/isayevlab">Hugging Face Hub</a> as safetensors checkpoints alongside a <code>config.json</code> that encodes the full model architecture and metadata. This lets you load any model with a single line — weights are downloaded and cached automatically.</p>
+<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<p>The HF integration is an optional dependency group. It adds <code>huggingface_hub</code> and <code>safetensors</code> but does not affect the default <code>pip install aimnet</code> path.</p>
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;aimnet[hf]&quot;</span>
+</code></pre></div>
+<h2 id="basic-usage">Basic Usage<a class="headerlink" href="#basic-usage" title="Permanent link">&para;</a></h2>
+<p>Pass a Hugging Face repo ID (<code>org/name</code>) directly to <code>AIMNet2Calculator</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
 
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;isayevlab/aimnet2-wb97m-d3&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>The first call downloads the model weights to the HF cache directory (<code>~/.cache/huggingface/hub/</code> by default) and reuses them on subsequent runs.</p>
+<h2 id="available-models">Available Models<a class="headerlink" href="#available-models" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>HF Repo</th>
+<th>Equivalent Alias</th>
+<th>DFT Functional</th>
+<th>Best For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>isayevlab/aimnet2-wb97m-d3</code></td>
+<td><code>aimnet2</code></td>
+<td>wB97M-D3</td>
+<td>General organic chemistry</td>
+</tr>
+<tr>
+<td><code>isayevlab/aimnet2-2025</code></td>
+<td><code>aimnet2_2025</code></td>
+<td>B97-3c</td>
+<td>Recommended for intermolecular interactions</td>
+</tr>
+<tr>
+<td><code>isayevlab/aimnet2-nse</code></td>
+<td><code>aimnet2nse</code></td>
+<td>wB97M-D3</td>
+<td>Open-shell systems / radicals</td>
+</tr>
+<tr>
+<td><code>isayevlab/aimnet2-pd</code></td>
+<td><code>aimnet2pd</code></td>
+<td>B97-3c/CPCM</td>
+<td>Palladium chemistry</td>
+</tr>
+</tbody>
+</table>
+<p>Each repo contains four ensemble members (<code>ensemble_0.safetensors</code> – <code>ensemble_3.safetensors</code>). Member 0 is loaded by default.</p>
+<h2 id="options">Options<a class="headerlink" href="#options" title="Permanent link">&para;</a></h2>
+<h3 id="ensemble-member">Ensemble member<a class="headerlink" href="#ensemble-member" title="Permanent link">&para;</a></h3>
+<p>Each model family has four ensemble members trained from different random seeds. You can load a specific one for uncertainty estimation:</p>
+<div class="highlight"><pre><span></span><code><span class="n">calc_0</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;isayevlab/aimnet2-wb97m-d3&quot;</span><span class="p">,</span> <span class="n">ensemble_member</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">calc_1</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;isayevlab/aimnet2-wb97m-d3&quot;</span><span class="p">,</span> <span class="n">ensemble_member</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">calc_2</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;isayevlab/aimnet2-wb97m-d3&quot;</span><span class="p">,</span> <span class="n">ensemble_member</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">calc_3</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;isayevlab/aimnet2-wb97m-d3&quot;</span><span class="p">,</span> <span class="n">ensemble_member</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="pinned-revision">Pinned revision<a class="headerlink" href="#pinned-revision" title="Permanent link">&para;</a></h3>
+<p>Pin to a specific tag or branch for reproducible results:</p>
+<div class="highlight"><pre><span></span><code><span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;isayevlab/aimnet2-wb97m-d3&quot;</span><span class="p">,</span> <span class="n">revision</span><span class="o">=</span><span class="s2">&quot;v1.0&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="private-repos">Private repos<a class="headerlink" href="#private-repos" title="Permanent link">&para;</a></h3>
+<p>Pass a HF access token for private or gated repos:</p>
+<div class="highlight"><pre><span></span><code><span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;myorg/private-model&quot;</span><span class="p">,</span> <span class="n">token</span><span class="o">=</span><span class="s2">&quot;hf_...&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>Alternatively set the <code>HF_TOKEN</code> environment variable or log in with <code>huggingface-cli login</code>.</p>
+<h3 id="local-directory">Local directory<a class="headerlink" href="#local-directory" title="Permanent link">&para;</a></h3>
+<p>If you have a local directory with the same layout as an HF repo (<code>config.json</code> + <code>ensemble_N.safetensors</code>), pass the path directly:</p>
+<div class="highlight"><pre><span></span><code><span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;/path/to/local/repo&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="mixing-hf-and-registry-models">Mixing HF and Registry Models<a class="headerlink" href="#mixing-hf-and-registry-models" title="Permanent link">&para;</a></h2>
+<p>HF loading and the built-in GCS registry are independent. You can use both in the same script without any conflicts — HF extras are only imported when an HF repo ID is detected:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Loads from Hugging Face (requires aimnet[hf]):</span>
+<span class="n">calc_hf</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;isayevlab/aimnet2-wb97m-d3&quot;</span><span class="p">)</span>
 
-<div class="doc doc-object doc-function">
-
-
-<h2 id="aimnet.config.build_module" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">build_module</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">hyperpar</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
-
-<a href="#aimnet.config.build_module" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents first">
-
-        <p>Build a module based on the provided configuration.
-Every (possibly nested) dictionary with a 'class' key will be replaced by an instance initialized with
-arguments and keywords provided as 'args' and 'kwargs' keys.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>config</code>
-            </td>
-            <td>
-                  <code><span title="Union">Union</span>[<span title="str">str</span>, <span title="Dict">Dict</span>, <span title="List">List</span>]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The configuration for building the module.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>hyperpar</code>
-            </td>
-            <td>
-                  <code><span title="Union">Union</span>[<span title="str">str</span>, <span title="Dict">Dict</span>, None]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The hyperparameters for the module. Defaults to None.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="list">list</span> | <span title="dict">dict</span> | <span title="collections.abc.Callable">Callable</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Union[List, Dict, Callable]: The built module.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="AssertionError">AssertionError</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If <code>hyperpar</code> is provided and is not a dictionary.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-            <details class="mkdocstrings-source">
-              <summary>Source code in <code>aimnet/config.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">106</span>
-<span class="normal">107</span>
-<span class="normal">108</span>
-<span class="normal">109</span>
-<span class="normal">110</span>
-<span class="normal">111</span>
-<span class="normal">112</span>
-<span class="normal">113</span>
-<span class="normal">114</span>
-<span class="normal">115</span>
-<span class="normal">116</span>
-<span class="normal">117</span>
-<span class="normal">118</span>
-<span class="normal">119</span>
-<span class="normal">120</span>
-<span class="normal">121</span>
-<span class="normal">122</span>
-<span class="normal">123</span>
-<span class="normal">124</span>
-<span class="normal">125</span>
-<span class="normal">126</span>
-<span class="normal">127</span>
-<span class="normal">128</span>
-<span class="normal">129</span>
-<span class="normal">130</span>
-<span class="normal">131</span>
-<span class="normal">132</span>
-<span class="normal">133</span>
-<span class="normal">134</span>
-<span class="normal">135</span>
-<span class="normal">136</span>
-<span class="normal">137</span>
-<span class="normal">138</span>
-<span class="normal">139</span>
-<span class="normal">140</span>
-<span class="normal">141</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">build_module</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="nb">list</span><span class="p">,</span> <span class="n">hyperpar</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Build a module based on the provided configuration.</span>
-<span class="sd">    Every (possibly nested) dictionary with a &#39;class&#39; key will be replaced by an instance initialized with</span>
-<span class="sd">    arguments and keywords provided as &#39;args&#39; and &#39;kwargs&#39; keys.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        config (Union[str, Dict, List]): The configuration for building the module.</span>
-<span class="sd">        hyperpar (Union[str, Dict, None], optional): The hyperparameters for the module. Defaults to None.</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        Union[List, Dict, Callable]: The built module.</span>
-
-<span class="sd">    Raises:</span>
-<span class="sd">        AssertionError: If `hyperpar` is provided and is not a dictionary.</span>
-
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">hyperpar</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-        <span class="n">hyperpar</span> <span class="o">=</span> <span class="n">load_yaml</span><span class="p">(</span><span class="n">hyperpar</span><span class="p">)</span>  <span class="c1"># type: ignore[assignment]</span>
-    <span class="k">if</span> <span class="n">hyperpar</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">hyperpar</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Hyperpar must be a dictionary&quot;</span><span class="p">)</span>
-    <span class="n">config</span> <span class="o">=</span> <span class="n">load_yaml</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">hyperpar</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">d</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">_iter_rec_bottomup</span><span class="p">(</span><span class="n">config</span><span class="p">):</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;class&quot;</span> <span class="ow">in</span> <span class="n">v</span><span class="p">:</span>
-            <span class="n">d</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_init_module</span><span class="p">(</span>  <span class="c1"># type: ignore[index]</span>
-                <span class="n">v</span><span class="p">[</span><span class="s2">&quot;class&quot;</span><span class="p">],</span>
-                <span class="n">args</span><span class="o">=</span><span class="n">v</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;args&quot;</span><span class="p">,</span> <span class="p">[]),</span>  <span class="c1"># type: ignore[assignment]</span>
-                <span class="n">kwargs</span><span class="o">=</span><span class="n">v</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;kwargs&quot;</span><span class="p">,</span> <span class="p">{}),</span>
-            <span class="p">)</span>
-    <span class="k">if</span> <span class="s2">&quot;class&quot;</span> <span class="ow">in</span> <span class="n">config</span><span class="p">:</span>
-        <span class="n">config</span> <span class="o">=</span> <span class="n">get_init_module</span><span class="p">(</span>  <span class="c1"># type: ignore[assignment]</span>
-            <span class="n">config</span><span class="p">[</span><span class="s2">&quot;class&quot;</span><span class="p">],</span>  <span class="c1"># type: ignore[call-overload]</span>
-            <span class="n">args</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;args&quot;</span><span class="p">,</span> <span class="p">[]),</span>  <span class="c1"># type: ignore[union-attr]</span>
-            <span class="n">kwargs</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;kwargs&quot;</span><span class="p">,</span> <span class="p">{}),</span>  <span class="c1"># type: ignore[union-attr]</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">config</span>  <span class="c1"># type: ignore[assignment]</span>
-</code></pre></div></td></tr></table></div>
-            </details>
-    </div>
-
+<span class="c1"># Loads from GCS registry (no extra deps needed):</span>
+<span class="n">calc_registry</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="expected-repo-layout">Expected Repo Layout<a class="headerlink" href="#expected-repo-layout" title="Permanent link">&para;</a></h2>
+<p>When hosting your own models on HF Hub, the calculator expects:</p>
+<div class="highlight"><pre><span></span><code>config.json                 # architecture + metadata (see below)
+ensemble_0.safetensors      # weights for member 0
+ensemble_1.safetensors      # weights for member 1
+ensemble_2.safetensors      # weights for member 2
+ensemble_3.safetensors      # weights for member 3
+</code></pre></div>
+<h3 id="configjson-fields">config.json fields<a class="headerlink" href="#configjson-fields" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cutoff</code></td>
+<td>yes</td>
+<td>Neighbor list cutoff in Å</td>
+</tr>
+<tr>
+<td><code>model_yaml</code></td>
+<td>yes*</td>
+<td>YAML string of the full model architecture</td>
+</tr>
+<tr>
+<td><code>needs_coulomb</code></td>
+<td>no</td>
+<td>Whether external Coulomb correction is needed</td>
+</tr>
+<tr>
+<td><code>needs_dispersion</code></td>
+<td>no</td>
+<td>Whether external D3 dispersion is needed</td>
+</tr>
+<tr>
+<td><code>coulomb_mode</code></td>
+<td>no</td>
+<td><code>"none"</code>, <code>"sr_embedded"</code>, or <code>"full_embedded"</code></td>
+</tr>
+<tr>
+<td><code>implemented_species</code></td>
+<td>no</td>
+<td>List of supported atomic numbers</td>
+</tr>
+</tbody>
+</table>
+<p>*If <code>model_yaml</code> is absent, the loader falls back to the GCS registry using <code>member_names</code> (a list of registry keys) — useful for family-level uploads. A warning is issued in this case.</p>
+<div class="admonition note">
+<p class="admonition-title">Security</p>
+<p>All <code>class:</code> entries in <code>model_yaml</code> are validated against an allowlist of <code>aimnet.*</code>
+classes before <code>build_module()</code> is called. Configs referencing arbitrary Python classes
+are rejected to prevent code execution via crafted <code>config.json</code> files.</p>
 </div>
+<h2 id="interactive-demo">Interactive Demo<a class="headerlink" href="#interactive-demo" title="Permanent link">&para;</a></h2>
+<p>Try AIMNet2 directly in your browser without installing anything:</p>
+<p><a href="https://huggingface.co/spaces/isayevlab/aimnet2-demo">Launch Demo on Hugging Face Spaces</a></p>
 
 
 

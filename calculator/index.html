@@ -778,6 +778,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/hugging_face/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Loading from Hugging Face
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1521,6 +1549,17 @@
     <span class="md-ellipsis">
       
         Input Conversion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#autograd-graph-preservation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Autograd Graph Preservation
       
     </span>
   </a>
@@ -2768,6 +2807,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#autograd-graph-preservation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Autograd Graph Preservation
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3882,6 +3932,25 @@
 <li>All tensors → Correct dtype and device</li>
 </ul>
 <p>Any keys not listed in required/optional tables are ignored during input conversion.</p>
+<h3 id="autograd-graph-preservation">Autograd Graph Preservation<a class="headerlink" href="#autograd-graph-preservation" title="Permanent link">&para;</a></h3>
+<p>When <code>coord</code> is passed as a PyTorch tensor with <code>requires_grad=True</code>, the calculator preserves the full autograd graph from <code>coord</code> to the output energy. This allows external higher-order differentiation — for example, computing a Hessian via <code>torch.autograd.functional.hessian()</code> without using the built-in <code>hessian=True</code> flag:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
+
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>
+<span class="n">numbers</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">8</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]])</span>
+<span class="n">charge</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">0.0</span><span class="p">])</span>
+
+<span class="n">coords</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.76</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.47</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.76</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.47</span><span class="p">]])</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">energy_fn</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">calc</span><span class="p">({</span><span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="n">numbers</span><span class="p">,</span> <span class="s2">&quot;charge&quot;</span><span class="p">:</span> <span class="n">charge</span><span class="p">},</span> <span class="n">forces</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">out</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="n">H</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">hessian</span><span class="p">(</span><span class="n">energy_fn</span><span class="p">,</span> <span class="n">coords</span><span class="p">)</span>  <span class="c1"># shape (N, 3, N, 3)</span>
+</code></pre></div>
+<p>!!! note "Use <code>forces=False</code> for external Hessians" When computing higher-order derivatives from outside the calculator, pass <code>forces=False</code>. Requesting <code>forces=True</code> triggers an internal backward pass that frees intermediate activations, preventing a second differentiation through the graph.</p>
+<p>When <code>coord</code> does <strong>not</strong> have <code>requires_grad=True</code> (the default), inputs are detached as before — optimization loops that call the calculator repeatedly incur no graph accumulation overhead.</p>
 <h2 id="output-format">Output Format<a class="headerlink" href="#output-format" title="Permanent link">&para;</a></h2>
 <table>
 <thead>

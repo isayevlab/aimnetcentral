@@ -398,6 +398,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#with-hugging-face-hub" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        With Hugging Face Hub
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#gpu-support" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -945,6 +956,34 @@
     
   
     Performance Tuning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/hugging_face/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Loading from Hugging Face
   
 
     
@@ -1647,6 +1686,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#with-hugging-face-hub" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        With Hugging Face Hub
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#gpu-support" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1771,6 +1821,11 @@
 <p>For molecular dynamics and geometry optimization with ASE:</p>
 <div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;aimnet[ase]&quot;</span>
 </code></pre></div>
+<h3 id="with-hugging-face-hub">With Hugging Face Hub<a class="headerlink" href="#with-hugging-face-hub" title="Permanent link">&para;</a></h3>
+<p>To load models directly from <a href="https://huggingface.co/isayevlab">Hugging Face</a> (<code>isayevlab/aimnet2-wb97m-d3</code>, etc.):</p>
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;aimnet[hf]&quot;</span>
+</code></pre></div>
+<p>See the <a href="../tutorials/hugging_face/">Hugging Face tutorial</a> for details.</p>
 <h3 id="gpu-support">GPU Support<a class="headerlink" href="#gpu-support" title="Permanent link">&para;</a></h3>
 <p>AIMNet2 works on CPU by default. For GPU acceleration, install PyTorch with CUDA:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># For CUDA 12.4</span>

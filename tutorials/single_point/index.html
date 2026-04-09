@@ -915,6 +915,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hugging_face/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Loading from Hugging Face
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1841,6 +1869,16 @@ After the first run, subsequent calculations are fast.
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Hessian shape: </span><span class="si">{</span><span class="n">hessian</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># (21, 3, 21, 3) for aspirin</span>
 </code></pre></div>
 <p>!!! tip "When to request each property" Only request what you need. Computing forces adds one backward pass. Computing the hessian adds <code>3N</code> backward passes (one per force component), so it becomes expensive for large molecules. The hessian is also limited to single-molecule calculations.</p>
+<pre><code>If you need to differentiate through the calculator from **outside** (e.g., wrapping it in an optimizer or computing a Hessian via `torch.autograd.functional.hessian`), pass `coord` as a tensor with `requires_grad=True` and use `forces=False`:
+
+```python
+def energy_fn(x):
+    out = calc({"coord": x.unsqueeze(0), "numbers": numbers, "charge": charge}, forces=False)
+    return out["energy"][0]
+
+H = torch.autograd.functional.hessian(energy_fn, coords)
+```
+</code></pre>
 <h2 id="step-4-comparing-models">Step 4: Comparing Models<a class="headerlink" href="#step-4-comparing-models" title="Permanent link">&para;</a></h2>
 <p>AIMNet2 provides several models trained on different DFT functionals. Each is suitable for different chemistry. You can compare them on the same molecule to understand how model choice affects predictions:</p>
 <div class="highlight"><pre><span></span><code><span class="n">model_names</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="s2">&quot;aimnet2_b973c&quot;</span><span class="p">,</span> <span class="s2">&quot;aimnet2_2025&quot;</span><span class="p">]</span>
