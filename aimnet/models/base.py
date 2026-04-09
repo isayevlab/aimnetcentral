@@ -40,6 +40,7 @@ class ModelMetadata(TypedDict):
 
     # Dispersion parameters (optional)
     d3_params: NotRequired[dict | None]  # {s8, a1, a2, s6} if needs_dispersion=True
+    has_embedded_lr: NotRequired[bool]  # True if model has embedded LR (legacy or D3TS)
 
     implemented_species: list[int]  # Supported atomic numbers
 

@@ -84,7 +84,7 @@ requires-dist = [
     { name = "safetensors", marker = "extra == 'hf'", specifier = ">=0.4" },
     { name = "torch", specifier = ">=2.8" },
     { name = "wandb", marker = "extra == 'train'", specifier = ">=0.18.5" },
-    { name = "warp-lang", specifier = ">=1.11" },
+    { name = "warp-lang", specifier = ">=1.11,<2" },
 ]
 provides-extras = ["ase", "hf", "pysis", "train"]
 

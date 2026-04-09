@@ -269,6 +269,11 @@ class AIMNet2Calculator:
                     )
                     self.model = _model
                     self.cutoff = metadata["cutoff"]
+                else:
+                    # _looks_like_hf matched but it's a local file path — fall through
+                    p = get_model_path(model)
+                    self.model, metadata = load_model(p, device=self.device)
+                    self.cutoff = metadata["cutoff"]
             else:
                 p = get_model_path(model)
                 self.model, metadata = load_model(p, device=self.device)

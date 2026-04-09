@@ -976,3 +976,24 @@ class TestCutoffConfiguration:
         res = calc(data)
         assert "energy" in res
         assert torch.isfinite(res["energy"]).all()
+
+
+def test_relative_path_with_slash_loads_correctly(tmp_path, monkeypatch):
+    """Relative two-segment paths like 'subdir/model.pt' must not be misrouted to HF."""
+    import shutil
+
+    from aimnet.calculators.model_registry import get_model_path
+
+    real_path = get_model_path("aimnet2")
+    subdir = tmp_path / "mymodels"
+    subdir.mkdir()
+    dest = subdir / "aimnet2.pt"
+    shutil.copy(real_path, dest)
+
+    # Change cwd so the path "mymodels/aimnet2.pt" resolves correctly as a relative path.
+    # _HF_ID_RE matches "mymodels/aimnet2.pt" (both segments are [a-zA-Z0-9._-]+),
+    # triggering the HF routing branch. Without the fix, self.model is never assigned.
+    monkeypatch.chdir(tmp_path)
+    calc = AIMNet2Calculator("mymodels/aimnet2.pt")
+    assert hasattr(calc, "model")
+    assert calc.cutoff > 0

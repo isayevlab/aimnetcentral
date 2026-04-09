@@ -73,6 +73,9 @@ AIMNet2Calculator(
     device: str | None = None,
     compile_model: bool = False,
     compile_kwargs: dict | None = None,
+    ensemble_member: int = 0,
+    revision: str | None = None,
+    token: str | None = None,
 )
 ```
 
@@ -86,6 +89,8 @@ Model to use for inference.
 | --- | --- |
 | `str` (registry name) | Loads from model registry (e.g., `"aimnet2"`), downloading if needed |
 | `str` (file path) | Loads from `.pt` (v2) or `.jpt` (v1 legacy) file if the path exists |
+| `str` (HF repo ID) | Loads from Hugging Face Hub (e.g., `"isayevlab/aimnet2-wb97m-d3"`); requires `aimnet[hf]` |
+| `str` (local HF dir) | Loads from a local directory with `config.json` + `ensemble_N.safetensors` |
 | `torch.nn.Module` | Uses provided module directly |
 
 For `torch.nn.Module`, metadata is read from `model.metadata` attribute if available (v2 models).
@@ -163,6 +168,26 @@ calc = AIMNet2Calculator("aimnet2", compile_model=True, compile_kwargs={"mode": 
 ```
 
 See [torch.compile documentation](https://pytorch.org/docs/stable/generated/torch.compile.html) for available options.
+
+#### `ensemble_member`
+
+Which ensemble member to load when loading from a Hugging Face repo. Default: `0`.
+
+Ensemble members are indexed 0–3. Only applies when `model` is a HF repo ID or a local HF-style directory (containing `config.json` + `ensemble_N.safetensors`).
+
+#### `revision`
+
+HF repo revision (branch, tag, or commit hash) to load from. Default: `None` (latest).
+
+Only applies when `model` is a HF repo ID.
+
+#### `token`
+
+HF API token for accessing private or gated repositories. Default: `None`.
+
+Set via environment variable `HF_TOKEN` as an alternative to passing it directly.
+
+Only applies when `model` is a HF repo ID.
 
 ### Metadata Resolution
 
