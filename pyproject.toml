@@ -120,7 +120,7 @@ docs = [
     "mkdocs-material>=9.2.7",
     "mkdocstrings[python]>=0.26.1",
     "griffe<3",
-    "pygments<2.20",
+    "pygments<2.21",
 ]
 
 # Ruff configuration
