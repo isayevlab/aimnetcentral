@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 
 def load_model_registry(registry_file: str | None = None) -> dict[str, str]:
     registry_file = registry_file or os.path.join(os.path.dirname(__file__), "model_registry.yaml")
-    with open(os.path.join(os.path.dirname(__file__), "model_registry.yaml")) as f:
+    with open(registry_file) as f:
         return yaml.load(f, Loader=yaml.SafeLoader)
 
 
@@ -54,5 +54,5 @@ def clear_assets():
 
     for fil in glob(os.path.join(os.path.dirname(__file__), "assets", "*")):
         if os.path.isfile(fil):
-            logging.warn(f"Removing {fil}")
+            logging.warning(f"Removing {fil}")
             os.remove(fil)

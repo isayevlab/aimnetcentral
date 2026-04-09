@@ -22,6 +22,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Intended Audience :: Science/Research",
@@ -34,7 +35,7 @@ dynamic = ["version"]
 dependencies = [
     "torch>=2.8",
     "numpy",
-    "warp-lang>=1.11",
+    "warp-lang>=1.11,<2",
     "nvalchemi-toolkit-ops>=0.3",
     "requests>=2.32.3",
     "click>=8.1.7",

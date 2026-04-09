@@ -240,6 +240,18 @@ def device():
     return get_device()
 
 
+@pytest.fixture(scope="session")
+def aimnet2_calc():
+    """Session-scoped AIMNet2Calculator with the default aimnet2 model.
+
+    Loaded once per test session. Use this instead of constructing
+    AIMNet2Calculator("aimnet2") inside individual tests.
+    """
+    from aimnet.calculators import AIMNet2Calculator
+
+    return AIMNet2Calculator("aimnet2")
+
+
 @pytest.fixture
 def requires_gpu():
     """Skip test if GPU is not available."""

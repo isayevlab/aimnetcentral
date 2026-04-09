@@ -325,6 +325,35 @@ class TestSpinCharges:
         assert abs(sc.sum() - 1.0) < 1e-3
 
 
+class TestSpeciesValidation:
+    """Tests for implemented_species population and validation."""
+
+    def test_implemented_species_populated_from_metadata(self):
+        """AIMNet2ASE must read implemented_species from model metadata, not a missing attribute."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        from aimnet.calculators import AIMNet2ASE, AIMNet2Calculator
+
+        base_calc = AIMNet2Calculator("aimnet2")
+        ase_calc = AIMNet2ASE(base_calc)
+        assert ase_calc.implemented_species is not None
+        assert len(ase_calc.implemented_species) > 0
+        # H (atomic number 1) must be supported
+        assert 1 in ase_calc.implemented_species
+
+    def test_species_validation_rejects_unsupported_element(self):
+        """set_atoms must raise ValueError when atoms contain an unsupported element."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase import Atoms
+
+        from aimnet.calculators import AIMNet2ASE
+
+        ase_calc = AIMNet2ASE("aimnet2")
+        # Uranium (Z=92) is not in aimnet2 supported elements
+        atoms = Atoms("U", positions=[[0, 0, 0]])
+        with pytest.raises(ValueError, match="not implemented"):
+            ase_calc.set_atoms(atoms)
+
+
 class TestAtomsInfoChargeSpin:
     """Tests for charge/spin multiplicity in Atoms.info."""
 
