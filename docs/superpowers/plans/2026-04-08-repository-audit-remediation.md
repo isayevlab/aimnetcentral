@@ -13,10 +13,12 @@
 ## File Map
 
 **Delete:**
+
 - `.github/workflows/cursor-code-review.yml` — broken, CURSOR_API_KEY secret missing
 - `aimnet/base.py` — dead code, duplicate of `aimnet/models/base.py`
 
 **Modify:**
+
 - `.github/workflows/main.yml` — add `tests-hf` job, fix action pins, add timeouts, `fetch-depth: 0` in tests-core
 - `.github/workflows/gpu-tests.yml` — add `concurrency` limit, fix action pins
 - `.github/workflows/on-release-main.yml` — remove broken `branches` filter from `release` event
@@ -36,6 +38,7 @@
 ## Task 1: Delete cursor-code-review.yml
 
 **Files:**
+
 - Delete: `.github/workflows/cursor-code-review.yml`
 
 - [ ] **Step 1: Confirm the file is standalone (nothing references it)**
@@ -63,6 +66,7 @@ git commit -m "ci: remove cursor-code-review workflow (missing CURSOR_API_KEY se
 ## Task 2: Fix CI workflow — add tests-hf job + minor fixes to main.yml
 
 **Files:**
+
 - Modify: `.github/workflows/main.yml`
 
 The `tests-hf` job is missing, so HF-marked tests never run in CI. The `tests-core` job also lacks `fetch-depth: 0` (needed for `hatch-vcs` in some edge cases) and job-level `timeout-minutes`.
@@ -78,61 +82,64 @@ In `.github/workflows/main.yml`:
 a) Add `timeout-minutes: 20` to each existing job block (`quality`, `tests-core`, `tests-ase`, `tests-train`, `tests-pysis`, `check-docs`).
 
 b) Add `fetch-depth: 0` to the `tests-core` checkout step:
+
 ```yaml
-            - name: Check out
-              uses: actions/checkout@v6
-              with:
-                  fetch-depth: 0
+- name: Check out
+  uses: actions/checkout@v6
+  with:
+    fetch-depth: 0
 ```
 
 c) Add a new `tests-hf` job after `tests-pysis`:
+
 ```yaml
-    tests-hf:
-        runs-on: ubuntu-latest
-        timeout-minutes: 20
-        strategy:
-            matrix:
-                python-version: ["3.11"]
-            fail-fast: false
-        defaults:
-            run:
-                shell: bash
-        steps:
-            - name: Check out
-              uses: actions/checkout@v6
+tests-hf:
+  runs-on: ubuntu-latest
+  timeout-minutes: 20
+  strategy:
+    matrix:
+      python-version: ["3.11"]
+    fail-fast: false
+  defaults:
+    run:
+      shell: bash
+  steps:
+    - name: Check out
+      uses: actions/checkout@v6
 
-            - name: Set up the environment
-              uses: ./.github/actions/setup-uv-env
-              with:
-                  python-version: ${{ matrix.python-version }}
-                  groups: dev
-                  extras: hf
+    - name: Set up the environment
+      uses: ./.github/actions/setup-uv-env
+      with:
+        python-version: ${{ matrix.python-version }}
+        groups: dev
+        extras: hf
 
-            - name: Run hf-marked tests (allow empty)
-              run: |
-                  set -e
-                  uv run pytest tests -m hf || rc=$?
-                  if [ "${rc:-0}" -eq 5 ]; then
-                    echo "No hf-marked tests collected; treating as success."
-                    exit 0
-                  fi
-                  exit "${rc:-0}"
+    - name: Run hf-marked tests (allow empty)
+      run: |
+        set -e
+        uv run pytest tests -m hf || rc=$?
+        if [ "${rc:-0}" -eq 5 ]; then
+          echo "No hf-marked tests collected; treating as success."
+          exit 0
+        fi
+        exit "${rc:-0}"
 ```
 
 d) Add `tests-hf` to the `deploy-docs` needs list:
+
 ```yaml
-    deploy-docs:
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        needs:
-            [
-                quality,
-                tests-core,
-                tests-ase,
-                tests-train,
-                tests-pysis,
-                tests-hf,
-                check-docs,
-            ]
+deploy-docs:
+  if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  needs:
+    [
+      quality,
+      tests-core,
+      tests-ase,
+      tests-train,
+      tests-pysis,
+      tests-hf,
+      check-docs,
+    ]
 ```
 
 - [ ] **Step 3: Run mkdocs build to ensure no docs breakage**
@@ -155,6 +162,7 @@ git commit -m "ci: add tests-hf job, timeouts, and fetch-depth to main workflow"
 ## Task 3: Fix on-release-main.yml — remove broken branches filter
 
 **Files:**
+
 - Modify: `.github/workflows/on-release-main.yml`
 
 The `branches: [main]` under `on: release:` is silently ignored by GitHub Actions (the `branches` filter only applies to `push`/`pull_request` events, not `release`). It's dead config that creates false confidence about branch scoping.
@@ -166,18 +174,20 @@ Read `.github/workflows/on-release-main.yml`.
 - [ ] **Step 2: Remove the branches filter**
 
 Change:
+
 ```yaml
 on:
-    release:
-        types: [published]
-        branches: [main]
+  release:
+    types: [published]
+    branches: [main]
 ```
 
 To:
+
 ```yaml
 on:
-    release:
-        types: [published]
+  release:
+    types: [published]
 ```
 
 - [ ] **Step 3: Commit**
@@ -192,6 +202,7 @@ git commit -m "ci: remove invalid branches filter from release event trigger"
 ## Task 4: Fix GPU tests workflow — add concurrency limit
 
 **Files:**
+
 - Modify: `.github/workflows/gpu-tests.yml`
 
 Without a `concurrency` group, multiple pushes can queue simultaneous GPU jobs, tying up the self-hosted runner for long periods.
@@ -203,10 +214,11 @@ Read `.github/workflows/gpu-tests.yml`.
 - [ ] **Step 2: Add concurrency group at the workflow level**
 
 Add after the `on:` block:
+
 ```yaml
 concurrency:
-    group: gpu-${{ github.ref }}
-    cancel-in-progress: true
+  group: gpu-${{ github.ref }}
+  cancel-in-progress: true
 ```
 
 - [ ] **Step 3: Commit**
@@ -221,6 +233,7 @@ git commit -m "ci: add concurrency limit to GPU tests workflow"
 ## Task 5: Fix AIMNet2Calculator routing bug (relative two-segment paths)
 
 **Files:**
+
 - Modify: `aimnet/calculators/calculator.py:248-281`
 
 **Bug:** When `model` is a relative path like `"subdir/mymodel.pt"` (exactly one `/`, no directory exists, but file exists), it matches `_HF_ID_RE` but `is_hf_repo_id()` returns `False` (because `Path(model).exists()`) and `_is_hf_dir` is `False`. We enter the outer `if` but skip the inner `if`, so `self.model` is never assigned → `AttributeError` on first call.
@@ -264,6 +277,7 @@ Read `aimnet/calculators/calculator.py` offset 244 limit 45.
 - [ ] **Step 4: Apply the fix**
 
 Change the inner block from:
+
 ```python
             if is_hf_repo_id(model) or _is_hf_dir:
                 _model, metadata = load_from_hf_repo(
@@ -282,6 +296,7 @@ Change the inner block from:
 ```
 
 To:
+
 ```python
             if is_hf_repo_id(model) or _is_hf_dir:
                 _model, metadata = load_from_hf_repo(
@@ -332,6 +347,7 @@ git commit -m "fix: handle relative two-segment paths in AIMNet2Calculator model
 ## Task 6: Fix load_model_registry() ignoring its registry_file parameter
 
 **Files:**
+
 - Modify: `aimnet/calculators/model_registry.py:11-14`
 
 **Bug:** `registry_file` param is computed but `open()` always uses the hardcoded path.
@@ -367,6 +383,7 @@ Expected: FAIL (returns default registry, not fake one).
 - [ ] **Step 3: Apply the fix**
 
 In `aimnet/calculators/model_registry.py`, change:
+
 ```python
 def load_model_registry(registry_file: str | None = None) -> dict[str, str]:
     registry_file = registry_file or os.path.join(os.path.dirname(__file__), "model_registry.yaml")
@@ -375,6 +392,7 @@ def load_model_registry(registry_file: str | None = None) -> dict[str, str]:
 ```
 
 To:
+
 ```python
 def load_model_registry(registry_file: str | None = None) -> dict[str, str]:
     registry_file = registry_file or os.path.join(os.path.dirname(__file__), "model_registry.yaml")
@@ -393,10 +411,13 @@ Expected: PASS
 - [ ] **Step 5: Fix logging.warn → logging.warning in the same file**
 
 In `aimnet/calculators/model_registry.py` line 57, change:
+
 ```python
             logging.warn(f"Removing {fil}")
 ```
+
 To:
+
 ```python
             logging.warning(f"Removing {fil}")
 ```
@@ -413,6 +434,7 @@ git commit -m "fix: load_model_registry() now uses its registry_file parameter; 
 ## Task 7: Fix AIMNet2ASE species validation (hasattr always False)
 
 **Files:**
+
 - Modify: `aimnet/calculators/aimnet2ase.py:36-39`
 
 **Bug:** `AIMNet2Calculator` stores implemented species as `self.implemented_species` (a tensor), but `AIMNet2ASE.__init__` checks `hasattr(base_calc, "implemented_species")` — this is `True` when a tensor attribute exists and `False` when it doesn't, so the `hasattr` check itself isn't the problem. The bug reported was that the attribute is set on `base_calc` but the check always returns `False`.
@@ -430,6 +452,7 @@ grep -n "implemented_species" aimnet/calculators/calculator.py | head -20
 If `AIMNet2Calculator` sets `self.implemented_species` only when metadata is available, and the attribute is a `Tensor`, the check `hasattr(base_calc, "implemented_species")` should work. If the audit found it always returns `False`, it may be that the attribute name doesn't match or is set on a different object.
 
 Check the actual attribute name:
+
 ```bash
 grep -n "implemented_species" aimnet/calculators/calculator.py aimnet/calculators/aimnet2ase.py
 ```
@@ -483,6 +506,7 @@ git commit -m "fix: AIMNet2ASE species validation now correctly reads implemente
 ## Task 8: Add has_embedded_lr to ModelMetadata + fix hf_hub.py needs_coulomb fallback
 
 **Files:**
+
 - Modify: `aimnet/models/base.py:20-44`
 - Modify: `aimnet/calculators/hf_hub.py:274-276`
 
@@ -493,6 +517,7 @@ git commit -m "fix: AIMNet2ASE species validation now correctly reads implemente
 - [ ] **Step 1: Add has_embedded_lr to ModelMetadata**
 
 In `aimnet/models/base.py`, change the `ModelMetadata` TypedDict to add the field after `d3_params`:
+
 ```python
     # Dispersion parameters (optional)
     d3_params: NotRequired[dict | None]  # {s8, a1, a2, s6} if needs_dispersion=True
@@ -504,6 +529,7 @@ In `aimnet/models/base.py`, change the `ModelMetadata` TypedDict to add the fiel
 - [ ] **Step 2: Fix needs_coulomb/needs_dispersion in hf_hub.py**
 
 In `aimnet/calculators/hf_hub.py`, change lines 274-276 from:
+
 ```python
         "needs_coulomb": config.get("needs_coulomb", False),
         "needs_dispersion": config.get("needs_dispersion", False),
@@ -511,6 +537,7 @@ In `aimnet/calculators/hf_hub.py`, change lines 274-276 from:
 ```
 
 To:
+
 ```python
         "needs_coulomb": _cfg("needs_coulomb", False),
         "needs_dispersion": _cfg("needs_dispersion", False),
@@ -545,6 +572,7 @@ git commit -m "fix: add has_embedded_lr to ModelMetadata; fix hf_hub needs_coulo
 ## Task 9: Delete aimnet/base.py (dead code)
 
 **Files:**
+
 - Delete: `aimnet/base.py`
 
 `aimnet/base.py` is a duplicate of an earlier version of `aimnet/models/base.py`. It exports `AIMNet2Base` (a different class from `AIMNet2` in `models/`), but nothing imports it anywhere.
@@ -559,7 +587,7 @@ grep -r "aimnet/base" . --include="*.py" --include="*.yaml" --include="*.toml"
 
 Expected: no results (only `aimnet/models/base.py` references).
 
-- [ ] **Step 2: Check __init__.py doesn't re-export it**
+- [ ] **Step 2: Check **init**.py doesn't re-export it**
 
 ```bash
 grep -n "base" aimnet/__init__.py
@@ -590,6 +618,7 @@ git commit -m "chore: delete aimnet/base.py (dead code, superseded by aimnet/mod
 ## Task 10: Add session-scoped model fixture to conftest.py
 
 **Files:**
+
 - Modify: `tests/conftest.py`
 
 Many tests each load the `aimnet2` model independently, which means N model downloads/loads per test run. A session-scoped fixture loads it once per session, cutting test suite time significantly.
@@ -634,6 +663,7 @@ git commit -m "test: add session-scoped aimnet2_calc fixture to reduce model loa
 ## Task 11: Add missing constructor params to calculator.md
 
 **Files:**
+
 - Modify: `docs/calculator.md`
 
 The constructor docs at line 66-77 list 7 parameters but are missing `ensemble_member`, `revision`, `token` (added with HF integration) and the HF repo ID model source.
@@ -645,6 +675,7 @@ Read `docs/calculator.md` offset 65 limit 80.
 - [ ] **Step 2: Update constructor signature block**
 
 Change the constructor block from:
+
 ```python
 AIMNet2Calculator(
     model: str | nn.Module = "aimnet2",
@@ -658,6 +689,7 @@ AIMNet2Calculator(
 ```
 
 To:
+
 ```python
 AIMNet2Calculator(
     model: str | nn.Module = "aimnet2",
@@ -731,6 +763,7 @@ git commit -m "docs: add ensemble_member, revision, token params and HF repo ID 
 ## Task 12: Packaging fixes (pyproject.toml)
 
 **Files:**
+
 - Modify: `pyproject.toml`
 
 Three fixes: (1) add `warp-lang` upper bound to avoid API breakage on next major version; (2) add Python 3.13 classifiers; (3) add S101 per-file ignore for test files so `assert` in tests doesn't trigger the bandit rule.
@@ -742,10 +775,13 @@ Read `pyproject.toml` lines 33–50 (dependencies) and 165–180 (ruff ignore se
 - [ ] **Step 2: Add warp-lang upper bound**
 
 Change:
+
 ```toml
     "warp-lang>=1.11",
 ```
+
 To:
+
 ```toml
     "warp-lang>=1.11,<2",
 ```
@@ -753,6 +789,7 @@ To:
 - [ ] **Step 3: Add Python 3.13 classifier**
 
 In the `classifiers` list, add after `"Programming Language :: Python :: 3.12"`:
+
 ```toml
     "Programming Language :: Python :: 3.13",
 ```
@@ -800,6 +837,7 @@ make check
 Expected: all pre-commit hooks pass (ruff, markdownlint, prettier, codespell, deptry).
 
 If prettier reformats any docs files, stage the reformatted versions and amend/commit:
+
 ```bash
 git add docs/
 git commit -m "chore: apply prettier formatting"
@@ -827,27 +865,28 @@ Expected: clean build with no warnings.
 
 **Spec coverage check:**
 
-| Finding | Task |
-|---------|------|
-| Delete cursor-code-review.yml | Task 1 |
-| Add tests-hf CI job | Task 2 |
-| CI timeouts | Task 2 |
-| fetch-depth in tests-core | Task 2 |
-| Remove broken branches filter from release event | Task 3 |
-| GPU runner concurrency | Task 4 |
-| Relative path routing bug in AIMNet2Calculator | Task 5 |
-| load_model_registry() param bug | Task 6 |
-| logging.warn → logging.warning | Task 6 |
-| AIMNet2ASE species validation bug | Task 7 |
-| has_embedded_lr missing from ModelMetadata | Task 8 |
-| needs_coulomb/dispersion not using _cfg() in hf_hub.py | Task 8 |
-| Delete aimnet/base.py dead code | Task 9 |
-| Session-scoped model fixture | Task 10 |
-| Missing HF params in calculator.md | Task 11 |
-| warp-lang upper bound | Task 12 |
-| Python 3.13 classifiers | Task 12 |
+| Finding                                                 | Task    |
+| ------------------------------------------------------- | ------- |
+| Delete cursor-code-review.yml                           | Task 1  |
+| Add tests-hf CI job                                     | Task 2  |
+| CI timeouts                                             | Task 2  |
+| fetch-depth in tests-core                               | Task 2  |
+| Remove broken branches filter from release event        | Task 3  |
+| GPU runner concurrency                                  | Task 4  |
+| Relative path routing bug in AIMNet2Calculator          | Task 5  |
+| load_model_registry() param bug                         | Task 6  |
+| logging.warn → logging.warning                          | Task 6  |
+| AIMNet2ASE species validation bug                       | Task 7  |
+| has_embedded_lr missing from ModelMetadata              | Task 8  |
+| needs_coulomb/dispersion not using \_cfg() in hf_hub.py | Task 8  |
+| Delete aimnet/base.py dead code                         | Task 9  |
+| Session-scoped model fixture                            | Task 10 |
+| Missing HF params in calculator.md                      | Task 11 |
+| warp-lang upper bound                                   | Task 12 |
+| Python 3.13 classifiers                                 | Task 12 |
 
 **Out of scope for this plan** (deferred — low risk, no user-visible bugs):
+
 - Codecov token secret (needs repo admin access)
 - Branch protection rules (repo settings, not code)
 - PyPI publish gate environment (needs repo admin access)
