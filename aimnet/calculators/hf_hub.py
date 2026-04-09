@@ -271,14 +271,14 @@ def load_from_hf_repo(
     metadata: ModelMetadata = {
         "format_version": _cfg("format_version", 2),
         "cutoff": config["cutoff"],
-        "needs_coulomb": config.get("needs_coulomb", False),
-        "needs_dispersion": config.get("needs_dispersion", False),
-        "coulomb_mode": config.get("coulomb_mode", "none"),
+        "needs_coulomb": _cfg("needs_coulomb", False),
+        "needs_dispersion": _cfg("needs_dispersion", False),
+        "coulomb_mode": _cfg("coulomb_mode", "none"),
         "coulomb_sr_rc": coulomb_sr_rc,
         "coulomb_sr_envelope": coulomb_sr_envelope,
         "d3_params": _cfg("d3_params"),
         "has_embedded_lr": _cfg("has_embedded_lr", False),
-        "implemented_species": config.get("implemented_species", []),
+        "implemented_species": _cfg("implemented_species", []),
     }
 
     model._metadata = metadata

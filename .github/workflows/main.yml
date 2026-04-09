@@ -10,6 +10,7 @@ on:
 jobs:
     quality:
         runs-on: ubuntu-latest
+        timeout-minutes: 20
         steps:
             - name: Check out
               uses: actions/checkout@v6
@@ -29,6 +30,7 @@ jobs:
 
     tests-core:
         runs-on: ubuntu-latest
+        timeout-minutes: 20
         strategy:
             matrix:
                 python-version: ["3.11", "3.12"]
@@ -39,6 +41,8 @@ jobs:
         steps:
             - name: Check out
               uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
 
             - name: Set up the environment
               uses: ./.github/actions/setup-uv-env
@@ -55,6 +59,7 @@ jobs:
 
     tests-ase:
         runs-on: ubuntu-latest
+        timeout-minutes: 20
         strategy:
             matrix:
                 python-version: ["3.11"]
@@ -78,6 +83,7 @@ jobs:
 
     tests-train:
         runs-on: ubuntu-latest
+        timeout-minutes: 20
         strategy:
             matrix:
                 python-version: ["3.11"]
@@ -108,6 +114,7 @@ jobs:
 
     tests-pysis:
         runs-on: ubuntu-latest
+        timeout-minutes: 20
         strategy:
             matrix:
                 python-version: ["3.11"]
@@ -136,8 +143,40 @@ jobs:
                   fi
                   exit "${rc:-0}"
 
+    tests-hf:
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        strategy:
+            matrix:
+                python-version: ["3.11"]
+            fail-fast: false
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - name: Check out
+              uses: actions/checkout@v6
+
+            - name: Set up the environment
+              uses: ./.github/actions/setup-uv-env
+              with:
+                  python-version: ${{ matrix.python-version }}
+                  groups: dev
+                  extras: hf
+
+            - name: Run hf-marked tests (allow empty)
+              run: |
+                  set -e
+                  uv run pytest tests -m hf || rc=$?
+                  if [ "${rc:-0}" -eq 5 ]; then
+                    echo "No hf-marked tests collected; treating as success."
+                    exit 0
+                  fi
+                  exit "${rc:-0}"
+
     check-docs:
         runs-on: ubuntu-latest
+        timeout-minutes: 20
         steps:
             - name: Check out
               uses: actions/checkout@v6
@@ -152,6 +191,7 @@ jobs:
 
     deploy-docs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        timeout-minutes: 20
         needs:
             [
                 quality,
@@ -159,6 +199,7 @@ jobs:
                 tests-ase,
                 tests-train,
                 tests-pysis,
+                tests-hf,
                 check-docs,
             ]
         runs-on: ubuntu-latest

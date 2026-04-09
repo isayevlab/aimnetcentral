@@ -32,11 +32,10 @@ class AIMNet2ASE(Calculator):
         self.charge = charge
         self.mult = mult
         self.update_tensors()
-        # list of implemented species
-        if hasattr(base_calc, "implemented_species"):
-            self.implemented_species = base_calc.implemented_species.cpu().numpy()  # type: ignore
-        else:
-            self.implemented_species = None
+        # list of implemented species — read from model metadata
+        _meta = getattr(base_calc.model, "_metadata", None)
+        _species = _meta.get("implemented_species") if _meta is not None else None
+        self.implemented_species = np.array(_species, dtype=np.int64) if _species else None
 
     def reset(self):
         super().reset()
@@ -45,7 +44,7 @@ class AIMNet2ASE(Calculator):
         self._t_mult = None
 
     def set_atoms(self, atoms):
-        if self.implemented_species is not None and not np.in1d(atoms.numbers, self.implemented_species).all():
+        if self.implemented_species is not None and not np.isin(atoms.numbers, self.implemented_species).all():
             raise ValueError("Some species are not implemented in the AIMNet2Calculator")
         self.reset()
         self.atoms = atoms
