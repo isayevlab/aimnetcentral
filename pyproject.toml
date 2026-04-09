@@ -197,6 +197,7 @@ testpaths = ["tests"]
 markers = [
     "ase: marks tests that require ASE (deselect with: -m 'not ase')",
     "gpu: marks tests that require GPU/CUDA (deselect with: -m 'not gpu')",
+    "hf: marks tests that require Hugging Face extras (deselect with: -m 'not hf')",
     "pysis: marks tests that require PySisyphus (deselect with: -m 'not pysis')",
     "train: marks tests that require training dependencies (deselect with: -m 'not train')",
 ]
