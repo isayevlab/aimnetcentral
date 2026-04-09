@@ -91,13 +91,13 @@ provides-extras = ["ase", "hf", "pysis", "train"]
 [package.metadata.requires-dev]
 dev = [
     { name = "deptry", specifier = ">=0.16.2" },
-    { name = "griffe", specifier = "<2" },
+    { name = "griffe", specifier = "<3" },
     { name = "mkdocs", specifier = ">=1.4.2" },
     { name = "mkdocs-material", specifier = ">=9.2.7" },
     { name = "mkdocstrings", extras = ["python"], specifier = ">=0.26.1" },
     { name = "mypy", specifier = ">=1.5.1" },
     { name = "pre-commit" },
-    { name = "pygments", specifier = "<2.20" },
+    { name = "pygments", specifier = "<2.21" },
     { name = "pytest", specifier = ">=7.2.0" },
     { name = "pytest-cov", specifier = ">=4.0.0" },
     { name = "pytest-randomly", specifier = ">=3.15.0" },
@@ -106,11 +106,11 @@ dev = [
     { name = "setuptools" },
 ]
 docs = [
-    { name = "griffe", specifier = "<2" },
+    { name = "griffe", specifier = "<3" },
     { name = "mkdocs", specifier = ">=1.4.2" },
     { name = "mkdocs-material", specifier = ">=9.2.7" },
     { name = "mkdocstrings", extras = ["python"], specifier = ">=0.26.1" },
-    { name = "pygments", specifier = "<2.20" },
+    { name = "pygments", specifier = "<2.21" },
 ]
 
 [[package]]

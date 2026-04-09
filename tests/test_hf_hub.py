@@ -5,6 +5,8 @@ import warnings
 
 import pytest
 import torch
+
+pytest.importorskip("safetensors")
 from safetensors.torch import save_file
 
 from aimnet.calculators.hf_hub import _validate_model_yaml, is_hf_repo_id, load_from_hf_repo
@@ -48,6 +50,7 @@ def fake_hf_repo(tmp_path):
     return tmp_path
 
 
+@pytest.mark.hf
 def test_is_hf_repo_id():
     """Test HF repo ID detection."""
     assert is_hf_repo_id("isayevlab/aimnet2-wb97m-d3")
@@ -56,12 +59,14 @@ def test_is_hf_repo_id():
     assert not is_hf_repo_id("")
 
 
+@pytest.mark.hf
 def test_validate_model_yaml_allows_aimnet():
     """Test that aimnet classes are allowed."""
     yaml_str = "class: aimnet.models.AIMNet2\nkwargs:\n  outputs:\n    energy:\n      class: aimnet.modules.Output\n"
     _validate_model_yaml(yaml_str)  # Should not raise
 
 
+@pytest.mark.hf
 def test_validate_model_yaml_blocks_untrusted():
     """Test that non-aimnet classes are blocked."""
     yaml_str = "class: os.system\nkwargs: {}"
@@ -69,6 +74,7 @@ def test_validate_model_yaml_blocks_untrusted():
         _validate_model_yaml(yaml_str)
 
 
+@pytest.mark.hf
 def test_load_from_hf_repo_local(fake_hf_repo):
     """Test loading model from a local directory mimicking HF repo structure."""
     model, metadata = load_from_hf_repo(str(fake_hf_repo), ensemble_member=0)
@@ -77,6 +83,7 @@ def test_load_from_hf_repo_local(fake_hf_repo):
     assert len(metadata["implemented_species"]) > 0
 
 
+@pytest.mark.hf
 def test_calculator_with_hf_repo(fake_hf_repo):
     """Test that AIMNet2Calculator accepts a local HF-style directory."""
     import numpy as np
