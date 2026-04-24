@@ -78,6 +78,7 @@ calc.set_lrcoulomb_method("dsf", cutoff=15.0, dsf_alpha=0.2)
 - O(N) scaling with neighbor lists
 - Energy and forces continuous at cutoff
 - Based on Wolf summation method
+- Inference forces and stress are supported; force/stress training and Hessians are not (see [Derivative Support](#derivative-support))
 
 ### Ewald Summation
 
@@ -90,61 +91,94 @@ calc.set_lrcoulomb_method("dsf", cutoff=15.0, dsf_alpha=0.2)
 
 **When NOT to use:**
 
-- Long MD trajectories (slower than DSF)
+- Long MD trajectories (slower than DSF; consider PME for large boxes)
 - When DSF accuracy is sufficient
-- Very large systems (reciprocal space cost increases)
+- Very large systems (reciprocal-space cost grows; prefer PME)
 
 **Configuration:**
 
 ```python
-# Default accuracy (1e-8)
+# Default accuracy (1e-5)
 calc.set_lrcoulomb_method("ewald")
 
-# Custom accuracy (higher precision, more computation)
-calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-10)
-
-# Lower accuracy (faster, but less precise)
+# Tighter accuracy (more expensive)
 calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-6)
 ```
 
+The Ewald and PME backends ignore the public `cutoff` argument; the calculator estimates a per-system real-space cutoff (and `alpha`/k-space cutoff or PME mesh) from `ewald_accuracy` and the cell geometry on every call.
+
 **Accuracy Parameter:**
 
-The `ewald_accuracy` parameter controls the real-space and reciprocal-space cutoffs. Lower values give higher precision but require more computation. The cutoffs are computed automatically based on system geometry:
+The `ewald_accuracy` parameter controls the splitting parameter, the real-space cutoff, and the reciprocal-space cutoff (or PME mesh dimensions). Lower values give higher precision at higher cost. The calculator default is `1e-5`.
+
+`nvalchemiops` estimates Ewald parameters from system geometry (similar to the standard formulas):
 
 \[ \eta = \frac{(V^2 / N)^{1/6}}{\sqrt{2\pi}} \]
 
 \[ r*{\text{cutoff}} = \sqrt{-2 \ln \varepsilon} \cdot \eta, \quad k*{\text{cutoff}} = \frac{\sqrt{-2 \ln \varepsilon}}{\eta} \]
 
-Where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and \(N\) is the number of atoms.
+where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and \(N\) is the number of atoms.
 
 **Characteristics:**
 
-- Splits Coulomb into real-space + reciprocal-space + self-energy terms
-- Configurable accuracy target (default 1e-8)
-- Automatically determines k-space vectors based on accuracy
-- O(N^2) complexity (full pairwise Ewald sum)
+- Splits Coulomb into real-space + reciprocal-space + self-energy + background terms
+- Configurable accuracy target (default `1e-5`)
+- Splitting parameter and cutoffs estimated per call from `ewald_accuracy`
+- Per-call dense neighbor list sized to the real-space cutoff
 - Most accurate method for periodic systems
 
-**When Ewald matters:**
+### PME (Particle Mesh Ewald)
 
-- Computing precise thermodynamic properties
-- Benchmark comparisons against QM calculations
-- Validation of other Coulomb methods
-- Systems with significant long-range charge ordering
+**When to use:**
+
+- Large periodic boxes where Ewald reciprocal cost becomes a bottleneck
+- Production MD with large unit cells
+- Ewald-like accuracy with better asymptotic scaling for large systems
+
+**When NOT to use:**
+
+- Very small unit cells (Ewald may be faster)
+- Non-periodic systems (use `simple`)
+
+**Configuration:**
+
+```python
+# Default accuracy (1e-5)
+calc.set_lrcoulomb_method("pme")
+
+# Tighter accuracy (more expensive)
+calc.set_lrcoulomb_method("pme", ewald_accuracy=1e-6)
+```
+
+PME shares the `ewald_accuracy` knob with Ewald (default `1e-5`). The real-space cutoff, splitting parameter, and B-spline mesh dimensions are all estimated from this accuracy and the cell geometry; the mesh is not configured manually.
+
+**Characteristics:**
+
+- Same physical model as Ewald but reciprocal space evaluated on a B-spline mesh via FFT
+- Better asymptotic scaling for large systems
+- Same `ewald_accuracy` semantics as Ewald
+
+### Derivative Support
+
+The three nvalchemiops-backed methods differ in how they expose forces and stress:
+
+- **DSF**: energy is autograd-connected through charges only. The calculator assembles inference forces and stress by combining PyTorch autograd for the NN and the charge chain with explicit DSF forces/virial. Force/stress losses (`train=True` with `forces=True` or `stress=True`) and Hessian requests raise `NotImplementedError`.
+- **Ewald / PME**: support inference forces/stress, force/stress losses in `train=True`, and calculator Hessian requests. Higher-order derivatives use the nvalchemiops first-derivative outputs; the explicit position/cell contribution is treated as constant for higher-order derivatives, while the charge chain remains differentiable.
 
 ## Method Comparison
 
 | Method | Complexity | PBC Support | Typical Use Case | Notes |
 | --- | --- | --- | --- | --- |
 | Simple | O(N²) fully connected | No | Small molecules, quick tests | Auto-switches for PBC |
-| DSF | O(N) with neighbor lists | Yes | Production MD, large systems | Recommended for PBC |
-| Ewald | O(N^2) full pairwise | Yes | High-accuracy benchmarks | Research-grade precision |
+| DSF | O(N) with neighbor lists | Yes | Production MD, large systems | Inference derivatives only |
+| Ewald | O(N · K) reciprocal + O(N) real-space | Yes | High-accuracy benchmarks | Default `ewald_accuracy=1e-5` |
+| PME | O(N log N) via B-spline + FFT | Yes | Large-cell production MD | Scales better than Ewald |
 
-**Accuracy hierarchy:** Ewald > DSF > Simple (for PBC)
+**Accuracy hierarchy:** Ewald ≈ PME > DSF > Simple (for PBC)
 
-**Speed hierarchy:** Simple (small N) > DSF > Ewald
+**Speed hierarchy:** Simple (small N) > DSF > PME ≳ Ewald (depending on system size)
 
-**Recommendation:** Use DSF for periodic systems unless you need Ewald's precision.
+**Recommendation:** Use DSF for typical periodic systems. Switch to PME for large unit cells where reciprocal cost matters, and Ewald for benchmarking against PME or older Ewald-based references.
 
 ## Common Data and Neighbor-List Handling
 
@@ -154,6 +188,8 @@ Where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and \
 - Dispersion modules (`DFTD3`, `D3TS`) prefer `nbmat_dftd3` and fall back to `nbmat_lr`.
 
 This fallback behavior is implemented via `nbops.resolve_suffix`, and distance calculation is lazily computed with `ops.lazy_calc_dij`.
+
+Direct flat `nb_mode=1` calls into `LRCoulomb` must include the standard final padding atom. The padding atom should have atomic number and charge zero, and invalid neighbor entries should point to that final index. The calculator prepares this format internally.
 
 **Distance and masking**
 
@@ -179,7 +215,7 @@ Distances use `d_ij{suffix}` derived from `coord` (and `shifts{suffix}` when PBC
 
 2. **DSF (damped shifted force)**
 
-Uses `ops.coulomb_matrix_dsf`:
+Uses `nvalchemiops.torch.interactions.electrostatics.dsf_coulomb` with a full dense neighbor matrix:
 
 ```
 J(r) = erfc(alpha r)/r
@@ -187,17 +223,27 @@ J(r) = erfc(alpha r)/r
      + (r - Rc) * (erfc(alpha Rc)/Rc^2 + 2 alpha exp(-(alpha Rc)^2) / (Rc sqrt(pi)))
 ```
 
-Pairs with `r > Rc` or masked entries are zeroed. Energy is:
+Pairs with `r > Rc` or masked entries are zeroed. nvalchemiops also applies the DSF self-energy correction and returns energy in e²/Å; AIMNet converts to eV with `Hartree * Bohr`.
 
-`E = factor * sum_i sum_j q_i q_j J(r_ij)`
+The DSF energy remains connected to autograd through charges via nvalchemiops' straight-through charge-gradient injection. It is not autograd-differentiable through positions or cell.
 
 If `subtract_sr=True`, the SR term is subtracted.
 
 3. **Ewald**
 
-Uses `ops.coulomb_matrix_ewald`, which implements real-space + reciprocal-space + self terms with fixed accuracy (`1e-8`). This path requires a single molecule with `coord.ndim == 2` and `cell.ndim == 2`.
+Uses `nvalchemiops.torch.interactions.electrostatics.ewald_summation`. The calculator estimates the splitting parameter, real-space cutoff, and reciprocal-space cutoff per call from `ewald_accuracy` (default `1e-5`) and the cell, then builds a per-call dense neighbor list (`nbmat_coulomb`/`shifts_coulomb`, also aliased as `nbmat_lr`/`shifts_lr`).
+
+The custom AIMNet wrapper exposes nvalchemiops forces, charge gradients, and virial through PyTorch autograd without requiring second derivatives of the underlying Warp kernels.
 
 If `subtract_sr=True`, the SR term is subtracted.
+
+4. **PME (Particle Mesh Ewald)**
+
+Uses `nvalchemiops.torch.interactions.electrostatics.particle_mesh_ewald`. Same accuracy and neighbor-list flow as Ewald, but reciprocal space is evaluated on a B-spline mesh via FFT for better asymptotic scaling on large cells. Derivative behavior is identical to Ewald.
+
+If `subtract_sr=True`, the SR term is subtracted.
+
+> **Note:** The legacy in-tree implementation `aimnet.ops.coulomb_matrix_ewald` (and its helper `aimnet.ops.get_shifts_within_cutoff`) is kept for backwards-compatibility cross-checks but is no longer wired into `LRCoulomb`.
 
 **SR subtraction (shared by all methods)**
 
@@ -355,10 +401,8 @@ print(f"Stress: {result['stress']}")  # (3, 3)
 ### Ewald for High Accuracy
 
 ```python
-# Configure Ewald method with default accuracy (1e-8)
 calc.set_lrcoulomb_method("ewald")
 
-# Same periodic system as above
 result_ewald = calc({
     "coord": coords,
     "numbers": numbers,
@@ -366,7 +410,6 @@ result_ewald = calc({
     "cell": cell,
 }, forces=True)
 
-# Compare with DSF
 calc.set_lrcoulomb_method("dsf", cutoff=15.0)
 result_dsf = calc({
     "coord": coords,
@@ -377,7 +420,22 @@ result_dsf = calc({
 
 energy_diff = abs(result_ewald["energy"] - result_dsf["energy"])
 print(f"DSF vs Ewald energy difference: {energy_diff.item():.4f} eV")
-# Typically < 0.01 eV for well-converged cutoffs
+```
+
+### PME for Large Cells
+
+```python
+calc.set_lrcoulomb_method("pme")
+
+result_pme = calc({
+    "coord": coords,
+    "numbers": numbers,
+    "charge": 0.0,
+    "cell": cell,
+}, forces=True, stress=True)
+
+print(f"Energy: {result_pme['energy'].item():.4f} eV")
+print(f"Stress: {result_pme['stress']}")
 ```
 
 ### Changing Methods at Runtime
@@ -385,22 +443,22 @@ print(f"DSF vs Ewald energy difference: {energy_diff.item():.4f} eV")
 ```python
 calc = AIMNet2Calculator("aimnet2")
 
-# Start with simple
 calc.set_lrcoulomb_method("simple")
 result_simple = calc(data)
 
-# Switch to DSF
 calc.set_lrcoulomb_method("dsf", cutoff=15.0)
 result_dsf = calc(data)
 
-# Switch to Ewald
-calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-8)
+calc.set_lrcoulomb_method("ewald")
 result_ewald = calc(data)
 
-# Compare energies
+calc.set_lrcoulomb_method("pme")
+result_pme = calc(data)
+
 print(f"Simple: {result_simple['energy'].item():.4f} eV")
 print(f"DSF:    {result_dsf['energy'].item():.4f} eV")
 print(f"Ewald:  {result_ewald['energy'].item():.4f} eV")
+print(f"PME:    {result_pme['energy'].item():.4f} eV")
 ```
 
 ### Separate Coulomb and DFTD3 Cutoffs

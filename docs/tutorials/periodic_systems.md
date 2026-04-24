@@ -4,7 +4,7 @@
 
 - How to set up periodic boundary conditions (PBC) with AIMNet2 and ASE
 - How the calculator handles long-range electrostatics in periodic systems
-- When to use DSF vs Ewald summation for Coulomb interactions
+- When to use DSF, Ewald, or PME for Coulomb interactions
 - How to optimize unit cell parameters using the stress tensor
 
 ## Prerequisites
@@ -76,14 +76,13 @@ energy = atoms.get_potential_energy()
 
 ## Step 3: Choosing a Coulomb Method for PBC
 
-For periodic systems, you have two options for long-range electrostatics. Set the method on the underlying `AIMNet2Calculator` via the `base_calc` attribute:
+For periodic systems, you have three options for long-range electrostatics. Set the method on the underlying `AIMNet2Calculator` via the `base_calc` attribute:
 
 ### DSF (Recommended for Most Uses)
 
 DSF (Damped Shifted Force) is the recommended method for routine periodic calculations. It uses a neighbor-list-based cutoff with smooth damping, giving O(N) scaling:
 
 ```python
-# Set DSF before running any periodic calculation
 calc.base_calc.set_lrcoulomb_method("dsf", cutoff=15.0, dsf_alpha=0.2)
 
 energy = atoms.get_potential_energy()
@@ -94,42 +93,54 @@ The default parameters (`cutoff=15.0`, `dsf_alpha=0.2`) work well for most molec
 
 ### Ewald (High-Accuracy Benchmarks)
 
-Ewald summation splits the Coulomb sum into real-space and reciprocal-space components, giving the most accurate treatment of long-range electrostatics:
+Ewald summation splits the Coulomb sum into real-space and reciprocal-space components. The splitting parameter and real/reciprocal cutoffs are estimated per call from `ewald_accuracy` (default `1e-5`):
 
 ```python
-calc.base_calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-8)
+calc.base_calc.set_lrcoulomb_method("ewald")
 
 energy = atoms.get_potential_energy()
+forces = atoms.get_forces()
+stress = atoms.get_stress()
 ```
 
-!!! warning
-
-    Ewald summation is currently limited to **single-molecule (single-system) calculations**. It uses a full interaction matrix rather than neighbor lists, so it does not support batched periodic systems. For routine PBC work, use DSF.
+DSF supports inference forces and stress, but force/stress losses (`train=True` with `forces=True` or `stress=True`) and Hessians are not supported. Ewald and PME support all derivative modes, including training. See [Long-Range Methods → Derivative Support](../long_range.md#derivative-support).
 
 **When to use Ewald:**
 
 - Validating DSF results for a new system type
 - Computing precise lattice energies for benchmarking
 - Systems where electrostatics dominate (ionic molecular crystals)
-- When computational cost is acceptable (not long MD trajectories)
+
+### PME (Large Cells)
+
+Particle Mesh Ewald uses the same accuracy machinery as Ewald but evaluates the reciprocal sum on a B-spline mesh via FFT, which scales better on large cells:
+
+```python
+calc.base_calc.set_lrcoulomb_method("pme")
+
+energy = atoms.get_potential_energy()
+stress = atoms.get_stress()
+```
+
+PME and Ewald share the same `ewald_accuracy`, neighbor-list construction, and calculator derivative behavior; PME tends to be cheaper as the cell grows.
 
 ### Comparing Methods
 
-You can verify convergence by comparing DSF and Ewald on the same system:
+You can verify convergence by comparing DSF, Ewald, and PME on the same system:
 
 ```python
-# DSF calculation
 calc.base_calc.set_lrcoulomb_method("dsf", cutoff=15.0)
 energy_dsf = atoms.get_potential_energy()
 
-# Ewald calculation
-calc.base_calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-8)
+calc.base_calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-5)
 energy_ewald = atoms.get_potential_energy()
+
+calc.base_calc.set_lrcoulomb_method("pme", ewald_accuracy=1e-5)
+energy_pme = atoms.get_potential_energy()
 
 print(f"DSF energy:   {energy_dsf:.6f} eV")
 print(f"Ewald energy: {energy_ewald:.6f} eV")
-print(f"Difference:   {abs(energy_dsf - energy_ewald):.6f} eV")
-# Typically < 0.01 eV for well-converged cutoffs
+print(f"PME energy:   {energy_pme:.6f} eV")
 ```
 
 ## Step 4: Computing the Stress Tensor
@@ -225,11 +236,12 @@ print(f"Cell angles:  {atoms.cell.angles()}")
 
 ## Summary of Coulomb Methods for PBC
 
-| Method | Scaling | PBC Support | Accuracy | Best For |
+| Method | Scaling | PBC Support | Accuracy control | Best For |
 | --- | --- | --- | --- | --- |
 | `simple` | O(N^2) | No | Exact (non-PBC) | Auto-switches to DSF for PBC |
-| `dsf` | O(N) | Yes | Good | Routine PBC, MD, optimization |
-| `ewald` | O(N^2) | Yes | Highest | Benchmarks, single systems |
+| `dsf` | O(N) | Yes | `cutoff`, `dsf_alpha` | Routine PBC, MD, optimization |
+| `ewald` | ~O(N^{3/2}) | Yes | `ewald_accuracy` (default `1e-5`) | High-accuracy reference |
+| `pme` | ~O(N log N) | Yes | `ewald_accuracy` (default `1e-5`) | Large cells |
 
 ## What's Next
 

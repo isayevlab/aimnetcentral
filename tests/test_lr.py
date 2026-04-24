@@ -10,7 +10,6 @@ from aimnet.modules.lr import LRCoulomb, SRCoulomb
 # Note: "ewald" excluded here because it requires cell and flat format (mode 1)
 # Ewald is tested separately in TestLRCoulombEwald and TestLRCoulombEwaldPBC classes
 COULOMB_METHODS = ["simple", "dsf"]
-COULOMB_METHODS_ALL = ["simple", "dsf", "ewald"]
 
 
 def setup_data_mode_0(device, n_atoms=5):
@@ -167,6 +166,19 @@ class TestLRCoulombDSF:
         # (might be same if all atoms within short cutoff)
         assert torch.isfinite(result_short["e_h"])
         assert torch.isfinite(result_long["e_h"])
+
+    def test_dsf_mode0_explicit_forces_shape(self, device):
+        """DSF explicit forces preserve dense batched input shape."""
+        module = LRCoulomb(method="dsf", subtract_sr=False).to(device)
+        data = setup_data_mode_0(device, n_atoms=5)
+
+        result, terms = module.forward_with_derivatives(data, compute_forces=True)
+
+        assert "e_h" in result
+        assert terms is not None
+        assert terms.forces is not None
+        assert terms.forces.shape == data["coord"].shape
+        assert torch.isfinite(terms.forces).all()
 
 
 class TestLRCoulombEwald:
@@ -420,24 +432,42 @@ class TestLRCoulombAdditive:
 
 
 def setup_pbc_data(pbc_fixture: dict, device: torch.device, cutoff: float = 8.0) -> dict:
-    """Set up periodic data with neighbor list for Coulomb calculations."""
+    """Set up padded flat nb_mode=1 periodic data for Coulomb calculations."""
     data = pbc_fixture.copy()
-    coord = data["coord"]
+    coord_real = data["coord"].to(device)
+    numbers_real = data["numbers"].to(device)
+    n_real = coord_real.shape[0]
+    pad_idx = n_real
+
+    coord = torch.cat([coord_real, coord_real.new_zeros((1, 3))], dim=0)
+    if coord.requires_grad:
+        coord.retain_grad()
+    numbers = torch.cat([numbers_real, numbers_real.new_zeros((1,))], dim=0)
+    mol_idx_real = data.get("mol_idx")
+    if mol_idx_real is None:
+        mol_idx_real = torch.zeros(n_real, dtype=torch.long, device=device)
+    else:
+        mol_idx_real = mol_idx_real.to(device)
+    pad_mol_idx = mol_idx_real.max().to(torch.long)
+    mol_idx = torch.cat([mol_idx_real, pad_mol_idx.reshape(1)], dim=0)
     n_atoms = coord.shape[0]
 
-    # Create a simple all-pairs neighbor matrix
-    max_nb = min(n_atoms - 1, 50)
-    nbmat = torch.zeros((n_atoms, max_nb), dtype=torch.long, device=device)
-    for i in range(n_atoms):
-        neighbors = [j for j in range(n_atoms) if j != i][:max_nb]
+    # Create a simple all-pairs neighbor matrix over real atoms; invalid slots
+    # and the final row point to the required padding atom.
+    max_nb = max(1, min(n_real - 1, 50))
+    nbmat = torch.full((n_atoms, max_nb), pad_idx, dtype=torch.long, device=device)
+    for i in range(n_real):
+        neighbors = [j for j in range(n_real) if j != i][:max_nb]
         for k, nb in enumerate(neighbors):
             nbmat[i, k] = nb
-        for k in range(len(neighbors), max_nb):
-            nbmat[i, k] = n_atoms - 1
 
     # Shifts are unit cell translations - use float for matrix multiplication with cell
     shifts = torch.zeros((n_atoms, max_nb, 3), dtype=torch.float32, device=device)
 
+    data["coord"] = coord
+    data["numbers"] = numbers
+    data["cell"] = data["cell"].to(device)
+    data["mol_idx"] = mol_idx
     data["nbmat"] = nbmat
     data["shifts"] = shifts
     # Long-range neighbor list keys (used by LRCoulomb module)
@@ -457,6 +487,21 @@ def setup_pbc_data(pbc_fixture: dict, device: torch.device, cutoff: float = 8.0)
     return data
 
 
+def _neutral_padded_charges(n_atoms: int, device: torch.device) -> torch.Tensor:
+    """Random neutral charges with the final padded atom fixed at zero."""
+    charges = torch.randn(n_atoms, device=device) * 0.3
+    charges[:-1] = charges[:-1] - charges[:-1].mean()
+    charges[-1] = 0.0
+    return charges
+
+
+def _random_padded_charges(n_atoms: int, device: torch.device) -> torch.Tensor:
+    """Random charges following the padded flat nb_mode=1 contract."""
+    charges = torch.randn(n_atoms, device=device) * 0.3
+    charges[-1] = 0.0
+    return charges
+
+
 class TestLRCoulombDSFPBC:
     """Tests for DSF Coulomb with periodic boundary conditions."""
 
@@ -466,29 +511,30 @@ class TestLRCoulombDSFPBC:
         data = setup_pbc_data(pbc_crystal_small, device)
 
         n_atoms = data["coord"].shape[0]
-        data["charges"] = torch.randn(n_atoms, device=device) * 0.3
+        data["charges"] = _random_padded_charges(n_atoms, device)
 
         result = module(data)
 
         assert "e_h" in result
         assert result["e_h"].shape == (1,)
 
-    def test_dsf_pbc_gradient_wrt_coords(self, pbc_crystal_small, device):
-        """Test DSF coordinate gradients with PBC."""
+    def test_dsf_pbc_explicit_forces(self, pbc_crystal_small, device):
+        """DSF exposes nvalchemiops explicit forces for padded flat PBC inputs."""
         module = LRCoulomb(method="dsf", dsf_rc=8.0).to(device)
 
-        data = pbc_crystal_small.copy()
-        data["coord"] = data["coord"].clone().requires_grad_(True)
-        data = setup_pbc_data(data, device)
+        data = setup_pbc_data(pbc_crystal_small, device)
 
         n_atoms = data["coord"].shape[0]
-        data["charges"] = torch.randn(n_atoms, device=device) * 0.3
+        data["charges"] = _random_padded_charges(n_atoms, device)
 
-        result = module(data)
-        result["e_h"].backward()
+        result, terms = module.forward_with_derivatives(data, compute_forces=True)
 
-        assert data["coord"].grad is not None
-        assert torch.isfinite(data["coord"].grad).all()
+        assert "e_h" in result
+        assert terms is not None
+        assert terms.forces is not None
+        assert terms.forces.shape == data["coord"].shape
+        assert torch.isfinite(terms.forces).all()
+        assert torch.allclose(terms.forces[-1], torch.zeros(3, device=device))
 
     def test_dsf_pbc_finite_energy(self, pbc_crystal_small, device):
         """Test DSF produces finite energy with PBC."""
@@ -496,11 +542,132 @@ class TestLRCoulombDSFPBC:
         data = setup_pbc_data(pbc_crystal_small, device)
 
         n_atoms = data["coord"].shape[0]
-        data["charges"] = torch.randn(n_atoms, device=device) * 0.3
+        data["charges"] = _random_padded_charges(n_atoms, device)
 
         result = module(data)
 
         assert torch.isfinite(result["e_h"]).all()
+
+    def test_dsf_mode2_matches_individual_batches(self, device):
+        """DSF mode-2 energy and forces match independent per-system calls."""
+        torch.manual_seed(0)
+        B, N = 2, 5
+        coord = torch.randn(B, N, 3, device=device) * 2.0
+        charges = torch.randn(B, N, device=device) * 0.3
+        charges = charges - charges.mean(dim=-1, keepdim=True)
+
+        # All-pairs nbmat with local atom indices per batch.
+        nbmat = torch.zeros((B, N, N - 1), dtype=torch.long, device=device)
+        for i in range(N):
+            others = [j for j in range(N) if j != i]
+            nbmat[:, i, :] = torch.tensor(others, device=device)
+        mask_ij = torch.zeros((B, N, N - 1), dtype=torch.bool, device=device)
+        mask_i = torch.zeros((B, N), dtype=torch.bool, device=device)
+
+        module = LRCoulomb(method="dsf", dsf_rc=8.0, subtract_sr=False).to(device)
+
+        data_mode2 = {
+            "_nb_mode": torch.tensor(2),
+            "_input_padded": torch.tensor(False),
+            "coord": coord,
+            "charges": charges,
+            "numbers": torch.ones((B, N), dtype=torch.long, device=device),
+            "nbmat_lr": nbmat,
+            "mask_ij_lr": mask_ij,
+            "mask_i": mask_i,
+            "mol_idx": torch.arange(B, device=device).repeat_interleave(N),
+            "mol_sizes": torch.full((B,), N, device=device, dtype=torch.long),
+        }
+        result_mode2, terms_mode2 = module.forward_with_derivatives(data_mode2, compute_forces=True)
+        e_mode2 = result_mode2["e_h"]
+        assert terms_mode2 is not None and terms_mode2.forces is not None
+        assert terms_mode2.forces.shape == coord.shape
+
+        # Reference: each batch evaluated independently in mode 0.
+        e_ref = []
+        f_ref = []
+        for b in range(B):
+            data_b = {
+                "_nb_mode": torch.tensor(0),
+                "_input_padded": torch.tensor(False),
+                "coord": coord[b : b + 1],
+                "charges": charges[b : b + 1],
+                "numbers": torch.ones((1, N), dtype=torch.long, device=device),
+                "mask_ij": mask_ij[b : b + 1],
+                "mask_i": mask_i[b : b + 1],
+                "mol_idx": torch.zeros(N, device=device, dtype=torch.long),
+                "mol_sizes": torch.tensor([N], device=device, dtype=torch.long),
+            }
+            result_b, terms_b = module.forward_with_derivatives(data_b, compute_forces=True)
+            assert terms_b is not None and terms_b.forces is not None
+            e_ref.append(result_b["e_h"])
+            f_ref.append(terms_b.forces.squeeze(0))
+        e_ref = torch.cat(e_ref)
+        f_ref = torch.stack(f_ref, dim=0)
+
+        torch.testing.assert_close(e_mode2, e_ref, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(terms_mode2.forces, f_ref, atol=1e-5, rtol=1e-5)
+
+    def test_dsf_mode0_padded_batched_indices(self, device):
+        """DSF mode-0 builds a cutoff-bounded NL with correct global indices and
+        respects ``mask_i`` for mixed-size batches.
+
+        Reference: evaluate each molecule independently in mode 0 and confirm
+        the batched mode-0 result matches both energy and per-atom forces.
+        Padded atoms in batch 0 must not contaminate batch 1's neighbors.
+        """
+        torch.manual_seed(0)
+        B, N = 2, 5
+        # Batch 0: 4 real atoms + 1 padded (mask_i[0, -1] = True)
+        # Batch 1: 5 real atoms (no padding)
+        coord = torch.randn(B, N, 3, device=device) * 2.0
+        charges = torch.randn(B, N, device=device) * 0.3
+        charges = charges - charges.mean(dim=-1, keepdim=True)
+        mask_i = torch.zeros((B, N), dtype=torch.bool, device=device)
+        mask_i[0, -1] = True
+
+        module = LRCoulomb(method="dsf", dsf_rc=8.0, subtract_sr=False).to(device)
+
+        data_mode0 = {
+            "_nb_mode": torch.tensor(0),
+            "_input_padded": torch.tensor(True),
+            "coord": coord,
+            "charges": charges,
+            "numbers": torch.ones((B, N), dtype=torch.long, device=device),
+            "mask_i": mask_i,
+            "mol_idx": torch.arange(B, device=device).repeat_interleave(N),
+            "mol_sizes": torch.tensor([N - 1, N], device=device, dtype=torch.long),
+        }
+        result_mode0, terms_mode0 = module.forward_with_derivatives(data_mode0, compute_forces=True)
+        e_mode0 = result_mode0["e_h"]
+        assert terms_mode0 is not None and terms_mode0.forces is not None
+        assert terms_mode0.forces.shape == coord.shape
+
+        # Reference: each batch in its own mode-0 call.
+        e_ref = []
+        f_ref = []
+        for b in range(B):
+            data_b = {
+                "_nb_mode": torch.tensor(0),
+                "_input_padded": torch.tensor(True),
+                "coord": coord[b : b + 1],
+                "charges": charges[b : b + 1],
+                "numbers": torch.ones((1, N), dtype=torch.long, device=device),
+                "mask_i": mask_i[b : b + 1],
+                "mol_idx": torch.zeros(N, device=device, dtype=torch.long),
+                "mol_sizes": data_mode0["mol_sizes"][b : b + 1],
+            }
+            result_b, terms_b = module.forward_with_derivatives(data_b, compute_forces=True)
+            assert terms_b is not None and terms_b.forces is not None
+            e_ref.append(result_b["e_h"])
+            f_ref.append(terms_b.forces.squeeze(0))
+        e_ref = torch.cat(e_ref)
+        f_ref = torch.stack(f_ref, dim=0)
+
+        torch.testing.assert_close(e_mode0, e_ref, atol=1e-5, rtol=1e-5)
+        # Padded atom force should be zero (it has charge zero and was shifted out).
+        assert torch.allclose(terms_mode0.forces[0, -1], torch.zeros(3, device=device), atol=1e-5)
+        torch.testing.assert_close(terms_mode0.forces, f_ref, atol=1e-5, rtol=1e-5)
 
 
 class TestLRCoulombEwaldPBC:
@@ -512,9 +679,7 @@ class TestLRCoulombEwaldPBC:
         data = setup_pbc_data(pbc_crystal_small, device, cutoff=8.0)
 
         n_atoms = data["coord"].shape[0]
-        charges = torch.randn(n_atoms, device=device) * 0.3
-        charges = charges - charges.mean()  # Make neutral
-        data["charges"] = charges
+        data["charges"] = _neutral_padded_charges(n_atoms, device)
 
         result = module(data)
 
@@ -530,9 +695,7 @@ class TestLRCoulombEwaldPBC:
         data = setup_pbc_data(data, device)
 
         n_atoms = data["coord"].shape[0]
-        charges = torch.randn(n_atoms, device=device) * 0.3
-        charges = charges - charges.mean()
-        data["charges"] = charges
+        data["charges"] = _neutral_padded_charges(n_atoms, device)
 
         result = module(data)
         result["e_h"].backward()
@@ -545,9 +708,7 @@ class TestLRCoulombEwaldPBC:
         data = setup_pbc_data(pbc_crystal_small, device)
 
         n_atoms = data["coord"].shape[0]
-        charges = torch.randn(n_atoms, device=device) * 0.3
-        charges = charges - charges.mean()
-        data["charges"] = charges
+        data["charges"] = _neutral_padded_charges(n_atoms, device)
 
         # Verify cell is present
         assert "cell" in data
@@ -555,6 +716,107 @@ class TestLRCoulombEwaldPBC:
 
         module = LRCoulomb(method="ewald").to(device)
         result = module(data)
+
+        assert torch.isfinite(result["e_h"]).all()
+
+
+class TestLRCoulombPMEPBC:
+    """Tests for Particle Mesh Ewald (PME) with periodic boundary conditions."""
+
+    def test_pme_pbc_output_shape(self, pbc_crystal_small, device):
+        """Test PME output shape with PBC."""
+        module = LRCoulomb(method="pme").to(device)
+        data = setup_pbc_data(pbc_crystal_small, device, cutoff=8.0)
+
+        n_atoms = data["coord"].shape[0]
+        data["charges"] = _neutral_padded_charges(n_atoms, device)
+
+        result = module(data)
+
+        assert "e_h" in result
+        assert torch.isfinite(result["e_h"]).all()
+
+    def test_pme_pbc_zero_charges(self, pbc_crystal_small, device):
+        """Test PME with zero charges produces zero energy."""
+        module = LRCoulomb(method="pme").to(device)
+        data = setup_pbc_data(pbc_crystal_small, device)
+
+        n_atoms = data["coord"].shape[0]
+        data["charges"] = torch.zeros(n_atoms, device=device)
+
+        result = module(data)
+
+        assert result["e_h"].abs().sum().item() < 1e-6
+
+    def test_pme_pbc_gradient_wrt_coords(self, pbc_crystal_small, device):
+        """Test PME coordinate gradients with PBC."""
+        module = LRCoulomb(method="pme").to(device)
+
+        data = pbc_crystal_small.copy()
+        data["coord"] = data["coord"].clone().requires_grad_(True)
+        data = setup_pbc_data(data, device)
+
+        n_atoms = data["coord"].shape[0]
+        data["charges"] = _neutral_padded_charges(n_atoms, device)
+
+        result = module(data)
+        result["e_h"].backward()
+
+        assert data["coord"].grad is not None
+        assert torch.isfinite(data["coord"].grad).all()
+
+
+class TestLRCoulombSRSubtraction:
+    """Tests covering subtract_sr behaviour for nvalchemiops Coulomb backends."""
+
+    @pytest.mark.parametrize("method", ["dsf", "ewald", "pme"])
+    def test_last_real_atom_charge_affects_energy(self, pbc_crystal_small, device, method):
+        """The atom before the padding row is real and must participate."""
+        data = setup_pbc_data(pbc_crystal_small, device)
+        n_atoms = data["coord"].shape[0]
+        charges = torch.zeros(n_atoms, device=device)
+        charges[0] = -0.4
+        charges[-2] = 0.4
+
+        charges_changed = charges.clone()
+        charges_changed[0] = -0.8
+        charges_changed[-2] = 0.8
+
+        mod = LRCoulomb(method=method, subtract_sr=False).to(device)
+        e_ref = mod({**data, "charges": charges})["e_h"]
+        e_changed = mod({**data, "charges": charges_changed})["e_h"]
+
+        assert not torch.allclose(e_ref, e_changed, rtol=0.0, atol=1e-8)
+
+    @pytest.mark.parametrize("method", ["dsf", "ewald", "pme"])
+    def test_subtract_sr_changes_energy(self, pbc_crystal_small, device, method):
+        """``subtract_sr`` should produce a different energy than the raw backend."""
+        data = setup_pbc_data(pbc_crystal_small, device)
+        n_atoms = data["coord"].shape[0]
+        data["charges"] = _neutral_padded_charges(n_atoms, device)
+
+        mod_with_sr = LRCoulomb(method=method, subtract_sr=True).to(device)
+        mod_without_sr = LRCoulomb(method=method, subtract_sr=False).to(device)
+
+        e_with = mod_with_sr(data.copy())["e_h"]
+        e_without = mod_without_sr(data.copy())["e_h"]
+
+        assert torch.isfinite(e_with).all()
+        assert torch.isfinite(e_without).all()
+        assert (e_with - e_without).abs().item() > 1e-8
+
+    @pytest.mark.parametrize("method", ["dsf", "ewald", "pme"])
+    def test_charge_non_neutral_finite(self, pbc_crystal_small, device, method):
+        """The nvalchemiops Coulomb backends produce finite non-neutral energies."""
+        data = setup_pbc_data(pbc_crystal_small, device)
+        n_atoms = data["coord"].shape[0]
+        charges = torch.randn(n_atoms, device=device) * 0.3
+        charges = charges + 0.5  # explicitly NOT neutral
+        charges[-1] = 0.0
+        data["charges"] = charges
+
+        mod = LRCoulomb(method=method).to(device)
+        result = mod(data)
 
         assert torch.isfinite(result["e_h"]).all()
 
@@ -651,3 +913,135 @@ class TestSRCoulomb:
 
         assert "sr_energy" in result
         assert torch.isfinite(result["sr_energy"]).all()
+
+
+class TestLRCoulombTraining:
+    """Model-level training regression tests for Ewald/PME.
+
+    The default training pipeline (``aimnet/train/train.py``) wraps models
+    with ``aimnet.modules.core.Forces``, which runs
+    ``torch.autograd.grad(energy, coord, create_graph=self.training)`` and
+    then ``loss.backward()`` on a force-dependent loss. Before
+    ``aimnet::lr_coulomb_fwd`` was introduced, this raised
+    ``RuntimeError: Trying to backward through
+    alchemiops._batch_ewald_real_space_energy_matrix_backward.default but no
+    autograd formula was registered`` because the nvalchemiops Warp kernels
+    lack a registered 2nd-order autograd formula.
+
+    These tests lock in that contract: 1st-order forces, 2nd-order force
+    loss, and param-gradient flow through the charge chain all work for
+    both Ewald and PME.
+    """
+
+    @staticmethod
+    def _tiny_charge_model(n_atoms: int, device: torch.device) -> torch.nn.Module:
+        """Tiny learnable module that maps ``coord`` to charge-like features.
+
+        Produces neutral per-atom values with a graph dependency on both
+        ``coord`` and the module's parameters, so a 2nd-order force-loss
+        backward exercises the full charge-chain path.
+        """
+
+        class _TinyChargeModel(torch.nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.w = torch.nn.Parameter(torch.randn(3, device=device) * 0.1)
+                self.b = torch.nn.Parameter(torch.zeros(n_atoms, device=device))
+
+            def forward(self, coord_real: torch.Tensor) -> torch.Tensor:
+                raw = torch.tanh(coord_real @ self.w + self.b) * 0.3
+                # Enforce charge neutrality (total charge must sum to 0 for Ewald).
+                return raw - raw.mean()
+
+        return _TinyChargeModel().to(device)
+
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_force_loss_backward_does_not_raise(self, pbc_crystal_small, device, method):
+        """Force-loss backward through Ewald/PME must not hit the unregistered
+        2nd-order Warp autograd path (regression for the critical training gap)."""
+        torch.manual_seed(0)
+        data = pbc_crystal_small.copy()
+        data["coord"] = data["coord"].clone().requires_grad_(True)
+        data = setup_pbc_data(data, device)
+        n_real = data["coord"].shape[0] - 1
+
+        model = self._tiny_charge_model(n_real, device)
+        charges_real = model(data["coord"][:-1])
+        data["charges"] = torch.cat([charges_real, charges_real.new_zeros(1)], dim=0)
+
+        coulomb = LRCoulomb(method=method, subtract_sr=False).to(device)
+        result = coulomb(data)
+        energy = result["e_h"].sum()
+
+        forces = -torch.autograd.grad(energy, data["coord"], create_graph=True)[0]
+        target = torch.zeros_like(forces)
+        loss = ((forces - target) ** 2).mean()
+        loss.backward()
+
+        param_grads = [p.grad for p in model.parameters() if p.grad is not None]
+        assert param_grads, "expected gradients on tiny model parameters"
+        assert any(g.abs().sum().item() > 0 for g in param_grads), (
+            "force-loss backward through Ewald/PME produced zero gradient for every "
+            "parameter — the charge chain is not reaching model parameters."
+        )
+        for g in param_grads:
+            assert torch.isfinite(g).all()
+
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_energy_backward_matches_explicit_forces(self, pbc_crystal_small, device, method):
+        """``-grad(energy, coord)`` from the custom-op Function must match the
+        explicit forces the same nvalchemiops call would have produced."""
+        from aimnet.modules.ops import lr_coulomb_energy
+
+        torch.manual_seed(1)
+        data = pbc_crystal_small.copy()
+        data["coord"] = data["coord"].clone().requires_grad_(True)
+        data = setup_pbc_data(data, device)
+        n_atoms = data["coord"].shape[0]
+        data["charges"] = _neutral_padded_charges(n_atoms, device)
+
+        coulomb = LRCoulomb(method=method, subtract_sr=False).to(device)
+        energy = coulomb(data)["e_h"].sum()
+        f_autograd = -torch.autograd.grad(energy, data["coord"])[0]
+
+        n_real = n_atoms - 1
+        mol_idx_real = data["mol_idx"][:-1].to(torch.int32)
+        _e, f_explicit, _qg, _v = lr_coulomb_energy(
+            coord=data["coord"].detach()[:-1],
+            cell=data["cell"],
+            charges=data["charges"].detach()[:-1],
+            batch_idx=mol_idx_real,
+            neighbor_matrix=data["nbmat_lr"][:-1].to(torch.int32),
+            shifts=data["shifts_lr"][:-1].to(torch.int32),
+            mask_value=n_real,
+            num_systems=int(mol_idx_real.max().item()) + 1,
+            accuracy=float(coulomb.ewald_accuracy),
+            backend=method,
+            compute_virial=False,
+        )
+        torch.testing.assert_close(f_autograd[:-1], f_explicit, atol=1e-5, rtol=1e-5)
+        assert torch.allclose(f_autograd[-1], torch.zeros(3, device=device))
+
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_double_backward_smoke(self, pbc_crystal_small, device, method):
+        """Minimal double-backward smoke test: ``grad(grad(E).sum(), charges)``
+        must not raise even though the nvalchemiops Warp backward has no
+        2nd-order autograd rule registered."""
+        torch.manual_seed(2)
+        data = pbc_crystal_small.copy()
+        data["coord"] = data["coord"].clone().requires_grad_(True)
+        data = setup_pbc_data(data, device)
+        n_atoms = data["coord"].shape[0]
+        charges = torch.randn(n_atoms, device=device) * 0.2
+        charges[:-1] = charges[:-1] - charges[:-1].mean()
+        charges[-1] = 0.0
+        charges = charges.clone().requires_grad_(True)
+        data["charges"] = charges
+
+        coulomb = LRCoulomb(method=method, subtract_sr=False).to(device)
+        energy = coulomb(data)["e_h"].sum()
+        forces_like = torch.autograd.grad(energy, data["coord"], create_graph=True)[0]
+        (forces_like.pow(2).sum()).backward()  # raises before the fix
+
+        assert charges.grad is not None
+        assert torch.isfinite(charges.grad).all()

@@ -1,10 +1,15 @@
+import math
 import os
+from dataclasses import dataclass
 
 import torch
+from nvalchemiops.neighbors import NeighborOverflowError
+from nvalchemiops.torch.interactions.electrostatics import dsf_coulomb
+from nvalchemiops.torch.neighbors import neighbor_list
 from torch import Tensor, nn
 
 from aimnet import constants, nbops, ops
-from aimnet.modules.ops import dftd3_energy
+from aimnet.modules.ops import dftd3_energy, lr_coulomb_energy
 
 
 def _calc_coulomb_sr(
@@ -51,11 +56,21 @@ def _calc_coulomb_sr(
     return factor * nbops.mol_sum(e_i, data)
 
 
+@dataclass(slots=True)
+class LRCoulombDerivativeTerms:
+    """Explicit derivative terms returned by non-autograd Coulomb backends."""
+
+    forces: Tensor | None = None
+    virial: Tensor | None = None
+
+
 class LRCoulomb(nn.Module):
     """Long-range Coulomb energy module.
 
     Computes electrostatic energy using one of several methods:
-    simple (all pairs), DSF (damped shifted force), or Ewald summation.
+    simple (all pairs), DSF (damped shifted force), Ewald summation, or
+    Particle Mesh Ewald (PME). DSF, Ewald, and PME are backed by
+    ``nvalchemiops``; Ewald and PME require periodic systems with a ``cell``.
 
     Parameters
     ----------
@@ -66,15 +81,15 @@ class LRCoulomb(nn.Module):
     rc : float
         Short-range cutoff radius. Default is 4.6 Angstrom.
     method : str
-        Coulomb method: "simple", "dsf", or "ewald". Default is "simple".
+        Coulomb method: "simple", "dsf", "ewald", or "pme". Default is "simple".
     dsf_alpha : float
         Alpha parameter for DSF method. Default is 0.2.
     dsf_rc : float
         Cutoff for DSF method. Default is 15.0.
     ewald_accuracy : float
-        Target accuracy for Ewald summation. Controls real-space and
-        reciprocal-space cutoffs. Lower values give higher accuracy.
-        Default is 1e-8.
+        Target accuracy for Ewald and PME summation. Controls real-space and
+        reciprocal-space cutoffs (and PME mesh dimensions). Lower values give
+        higher accuracy at higher cost. Default is 1e-5.
     subtract_sr : bool
         Whether to subtract short-range contribution. Default is True.
     envelope : str
@@ -89,6 +104,19 @@ class LRCoulomb(nn.Module):
     Neighbor list keys follow a suffix resolution pattern: methods first look
     for module-specific keys (e.g., nbmat_coulomb, shifts_coulomb), falling
     back to shared _lr suffix (nbmat_lr, shifts_lr) if not found.
+
+    DSF uses ``nvalchemiops.torch.interactions.electrostatics.dsf_coulomb``.
+    Its energy is differentiable through charges, but not through positions
+    or cell; the calculator consumes explicit DSF forces/virial for inference
+    and rejects DSF force/stress training and Hessian requests.
+
+    Ewald/PME are routed through ``aimnet::lr_coulomb_fwd`` (an
+    ``autograd.Function`` wrapping ``nvalchemiops``). The Function's backward
+    publishes analytic forces, charge gradients, and virial from the same
+    nvalchemiops call, which makes ``create_graph=True`` / force-loss
+    training (``loss.backward()`` after ``autograd.grad(E, coord,
+    create_graph=True)``) safe despite the underlying Warp kernels lacking a
+    registered 2nd-order autograd formula.
     """
 
     def __init__(
@@ -99,13 +127,16 @@ class LRCoulomb(nn.Module):
         method: str = "simple",
         dsf_alpha: float = 0.2,
         dsf_rc: float = 15.0,
-        ewald_accuracy: float = 1e-8,
+        ewald_accuracy: float = 1e-5,
         subtract_sr: bool = True,
         envelope: str = "exp",
     ):
         super().__init__()
         self.key_in = key_in
         self.key_out = key_out
+        # Pairwise convention factor used by simple/dsf (sums over ordered pairs).
+        # Ewald/PME go through aimnet::lr_coulomb_fwd, which converts to eV
+        # internally using the Coulomb constant k_e = Hartree * Bohr.
         self._factor = constants.half_Hartree * constants.Bohr
         self.register_buffer("rc", torch.tensor(rc))
         self.dsf_alpha = dsf_alpha
@@ -115,7 +146,7 @@ class LRCoulomb(nn.Module):
         if envelope not in ("exp", "cosine"):
             raise ValueError(f"Unknown envelope {envelope}, must be 'exp' or 'cosine'")
         self.envelope = envelope
-        if method in ("simple", "dsf", "ewald"):
+        if method in ("simple", "dsf", "ewald", "pme"):
             self.method = method
         else:
             raise ValueError(f"Unknown method {method}")
@@ -145,26 +176,315 @@ class LRCoulomb(nn.Module):
     def coul_simple_sr(self, data: dict[str, Tensor]) -> Tensor:
         return _calc_coulomb_sr(data, self.rc, self.envelope, self.key_in, self._factor)
 
-    def coul_dsf(self, data: dict[str, Tensor]) -> Tensor:
+    def _dsf_inputs_mode0(
+        self,
+        data: dict[str, Tensor],
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor | None, Tensor | None, int, int]:
+        """Flatten dense, unlisted molecular batches and build a cutoff-bounded
+        neighbor list for nvalchemiops DSF.
+
+        Uses ``nvalchemiops.torch.neighbors.neighbor_list`` with
+        ``cutoff=self.dsf_rc`` so the kernel only sees pairs within range,
+        not the full O(B·N²) all-pairs set. Padded atoms in the batch are
+        shifted far away before NL construction so they cannot become
+        neighbors of real atoms; their charges are zeroed regardless.
+        """
+        if data.get("cell") is not None:
+            raise ValueError("Direct DSF with periodic cells requires flat nb_mode=1 neighbor matrices.")
+
+        coord = data["coord"]
+        charges = data[self.key_in].to(coord.dtype)
+        mask_i = data["mask_i"]
+        charges = charges.masked_fill(mask_i, 0.0)
+
+        B, N = coord.shape[:2]
+        total_atoms = B * N
+        fill_value = total_atoms
+
+        # Flatten real atoms; shift padded atoms outside the cutoff so the NL
+        # cannot pick them up as neighbors of real atoms (avoids spurious
+        # near-zero distances and keeps the kernel inputs clean).
+        coord_real = coord.reshape(total_atoms, 3)
+        mask_i_flat = mask_i.reshape(total_atoms)
+        if mask_i_flat.any():
+            far = float(self.dsf_rc) * 100.0 + 1.0
+            shift = coord_real.new_zeros(3)
+            shift[0] = far
+            coord_real = torch.where(mask_i_flat.unsqueeze(-1), coord_real + shift, coord_real)
+
+        charges_real = charges.reshape(total_atoms)
+        batch_idx_real = torch.arange(B, device=coord.device, dtype=torch.int32).repeat_interleave(N)
+
+        # Build NL with overflow retry. Initial guess is a density-based
+        # estimate (matching AdaptiveNeighborList's heuristic) clamped to the
+        # absolute upper bound of N-1.
+        sphere_volume = 4.0 / 3.0 * math.pi * float(self.dsf_rc) ** 3
+        max_neighbors = max(16, min(N - 1, ((int(0.2 * sphere_volume) + 15) // 16) * 16))
+        if max_neighbors < 1:
+            max_neighbors = 1
+        while True:
+            try:
+                nbmat_real, _ = neighbor_list(
+                    positions=coord_real,
+                    cutoff=float(self.dsf_rc),
+                    batch_idx=batch_idx_real,
+                    max_neighbors=max_neighbors,
+                    half_fill=False,
+                    fill_value=fill_value,
+                    method="batch_naive",
+                )
+                break
+            except NeighborOverflowError:
+                if max_neighbors >= max(1, N - 1):
+                    raise
+                max_neighbors = min(max(1, N - 1), ((int(max_neighbors * 1.5) + 15) // 16) * 16)
+
+        # Append the explicit pad atom (charges=0, coord=0) and matching pad row.
+        positions = torch.cat([coord_real, coord_real.new_zeros(1, 3)], dim=0)
+        charges_flat = torch.cat([charges_real, charges_real.new_zeros(1)], dim=0)
+        batch_idx = torch.cat(
+            [batch_idx_real, torch.zeros(1, device=coord.device, dtype=torch.int32)],
+            dim=0,
+        )
+        pad_row = torch.full((1, nbmat_real.shape[1]), fill_value, dtype=torch.int32, device=coord.device)
+        nbmat = torch.cat([nbmat_real.to(torch.int32), pad_row], dim=0)
+
+        return positions, charges_flat, batch_idx, nbmat, None, None, fill_value, B
+
+    def _dsf_inputs_mode1(
+        self,
+        data: dict[str, Tensor],
+        suffix: str,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor | None, Tensor | None, int, int]:
+        """Use padded flat nb_mode=1 tensors directly for nvalchemiops DSF."""
+        coord = data["coord"]
+        charges = nbops.mask_i_(data[self.key_in].to(coord.dtype), data, 0.0, inplace=False)
+        batch_idx = data["mol_idx"].to(torch.int32)
+        fill_value = coord.shape[0] - 1
+        num_systems = int(batch_idx.max().item()) + 1
+
+        nbmat = data[f"nbmat{suffix}"].to(torch.int32)
+        cell = data.get("cell")
+        shifts = None
+        if cell is not None:
+            cell = cell.to(coord.dtype)
+            if cell.ndim == 2:
+                cell = cell.unsqueeze(0)
+            shifts = data[f"shifts{suffix}"].to(torch.int32)
+
+        return coord, charges, batch_idx, nbmat, cell, shifts, fill_value, num_systems
+
+    def _dsf_inputs_mode2(
+        self,
+        data: dict[str, Tensor],
+        suffix: str,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor | None, Tensor | None, int, int]:
+        """Flatten batched neighbor-matrix inputs for nvalchemiops DSF."""
+        coord = data["coord"]
+        charges = data[self.key_in].to(coord.dtype).masked_fill(data["mask_i"], 0.0)
+        B, N = coord.shape[:2]
+        fill_value = B * N
+
+        positions = torch.cat([coord.reshape(B * N, 3), coord.new_zeros(1, 3)], dim=0)
+        charges_flat = torch.cat([charges.reshape(B * N), charges.new_zeros(1)], dim=0)
+        batch_idx = torch.cat(
+            [
+                torch.repeat_interleave(torch.arange(B, device=coord.device, dtype=torch.int32), N),
+                torch.zeros(1, device=coord.device, dtype=torch.int32),
+            ],
+            dim=0,
+        )
+
+        # nbmat values are atom indices LOCAL to each batch; the flattened
+        # `positions` tensor uses GLOBAL indices (b * N + i), so each batch's
+        # neighbor entries must be offset by b * N. Without this, valid
+        # neighbors in batch b > 0 silently point into batch 0 and DSF energy
+        # is wrong. Mirrors the offset that DFTD3 mode-2 already applies.
+        nbmat_local = data[f"nbmat{suffix}"].to(torch.int32)
+        offsets = (torch.arange(B, device=coord.device, dtype=torch.int32) * N).view(B, 1, 1)
+        nbmat = (nbmat_local + offsets).flatten(0, 1)
+        mask_ij = data[f"mask_ij{suffix}"].flatten(0, 1)
+        nbmat = torch.where(mask_ij, torch.full_like(nbmat, fill_value), nbmat)
+        nbmat = torch.cat(
+            [nbmat, torch.full((1, nbmat.shape[1]), fill_value, dtype=torch.int32, device=coord.device)],
+            dim=0,
+        )
+
+        cell = data.get("cell")
+        shifts = None
+        if cell is not None:
+            cell = cell.to(coord.dtype)
+            if cell.ndim == 2:
+                cell = cell.unsqueeze(0).expand(B, -1, -1)
+            shifts = data[f"shifts{suffix}"].flatten(0, 1).to(torch.int32)
+            shifts = torch.cat([shifts, torch.zeros((1, shifts.shape[1], 3), dtype=torch.int32, device=coord.device)])
+
+        return positions, charges_flat, batch_idx, nbmat, cell, shifts, fill_value, B
+
+    def _dsf_inputs(
+        self,
+        data: dict[str, Tensor],
+        suffix: str,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor | None, Tensor | None, int, int]:
+        nb_mode = nbops.get_nb_mode(data)
+        if nb_mode == 0:
+            return self._dsf_inputs_mode0(data)
+        if nb_mode == 1:
+            return self._dsf_inputs_mode1(data, suffix)
+        if nb_mode == 2:
+            return self._dsf_inputs_mode2(data, suffix)
+        raise ValueError(f"Invalid neighbor mode: {nb_mode}")
+
+    @staticmethod
+    def _restore_dsf_forces_shape(data: dict[str, Tensor], forces: Tensor) -> Tensor:
+        """Map flattened nvalchemiops DSF forces back to the input coordinate shape."""
+        nb_mode = nbops.get_nb_mode(data)
+        if nb_mode == 1:
+            return forces
+        if nb_mode in (0, 2):
+            return forces[:-1].reshape_as(data["coord"])
+        raise ValueError(f"Invalid neighbor mode: {nb_mode}")
+
+    def _coul_dsf_nvalchemi(
+        self,
+        data: dict[str, Tensor],
+        *,
+        compute_forces: bool = False,
+        compute_virial: bool = False,
+    ) -> tuple[Tensor, LRCoulombDerivativeTerms | None]:
+        """Compute DSF through nvalchemiops.
+
+        The nvalchemiops DSF energy is connected to autograd through charges
+        only. When requested by the calculator, explicit forces and virial are
+        returned separately for inference-time assembly.
+        """
         suffix = nbops.resolve_suffix(data, ["_coulomb", "_lr"])
-        data = ops.lazy_calc_dij(data, suffix)
-        d_ij = data[f"d_ij{suffix}"]
-        q = data[self.key_in]
-        q_i, q_j = nbops.get_ij(q, data, suffix=suffix)
-        J = ops.coulomb_matrix_dsf(d_ij, self.dsf_rc, self.dsf_alpha, data)
-        e = (q_i * q_j * J).sum(-1, dtype=torch.float64)
-        e = self._factor * nbops.mol_sum(e, data)
+        coord, charges, batch_idx, nbmat, cell, shifts, fill_value, num_systems = self._dsf_inputs(data, suffix)
+        result = dsf_coulomb(
+            positions=coord,
+            charges=charges,
+            cutoff=float(self.dsf_rc),
+            alpha=float(self.dsf_alpha),
+            cell=cell,
+            batch_idx=batch_idx,
+            neighbor_matrix=nbmat,
+            neighbor_matrix_shifts=shifts,
+            fill_value=int(fill_value),
+            compute_forces=compute_forces or compute_virial,
+            compute_virial=compute_virial,
+            num_systems=int(num_systems),
+            device=str(coord.device),
+        )
+
+        ke = constants.Hartree * constants.Bohr
+        energy = result[0] * ke
+        terms = None
+        if compute_forces or compute_virial:
+            forces = self._restore_dsf_forces_shape(data, result[1] * ke) if compute_forces else None
+            virial = result[2] * ke if compute_virial else None
+            terms = LRCoulombDerivativeTerms(forces=forces, virial=virial)
+
         if self.subtract_sr:
-            e = e - self.coul_simple_sr(data)
-        return e
+            data = ops.lazy_calc_dij(data, "")
+            energy = energy - self.coul_simple_sr(data)
+        return energy, terms
+
+    def coul_dsf(self, data: dict[str, Tensor]) -> Tensor:
+        energy, _terms = self._coul_dsf_nvalchemi(data)
+        return energy
+
+    def _coul_nvalchemi(self, data: dict[str, Tensor], backend: str) -> Tensor:
+        """Compute periodic Coulomb energy via the ``aimnet::lr_coulomb_fwd`` custom op.
+
+        The custom op wraps ``nvalchemiops`` Ewald/PME in an
+        ``autograd.Function`` whose backward publishes analytic forces,
+        charge gradients and (optionally) virial, so 1st-order forces via
+        ``autograd.grad`` and 2nd-order force-loss training both work
+        without touching the non-differentiable Warp kernels a second time.
+
+        Requires ``cell`` in ``data`` and a PBC neighbor list under
+        ``nbmat_coulomb``/``shifts_coulomb`` (preferred) or the shared
+        ``nbmat_lr``/``shifts_lr``. Drops the trailing padding row before
+        invoking the backend and re-adds a zero pad row so downstream
+        ``unpad_output`` contracts are preserved.
+
+        Whether the virial is computed is decided by ``cell.requires_grad``:
+        cell gradients are needed only when the caller (stress path) built a
+        strained cell with autograd.
+        """
+        suffix = nbops.resolve_suffix(data, ["_coulomb", "_lr"])
+
+        coord = data["coord"]
+        charges = data[self.key_in]
+        mol_idx = data["mol_idx"]
+        cell = data["cell"]
+        nbmat = data[f"nbmat{suffix}"]
+        shifts = data[f"shifts{suffix}"]
+
+        # Drop the trailing padding atom (flat mode includes one at index N).
+        N_padded = coord.shape[0]
+        N = N_padded - 1
+        coord_real = coord[:-1]
+        charges_real = charges[:-1]
+        mol_idx_real = mol_idx[:-1].to(torch.int32)
+        nbmat_real = nbmat[:-1].to(torch.int32)
+        shifts_real = shifts[:-1].to(torch.int32)
+
+        num_systems = int(mol_idx_real.max().item()) + 1
+        # Only pay for virial when the caller is going to take a cell gradient.
+        compute_virial = cell.requires_grad
+
+        energies_per_system, _forces, _charge_grad, _virial = lr_coulomb_energy(
+            coord=coord_real,
+            cell=cell,
+            charges=charges_real,
+            batch_idx=mol_idx_real,
+            neighbor_matrix=nbmat_real,
+            shifts=shifts_real,
+            mask_value=N,
+            num_systems=num_systems,
+            accuracy=float(self.ewald_accuracy),
+            backend=backend,
+            compute_virial=compute_virial,
+        )
+        # Custom op already converted e²/Å → eV (k_e = Hartree * Bohr) and
+        # summed per-atom → per-system. energies_per_system has shape
+        # (num_systems,) and is float64.
+        e_periodic = energies_per_system
+
+        if self.subtract_sr:
+            data = ops.lazy_calc_dij(data, "")
+            e_periodic = e_periodic - self.coul_simple_sr(data)
+        return e_periodic
 
     def coul_ewald(self, data: dict[str, Tensor]) -> Tensor:
-        J = ops.coulomb_matrix_ewald(data["coord"], data["cell"], accuracy=self.ewald_accuracy)
-        q_i, q_j = data["charges"].unsqueeze(-1), data["charges"].unsqueeze(-2)
-        e = self._factor * (q_i * q_j * J).flatten(-2, -1).sum(-1, dtype=torch.float64)
-        if self.subtract_sr:
-            e = e - self.coul_simple_sr(data)
-        return e
+        """Per-system Ewald energy in eV. Requires ``cell`` and ``nbmat_lr``/``shifts_lr``."""
+        return self._coul_nvalchemi(data, backend="ewald")
+
+    def coul_pme(self, data: dict[str, Tensor]) -> Tensor:
+        """Per-system PME energy in eV. Requires ``cell`` and ``nbmat_lr``/``shifts_lr``."""
+        return self._coul_nvalchemi(data, backend="pme")
+
+    def forward_with_derivatives(
+        self,
+        data: dict[str, Tensor],
+        *,
+        compute_forces: bool = False,
+        compute_virial: bool = False,
+    ) -> tuple[dict[str, Tensor], LRCoulombDerivativeTerms | None]:
+        if self.method != "dsf":
+            return self.forward(data), None
+
+        e, terms = self._coul_dsf_nvalchemi(
+            data,
+            compute_forces=compute_forces,
+            compute_virial=compute_virial,
+        )
+        if self.key_out in data:
+            data[self.key_out] = data[self.key_out].double() + e
+        else:
+            data[self.key_out] = e
+        return data, terms
 
     def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         if self.method == "simple":
@@ -172,7 +492,9 @@ class LRCoulomb(nn.Module):
         elif self.method == "dsf":
             e = self.coul_dsf(data)
         elif self.method == "ewald":
-            e = self.coul_ewald(data)
+            e = self._coul_nvalchemi(data, backend="ewald")
+        elif self.method == "pme":
+            e = self._coul_nvalchemi(data, backend="pme")
         else:
             raise ValueError(f"Unknown method {self.method}")
         if self.key_out in data:

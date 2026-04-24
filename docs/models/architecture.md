@@ -185,13 +185,14 @@ E_mol = sum_i  e_atom_i    (for atoms i in molecule)
 
 Two external modules add long-range physics that the short-range NN cannot capture:
 
-**LRCoulomb** -- Electrostatic energy from predicted charges. Three methods:
+**LRCoulomb** -- Electrostatic energy from predicted charges. Four methods:
 
-| Method   | Use Case                    | Neighbor List                 |
-| -------- | --------------------------- | ----------------------------- |
-| `simple` | Non-periodic, small systems | All pairs                     |
-| `dsf`    | Periodic systems            | Finite cutoff (default 15 A)  |
-| `ewald`  | Periodic, high accuracy     | Computed from accuracy target |
+| Method | Use Case | Neighbor List |
+| --- | --- | --- |
+| `simple` | Non-periodic, small systems | All pairs |
+| `dsf` | Periodic systems | Finite cutoff (default 15 A) |
+| `ewald` | Periodic, high accuracy | Estimated from `ewald_accuracy` (default `1e-5`) |
+| `pme` | Periodic, large cells | Estimated from `ewald_accuracy` (default `1e-5`) |
 
 The Coulomb module uses the charges predicted by the equilibration loop and subtracts the short-range Coulomb component (already learned by the NN) to avoid double-counting.
 
@@ -242,7 +243,7 @@ LRCoulomb(charges) + DFTD3(coord) --> E_total
 | **NSE** | Neutral Spin Equilibrated | Charge redistribution scheme that enforces total charge (and optionally spin) conservation by distributing the deficit proportionally to per-atom flexibility values. |
 | **SAE** | Self-Atomic Energy | Element-specific energy offset (a.k.a. atomic reference energy). Stored as a learnable embedding and added to per-atom NN outputs before summation. |
 | **DSF** | Damped Shifted Force | Electrostatic method for periodic systems. Applies a damping function and shift to the Coulomb potential at a finite cutoff, avoiding the need for Ewald summation. |
-| **SRCoulomb** | Short-Range Coulomb | The portion of Coulomb interaction within the NN cutoff radius (5.0 A). When using external Coulomb methods (DSF, Ewald), this component is subtracted to avoid double-counting with the NN. |
+| **SRCoulomb** | Short-Range Coulomb | The portion of Coulomb interaction within the NN cutoff radius (5.0 A). When using external Coulomb methods (DSF, Ewald, PME), this component is subtracted to avoid double-counting with the NN. |
 | **nb_threshold** | Neighbor Threshold | Atom count threshold (default 120) that controls whether molecules are processed in dense batched mode (small systems) or sparse flattened mode (large systems). |
 | **ConvSV** | Scalar-Vector Convolution | Custom convolution combining neighbor atomic features with AEV geometry descriptors via einsum, producing rotationally invariant output through vector squaring. |
 | **AIM** | Atomic Interaction Model | The final per-atom feature vector produced by the last MLP pass, which encodes all information needed to predict atomic properties. |

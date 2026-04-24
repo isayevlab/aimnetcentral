@@ -78,7 +78,20 @@ class TestInputValidation:
         assert "energy" in res
 
 
-COULOMB_METHODS = ["simple", "dsf", "ewald"]
+COULOMB_METHODS = ["simple", "dsf", "ewald", "pme"]
+
+
+class DummyEmbeddedCoulombModel(torch.nn.Module):
+    """Minimal legacy-style model with embedded Coulomb metadata."""
+
+    cutoff = 5.0
+
+    def __init__(self):
+        super().__init__()
+        self._metadata = {"needs_coulomb": False, "coulomb_mode": "simple"}
+
+    def forward(self, data):
+        return data
 
 
 class TestCoulombMethods:
@@ -87,31 +100,112 @@ class TestCoulombMethods:
     @pytest.mark.parametrize("method", COULOMB_METHODS)
     def test_set_coulomb_method(self, method):
         """Test setting each Coulomb method."""
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
             if method == "dsf":
                 calc.set_lrcoulomb_method(method, cutoff=12.0, dsf_alpha=0.25)
-            elif method == "ewald":
-                calc.set_lrcoulomb_method(method, cutoff=10.0)
+            elif method in ("ewald", "pme"):
+                calc.set_lrcoulomb_method(method)
             else:
                 calc.set_lrcoulomb_method(method)
         assert calc._coulomb_method == method
 
     def test_set_coulomb_dsf_with_params(self):
         """Test DSF Coulomb method sets cutoff correctly."""
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
             calc.set_lrcoulomb_method("dsf", cutoff=12.0, dsf_alpha=0.25)
         assert calc._coulomb_method == "dsf"
         assert calc.cutoff_lr == 12.0
 
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_set_coulomb_ewald_pme_default_accuracy(self, method):
+        """Default ``ewald_accuracy`` is 1e-5 and applies to both ewald and pme."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method(method)
+        assert calc._coulomb_method == method
+        assert calc.coulomb_cutoff is None
+        if calc.external_coulomb is not None:
+            assert calc.external_coulomb.ewald_accuracy == pytest.approx(1e-5)
+
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_set_coulomb_ewald_pme_custom_accuracy(self, method):
+        """Custom ``ewald_accuracy`` is forwarded to the external module."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method(method, ewald_accuracy=1e-4)
+        if calc.external_coulomb is not None:
+            assert calc.external_coulomb.ewald_accuracy == pytest.approx(1e-4)
+
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_ewald_pme_without_cell_raises(self, method):
+        """Calling Ewald/PME on a non-PBC molecule raises a clear ValueError."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method(method)
+        data = {
+            "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+            "numbers": np.array([8, 1, 1]),
+            "charge": 0.0,
+        }
+        with pytest.raises(ValueError, match="requires a periodic 'cell'"):
+            calc(data)
+
+    @pytest.mark.parametrize("kwargs", [{"forces": True}, {"stress": True}])
+    def test_dsf_train_derivative_modes_raise(self, kwargs):
+        """DSF uses explicit nvalchemiops derivatives and does not support force/stress training."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True, train=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        data = {
+            "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+            "numbers": np.array([8, 1, 1]),
+            "charge": 0.0,
+            "cell": np.eye(3) * 8.0,
+        }
+        with pytest.raises(NotImplementedError, match="DSF Coulomb"):
+            calc(data, **kwargs)
+
+    def test_dsf_hessian_raises(self):
+        """DSF Hessians are unsupported because nvalchemiops DSF has no coordinate autograd."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        data = {
+            "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+            "numbers": np.array([8, 1, 1]),
+            "charge": 0.0,
+        }
+        with pytest.raises(NotImplementedError, match="DSF Coulomb"):
+            calc(data, hessian=True)
+
     def test_invalid_coulomb_method(self):
         """Test that invalid Coulomb method raises ValueError."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
         with pytest.raises(ValueError, match="Invalid method"):
             calc.set_lrcoulomb_method("invalid_method")
+
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_set_coulomb_method_noops_for_embedded_coulomb(self, method):
+        """Legacy embedded Coulomb models warn and keep calculator state unchanged."""
+        calc = AIMNet2Calculator(DummyEmbeddedCoulombModel(), nb_threshold=0)
+        before = (calc._coulomb_method, calc._coulomb_cutoff, calc.cutoff_lr)
+
+        with pytest.warns(UserWarning, match="embedded Coulomb"):
+            calc.set_lrcoulomb_method(method)
+
+        assert calc.external_coulomb is None
+        assert (calc._coulomb_method, calc._coulomb_cutoff, calc.cutoff_lr) == before
 
     @pytest.mark.parametrize("method", ["simple", "dsf"])
     def test_coulomb_method_produces_valid_energy(self, method):
@@ -145,6 +239,32 @@ class TestCoulombMethods:
                 calc.set_lrcoulomb_method(method)
 
         res = calc(data, forces=True)
+        assert torch.isfinite(res["forces"]).all()
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="dense batched calculator path is CUDA-only")
+    def test_dsf_forces_dense_batched_input(self):
+        """DSF inference forces work when small batched inputs stay in dense mode."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=1000, needs_coulomb=True, device="cuda")
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=12.0)
+
+        coord = torch.tensor(
+            [
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]],
+                [[0.1, 0.0, 0.0], [1.06, 0.0, 0.0], [-0.14, 0.93, 0.0]],
+            ],
+            dtype=torch.float32,
+        )
+        data = {
+            "coord": coord,
+            "numbers": torch.tensor([[8, 1, 1], [8, 1, 1]]),
+            "charge": torch.tensor([0.0, 0.0]),
+        }
+
+        res = calc(data, forces=True)
+
+        assert res["forces"].shape == coord.shape
         assert torch.isfinite(res["forces"]).all()
 
 
