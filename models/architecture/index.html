@@ -2052,12 +2052,8 @@ g_s(r_{ij}) = \exp\bigl(-\eta\,(r_{ij} - r_s)^2\bigr) \cdot f_c(r_{ij})
 <div class="highlight"><pre><span></span><code>avf_sv[i, a, g, d] = sum_j  a_j[i, m, a, g] * g_sv[i, m, g, d]
 </code></pre></div>
 <ol>
-<li>
-<p><strong>Split scalar and vector parts:</strong></p>
-</li>
-<li>
-<p><code>avf_s</code> -- Scalar part (d=0), flattened to <code>(nchannel * nshifts_s,)</code>.</p>
-</li>
+<li><strong>Split scalar and vector parts:</strong></li>
+<li><code>avf_s</code> -- Scalar part (d=0), flattened to <code>(nchannel * nshifts_s,)</code>.</li>
 <li>
 <p><code>avf_v</code> -- Vector part (d=1,2,3), processed through learned linear combinations via the <code>agh</code> parameter tensor, then squared and summed over the spatial dimension to produce rotationally invariant features. Output: <code>(nchannel * ncomb_v,)</code>.</p>
 </li>

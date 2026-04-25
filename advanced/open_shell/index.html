@@ -1823,12 +1823,8 @@
 <h2 id="how-nse-works">How NSE Works<a class="headerlink" href="#how-nse-works" title="Permanent link">&para;</a></h2>
 <p>AIMNet2-NSE extends the standard architecture with <strong>two charge channels</strong> (<code>num_charge_channels=2</code>). These represent alpha and beta electron populations separately:</p>
 <ol>
-<li>
-<p><strong>Preprocessing</strong>: The molecular charge and multiplicity are decomposed into alpha and beta channel inputs:</p>
-</li>
-<li>
-<p>Alpha channel charge: <code>(charge/2) + (mult-1)/2</code></p>
-</li>
+<li><strong>Preprocessing</strong>: The molecular charge and multiplicity are decomposed into alpha and beta channel inputs:</li>
+<li>Alpha channel charge: <code>(charge/2) + (mult-1)/2</code></li>
 <li>
 <p>Beta channel charge: <code>(charge/2) - (mult-1)/2</code></p>
 </li>
