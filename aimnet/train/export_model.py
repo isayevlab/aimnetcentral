@@ -93,7 +93,7 @@ def export_model(
     """Export trained model to distributable state dict format.
 
     weights: Path to the raw PyTorch weights file (.pt).
-    outoput: Path to the output .pt file.
+    output: Path to the output .pt file.
 
     Example:
         aimnet export weights.pt model.pt --model config.yaml --sae model.sae

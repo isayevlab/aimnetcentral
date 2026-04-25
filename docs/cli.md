@@ -35,14 +35,14 @@ aimnet train --config config.yaml --model model.yaml
 aimnet train [OPTIONS] [ARGS]...
 ```
 
-| Option                 | Type     | Description                                                                                  |
-| ---------------------- | -------- | -------------------------------------------------------------------------------------------- |
-| `--config PATH`        | Optional | Extra training configuration YAML (may be passed multiple times; merged over the default)    |
-| `--model PATH`         | Optional | Model architecture YAML (defaults to bundled `aimnet/models/aimnet2.yaml`)                   |
-| `--load PATH`          | Optional | Path to existing model weights to load before training                                       |
-| `--save PATH`          | Optional | Path to save model weights                                                                   |
-| `--no-default-config`  | Flag     | Skip loading `aimnet/train/default_train.yaml`                                               |
-| `ARGS`                 | Variadic | Dot-separated overrides applied last (e.g., `data.train=mydata.h5 run_name=firstrun`)        |
+| Option | Type | Description |
+| --- | --- | --- |
+| `--config PATH` | Optional | Extra training configuration YAML (may be passed multiple times; merged over the default) |
+| `--model PATH` | Optional | Model architecture YAML (defaults to bundled `aimnet/models/aimnet2.yaml`) |
+| `--load PATH` | Optional | Path to existing model weights to load before training |
+| `--save PATH` | Optional | Path to save model weights |
+| `--no-default-config` | Flag | Skip loading `aimnet/train/default_train.yaml` |
+| `ARGS` | Variadic | Dot-separated overrides applied last (e.g., `data.train=mydata.h5 run_name=firstrun`) |
 
 Device selection is controlled via `CUDA_VISIBLE_DEVICES`; training uses all visible GPUs in DDP mode.
 
@@ -250,16 +250,16 @@ aimnet calc_sae [OPTIONS] DS OUTPUT
 
 **Positional Arguments:**
 
-| Argument | Description                                                            |
-| -------- | ---------------------------------------------------------------------- |
-| `DS`     | HDF5 dataset (`SizeGroupedDataset` layout) containing `numbers` and `energy` |
-| `OUTPUT` | Output YAML file for fitted SAE values                                       |
+| Argument | Description |
+| --- | --- |
+| `DS` | HDF5 dataset (`SizeGroupedDataset` layout) containing `numbers` and `energy` |
+| `OUTPUT` | Output YAML file for fitted SAE values |
 
 **Options:**
 
-| Option       | Type | Default | Description                                          |
-| ------------ | ---- | ------- | ---------------------------------------------------- |
-| `--samples`  | int  | 100000  | Maximum number of dataset samples used for the fit   |
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--samples` | int | 100000 | Maximum number of dataset samples used for the fit |
 
 ### SAE Format
 

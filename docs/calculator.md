@@ -174,10 +174,10 @@ See [torch.compile documentation](https://pytorch.org/docs/stable/generated/torc
 
 Whether to put the model in training mode. Default: `False`.
 
-| Value             | Behavior                                                                  |
-| ----------------- | ------------------------------------------------------------------------- |
+| Value | Behavior |
+| --- | --- |
 | `False` (default) | Inference mode: model set to `.eval()`, all parameters set to `requires_grad_(False)` |
-| `True`            | Training mode: model set to `.train()`, parameters keep `requires_grad`   |
+| `True` | Training mode: model set to `.train()`, parameters keep `requires_grad` |
 
 For ordinary energy/force/charge inference (including external autograd through the calculator), leave this `False`. Set `True` only when using the calculator inside a training loop where model parameters need gradients.
 
