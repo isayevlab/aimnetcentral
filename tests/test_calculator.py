@@ -1158,3 +1158,30 @@ def test_constructing_two_families_warns_once(monkeypatch):
         calc_b.model._metadata["family"] = "family-B"
         # Call the production helper that __init__ calls (see Step 3).
         calc_b._maybe_warn_family_mix("family-B")
+
+
+@pytest.mark.network
+def test_aimnet2rxn_alias_calculator_e2e():
+    """Alias 'aimnet2rxn' must resolve through the registry, the .pt must load,
+    and the calculator must expose rxn-specific metadata fields."""
+    import urllib.error
+
+    import requests
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    try:
+        calc = AIMNet2Calculator("aimnet2rxn", device="cpu")
+    except (
+        urllib.error.HTTPError,
+        urllib.error.URLError,
+        requests.exceptions.HTTPError,
+        requests.exceptions.ConnectionError,
+    ) as e:
+        pytest.skip(f"GCS .pt for aimnet2rxn not yet uploaded: {e}")
+
+    assert calc.metadata is not None
+    assert calc.metadata.get("family") == "rxn"
+    assert calc.metadata.get("supports_charged_systems") is False
+    assert calc.metadata.get("implemented_species") == [1, 6, 7, 8]
+    assert abs(calc.metadata.get("cutoff") - 5.0) < 1e-6
