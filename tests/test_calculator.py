@@ -1051,3 +1051,27 @@ def test_calculator_validate_species_false_bypasses():
     # Both calls should succeed; validate_species=False is the explicit bypass path.
     calc(data, validate_species=True)
     calc(data, validate_species=False)
+
+
+def test_calculator_rejects_charged_input_when_unsupported(monkeypatch):
+    """When metadata declares supports_charged_systems=False, a non-zero charge raises."""
+    import pytest
+    import torch
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    # Synthetically inject the family-narrowing metadata (aimnet2 does not declare it
+    # natively; this mirrors what an aimnet2-rxn .pt would carry).
+    calc.model._metadata = dict(calc.model._metadata)
+    calc.model._metadata["supports_charged_systems"] = False
+
+    coords = torch.tensor([[0.0, 0.0, 0.0]])
+    numbers = torch.tensor([1])
+    data = {"coord": coords, "numbers": numbers, "charge": torch.tensor(-1.0)}
+
+    with pytest.raises(ValueError, match=r"net-charged systems"):
+        calc(data)
+
+    # Bypass works
+    calc(data, validate_species=False)

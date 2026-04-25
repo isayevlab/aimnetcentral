@@ -752,6 +752,16 @@ class AIMNet2Calculator:
                         f"`isayevlab/aimnet2-wb97m-d3`; for radicals/open-shell systems use "
                         f"`isayevlab/aimnet2-nse`. Pass validate_species=False to bypass."
                     )
+            meta = self.metadata or {}
+            if meta.get("supports_charged_systems") is False:
+                charge_val = float(data.get("charge", 0.0))
+                if abs(charge_val) > 1e-6:
+                    raise ValueError(
+                        f"This model does not support net-charged systems "
+                        f"(got charge={charge_val}). Net-neutral zwitterions are supported. "
+                        f"For ions use `isayevlab/aimnet2-wb97m-d3`. "
+                        f"Pass validate_species=False to bypass."
+                    )
         data = self.prepare_input(data)
 
         if hessian and "mol_idx" in data and data["mol_idx"][-1] > 0:
