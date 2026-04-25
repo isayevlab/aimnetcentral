@@ -47,7 +47,9 @@ print(f"Forces (eV/A):\n{result['forces']}")
 print(f"Partial charges (e): {result['charges']}")
 ```
 
-!!! note "First-run warmup" The very first calculation triggers two one-time costs:
+!!! note "First-run warmup"
+
+    The very first calculation triggers two one-time costs:
 
     1. **Warp kernel JIT compilation** (10--30 seconds): AIMNet2 uses NVIDIA Warp
        for GPU-accelerated neighbor list and kernel operations. These kernels are compiled on first use and cached for subsequent runs.
@@ -154,7 +156,9 @@ hessian = result["hessian"]
 print(f"Hessian shape: {hessian.shape}")  # (21, 3, 21, 3) for aspirin
 ```
 
-!!! tip "When to request each property" Only request what you need. Computing forces adds one backward pass. Computing the hessian adds `3N` backward passes (one per force component), so it becomes expensive for large molecules. The hessian is also limited to single-molecule calculations.
+!!! tip "When to request each property"
+
+    Only request what you need. Computing forces adds one backward pass. Computing the hessian adds `3N` backward passes (one per force component), so it becomes expensive for large molecules. The hessian is also limited to single-molecule calculations.
 
     If you need to differentiate through the calculator from **outside** (e.g., wrapping it in an optimizer or computing a Hessian via `torch.autograd.functional.hessian`), pass `coord` as a tensor with `requires_grad=True` and use `forces=False`:
 
@@ -190,7 +194,9 @@ for name in model_names:
     print(f"{name:<20} {e:>14.6f} {f_max:>18.6f}")
 ```
 
-!!! warning "Absolute energies differ between models" Different models use different DFT functionals as training targets, so their absolute energy scales are not comparable. **Relative** energies (e.g., conformer energy differences, reaction energies) are meaningful within the same model but should not be mixed across models.
+!!! warning "Absolute energies differ between models"
+
+    Different models use different DFT functionals as training targets, so their absolute energy scales are not comparable. **Relative** energies (e.g., conformer energy differences, reaction energies) are meaningful within the same model but should not be mixed across models.
 
 The available model aliases are:
 
@@ -237,7 +243,9 @@ t1 = time.perf_counter()
 print(f"Average over 100 calls: {(t1 - t0) / 100 * 1000:.2f} ms")
 ```
 
-!!! note "What `compile_model=True` does" This wraps the neural network forward pass with `torch.compile()`. It does **not** compile the neighbor list construction or the external Coulomb/DFTD3 modules. The benefit is greatest for repeated evaluations on the same system size, such as MD trajectories or geometry optimizations.
+!!! note "What `compile_model=True` does"
+
+    This wraps the neural network forward pass with `torch.compile()`. It does **not** compile the neighbor list construction or the external Coulomb/DFTD3 modules. The benefit is greatest for repeated evaluations on the same system size, such as MD trajectories or geometry optimizations.
 
 ## What's Next
 
