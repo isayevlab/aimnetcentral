@@ -282,7 +282,9 @@ calc = AIMNet2ASE(
 
 !!! note "Practical size limits"
 
-    - **Geometry optimization** works well up to thousands of atoms. - **Hessian computation** is practical up to ~200 atoms due to O(N^2) memory scaling (the full Hessian for 200 atoms requires 200 x 3 x 200 x 3 = 360,000 elements). - For larger systems needing frequencies, use finite-difference approaches with a displacement step.
+    - **Geometry optimization** works well up to thousands of atoms.
+    - **Hessian computation** is practical up to ~200 atoms due to O(N^2) memory scaling (the full Hessian for 200 atoms requires 200 x 3 x 200 x 3 = 360,000 elements).
+    - For larger systems needing frequencies, use finite-difference approaches with a displacement step.
 
 ## What's Next
 

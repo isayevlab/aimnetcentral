@@ -24,7 +24,9 @@ AIMNet2-NSE (Neutral Spin Equilibrated) is the model for **open-shell molecular 
 
 ### Limitations
 
-!!! warning "Single-determinant DFT reference" AIMNet2-NSE is trained on unrestricted Kohn-Sham DFT data, which uses a single Slater determinant. It is **not reliable** for systems with genuine multi-reference character, including:
+!!! warning "Single-determinant DFT reference"
+
+    AIMNet2-NSE is trained on unrestricted Kohn-Sham DFT data, which uses a single Slater determinant. It is **not reliable** for systems with genuine multi-reference character, including:
 
     - Biradicals with significant open-shell singlet character
     - Near-degenerate spin states in transition-metal-free systems
@@ -32,9 +34,13 @@ AIMNet2-NSE (Neutral Spin Equilibrated) is the model for **open-shell molecular 
 
     If you suspect multi-reference character, validate against CASSCF or MRCI calculations.
 
-!!! warning "Spin contamination" The underlying DFT reference data may contain spin contamination from unrestricted KS calculations. The model learns from this data as-is, so predictions for heavily spin-contaminated states should be treated with caution.
+!!! warning "Spin contamination"
 
-!!! warning "Same element and system scope" No transition metals, molecular (gas-phase) training data only. For Pd-containing open-shell systems, neither this model nor [AIMNet2-Pd](aimnet2pd.md) is currently suitable -- use DFT directly.
+    The underlying DFT reference data may contain spin contamination from unrestricted KS calculations. The model learns from this data as-is, so predictions for heavily spin-contaminated states should be treated with caution.
+
+!!! warning "Same element and system scope"
+
+    No transition metals, molecular (gas-phase) training data only. For Pd-containing open-shell systems, neither this model nor [AIMNet2-Pd](aimnet2pd.md) is currently suitable -- use DFT directly.
 
 ## How Spin Multiplicity Works
 

@@ -44,6 +44,8 @@ aimnet train [OPTIONS] [ARGS]...
 | `--no-default-config` | Flag | Skip loading `aimnet/train/default_train.yaml` |
 | `ARGS` | Variadic | Dot-separated overrides applied last (e.g., `data.train=mydata.h5 run_name=firstrun`) |
 
+Trailing tokens after the named options (`ARGS`) are positional dot-form overrides into the merged training config — they are not flags.
+
 Device selection is controlled via `CUDA_VISIBLE_DEVICES`; training uses all visible GPUs in DDP mode.
 
 ### Example Configuration
