@@ -543,7 +543,6 @@ def test_load_v1_model_species_override_nan_pads_other_rows():
     """load_v1_model with implemented_species override must NaN-pad AFV rows
     for elements outside the supported set, write family/supports_charged_systems
     to metadata, AND keep atomic_shift in float64 (regression on .double() ordering)."""
-    import math
     from pathlib import Path
 
     import pytest
