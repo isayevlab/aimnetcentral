@@ -517,3 +517,23 @@ def test_model_metadata_typeddict_includes_family_and_charge_fields():
     assert "supports_charged_systems" in hints, (
         "ModelMetadata missing 'supports_charged_systems' field"
     )
+
+
+def test_load_model_propagates_family_and_charge_fields(tmp_path):
+    """load_model must include family/supports_charged_systems in metadata when present in .pt."""
+    import torch
+    from aimnet.calculators.model_registry import get_model_path
+    from aimnet.models.base import load_model
+
+    # Take the existing aimnet2 .pt as a template; add the new fields; save; reload.
+    src = get_model_path("aimnet2")
+    raw = torch.load(src, map_location="cpu", weights_only=False)
+    raw["family"] = "test-family"
+    raw["supports_charged_systems"] = False
+
+    out = tmp_path / "with_family.pt"
+    torch.save(raw, str(out))
+
+    _, metadata = load_model(str(out), device="cpu")
+    assert metadata.get("family") == "test-family"
+    assert metadata.get("supports_charged_systems") is False

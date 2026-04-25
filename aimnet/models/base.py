@@ -122,6 +122,8 @@ def load_model(path: str, device: str = "cpu") -> tuple[nn.Module, ModelMetadata
             "d3_params": data.get("d3_params"),
             "has_embedded_lr": data.get("has_embedded_lr", False),
             "implemented_species": data.get("implemented_species", []),
+            "family": data.get("family"),
+            "supports_charged_systems": data.get("supports_charged_systems"),
         }
 
         # Attach metadata to model for easy access
