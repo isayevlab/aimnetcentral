@@ -222,7 +222,7 @@ exclude_lines = [
 package_module_name_map = { "pytorch-ignite" = "ignite" }
 
 [tool.deptry.per_rule_ignores]
-# Optional dependencies (ase, pysisyphus, ignite) are only available with extras
-DEP001 = ["ase", "pysisyphus", "ignite"]
+# Optional extras (ase, pysisyphus) — installed via [project.optional-dependencies]; deptry can't see them statically
+DEP001 = ["ase", "pysisyphus"]
 DEP003 = ["ase", "pysisyphus"]
 DEP004 = ["ase", "pysisyphus"]
