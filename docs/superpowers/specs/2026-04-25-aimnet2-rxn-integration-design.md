@@ -90,6 +90,26 @@ def load_v1_model(jpt_path, yaml_config_path, output_path=None, *,
 
 All three new kwargs are keyword-only and default `None` — backward-compatible for the existing four families' conversions, which omit them and continue to use `extract_species(jit_model)` and no family/charge metadata. The HF `config.json` for rxn carries the same fields (`family`, `supports_charged_systems`) so both load paths produce equivalent metadata.
 
+**Schema propagation (mandatory companion change):** `aimnet/models/base.py::ModelMetadata` (TypedDict) and `load_model` (which constructs the dict and assigns it to `model._metadata`) silently drop unknown fields. Two additions are required so the calculator can actually read `family` and `supports_charged_systems`:
+
+```python
+class ModelMetadata(TypedDict):
+    ...
+    implemented_species: list[int]
+    family: NotRequired[str | None]                       # NEW
+    supports_charged_systems: NotRequired[bool | None]    # NEW
+
+# Inside load_model's v2-format branch:
+metadata: ModelMetadata = {
+    ...
+    "implemented_species": data.get("implemented_species", []),
+    "family": data.get("family"),
+    "supports_charged_systems": data.get("supports_charged_systems"),
+}
+```
+
+The same two-line addition goes into `aimnet/calculators/hf_hub.py::load_from_hf_repo` where it constructs its `ModelMetadata`. Both load paths converge on equivalent metadata for rxn.
+
 `.double()` ordering fix (unchanged from review):
 
 ```python
