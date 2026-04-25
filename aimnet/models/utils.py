@@ -569,6 +569,10 @@ def load_v1_model(
     jpt_path: str,
     yaml_config_path: str,
     output_path: str | None = None,
+    *,
+    implemented_species: list[int] | None = None,
+    family: str | None = None,
+    supports_charged_systems: bool | None = None,
     verbose: bool = True,
 ) -> tuple[nn.Module, dict]:
     """Load legacy JIT model (v1) and convert to v2 format.
@@ -631,7 +635,11 @@ def load_v1_model(
 
     # Extract metadata from JIT
     cutoff = float(jit_model.cutoff)
-    implemented_species = extract_species(jit_model)
+    _species_kwarg = implemented_species  # rename to avoid shadowing the metadata field below
+    if _species_kwarg is not None:
+        implemented_species_list = sorted(set(_species_kwarg))
+    else:
+        implemented_species_list = extract_species(jit_model)
 
     # Strip LR modules from YAML and add SRCoulomb
     # Note: disp_ptfile is unused here because JIT model already has disp_param0 in its state dict
@@ -718,8 +726,23 @@ def load_v1_model(
         "coulomb_sr_envelope": coulomb_sr_envelope if needs_coulomb else None,
         "d3_params": d3_params if needs_dispersion else None,
         "has_embedded_lr": has_embedded_lr,
-        "implemented_species": implemented_species,
+        "implemented_species": implemented_species_list,
     }
+    if family is not None:
+        metadata["family"] = family
+    if supports_charged_systems is not None:
+        metadata["supports_charged_systems"] = bool(supports_charged_systems)
+
+    # AFV row sanitization: when the caller declares the supported species
+    # explicitly, NaN-pad rows for elements outside that set so
+    # validate_species=False at inference time produces NaN-propagation
+    # instead of plausible-looking garbage from populated-but-untrained rows.
+    if _species_kwarg is not None:
+        species_set = set(implemented_species_list)
+        afv = core_model.afv.weight.data
+        for z in range(1, afv.shape[0]):
+            if z not in species_set:
+                afv[z] = float("nan")
 
     # Save if output path provided
     if output_path is not None:

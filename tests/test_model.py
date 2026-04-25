@@ -537,3 +537,69 @@ def test_load_model_propagates_family_and_charge_fields(tmp_path):
     _, metadata = load_model(str(out), device="cpu")
     assert metadata.get("family") == "test-family"
     assert metadata.get("supports_charged_systems") is False
+
+
+def test_load_v1_model_species_override_nan_pads_other_rows():
+    """load_v1_model with implemented_species override must NaN-pad AFV rows
+    for elements outside the supported set, write family/supports_charged_systems
+    to metadata, AND keep atomic_shift in float64 (regression on .double() ordering)."""
+    import math
+    from pathlib import Path
+
+    import pytest
+    import torch
+
+    src_jpt = Path("_tmp/model_1.jpt")
+    src_yaml = Path("_tmp/config.yaml")
+    if not src_jpt.exists() or not src_yaml.exists():
+        pytest.skip("aimnet2-rxn JIT source not available in _tmp/; skipping override test")
+
+    from aimnet.models.utils import load_v1_model
+
+    species = [1, 6, 7, 8]
+    model, metadata = load_v1_model(
+        str(src_jpt),
+        str(src_yaml),
+        output_path=None,
+        implemented_species=species,
+        family="rxn",
+        supports_charged_systems=False,
+        verbose=False,
+    )
+
+    assert metadata["implemented_species"] == species
+    assert metadata.get("family") == "rxn"
+    assert metadata.get("supports_charged_systems") is False
+
+    afv = model.afv.weight.data
+    species_set = set(species)
+    for z in range(1, afv.shape[0]):
+        row = afv[z]
+        if z in species_set:
+            assert not torch.isnan(row).any(), f"row {z} (in species) must not be NaN"
+        else:
+            assert torch.isnan(row).all(), f"row {z} (out of species) must be all-NaN"
+
+    # .double() ordering regression: atomic_shift dtype is float64.
+    assert hasattr(model, "outputs") and hasattr(model.outputs, "atomic_shift")
+    assert model.outputs.atomic_shift.shifts.weight.dtype == torch.float64
+
+
+def test_load_v1_model_without_overrides_is_backward_compatible():
+    """Existing four families' conversions must still work when the new kwargs are omitted."""
+    from pathlib import Path
+
+    import pytest
+
+    src_jpt = Path("_tmp/model_1.jpt")
+    src_yaml = Path("_tmp/config.yaml")
+    if not src_jpt.exists() or not src_yaml.exists():
+        pytest.skip("JIT source not available")
+
+    from aimnet.models.utils import load_v1_model
+
+    _, metadata = load_v1_model(str(src_jpt), str(src_yaml), output_path=None, verbose=False)
+    # No overrides → species derived from afv.weight (which for rxn means [1..63]).
+    assert isinstance(metadata["implemented_species"], list)
+    assert metadata.get("family") is None
+    assert metadata.get("supports_charged_systems") is None
