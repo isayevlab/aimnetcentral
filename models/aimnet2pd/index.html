@@ -1869,7 +1869,10 @@
 <p><strong>Registry alias:</strong> <code>aimnet2pd</code> (loads ensemble member <code>aimnet2-pd_0</code>)</p>
 <p><strong>Ensemble members:</strong> <code>aimnet2-pd_0</code> through <code>aimnet2-pd_3</code> (4 models)</p>
 <p><strong>DFT reference:</strong> B97-3c with CPCM implicit solvation (THF solvent)</p>
-<p>!!! warning "Element coverage difference" AIMNet2-Pd replaces <strong>As</strong> (arsenic) with <strong>Pd</strong> (palladium) compared to the standard AIMNet2 element set. Arsenic is <strong>not supported</strong> by this model.</p>
+<div class="admonition warning">
+<p class="admonition-title">Element coverage difference</p>
+<p>AIMNet2-Pd replaces <strong>As</strong> (arsenic) with <strong>Pd</strong> (palladium) compared to the standard AIMNet2 element set. Arsenic is <strong>not supported</strong> by this model.</p>
+</div>
 <h2 id="strengths-and-limitations">Strengths and Limitations<a class="headerlink" href="#strengths-and-limitations" title="Permanent link">&para;</a></h2>
 <h3 id="strengths">Strengths<a class="headerlink" href="#strengths" title="Permanent link">&para;</a></h3>
 <ul>
@@ -1881,11 +1884,26 @@
 <li><strong>Implicit CPCM solvation for THF</strong> baked into the model -- energetics include continuum solvent effects relevant to homogeneous catalysis without additional setup</li>
 </ul>
 <h3 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h3>
-<p>!!! warning "Palladium only" This model supports only palladium among transition metals. It cannot be used for other catalytic metals such as Ni, Cu, Fe, Ru, Rh, or Ir. For systems without transition metals, use the standard <a href="../aimnet2/">AIMNet2</a> model instead.</p>
-<p>!!! warning "No arsenic" Arsenic (As) is excluded from the element set. If your Pd complex contains arsine ligands (AsR3), this model cannot be used.</p>
-<p>!!! tip "Implicit solvation included" Unlike other AIMNet2 models, AIMNet2-Pd is trained on B97-3c/CPCM reference data with <strong>THF as the implicit solvent</strong>. This means solvent stabilization effects relevant to homogeneous catalysis in THF or similar non-polar aprotic solvents are captured directly. For reactions in very different solvent environments (e.g., water, DMSO), additional solvation corrections may still be needed.</p>
-<p>!!! warning "Closed-shell only" AIMNet2-Pd assumes closed-shell electronic structure. Open-shell Pd intermediates (e.g., Pd(I) species, radical mechanisms) require DFT treatment. For organic radical chemistry without Pd, use <a href="../aimnet2nse/">AIMNet2-NSE</a>.</p>
-<p>!!! warning "Coordination environment" The model has been trained on common coordination environments. Unusual geometries (e.g., Pd clusters, Pd nanoparticles, bulk Pd metal) are outside the training domain and should not be trusted.</p>
+<div class="admonition warning">
+<p class="admonition-title">Palladium only</p>
+<p>This model supports only palladium among transition metals. It cannot be used for other catalytic metals such as Ni, Cu, Fe, Ru, Rh, or Ir. For systems without transition metals, use the standard <a href="../aimnet2/">AIMNet2</a> model instead.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">No arsenic</p>
+<p>Arsenic (As) is excluded from the element set. If your Pd complex contains arsine ligands (AsR3), this model cannot be used.</p>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Implicit solvation included</p>
+<p>Unlike other AIMNet2 models, AIMNet2-Pd is trained on B97-3c/CPCM reference data with <strong>THF as the implicit solvent</strong>. This means solvent stabilization effects relevant to homogeneous catalysis in THF or similar non-polar aprotic solvents are captured directly. For reactions in very different solvent environments (e.g., water, DMSO), additional solvation corrections may still be needed.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Closed-shell only</p>
+<p>AIMNet2-Pd assumes closed-shell electronic structure. Open-shell Pd intermediates (e.g., Pd(I) species, radical mechanisms) require DFT treatment. For organic radical chemistry without Pd, use <a href="../aimnet2nse/">AIMNet2-NSE</a>.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Coordination environment</p>
+<p>The model has been trained on common coordination environments. Unusual geometries (e.g., Pd clusters, Pd nanoparticles, bulk Pd metal) are outside the training domain and should not be trusted.</p>
+</div>
 <h2 id="typical-use-cases">Typical Use Cases<a class="headerlink" href="#typical-use-cases" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Suzuki-Miyaura cross-coupling</strong> -- reaction profiles for the full catalytic cycle including oxidative addition, transmetalation, and reductive elimination</li>
@@ -1981,7 +1999,10 @@
 <span class="n">energies</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="p">])</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Energy: </span><span class="si">{</span><span class="n">energies</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> +/- </span><span class="si">{</span><span class="n">energies</span><span class="o">.</span><span class="n">std</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! note "Ensemble member naming" The Pd model ensemble members use a hyphen: <code>aimnet2-pd_0</code> through <code>aimnet2-pd_3</code> (note the hyphen between "aimnet2" and "pd").</p>
+<div class="admonition note">
+<p class="admonition-title">Ensemble member naming</p>
+<p>The Pd model ensemble members use a hyphen: <code>aimnet2-pd_0</code> through <code>aimnet2-pd_3</code> (note the hyphen between "aimnet2" and "pd").</p>
+</div>
 <h3 id="performance">Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <p>Pd complexes are typically moderate in size (20-80 atoms). Using <code>compile_model=True</code> is recommended for reaction profile scans or molecular dynamics where many sequential evaluations are performed on similarly-sized systems.</p>
 <h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h2>

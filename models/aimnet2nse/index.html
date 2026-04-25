@@ -1879,15 +1879,24 @@
 <li>Essential for radical stability comparisons and spin-state energetics</li>
 </ul>
 <h3 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h3>
-<p>!!! warning "Single-determinant DFT reference" AIMNet2-NSE is trained on unrestricted Kohn-Sham DFT data, which uses a single Slater determinant. It is <strong>not reliable</strong> for systems with genuine multi-reference character, including:</p>
-<pre><code>- Biradicals with significant open-shell singlet character
-- Near-degenerate spin states in transition-metal-free systems
-- Strongly stretched bonds in singlet states (e.g., homolytic dissociation on a singlet surface)
-
-If you suspect multi-reference character, validate against CASSCF or MRCI calculations.
-</code></pre>
-<p>!!! warning "Spin contamination" The underlying DFT reference data may contain spin contamination from unrestricted KS calculations. The model learns from this data as-is, so predictions for heavily spin-contaminated states should be treated with caution.</p>
-<p>!!! warning "Same element and system scope" No transition metals, molecular (gas-phase) training data only. For Pd-containing open-shell systems, neither this model nor <a href="../aimnet2pd/">AIMNet2-Pd</a> is currently suitable -- use DFT directly.</p>
+<div class="admonition warning">
+<p class="admonition-title">Single-determinant DFT reference</p>
+<p>AIMNet2-NSE is trained on unrestricted Kohn-Sham DFT data, which uses a single Slater determinant. It is <strong>not reliable</strong> for systems with genuine multi-reference character, including:</p>
+<ul>
+<li>Biradicals with significant open-shell singlet character</li>
+<li>Near-degenerate spin states in transition-metal-free systems</li>
+<li>Strongly stretched bonds in singlet states (e.g., homolytic dissociation on a singlet surface)</li>
+</ul>
+<p>If you suspect multi-reference character, validate against CASSCF or MRCI calculations.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Spin contamination</p>
+<p>The underlying DFT reference data may contain spin contamination from unrestricted KS calculations. The model learns from this data as-is, so predictions for heavily spin-contaminated states should be treated with caution.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Same element and system scope</p>
+<p>No transition metals, molecular (gas-phase) training data only. For Pd-containing open-shell systems, neither this model nor <a href="../aimnet2pd/">AIMNet2-Pd</a> is currently suitable -- use DFT directly.</p>
+</div>
 <h2 id="how-spin-multiplicity-works">How Spin Multiplicity Works<a class="headerlink" href="#how-spin-multiplicity-works" title="Permanent link">&para;</a></h2>
 <p>AIMNet2-NSE accepts a <code>mult</code> parameter specifying the spin multiplicity (2S+1) of the system:</p>
 <table>

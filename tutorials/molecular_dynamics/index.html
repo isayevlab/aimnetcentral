@@ -1920,13 +1920,16 @@
 <span class="n">opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">fmax</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Optimized energy: </span><span class="si">{</span><span class="n">ethanol</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! note "What <code>compile_model=True</code> actually compiles" The <code>compile_model=True</code> flag wraps <strong>only the neural network forward pass</strong> with <code>torch.compile()</code>. The neighbor list construction, external Coulomb module, and external DFT-D3 module are <strong>not</strong> compiled. This means:</p>
-<pre><code>- The NN evaluation (the most expensive part) gets compiled and optimized
-- Neighbor lists are rebuilt every step as normal
-- External long-range corrections run uncompiled
-
-The speedup is typically 1.5--3x for the overall step, depending on system size and what fraction of time is spent in the NN.
-</code></pre>
+<div class="admonition note">
+<p class="admonition-title">What <code>compile_model=True</code> actually compiles</p>
+<p>The <code>compile_model=True</code> flag wraps <strong>only the neural network forward pass</strong> with <code>torch.compile()</code>. The neighbor list construction, external Coulomb module, and external DFT-D3 module are <strong>not</strong> compiled. This means:</p>
+<ul>
+<li>The NN evaluation (the most expensive part) gets compiled and optimized</li>
+<li>Neighbor lists are rebuilt every step as normal</li>
+<li>External long-range corrections run uncompiled</li>
+</ul>
+<p>The speedup is typically 1.5--3x for the overall step, depending on system size and what fraction of time is spent in the NN.</p>
+</div>
 <h2 id="step-2-nvt-simulation-with-langevin-thermostat">Step 2: NVT Simulation with Langevin Thermostat<a class="headerlink" href="#step-2-nvt-simulation-with-langevin-thermostat" title="Permanent link">&para;</a></h2>
 <p>NVT (constant number, volume, temperature) is the most common ensemble for studying molecular motion in vacuum or implicit solvent. ASE's Langevin thermostat couples the system to a heat bath with a friction term.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
@@ -1983,26 +1986,35 @@ The speedup is typically 1.5--3x for the overall step, depending on system size 
 
 <span class="n">traj</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 </code></pre></div>
-<p>!!! warning "First-step warmup" The very first MD step is significantly slower than subsequent steps because of two one-time costs:</p>
-<pre><code>1. **Warp kernel JIT compilation** (10--30 s): NVIDIA Warp compiles GPU
-   kernels on first use. These are cached on disk for future sessions.
-2. **torch.compile warmup** (if `compile_model=True`): The first forward
-   pass through the compiled model triggers tracing and optimization. This adds 5--30 s depending on model size.
-
-After the first step, typical step times for a 9-atom molecule on a modern GPU are 1--5 ms. Do not include the first step in performance benchmarks.
-</code></pre>
-<p>!!! tip "Timestep selection for ML potentials" ML potentials like AIMNet2 have smooth, continuous energy surfaces, so they tolerate slightly larger timesteps than ab initio MD. However, the safe range depends on the dynamics:</p>
-<pre><code>- **0.5 fs**: Conservative. Good starting point for any system.
-- **1.0 fs**: Suitable for equilibrium sampling of organic molecules when
-  hydrogen motion is not critical.
-- **&gt; 1.0 fs**: Not recommended without careful validation. ML potentials
-  do not have the constraint machinery of classical force fields.
-
-When in doubt, run a short trajectory at 0.5 fs and check energy conservation in NVE (see below).
-</code></pre>
+<div class="admonition warning">
+<p class="admonition-title">First-step warmup</p>
+<p>The very first MD step is significantly slower than subsequent steps because of two one-time costs:</p>
+<ol>
+<li><strong>Warp kernel JIT compilation</strong> (10--30 s): NVIDIA Warp compiles GPU
+   kernels on first use. These are cached on disk for future sessions.</li>
+<li><strong>torch.compile warmup</strong> (if <code>compile_model=True</code>): The first forward
+   pass through the compiled model triggers tracing and optimization. This adds 5--30 s depending on model size.</li>
+</ol>
+<p>After the first step, typical step times for a 9-atom molecule on a modern GPU are 1--5 ms. Do not include the first step in performance benchmarks.</p>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Timestep selection for ML potentials</p>
+<p>ML potentials like AIMNet2 have smooth, continuous energy surfaces, so they tolerate slightly larger timesteps than ab initio MD. However, the safe range depends on the dynamics:</p>
+<ul>
+<li><strong>0.5 fs</strong>: Conservative. Good starting point for any system.</li>
+<li><strong>1.0 fs</strong>: Suitable for equilibrium sampling of organic molecules when
+  hydrogen motion is not critical.</li>
+<li><strong>&gt; 1.0 fs</strong>: Not recommended without careful validation. ML potentials
+  do not have the constraint machinery of classical force fields.</li>
+</ul>
+<p>When in doubt, run a short trajectory at 0.5 fs and check energy conservation in NVE (see below).</p>
+</div>
 <h2 id="step-3-npt-simulation-with-berendsen-barostat">Step 3: NPT Simulation with Berendsen Barostat<a class="headerlink" href="#step-3-npt-simulation-with-berendsen-barostat" title="Permanent link">&para;</a></h2>
 <p>NPT (constant pressure) is needed for condensed-phase simulations where the volume should fluctuate. ASE provides the <code>NPT</code> integrator for this purpose.</p>
-<p>!!! note "NPT requires periodic boundary conditions" The Berendsen barostat adjusts the unit cell dimensions, which only makes sense for periodic systems. For an isolated molecule in vacuum, use NVT instead.</p>
+<div class="admonition note">
+<p class="admonition-title">NPT requires periodic boundary conditions</p>
+<p>The Berendsen barostat adjusts the unit cell dimensions, which only makes sense for periodic systems. For an isolated molecule in vacuum, use NVT instead.</p>
+</div>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase.md.npt</span><span class="w"> </span><span class="kn">import</span> <span class="n">NPT</span> <span class="k">as</span> <span class="n">NPTIntegrator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">ase.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">read</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">ase</span><span class="w"> </span><span class="kn">import</span> <span class="n">units</span>
@@ -2038,14 +2050,17 @@ When in doubt, run a short trajectory at 0.5 fs and check energy conservation in
 <span class="c1"># npt.run(steps=5000)</span>
 <span class="c1"># traj.close()</span>
 </code></pre></div>
-<p>!!! tip "Equilibration strategy for condensed-phase systems" For reliable results, follow a two-phase protocol:</p>
-<pre><code>1. **NVT equilibration** (1--5 ps): Let the temperature stabilize before
-   coupling the barostat. This prevents large pressure spikes from an initial geometry that is far from the equilibrium density.
-2. **NPT production** (10+ ps): Collect data for analysis after the
-   volume has stabilized.
-
-Monitor both temperature and volume/density over time to verify equilibration before collecting production data.
-</code></pre>
+<div class="admonition tip">
+<p class="admonition-title">Equilibration strategy for condensed-phase systems</p>
+<p>For reliable results, follow a two-phase protocol:</p>
+<ol>
+<li><strong>NVT equilibration</strong> (1--5 ps): Let the temperature stabilize before
+   coupling the barostat. This prevents large pressure spikes from an initial geometry that is far from the equilibrium density.</li>
+<li><strong>NPT production</strong> (10+ ps): Collect data for analysis after the
+   volume has stabilized.</li>
+</ol>
+<p>Monitor both temperature and volume/density over time to verify equilibration before collecting production data.</p>
+</div>
 <h2 id="step-4-validate-energy-conservation-nve-check">Step 4: Validate Energy Conservation (NVE Check)<a class="headerlink" href="#step-4-validate-energy-conservation-nve-check" title="Permanent link">&para;</a></h2>
 <p>Before trusting production results, verify that your timestep conserves energy in an NVE (microcanonical) ensemble. Energy drift should be small compared to the thermal energy fluctuations.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase.md.verlet</span><span class="w"> </span><span class="kn">import</span> <span class="n">VelocityVerlet</span>
@@ -2114,14 +2129,15 @@ Monitor both temperature and volume/density over time to verify equilibration be
 <span class="c1"># ana = Analysis(traj)</span>
 <span class="c1"># rdf = ana.get_rdf(rmax=10.0, nbins=200, elements=(&quot;O&quot;, &quot;H&quot;))</span>
 </code></pre></div>
-<p>!!! tip "For periodic systems" The simplified distance histogram above works for isolated molecules. For proper RDF analysis of periodic (condensed-phase) systems, use the ASE <code>Analysis</code> class which correctly handles periodic images:</p>
-<pre><code>```python
-from ase.geometry.analysis import Analysis
+<div class="admonition tip">
+<p class="admonition-title">For periodic systems</p>
+<p>The simplified distance histogram above works for isolated molecules. For proper RDF analysis of periodic (condensed-phase) systems, use the ASE <code>Analysis</code> class which correctly handles periodic images:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase.geometry.analysis</span><span class="w"> </span><span class="kn">import</span> <span class="n">Analysis</span>
 
-ana = Analysis(traj)
-rdf = ana.get_rdf(rmax=10.0, nbins=200)
-```
-</code></pre>
+<span class="n">ana</span> <span class="o">=</span> <span class="n">Analysis</span><span class="p">(</span><span class="n">traj</span><span class="p">)</span>
+<span class="n">rdf</span> <span class="o">=</span> <span class="n">ana</span><span class="o">.</span><span class="n">get_rdf</span><span class="p">(</span><span class="n">rmax</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">nbins</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
+</code></pre></div>
+</div>
 <h2 id="step-6-performance-tuning">Step 6: Performance Tuning<a class="headerlink" href="#step-6-performance-tuning" title="Permanent link">&para;</a></h2>
 <h3 id="benchmarking-correctly">Benchmarking Correctly<a class="headerlink" href="#benchmarking-correctly" title="Permanent link">&para;</a></h3>
 <p>Always synchronize the GPU before timing to get accurate measurements:</p>
@@ -2182,7 +2198,10 @@ rdf = ana.get_rdf(rmax=10.0, nbins=200)
 </tr>
 </tbody>
 </table>
-<p>!!! warning "Compilation and system size changes" <code>torch.compile</code> traces the computation graph for a specific tensor shape. If the system size changes (e.g., atoms are added or removed), the model will be recompiled. For MD of a fixed system this is not an issue, but avoid using <code>compile_model=True</code> for workflows that process molecules of varying sizes.</p>
+<div class="admonition warning">
+<p class="admonition-title">Compilation and system size changes</p>
+<p><code>torch.compile</code> traces the computation graph for a specific tensor shape. If the system size changes (e.g., atoms are added or removed), the model will be recompiled. For MD of a fixed system this is not an issue, but avoid using <code>compile_model=True</code> for workflows that process molecules of varying sizes.</p>
+</div>
 <h2 id="practical-recommendations">Practical Recommendations<a class="headerlink" href="#practical-recommendations" title="Permanent link">&para;</a></h2>
 <h3 id="timestep-guidelines">Timestep Guidelines<a class="headerlink" href="#timestep-guidelines" title="Permanent link">&para;</a></h3>
 <table>

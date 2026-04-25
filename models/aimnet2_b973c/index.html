@@ -1841,7 +1841,10 @@
 
 
 <h1 id="aimnet2-b97-3c">AIMNet2-B97-3c<a class="headerlink" href="#aimnet2-b97-3c" title="Permanent link">&para;</a></h1>
-<p>!!! warning "Superseded by AIMNet2-2025" This model has been superseded by <a href="../aimnet2_2025/">AIMNet2-2025</a>, which provides improved intermolecular interaction accuracy with no regression for intramolecular chemistry. <strong>Use <code>aimnet2_2025</code> for all new work.</strong> The original <code>aimnet2_b973c</code> is retained only for reproducing previously published results.</p>
+<div class="admonition warning">
+<p class="admonition-title">Superseded by AIMNet2-2025</p>
+<p>This model has been superseded by <a href="../aimnet2_2025/">AIMNet2-2025</a>, which provides improved intermolecular interaction accuracy with no regression for intramolecular chemistry. <strong>Use <code>aimnet2_2025</code> for all new work.</strong> The original <code>aimnet2_b973c</code> is retained only for reproducing previously published results.</p>
+</div>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
 <p>AIMNet2-B97-3c is the <strong>original B97-3c screening model</strong> trained against B97-3c reference data. B97-3c is a composite density functional designed for speed, combining the B97 GGA functional with a small basis set (def2-mTZVP) and geometric counterpoise corrections. While the reference level is less accurate than wB97M-D3, the resulting ML potential inherits different error characteristics that can be advantageous for rapid ranking and filtering tasks.</p>
 <p><strong>Supported elements:</strong> H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I (14 elements)</p>
@@ -1856,15 +1859,27 @@
 <li>Good for relative energy rankings in conformer searches and high-throughput workflows</li>
 </ul>
 <h3 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h3>
-<p>!!! warning "Lower reference accuracy" B97-3c is a GGA-level composite method. It is systematically less accurate than wB97M-D3 for barrier heights, reaction energies involving significant electron correlation changes, and non-covalent interaction energies. For higher accuracy, use <a href="../aimnet2/">AIMNet2 (wB97M-D3)</a>.</p>
-<p>!!! warning "Barrier heights" GGA functionals tend to underestimate reaction barriers. If accurate transition state energies are important, prefer the wB97M-D3 model or use <a href="../aimnet2nse/">AIMNet2-NSE</a> for open-shell transition states.</p>
-<p>!!! warning "Same scope restrictions as AIMNet2" No transition metals, closed-shell only, molecular (gas-phase) training data. See the <a href="../aimnet2/">AIMNet2 page</a> for the full list of limitations.</p>
+<div class="admonition warning">
+<p class="admonition-title">Lower reference accuracy</p>
+<p>B97-3c is a GGA-level composite method. It is systematically less accurate than wB97M-D3 for barrier heights, reaction energies involving significant electron correlation changes, and non-covalent interaction energies. For higher accuracy, use <a href="../aimnet2/">AIMNet2 (wB97M-D3)</a>.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Barrier heights</p>
+<p>GGA functionals tend to underestimate reaction barriers. If accurate transition state energies are important, prefer the wB97M-D3 model or use <a href="../aimnet2nse/">AIMNet2-NSE</a> for open-shell transition states.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Same scope restrictions as AIMNet2</p>
+<p>No transition metals, closed-shell only, molecular (gas-phase) training data. See the <a href="../aimnet2/">AIMNet2 page</a> for the full list of limitations.</p>
+</div>
 <h2 id="typical-use-cases">Typical Use Cases<a class="headerlink" href="#typical-use-cases" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Reproducing published results</strong> -- use when replicating calculations from papers that used <code>aimnet2_b973c</code></li>
 <li><strong>Cross-validation</strong> -- compare B97-3c and wB97M-D3 predictions to gauge sensitivity to the reference method</li>
 </ul>
-<p>!!! tip "For new projects, use AIMNet2-2025" For high-throughput screening, conformer ranking, and any new B97-3c-level work, switch to <a href="../aimnet2_2025/"><code>aimnet2_2025</code></a> which provides strictly better accuracy for the same computational cost.</p>
+<div class="admonition tip">
+<p class="admonition-title">For new projects, use AIMNet2-2025</p>
+<p>For high-throughput screening, conformer ranking, and any new B97-3c-level work, switch to <a href="../aimnet2_2025/"><code>aimnet2_2025</code></a> which provides strictly better accuracy for the same computational cost.</p>
+</div>
 <h2 id="quick-example">Quick Example<a class="headerlink" href="#quick-example" title="Permanent link">&para;</a></h2>
 <p>Ranking conformer energies for a flexible molecule:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>

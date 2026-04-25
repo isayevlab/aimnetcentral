@@ -1710,26 +1710,26 @@
 <h2 id="general-workflow">General workflow<a class="headerlink" href="#general-workflow" title="Permanent link">&para;</a></h2>
 <h3 id="dataset-preparation">Dataset preparation<a class="headerlink" href="#dataset-preparation" title="Permanent link">&para;</a></h3>
 <p>The training dataset must be formatted as an HDF5 file, with groups containing molecules of uniform size. For example, the dataset below contains 25,768 molecules with 28 atoms and 19,404 molecules with 29 atoms.</p>
-<div class="highlight"><pre><span></span><code>$ h5ls -r dataset.h5
-/028                     Group
-/028/charge              Dataset {25768}
-/028/charges             Dataset {25768, 28}
-/028/coord               Dataset {25768, 28, 3}
-/028/energy              Dataset {25768}
-/028/forces              Dataset {25768, 28, 3}
-/028/numbers             Dataset {25768, 28}
-/029                     Group
-/029/charge              Dataset {19404}
-/029/charges             Dataset {19404, 29}
-/029/coord               Dataset {19404, 29, 3}
-/029/energy              Dataset {19404}
-/029/forces              Dataset {19404, 29, 3}
-/029/numbers             Dataset {19404, 29}
+<div class="highlight"><pre><span></span><code>$<span class="w"> </span>h5ls<span class="w"> </span>-r<span class="w"> </span>dataset.h5
+/028<span class="w">                     </span>Group
+/028/charge<span class="w">              </span>Dataset<span class="w"> </span><span class="o">{</span><span class="m">25768</span><span class="o">}</span>
+/028/charges<span class="w">             </span>Dataset<span class="w"> </span><span class="o">{</span><span class="m">25768</span>,<span class="w"> </span><span class="m">28</span><span class="o">}</span>
+/028/coord<span class="w">               </span>Dataset<span class="w"> </span><span class="o">{</span><span class="m">25768</span>,<span class="w"> </span><span class="m">28</span>,<span class="w"> </span><span class="m">3</span><span class="o">}</span>
+/028/energy<span class="w">              </span>Dataset<span class="w"> </span><span class="o">{</span><span class="m">25768</span><span class="o">}</span>
+/028/forces<span class="w">              </span>Dataset<span class="w"> </span><span class="o">{</span><span class="m">25768</span>,<span class="w"> </span><span class="m">28</span>,<span class="w"> </span><span class="m">3</span><span class="o">}</span>
+/028/numbers<span class="w">             </span>Dataset<span class="w"> </span><span class="o">{</span><span class="m">25768</span>,<span class="w"> </span><span class="m">28</span><span class="o">}</span>
+/029<span class="w">                     </span>Group
+/029/charge<span class="w">              </span>Dataset<span class="w"> </span><span class="o">{</span><span class="m">19404</span><span class="o">}</span>
+/029/charges<span class="w">             </span>Dataset<span class="w"> </span><span class="o">{</span><span class="m">19404</span>,<span class="w"> </span><span class="m">29</span><span class="o">}</span>
+/029/coord<span class="w">               </span>Dataset<span class="w"> </span><span class="o">{</span><span class="m">19404</span>,<span class="w"> </span><span class="m">29</span>,<span class="w"> </span><span class="m">3</span><span class="o">}</span>
+/029/energy<span class="w">              </span>Dataset<span class="w"> </span><span class="o">{</span><span class="m">19404</span><span class="o">}</span>
+/029/forces<span class="w">              </span>Dataset<span class="w"> </span><span class="o">{</span><span class="m">19404</span>,<span class="w"> </span><span class="m">29</span>,<span class="w"> </span><span class="m">3</span><span class="o">}</span>
+/029/numbers<span class="w">             </span>Dataset<span class="w"> </span><span class="o">{</span><span class="m">19404</span>,<span class="w"> </span><span class="m">29</span><span class="o">}</span>
 </code></pre></div>
 <p>Units should be based on Angstrom, electron-volt, and electron charge.</p>
 <h3 id="training-configuration">Training Configuration<a class="headerlink" href="#training-configuration" title="Permanent link">&para;</a></h3>
 <p>To access available options for the training script execute the following command:</p>
-<div class="highlight"><pre><span></span><code>$ aimnet train --help
+<div class="highlight"><pre><span></span><code>$<span class="w"> </span>aimnet<span class="w"> </span>train<span class="w"> </span>--help
 </code></pre></div>
 <p>Key components for initiating training include:</p>
 <ul>
@@ -1743,7 +1743,7 @@
 <p><strong>Self-Atomic Energies File:</strong> This file can be generated using the following command:</p>
 </li>
 </ul>
-<div class="highlight"><pre><span></span><code>$ aimnet calc_sae dataset.h5 dataset_sae.yaml
+<div class="highlight"><pre><span></span><code>$<span class="w"> </span>aimnet<span class="w"> </span>calc_sae<span class="w"> </span>dataset.h5<span class="w"> </span>dataset_sae.yaml
 </code></pre></div>
 <h3 id="weights-biases-wb-logging">Weights &amp; Biases (W&amp;B) Logging<a class="headerlink" href="#weights-biases-wb-logging" title="Permanent link">&para;</a></h3>
 <p>The training script integrates with Weights &amp; Biases (W&amp;B), a platform for experiment tracking (free for personal and academic use). To monitor training progress, either a W&amp;B account or a local Docker-based W&amp;B server is necessary. By default, W&amp;B operates in offline mode.</p>
@@ -1751,31 +1751,31 @@
 <ul>
 <li><strong>Online Account:</strong></li>
 </ul>
-<div class="highlight"><pre><span></span><code>$ wandb login
+<div class="highlight"><pre><span></span><code>$<span class="w"> </span>wandb<span class="w"> </span>login
 </code></pre></div>
 <ul>
 <li><strong>Project and Entity Configuration:</strong> Create a configuration file (e.g., <code>extra_conf.yaml</code>) with your W&amp;B project and entity details:</li>
 </ul>
-<div class="highlight"><pre><span></span><code>wandb:
-  init:
-    mode: online
-    entity: your_username
-    project: your_project_name
+<div class="highlight"><pre><span></span><code><span class="nt">wandb</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">init</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">online</span>
+<span class="w">    </span><span class="nt">entity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">your_username</span>
+<span class="w">    </span><span class="nt">project</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">your_project_name</span>
 </code></pre></div>
 <p>Pass this configuration to the <code>aimnet train</code> command using the <code>--config</code> parameter.</p>
 <h3 id="launching-training">Launching Training<a class="headerlink" href="#launching-training" title="Permanent link">&para;</a></h3>
 <p>For optimal data loader performance, it is recommended to disable numpy multithreading:</p>
-<div class="highlight"><pre><span></span><code>$ export OMP_NUM_THREADS=1
+<div class="highlight"><pre><span></span><code>$<span class="w"> </span><span class="nb">export</span><span class="w"> </span><span class="nv">OMP_NUM_THREADS</span><span class="o">=</span><span class="m">1</span>
 </code></pre></div>
 <p>By default, training will utilize all available GPUs in a single-node, distributed data-parallel mode. To restrict training to a specific GPU (e.g., GPU 0):</p>
-<div class="highlight"><pre><span></span><code>$ export CUDA_VISIBLE_DEVICES=0
+<div class="highlight"><pre><span></span><code>$<span class="w"> </span><span class="nb">export</span><span class="w"> </span><span class="nv">CUDA_VISIBLE_DEVICES</span><span class="o">=</span><span class="m">0</span>
 </code></pre></div>
 <p>Finally, initiate the training script with default parameters and the specified <code>run_name</code>:</p>
-<div class="highlight"><pre><span></span><code>$ aimnet train data.train=dataset.h5 data.sae.energy.file=dataset_sae.yaml run_name=firstrun
+<div class="highlight"><pre><span></span><code>$<span class="w"> </span>aimnet<span class="w"> </span>train<span class="w"> </span>data.train<span class="o">=</span>dataset.h5<span class="w"> </span>data.sae.energy.file<span class="o">=</span>dataset_sae.yaml<span class="w"> </span><span class="nv">run_name</span><span class="o">=</span>firstrun
 </code></pre></div>
 <h3 id="model-export-for-distribution">Model Export for Distribution<a class="headerlink" href="#model-export-for-distribution" title="Permanent link">&para;</a></h3>
 <p>To export a trained model for distribution and use with AIMNet calculators:</p>
-<div class="highlight"><pre><span></span><code>$ aimnet export weights.pt model.pt --model config.yaml --sae model.sae
+<div class="highlight"><pre><span></span><code>$<span class="w"> </span>aimnet<span class="w"> </span><span class="nb">export</span><span class="w"> </span>weights.pt<span class="w"> </span>model.pt<span class="w"> </span>--model<span class="w"> </span>config.yaml<span class="w"> </span>--sae<span class="w"> </span>model.sae
 </code></pre></div>
 <p>Arguments:</p>
 <ul>
@@ -1879,7 +1879,7 @@
 <p>For legacy models, Coulomb and dispersion modules remain embedded in the model.</p>
 <h3 id="converting-legacy-jit-models">Converting Legacy JIT Models<a class="headerlink" href="#converting-legacy-jit-models" title="Permanent link">&para;</a></h3>
 <p>To convert existing <code>.jpt</code> models to the new format:</p>
-<div class="highlight"><pre><span></span><code>$ aimnet convert model.jpt config.yaml model_new.pt
+<div class="highlight"><pre><span></span><code>$<span class="w"> </span>aimnet<span class="w"> </span>convert<span class="w"> </span>model.jpt<span class="w"> </span>config.yaml<span class="w"> </span>model_new.pt
 </code></pre></div>
 <p>Arguments:</p>
 <ul>

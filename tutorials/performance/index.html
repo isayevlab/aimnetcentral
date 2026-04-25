@@ -2204,7 +2204,10 @@
     <span class="s2">&quot;charge&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
 <span class="p">},</span> <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! note Warp caches compiled kernels in <code>~/.cache/warp/</code> (or the directory set by <code>WARP_CACHE_PATH</code>). If you delete this cache, the next run will recompile.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Warp caches compiled kernels in <code>~/.cache/warp/</code> (or the directory set by <code>WARP_CACHE_PATH</code>). If you delete this cache, the next run will recompile.</p>
+</div>
 <h2 id="step-2-using-torchcompile-compile_model">Step 2: Using torch.compile (compile_model)<a class="headerlink" href="#step-2-using-torchcompile-compile_model" title="Permanent link">&para;</a></h2>
 <p>The <code>compile_model=True</code> parameter applies <code>torch.compile()</code> to the neural network forward pass:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Without compilation</span>
@@ -2247,19 +2250,20 @@
     <span class="n">compile_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;max-autotune&quot;</span><span class="p">},</span>
 <span class="p">)</span>
 </code></pre></div>
-<p>!!! warning "Do not use reduce-overhead with varying input sizes" The <code>reduce-overhead</code> mode uses CUDA graphs, which record a fixed execution pattern. If your input sizes vary between calls (different numbers of atoms or neighbors), this causes <strong>graph breaks</strong> and can actually slow things down or produce errors. Only use <code>reduce-overhead</code> when the system size is truly constant.</p>
-<pre><code>```python
-# AVOID for varying sizes
-calc = AIMNet2Calculator(
-    "aimnet2",
-    compile_model=True,
-    compile_kwargs={"mode": "reduce-overhead"},  # Bad for varying sizes
-)
+<div class="admonition warning">
+<p class="admonition-title">Do not use reduce-overhead with varying input sizes</p>
+<p>The <code>reduce-overhead</code> mode uses CUDA graphs, which record a fixed execution pattern. If your input sizes vary between calls (different numbers of atoms or neighbors), this causes <strong>graph breaks</strong> and can actually slow things down or produce errors. Only use <code>reduce-overhead</code> when the system size is truly constant.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># AVOID for varying sizes</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span>
+    <span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span>
+    <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">compile_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;reduce-overhead&quot;</span><span class="p">},</span>  <span class="c1"># Bad for varying sizes</span>
+<span class="p">)</span>
 
-# SAFE default
-calc = AIMNet2Calculator("aimnet2", compile_model=True)
-```
-</code></pre>
+<span class="c1"># SAFE default</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+</div>
 <h2 id="step-3-dense-vs-sparse-mode">Step 3: Dense vs Sparse Mode<a class="headerlink" href="#step-3-dense-vs-sparse-mode" title="Permanent link">&para;</a></h2>
 <p>The calculator automatically chooses between two execution modes based on system size, device, and PBC. Understanding this choice is key to performance tuning.</p>
 <h3 id="mode-selection-rules">Mode Selection Rules<a class="headerlink" href="#mode-selection-rules" title="Permanent link">&para;</a></h3>
@@ -2309,7 +2313,10 @@ calc = AIMNet2Calculator("aimnet2", compile_model=True)
 <span class="c1"># High-memory GPU (e.g., 40+ GB) -- stay in dense mode longer</span>
 <span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">nb_threshold</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! warning "Avoid crossing the dense/sparse boundary with torch.compile" If you use <code>compile_model=True</code>, make sure all your inputs consistently land in the same mode (all dense or all sparse). Crossing the boundary (e.g., some calls with 100 atoms in dense mode, others with 150 atoms in sparse mode) causes recompilation each time, negating the benefits. Set <code>nb_threshold</code> so that your typical workload stays in one mode.</p>
+<div class="admonition warning">
+<p class="admonition-title">Avoid crossing the dense/sparse boundary with torch.compile</p>
+<p>If you use <code>compile_model=True</code>, make sure all your inputs consistently land in the same mode (all dense or all sparse). Crossing the boundary (e.g., some calls with 100 atoms in dense mode, others with 150 atoms in sparse mode) causes recompilation each time, negating the benefits. Set <code>nb_threshold</code> so that your typical workload stays in one mode.</p>
+</div>
 <h2 id="step-4-gpu-memory-considerations">Step 4: GPU Memory Considerations<a class="headerlink" href="#step-4-gpu-memory-considerations" title="Permanent link">&para;</a></h2>
 <h3 id="adaptive-neighbor-list-growth">Adaptive Neighbor List Growth<a class="headerlink" href="#adaptive-neighbor-list-growth" title="Permanent link">&para;</a></h3>
 <p>The <code>AdaptiveNeighborList</code> starts with a buffer sized from an initial density estimate. If the actual number of neighbors exceeds the buffer, it <strong>grows by 1.5x</strong> and retries. This means:</p>
@@ -2320,7 +2327,10 @@ calc = AIMNet2Calculator("aimnet2", compile_model=True)
 </ul>
 <h3 id="hessian-memory">Hessian Memory<a class="headerlink" href="#hessian-memory" title="Permanent link">&para;</a></h3>
 <p>Hessian calculation requires O(N^2) memory because the full second-derivative matrix has shape <code>(N, 3, N, 3)</code>. For a 100-atom molecule, this is 100 x 3 x 100 x 3 = 90,000 float values (~360 KB in float32), and for 1000 atoms it becomes 1000 x 3 x 1000 x 3 = 9,000,000 values (~36 MB in float32).</p>
-<p>!!! warning Hessian computation is limited to <strong>single molecules</strong> and scales quadratically with atom count. For molecules larger than ~200 atoms, you may run out of GPU memory. Consider computing the Hessian on a CPU for large systems, or using finite-difference approaches for specific vibrational modes.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Hessian computation is limited to <strong>single molecules</strong> and scales quadratically with atom count. For molecules larger than ~200 atoms, you may run out of GPU memory. Consider computing the Hessian on a CPU for large systems, or using finite-difference approaches for specific vibrational modes.</p>
+</div>
 <h3 id="synchronization-points">Synchronization Points<a class="headerlink" href="#synchronization-points" title="Permanent link">&para;</a></h3>
 <p>The adaptive neighbor list contains one GPU-CPU synchronization point: <code>num_neighbors.max().item()</code> is called to determine the actual maximum neighbor count for trimming. This is a single <code>.item()</code> call per neighbor list computation (not per atom). For most workloads, this overhead is negligible compared to the NN forward pass.</p>
 <h2 id="step-5-benchmarking-correctly">Step 5: Benchmarking Correctly<a class="headerlink" href="#step-5-benchmarking-correctly" title="Permanent link">&para;</a></h2>
@@ -2390,7 +2400,10 @@ calc = AIMNet2Calculator("aimnet2", compile_model=True)
 <span class="c1"># CORRECT for inference (default)</span>
 <span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>  <span class="c1"># train=False by default</span>
 </code></pre></div>
-<p>!!! note <code>train=False</code> (the default) disables <code>requires_grad</code> on all model parameters. This reduces memory usage and improves <code>torch.compile</code> compatibility. The calculator still computes forces and Hessians correctly via autograd on the input coordinates.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code>train=False</code> (the default) disables <code>requires_grad</code> on all model parameters. This reduces memory usage and improves <code>torch.compile</code> compatibility. The calculator still computes forces and Hessians correctly via autograd on the input coordinates.</p>
+</div>
 <h3 id="do-not-use-multiple-gpus">Do Not Use Multiple GPUs<a class="headerlink" href="#do-not-use-multiple-gpus" title="Permanent link">&para;</a></h3>
 <p>AIMNet2 does not support multi-GPU execution (DataParallel or DistributedDataParallel). Use a single GPU per calculator instance. If you have multiple GPUs, run independent processes on each:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Process 1</span>

@@ -1738,14 +1738,17 @@
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Forces (eV/A):</span><span class="se">\n</span><span class="si">{</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;forces&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Partial charges (e): </span><span class="si">{</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;charges&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! note "First-run warmup" The very first calculation triggers two one-time costs:</p>
-<pre><code>1. **Warp kernel JIT compilation** (10--30 seconds): AIMNet2 uses NVIDIA Warp
-   for GPU-accelerated neighbor list and kernel operations. These kernels are compiled on first use and cached for subsequent runs.
-2. **Model weight download**: If this is your first time using a model name,
-   the weights are downloaded from the model registry.
-
-After the first run, subsequent calculations are fast.
-</code></pre>
+<div class="admonition note">
+<p class="admonition-title">First-run warmup</p>
+<p>The very first calculation triggers two one-time costs:</p>
+<ol>
+<li><strong>Warp kernel JIT compilation</strong> (10--30 seconds): AIMNet2 uses NVIDIA Warp
+   for GPU-accelerated neighbor list and kernel operations. These kernels are compiled on first use and cached for subsequent runs.</li>
+<li><strong>Model weight download</strong>: If this is your first time using a model name,
+   the weights are downloaded from the model registry.</li>
+</ol>
+<p>After the first run, subsequent calculations are fast.</p>
+</div>
 <h2 id="step-2-a-real-world-example-aspirin">Step 2: A Real-World Example --- Aspirin<a class="headerlink" href="#step-2-a-real-world-example-aspirin" title="Permanent link">&para;</a></h2>
 <p>Water is useful for testing, but let's work with something more relevant: aspirin (acetylsalicylic acid, C9H8O4, 21 atoms). This is a typical drug-like molecule that AIMNet2 handles routinely.</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Aspirin (C9H8O4) - 21 atoms</span>
@@ -1868,17 +1871,17 @@ After the first run, subsequent calculations are fast.
 <span class="n">hessian</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;hessian&quot;</span><span class="p">]</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Hessian shape: </span><span class="si">{</span><span class="n">hessian</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># (21, 3, 21, 3) for aspirin</span>
 </code></pre></div>
-<p>!!! tip "When to request each property" Only request what you need. Computing forces adds one backward pass. Computing the hessian adds <code>3N</code> backward passes (one per force component), so it becomes expensive for large molecules. The hessian is also limited to single-molecule calculations.</p>
-<pre><code>If you need to differentiate through the calculator from **outside** (e.g., wrapping it in an optimizer or computing a Hessian via `torch.autograd.functional.hessian`), pass `coord` as a tensor with `requires_grad=True` and use `forces=False`:
+<div class="admonition tip">
+<p class="admonition-title">When to request each property</p>
+<p>Only request what you need. Computing forces adds one backward pass. Computing the hessian adds <code>3N</code> backward passes (one per force component), so it becomes expensive for large molecules. The hessian is also limited to single-molecule calculations.</p>
+<p>If you need to differentiate through the calculator from <strong>outside</strong> (e.g., wrapping it in an optimizer or computing a Hessian via <code>torch.autograd.functional.hessian</code>), pass <code>coord</code> as a tensor with <code>requires_grad=True</code> and use <code>forces=False</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">energy_fn</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">calc</span><span class="p">({</span><span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="n">numbers</span><span class="p">,</span> <span class="s2">&quot;charge&quot;</span><span class="p">:</span> <span class="n">charge</span><span class="p">},</span> <span class="n">forces</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">out</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
 
-```python
-def energy_fn(x):
-    out = calc({"coord": x.unsqueeze(0), "numbers": numbers, "charge": charge}, forces=False)
-    return out["energy"][0]
-
-H = torch.autograd.functional.hessian(energy_fn, coords)
-```
-</code></pre>
+<span class="n">H</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">hessian</span><span class="p">(</span><span class="n">energy_fn</span><span class="p">,</span> <span class="n">coords</span><span class="p">)</span>
+</code></pre></div>
+</div>
 <h2 id="step-4-comparing-models">Step 4: Comparing Models<a class="headerlink" href="#step-4-comparing-models" title="Permanent link">&para;</a></h2>
 <p>AIMNet2 provides several models trained on different DFT functionals. Each is suitable for different chemistry. You can compare them on the same molecule to understand how model choice affects predictions:</p>
 <div class="highlight"><pre><span></span><code><span class="n">model_names</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="s2">&quot;aimnet2_b973c&quot;</span><span class="p">,</span> <span class="s2">&quot;aimnet2_2025&quot;</span><span class="p">]</span>
@@ -1899,7 +1902,10 @@ H = torch.autograd.functional.hessian(energy_fn, coords)
     <span class="n">f_max</span> <span class="o">=</span> <span class="n">res</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">:</span><span class="s2">&lt;20</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">e</span><span class="si">:</span><span class="s2">&gt;14.6f</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">f_max</span><span class="si">:</span><span class="s2">&gt;18.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! warning "Absolute energies differ between models" Different models use different DFT functionals as training targets, so their absolute energy scales are not comparable. <strong>Relative</strong> energies (e.g., conformer energy differences, reaction energies) are meaningful within the same model but should not be mixed across models.</p>
+<div class="admonition warning">
+<p class="admonition-title">Absolute energies differ between models</p>
+<p>Different models use different DFT functionals as training targets, so their absolute energy scales are not comparable. <strong>Relative</strong> energies (e.g., conformer energy differences, reaction energies) are meaningful within the same model but should not be mixed across models.</p>
+</div>
 <p>The available model aliases are:</p>
 <table>
 <thead>
@@ -1967,7 +1973,10 @@ H = torch.autograd.functional.hessian(energy_fn, coords)
 <span class="n">t1</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Average over 100 calls: </span><span class="si">{</span><span class="p">(</span><span class="n">t1</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">t0</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">100</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1000</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> ms&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! note "What <code>compile_model=True</code> does" This wraps the neural network forward pass with <code>torch.compile()</code>. It does <strong>not</strong> compile the neighbor list construction or the external Coulomb/DFTD3 modules. The benefit is greatest for repeated evaluations on the same system size, such as MD trajectories or geometry optimizations.</p>
+<div class="admonition note">
+<p class="admonition-title">What <code>compile_model=True</code> does</p>
+<p>This wraps the neural network forward pass with <code>torch.compile()</code>. It does <strong>not</strong> compile the neighbor list construction or the external Coulomb/DFTD3 modules. The benefit is greatest for repeated evaluations on the same system size, such as MD trajectories or geometry optimizations.</p>
+</div>
 <h2 id="whats-next">What's Next<a class="headerlink" href="#whats-next" title="Permanent link">&para;</a></h2>
 <p>Now that you can run single-point calculations, continue with:</p>
 <ul>

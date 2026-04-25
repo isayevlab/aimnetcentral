@@ -1857,11 +1857,26 @@
 <li>Validated on drug-like molecules, amino acids, and small organics</li>
 </ul>
 <h3 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h3>
-<p>!!! warning "No transition metals" AIMNet2 does not support any transition metal elements. For palladium chemistry, use <a href="../aimnet2pd/">AIMNet2-Pd</a>.</p>
-<p>!!! warning "Molecular systems only" The training data consists of molecular (gas-phase) structures. While periodic boundary conditions are supported computationally, the model has not been validated for bulk materials, surfaces, or extended solids.</p>
-<p>!!! warning "System size" Validated for systems up to approximately 100 heavy atoms. Larger systems may work but accuracy has not been systematically benchmarked beyond this range.</p>
-<p>!!! warning "Closed-shell only" This model assumes closed-shell electronic structure. For radicals, triplet states, or any system with unpaired electrons, use <a href="../aimnet2nse/">AIMNet2-NSE</a>.</p>
-<p>!!! warning "Single-reference DFT" Trained on single-determinant DFT data. Systems with strong multi-reference character (e.g., biradicals, stretched bonds near dissociation, certain transition states) may not be reliable.</p>
+<div class="admonition warning">
+<p class="admonition-title">No transition metals</p>
+<p>AIMNet2 does not support any transition metal elements. For palladium chemistry, use <a href="../aimnet2pd/">AIMNet2-Pd</a>.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Molecular systems only</p>
+<p>The training data consists of molecular (gas-phase) structures. While periodic boundary conditions are supported computationally, the model has not been validated for bulk materials, surfaces, or extended solids.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">System size</p>
+<p>Validated for systems up to approximately 100 heavy atoms. Larger systems may work but accuracy has not been systematically benchmarked beyond this range.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Closed-shell only</p>
+<p>This model assumes closed-shell electronic structure. For radicals, triplet states, or any system with unpaired electrons, use <a href="../aimnet2nse/">AIMNet2-NSE</a>.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Single-reference DFT</p>
+<p>Trained on single-determinant DFT data. Systems with strong multi-reference character (e.g., biradicals, stretched bonds near dissociation, certain transition states) may not be reliable.</p>
+</div>
 <h2 id="typical-use-cases">Typical Use Cases<a class="headerlink" href="#typical-use-cases" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Drug-like molecule energetics</strong> -- conformational energies, tautomer ranking, protonation states</li>

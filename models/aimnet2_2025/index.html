@@ -1819,7 +1819,10 @@
 
 
 <h1 id="aimnet2-2025">AIMNet2-2025<a class="headerlink" href="#aimnet2-2025" title="Permanent link">&para;</a></h1>
-<p>!!! tip "Recommended B97-3c Model" AIMNet2-2025 is the <strong>recommended B97-3c-level model</strong> and supersedes the original <a href="../aimnet2_b973c/">AIMNet2-B97-3c</a>. It provides improved intermolecular interaction accuracy with no regression for intramolecular chemistry. Use this model for all new work requiring a B97-3c reference level.</p>
+<div class="admonition tip">
+<p class="admonition-title">Recommended B97-3c Model</p>
+<p>AIMNet2-2025 is the <strong>recommended B97-3c-level model</strong> and supersedes the original <a href="../aimnet2_b973c/">AIMNet2-B97-3c</a>. It provides improved intermolecular interaction accuracy with no regression for intramolecular chemistry. Use this model for all new work requiring a B97-3c reference level.</p>
+</div>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
 <p>AIMNet2-2025 is the <strong>current-generation B97-3c model</strong>, combining the cost-effective B97-3c reference level with improved training for non-covalent chemistry. It supersedes the original AIMNet2-B97-3c (<code>aimnet2_b973c</code>) and is recommended for all applications: high-throughput screening, conformer ranking, binding energy calculations, and any workflow where B97-3c-level accuracy is appropriate.</p>
 <p><strong>Supported elements:</strong> H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I (14 elements)</p>
@@ -1835,9 +1838,18 @@
 <li>Recommended for any study where non-covalent interactions drive the chemistry</li>
 </ul>
 <h3 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h3>
-<p>!!! warning "B97-3c base level" The underlying reference data is at the B97-3c level. While intermolecular interactions are improved through enhanced training, the base functional limitations for intramolecular thermochemistry (e.g., barrier heights) remain. For general thermochemistry, prefer <a href="../aimnet2/">AIMNet2 (wB97M-D3)</a>.</p>
-<p>!!! warning "Non-covalent improvements may not transfer to all motifs" The improved intermolecular accuracy has been validated on common non-covalent interaction types. Unusual or exotic interaction motifs (e.g., halogen bonding with heavy halogens, aerogen bonding) may not benefit equally.</p>
-<p>!!! warning "Same scope restrictions" No transition metals, closed-shell only, molecular training data. See the <a href="../aimnet2/">AIMNet2 page</a> for the full list of limitations.</p>
+<div class="admonition warning">
+<p class="admonition-title">B97-3c base level</p>
+<p>The underlying reference data is at the B97-3c level. While intermolecular interactions are improved through enhanced training, the base functional limitations for intramolecular thermochemistry (e.g., barrier heights) remain. For general thermochemistry, prefer <a href="../aimnet2/">AIMNet2 (wB97M-D3)</a>.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Non-covalent improvements may not transfer to all motifs</p>
+<p>The improved intermolecular accuracy has been validated on common non-covalent interaction types. Unusual or exotic interaction motifs (e.g., halogen bonding with heavy halogens, aerogen bonding) may not benefit equally.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Same scope restrictions</p>
+<p>No transition metals, closed-shell only, molecular training data. See the <a href="../aimnet2/">AIMNet2 page</a> for the full list of limitations.</p>
+</div>
 <h2 id="typical-use-cases">Typical Use Cases<a class="headerlink" href="#typical-use-cases" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>General-purpose B97-3c calculations</strong> -- recommended replacement for <code>aimnet2_b973c</code> in all workflows</li>
@@ -1895,7 +1907,10 @@
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Binding energy: </span><span class="si">{</span><span class="n">binding_energy</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1000</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> meV&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Binding energy: </span><span class="si">{</span><span class="n">binding_energy</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">23.0609</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> kcal/mol&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! note "No BSSE correction needed" Unlike ab initio methods with finite basis sets, neural network potentials do not suffer from basis set superposition error (BSSE). The supramolecular approach (dimer minus monomers) directly gives the interaction energy without counterpoise correction.</p>
+<div class="admonition note">
+<p class="admonition-title">No BSSE correction needed</p>
+<p>Unlike ab initio methods with finite basis sets, neural network potentials do not suffer from basis set superposition error (BSSE). The supramolecular approach (dimer minus monomers) directly gives the interaction energy without counterpoise correction.</p>
+</div>
 <h3 id="ase-integration">ASE Integration<a class="headerlink" href="#ase-integration" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase.build</span><span class="w"> </span><span class="kn">import</span> <span class="n">molecule</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2ASE</span><span class="p">,</span> <span class="n">AIMNet2Calculator</span>

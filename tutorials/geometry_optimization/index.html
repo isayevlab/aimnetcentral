@@ -1754,15 +1754,16 @@
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Initial energy: </span><span class="si">{</span><span class="n">energy</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Max force: </span><span class="si">{</span><span class="nb">abs</span><span class="p">(</span><span class="n">forces</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> eV/A&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! tip "Accessing the underlying calculator" The ASE wrapper stores the <code>AIMNet2Calculator</code> as <code>calc.base_calc</code>. You can use this to configure model settings that are not exposed through the ASE interface:</p>
-<pre><code>```python
-# Switch long-range Coulomb method (for periodic systems)
-calc.base_calc.set_lrcoulomb_method("dsf")
+<div class="admonition tip">
+<p class="admonition-title">Accessing the underlying calculator</p>
+<p>The ASE wrapper stores the <code>AIMNet2Calculator</code> as <code>calc.base_calc</code>. You can use this to configure model settings that are not exposed through the ASE interface:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Switch long-range Coulomb method (for periodic systems)</span>
+<span class="n">calc</span><span class="o">.</span><span class="n">base_calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;dsf&quot;</span><span class="p">)</span>
 
-# Check what device the model is running on
-print(calc.base_calc.device)
-```
-</code></pre>
+<span class="c1"># Check what device the model is running on</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">calc</span><span class="o">.</span><span class="n">base_calc</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+</code></pre></div>
+</div>
 <h2 id="step-2-optimize-a-drug-molecule">Step 2: Optimize a Drug Molecule<a class="headerlink" href="#step-2-optimize-a-drug-molecule" title="Permanent link">&para;</a></h2>
 <p>Let's optimize aspirin (C9H8O4, 21 atoms) -- a small but realistic drug molecule. In practice, you would load coordinates from a file. Here we build the molecule directly to keep the tutorial self-contained.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase</span><span class="w"> </span><span class="kn">import</span> <span class="n">Atoms</span>
@@ -1803,7 +1804,10 @@ print(calc.base_calc.device)
 <span class="n">write</span><span class="p">(</span><span class="s2">&quot;aspirin_optimized.xyz&quot;</span><span class="p">,</span> <span class="n">aspirin</span><span class="p">)</span>
 </code></pre></div>
 <p>The <code>fmax</code> parameter controls the convergence criterion: the optimization stops when the maximum atomic force magnitude (i.e., the largest per-atom force norm sqrt(fx^2+fy^2+fz^2)) drops below this threshold. A value of 0.01 eV/A is a reasonable default for most applications.</p>
-<p>!!! note "Why BFGS?" BFGS (Broyden--Fletcher--Goldfarb--Shanno) builds an approximate Hessian from force evaluations, giving superlinear convergence near the minimum. ASE also provides <code>LBFGS</code> (lower memory for large systems) and <code>FIRE</code> (robust for far-from-minimum starting geometries). For most molecules under ~200 atoms, <code>BFGS</code> is the best choice.</p>
+<div class="admonition note">
+<p class="admonition-title">Why BFGS?</p>
+<p>BFGS (Broyden--Fletcher--Goldfarb--Shanno) builds an approximate Hessian from force evaluations, giving superlinear convergence near the minimum. ASE also provides <code>LBFGS</code> (lower memory for large systems) and <code>FIRE</code> (robust for far-from-minimum starting geometries). For most molecules under ~200 atoms, <code>BFGS</code> is the best choice.</p>
+</div>
 <h2 id="step-3-monitor-convergence">Step 3: Monitor Convergence<a class="headerlink" href="#step-3-monitor-convergence" title="Permanent link">&para;</a></h2>
 <p>Inspecting the optimization trajectory helps verify that the optimization converged smoothly and didn't get stuck in a transition state or saddle point.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">read</span>
@@ -1819,14 +1823,18 @@ print(calc.base_calc.device)
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s2">4d</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="n">e</span><span class="si">:</span><span class="s2">14.6f</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="n">f_max</span><span class="si">:</span><span class="s2">16.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
 <p>You should see the energy decrease monotonically (or nearly so) and the maximum force drop toward your <code>fmax</code> threshold.</p>
-<p>!!! warning "Convergence issues" If the optimization oscillates or takes more than ~100 steps for a molecule under 50 atoms, check:</p>
-<pre><code>1. **Starting geometry**: Very distorted structures may need `FIRE` instead
-   of `BFGS` for the first phase.
-2. **Charge**: An incorrect net charge leads to wrong forces. Verify with
-   `calc.charge`.
-3. **Multiplicity**: For open-shell systems, use `AIMNet2ASE("aimnet2nse")`
-   and set `mult` appropriately.
-</code></pre>
+<div class="admonition warning">
+<p class="admonition-title">Convergence issues</p>
+<p>If the optimization oscillates or takes more than ~100 steps for a molecule under 50 atoms, check:</p>
+<ol>
+<li><strong>Starting geometry</strong>: Very distorted structures may need <code>FIRE</code> instead
+   of <code>BFGS</code> for the first phase.</li>
+<li><strong>Charge</strong>: An incorrect net charge leads to wrong forces. Verify with
+   <code>calc.charge</code>.</li>
+<li><strong>Multiplicity</strong>: For open-shell systems, use <code>AIMNet2ASE("aimnet2nse")</code>
+   and set <code>mult</code> appropriately.</li>
+</ol>
+</div>
 <h2 id="step-4-verify-the-minimum-with-frequency-analysis">Step 4: Verify the Minimum with Frequency Analysis<a class="headerlink" href="#step-4-verify-the-minimum-with-frequency-analysis" title="Permanent link">&para;</a></h2>
 <p>A structure is a true energy minimum only if all vibrational frequencies are real (positive). Imaginary frequencies indicate a saddle point or transition state. We compute frequencies from the Hessian matrix.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -1888,7 +1896,10 @@ print(calc.base_calc.device)
 <span class="k">else</span><span class="p">:</span>
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">WARNING: </span><span class="si">{</span><span class="n">n_imaginary</span><span class="si">}</span><span class="s2"> imaginary frequency(ies) found -&gt; not a minimum&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! warning "Hessian limitations" The Hessian calculation in AIMNet2 is limited to <strong>single molecules</strong> and scales as O(N^2) in memory. It is practical for molecules up to roughly 200 atoms. For larger systems, use finite-difference approaches or specialized phonon tools.</p>
+<div class="admonition warning">
+<p class="admonition-title">Hessian limitations</p>
+<p>The Hessian calculation in AIMNet2 is limited to <strong>single molecules</strong> and scales as O(N^2) in memory. It is practical for molecules up to roughly 200 atoms. For larger systems, use finite-difference approaches or specialized phonon tools.</p>
+</div>
 <h2 id="step-5-thermochemistry-from-frequencies">Step 5: Thermochemistry from Frequencies<a class="headerlink" href="#step-5-thermochemistry-from-frequencies" title="Permanent link">&para;</a></h2>
 <p>Once you have confirmed a true minimum (all real frequencies), you can compute thermochemical quantities -- enthalpy and Gibbs free energy corrections -- using ASE's <code>IdealGasThermo</code> module.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase.thermochemistry</span><span class="w"> </span><span class="kn">import</span> <span class="n">IdealGasThermo</span>
@@ -1929,13 +1940,13 @@ print(calc.base_calc.device)
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;-T*S contribution:     </span><span class="si">{</span><span class="p">(</span><span class="n">G</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">H</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">23.0609</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> kcal/mol&quot;</span><span class="p">)</span>
 </code></pre></div>
 <p>This workflow -- optimize, compute Hessian, extract thermochemistry -- is the standard approach for obtaining reaction enthalpies and free energies with AIMNet2.</p>
-<p>!!! tip "Thermochemistry for reactions" To compute a reaction enthalpy Delta_H, run this workflow for each reactant and product separately, then take the difference:</p>
-<pre><code>```
-Delta_H = sum(H_products) - sum(H_reactants)
-```
-
-The same applies for Delta_G. Make sure all structures are true minima (no imaginary frequencies) before computing differences.
-</code></pre>
+<div class="admonition tip">
+<p class="admonition-title">Thermochemistry for reactions</p>
+<p>To compute a reaction enthalpy Delta_H, run this workflow for each reactant and product separately, then take the difference:</p>
+<div class="highlight"><pre><span></span><code>Delta_H = sum(H_products) - sum(H_reactants)
+</code></pre></div>
+<p>The same applies for Delta_G. Make sure all structures are true minima (no imaginary frequencies) before computing differences.</p>
+</div>
 <h2 id="step-6-scaling-up-larger-molecules">Step 6: Scaling Up -- Larger Molecules<a class="headerlink" href="#step-6-scaling-up-larger-molecules" title="Permanent link">&para;</a></h2>
 <p>For molecules approaching 100+ atoms, consider these adjustments:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">read</span>
@@ -1955,7 +1966,14 @@ The same applies for Delta_G. Make sure all structures are true minima (no imagi
 <span class="c1"># opt = LBFGS(atoms, trajectory=&quot;taxol_opt.traj&quot;)</span>
 <span class="c1"># opt.run(fmax=0.01)</span>
 </code></pre></div>
-<p>!!! note "Practical size limits" - <strong>Geometry optimization</strong> works well up to thousands of atoms. - <strong>Hessian computation</strong> is practical up to ~200 atoms due to O(N^2) memory scaling (the full Hessian for 200 atoms requires 200 x 3 x 200 x 3 = 360,000 elements). - For larger systems needing frequencies, use finite-difference approaches with a displacement step.</p>
+<div class="admonition note">
+<p class="admonition-title">Practical size limits</p>
+<ul>
+<li><strong>Geometry optimization</strong> works well up to thousands of atoms.</li>
+<li><strong>Hessian computation</strong> is practical up to ~200 atoms due to O(N^2) memory scaling (the full Hessian for 200 atoms requires 200 x 3 x 200 x 3 = 360,000 elements).</li>
+<li>For larger systems needing frequencies, use finite-difference approaches with a displacement step.</li>
+</ul>
+</div>
 <h2 id="whats-next">What's Next<a class="headerlink" href="#whats-next" title="Permanent link">&para;</a></h2>
 <p>With optimized structures in hand, you can proceed to:</p>
 <ul>

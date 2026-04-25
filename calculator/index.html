@@ -1324,6 +1324,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#train" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        train
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#ensemble_member" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2609,6 +2620,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#train" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        train
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#ensemble_member" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3448,6 +3470,7 @@
     <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">compile_model</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">compile_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">train</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">ensemble_member</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
     <span class="n">revision</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">token</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -3626,6 +3649,27 @@
 <span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">compile_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;reduce-overhead&quot;</span><span class="p">})</span>
 </code></pre></div>
 <p>See <a href="https://pytorch.org/docs/stable/generated/torch.compile.html">torch.compile documentation</a> for available options.</p>
+<h4 id="train"><code>train</code><a class="headerlink" href="#train" title="Permanent link">&para;</a></h4>
+<p>Whether to put the model in training mode. Default: <code>False</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>False</code> (default)</td>
+<td>Inference mode: model set to <code>.eval()</code>, all parameters set to <code>requires_grad_(False)</code></td>
+</tr>
+<tr>
+<td><code>True</code></td>
+<td>Training mode: model set to <code>.train()</code>, parameters keep <code>requires_grad</code></td>
+</tr>
+</tbody>
+</table>
+<p>For ordinary energy/force/charge inference (including external autograd through the calculator), leave this <code>False</code>. Set <code>True</code> only when using the calculator inside a training loop where model parameters need gradients.</p>
 <h4 id="ensemble_member"><code>ensemble_member</code><a class="headerlink" href="#ensemble_member" title="Permanent link">&para;</a></h4>
 <p>Which ensemble member to load when loading from a Hugging Face repo. Default: <code>0</code>.</p>
 <p>Ensemble members are indexed 0–3. Only applies when <code>model</code> is a HF repo ID or a local HF-style directory (containing <code>config.json</code> + <code>ensemble_N.safetensors</code>).</p>

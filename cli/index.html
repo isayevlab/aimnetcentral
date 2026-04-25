@@ -1524,10 +1524,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#creating-single-atom-dataset" class="md-nav__link">
+  <a href="#how-sae-is-computed" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Creating Single-Atom Dataset
+        How SAE Is Computed
       
     </span>
   </a>
@@ -2120,10 +2120,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#creating-single-atom-dataset" class="md-nav__link">
+  <a href="#how-sae-is-computed" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Creating Single-Atom Dataset
+        How SAE Is Computed
       
     </span>
   </a>
@@ -2282,7 +2282,7 @@
 <div class="highlight"><pre><span></span><code>aimnet<span class="w"> </span>train<span class="w"> </span>--config<span class="w"> </span>config.yaml<span class="w"> </span>--model<span class="w"> </span>model.yaml
 </code></pre></div>
 <h3 id="options">Options<a class="headerlink" href="#options" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code>aimnet<span class="w"> </span>train<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="highlight"><pre><span></span><code>aimnet<span class="w"> </span>train<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span><span class="w"> </span><span class="o">[</span>ARGS<span class="o">]</span>...
 </code></pre></div>
 <table>
 <thead>
@@ -2295,26 +2295,38 @@
 <tbody>
 <tr>
 <td><code>--config PATH</code></td>
-<td>Required</td>
-<td>Training configuration YAML file</td>
+<td>Optional</td>
+<td>Extra training configuration YAML (may be passed multiple times; merged over the default)</td>
 </tr>
 <tr>
 <td><code>--model PATH</code></td>
-<td>Required</td>
-<td>Model architecture YAML file</td>
+<td>Optional</td>
+<td>Model architecture YAML (defaults to bundled <code>aimnet/models/aimnet2.yaml</code>)</td>
 </tr>
 <tr>
-<td><code>--resume PATH</code></td>
+<td><code>--load PATH</code></td>
 <td>Optional</td>
-<td>Resume from checkpoint</td>
+<td>Path to existing model weights to load before training</td>
 </tr>
 <tr>
-<td><code>--device DEVICE</code></td>
+<td><code>--save PATH</code></td>
 <td>Optional</td>
-<td>Device to use (cuda/cpu)</td>
+<td>Path to save model weights</td>
+</tr>
+<tr>
+<td><code>--no-default-config</code></td>
+<td>Flag</td>
+<td>Skip loading <code>aimnet/train/default_train.yaml</code></td>
+</tr>
+<tr>
+<td><code>ARGS</code></td>
+<td>Variadic</td>
+<td>Dot-separated overrides applied last (e.g., <code>data.train=mydata.h5 run_name=firstrun</code>)</td>
 </tr>
 </tbody>
 </table>
+<p>Trailing tokens after the named options (<code>ARGS</code>) are positional dot-form overrides into the merged training config — they are not flags.</p>
+<p>Device selection is controlled via <code>CUDA_VISIBLE_DEVICES</code>; training uses all visible GPUs in DDP mode.</p>
 <h3 id="example-configuration">Example Configuration<a class="headerlink" href="#example-configuration" title="Permanent link">&para;</a></h3>
 <p>Training requires two YAML files:</p>
 <p><strong>config.yaml</strong> (training parameters):</p>
@@ -2346,17 +2358,17 @@
 <span class="w">      </span><span class="c1"># ... output configuration</span>
 </code></pre></div>
 <h3 id="complete-example">Complete Example<a class="headerlink" href="#complete-example" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><span class="c1"># Train with W&amp;B logging</span>
+<div class="highlight"><pre><span></span><code><span class="c1"># Train with W&amp;B logging (GPU controlled via CUDA_VISIBLE_DEVICES)</span>
 aimnet<span class="w"> </span>train<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--config<span class="w"> </span>experiments/train_config.yaml<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--model<span class="w"> </span>models/aimnet2.yaml<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--device<span class="w"> </span>cuda
+<span class="w">  </span>--model<span class="w"> </span>models/aimnet2.yaml
 
-<span class="c1"># Resume training</span>
+<span class="c1"># Continue from existing weights</span>
 aimnet<span class="w"> </span>train<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--config<span class="w"> </span>experiments/train_config.yaml<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--model<span class="w"> </span>models/aimnet2.yaml<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--resume<span class="w"> </span>checkpoints/last.pt
+<span class="w">  </span>--load<span class="w"> </span>checkpoints/last.pt<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--save<span class="w"> </span>checkpoints/continued.pt
 </code></pre></div>
 <p>See <a href="../train/">train.md</a> for detailed training documentation.</p>
 <h2 id="aimnet-export">aimnet export<a class="headerlink" href="#aimnet-export" title="Permanent link">&para;</a></h2>
@@ -2504,12 +2516,12 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;<
 </code></pre></div>
 <p>See <a href="../model_format/#migration-guide">model_format.md</a> for detailed migration guide.</p>
 <h2 id="aimnet-calc_sae">aimnet calc_sae<a class="headerlink" href="#aimnet-calc_sae" title="Permanent link">&para;</a></h2>
-<p>Calculate self-atomic energies (SAE) from a dataset.</p>
+<p>Calculate self-atomic energies (SAE) from a dataset by fitting a per-element energy shift to the training data.</p>
 <h3 id="basic-usage_3">Basic Usage<a class="headerlink" href="#basic-usage_3" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code>aimnet<span class="w"> </span>calc_sae<span class="w"> </span>dataset.h5<span class="w"> </span>output_sae.yaml
 </code></pre></div>
 <h3 id="options_3">Options<a class="headerlink" href="#options_3" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code>aimnet<span class="w"> </span>calc_sae<span class="w"> </span>INPUT<span class="w"> </span>OUTPUT<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="highlight"><pre><span></span><code>aimnet<span class="w"> </span>calc_sae<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span><span class="w"> </span>DS<span class="w"> </span>OUTPUT
 </code></pre></div>
 <p><strong>Positional Arguments:</strong></p>
 <table>
@@ -2521,12 +2533,12 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;<
 </thead>
 <tbody>
 <tr>
-<td><code>INPUT</code></td>
-<td>HDF5 dataset with single-atom energies</td>
+<td><code>DS</code></td>
+<td>HDF5 dataset (<code>SizeGroupedDataset</code> layout) containing <code>numbers</code> and <code>energy</code></td>
 </tr>
 <tr>
 <td><code>OUTPUT</code></td>
-<td>Output YAML file for SAE values</td>
+<td>Output YAML file for fitted SAE values</td>
 </tr>
 </tbody>
 </table>
@@ -2535,13 +2547,17 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;<
 <thead>
 <tr>
 <th>Option</th>
+<th>Type</th>
+<th>Default</th>
 <th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>--elements LIST</code></td>
-<td>Comma-separated atomic numbers (e.g., "1,6,7,8")</td>
+<td><code>--samples</code></td>
+<td>int</td>
+<td>100000</td>
+<td>Maximum number of dataset samples used for the fit</td>
 </tr>
 </tbody>
 </table>
@@ -2554,37 +2570,25 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;<
 <span class="nt">8</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-2039.734</span><span class="w"> </span><span class="c1"># Oxygen</span>
 </code></pre></div>
 <h3 id="example_1">Example<a class="headerlink" href="#example_1" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><span class="c1"># Calculate SAE for H, C, N, O</span>
+<div class="highlight"><pre><span></span><code><span class="c1"># Fit SAE from the training dataset (uses up to 100k samples by default)</span>
 aimnet<span class="w"> </span>calc_sae<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>data/single_atoms.h5<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>data/dataset.h5<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>configs/sae.yaml
+
+<span class="c1"># Limit the number of samples used for the fit</span>
+aimnet<span class="w"> </span>calc_sae<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>data/dataset.h5<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>configs/sae.yaml<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--elements<span class="w"> </span><span class="s2">&quot;1,6,7,8&quot;</span>
+<span class="w">  </span>--samples<span class="w"> </span><span class="m">50000</span>
 
 <span class="c1"># Use in training</span>
 aimnet<span class="w"> </span>train<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--config<span class="w"> </span>train_config.yaml<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--model<span class="w"> </span>model.yaml
-<span class="w">  </span><span class="c1"># SAE loaded from train_config</span>
+<span class="w">  </span>--model<span class="w"> </span>model.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>data.sae.energy.file<span class="o">=</span>configs/sae.yaml
 </code></pre></div>
-<h3 id="creating-single-atom-dataset">Creating Single-Atom Dataset<a class="headerlink" href="#creating-single-atom-dataset" title="Permanent link">&para;</a></h3>
-<p>SAE calculation requires single-atom reference calculations:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">h5py</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-
-<span class="c1"># Single-atom energies from reference calculations (e.g., DFT)</span>
-<span class="n">sae_data</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="mi">1</span><span class="p">:</span> <span class="o">-</span><span class="mf">13.587</span><span class="p">,</span>   <span class="c1"># H atom energy</span>
-    <span class="mi">6</span><span class="p">:</span> <span class="o">-</span><span class="mf">1027.592</span><span class="p">,</span> <span class="c1"># C atom energy</span>
-    <span class="c1"># ... more elements</span>
-<span class="p">}</span>
-
-<span class="c1"># Create HDF5 dataset</span>
-<span class="k">with</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="s2">&quot;single_atoms.h5&quot;</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-    <span class="k">for</span> <span class="n">z</span><span class="p">,</span> <span class="n">energy</span> <span class="ow">in</span> <span class="n">sae_data</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-        <span class="n">grp</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;atom_</span><span class="si">{</span><span class="n">z</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="n">grp</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">energy</span>
-        <span class="n">grp</span><span class="p">[</span><span class="s2">&quot;numbers&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">z</span><span class="p">]</span>
-</code></pre></div>
+<h3 id="how-sae-is-computed">How SAE Is Computed<a class="headerlink" href="#how-sae-is-computed" title="Permanent link">&para;</a></h3>
+<p><code>aimnet calc_sae</code> does not require a separate single-atom dataset. It operates on the same <code>SizeGroupedDataset</code> HDF5 file used for training, fits a per-element energy shift via a least-squares regression on <code>(numbers, energy)</code>, trims outliers (2nd/98th percentiles of the residual), and refits. The element list is inferred automatically from the dataset.</p>
 <h2 id="common-workflows">Common Workflows<a class="headerlink" href="#common-workflows" title="Permanent link">&para;</a></h2>
 <h3 id="complete-training-workflow">Complete Training Workflow<a class="headerlink" href="#complete-training-workflow" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="c1"># 1. Calculate SAE</span>

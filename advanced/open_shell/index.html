@@ -1812,7 +1812,10 @@
 </ul>
 <h2 id="why-closed-shell-models-fail-for-radicals">Why Closed-Shell Models Fail for Radicals<a class="headerlink" href="#why-closed-shell-models-fail-for-radicals" title="Permanent link">&para;</a></h2>
 <p>Standard AIMNet2 models (<code>aimnet2</code>, <code>aimnet2_b973c</code>, <code>aimnet2_2025</code>) use a single charge channel internally (<code>num_charge_channels=1</code>). This means the model predicts one set of atomic partial charges and implicitly assumes all electrons are paired. When applied to a radical -- a species with one or more unpaired electrons -- the model has no mechanism to represent the spin density distribution and produces unreliable energies and forces.</p>
-<p>!!! warning "Do not use closed-shell models for open-shell systems" Applying <code>aimnet2</code> to a doublet radical or triplet state will silently produce results that look reasonable but have large systematic errors. Always use <code>aimnet2nse</code> when unpaired electrons are present.</p>
+<div class="admonition warning">
+<p class="admonition-title">Do not use closed-shell models for open-shell systems</p>
+<p>Applying <code>aimnet2</code> to a doublet radical or triplet state will silently produce results that look reasonable but have large systematic errors. Always use <code>aimnet2nse</code> when unpaired electrons are present.</p>
+</div>
 <p>Common symptoms of using the wrong model:</p>
 <ul>
 <li>Bond dissociation energies that are off by 10-30 kcal/mol</li>
@@ -1898,7 +1901,10 @@
 <span class="c1"># Change multiplicity later</span>
 <span class="n">calc</span><span class="o">.</span><span class="n">set_mult</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>  <span class="c1"># Switch to triplet</span>
 </code></pre></div>
-<p>!!! note "Default multiplicity" If <code>mult</code> is not provided, the calculator defaults to <code>mult=1</code> (singlet). For closed-shell molecules with <code>aimnet2nse</code>, this is correct and the model reduces to standard behavior. You do not need to switch models for closed-shell species.</p>
+<div class="admonition note">
+<p class="admonition-title">Default multiplicity</p>
+<p>If <code>mult</code> is not provided, the calculator defaults to <code>mult=1</code> (singlet). For closed-shell molecules with <code>aimnet2nse</code>, this is correct and the model reduces to standard behavior. You do not need to switch models for closed-shell species.</p>
+</div>
 <h2 id="worked-example-c-h-bond-dissociation-energy">Worked Example: C-H Bond Dissociation Energy<a class="headerlink" href="#worked-example-c-h-bond-dissociation-energy" title="Permanent link">&para;</a></h2>
 <p>Bond dissociation energy (BDE) measures the energy required to break a bond homolytically, producing two radical fragments. This is a fundamental test for open-shell models because it requires accurate energies for both the parent molecule and the radical products.</p>
 <p>For toluene (C6H5-CH3), breaking a benzylic C-H bond:</p>
@@ -1967,11 +1973,12 @@
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Benzylic C-H BDE:     </span><span class="si">{</span><span class="n">BDE_kcal</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> kcal/mol&quot;</span><span class="p">)</span>
 <span class="c1"># Expected: ~90 kcal/mol (experimental: 89.8 kcal/mol)</span>
 </code></pre></div>
-<p>!!! warning "Zero-point energy corrections" The BDE values computed above are purely electronic (Delta E_e). For thermochemically accurate results, include zero-point energy (ZPE) corrections by computing the Hessian at each optimized geometry and extracting harmonic frequencies. The ZPE-corrected BDE is:</p>
-<pre><code>BDE_0 = E(radical1) + E(radical2) - E(molecule) + ZPE(radical1) + ZPE(radical2) - ZPE(molecule)
-
-See the [Geometry Optimization tutorial](../tutorials/geometry_optimization.md) for thermochemistry workflows using `ase.thermochemistry.IdealGasThermo`.
-</code></pre>
+<div class="admonition warning">
+<p class="admonition-title">Zero-point energy corrections</p>
+<p>The BDE values computed above are purely electronic (Delta E_e). For thermochemically accurate results, include zero-point energy (ZPE) corrections by computing the Hessian at each optimized geometry and extracting harmonic frequencies. The ZPE-corrected BDE is:</p>
+<p>BDE_0 = E(radical1) + E(radical2) - E(molecule) + ZPE(radical1) + ZPE(radical2) - ZPE(molecule)</p>
+<p>See the <a href="../../tutorials/geometry_optimization/">Geometry Optimization tutorial</a> for thermochemistry workflows using <code>ase.thermochemistry.IdealGasThermo</code>.</p>
+</div>
 <h2 id="radical-stability-ordering">Radical Stability Ordering<a class="headerlink" href="#radical-stability-ordering" title="Permanent link">&para;</a></h2>
 <p>A key validation for any open-shell method is reproducing the correct stability ordering of radicals. More stable radicals have lower BDEs. For carbon radicals, the expected order is:</p>
 <p>methyl &lt; primary &lt; secondary &lt; tertiary &lt; allyl &lt; benzyl</p>
@@ -2049,7 +2056,10 @@ See the [Geometry Optimization tutorial](../tutorials/geometry_optimization.md) 
 
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Energy difference: </span><span class="si">{</span><span class="nb">abs</span><span class="p">(</span><span class="n">E_closed</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">E_nse</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">23.0609</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> kcal/mol&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! tip "When in doubt, use aimnet2nse" The NSE model handles closed-shell species correctly (mult=1 reduces to standard behavior). If your workflow involves a mix of closed-shell and open-shell species -- for example, computing BDEs -- use <code>aimnet2nse</code> throughout for consistent energetics.</p>
+<div class="admonition tip">
+<p class="admonition-title">When in doubt, use aimnet2nse</p>
+<p>The NSE model handles closed-shell species correctly (mult=1 reduces to standard behavior). If your workflow involves a mix of closed-shell and open-shell species -- for example, computing BDEs -- use <code>aimnet2nse</code> throughout for consistent energetics.</p>
+</div>
 <h2 id="when-to-fall-back-to-multi-reference-methods">When to Fall Back to Multi-Reference Methods<a class="headerlink" href="#when-to-fall-back-to-multi-reference-methods" title="Permanent link">&para;</a></h2>
 <p>AIMNet2-NSE handles most radical chemistry well, but certain electronic structure situations are beyond the reach of any single-reference method (including both AIMNet2 and standard DFT):</p>
 <p><strong>Multi-reference cases (use multi-configurational methods such as CASSCF, CASPT2, MRCI, or NEVPT2):</strong></p>
@@ -2066,7 +2076,10 @@ See the [Geometry Optimization tutorial](../tutorials/geometry_optimization.md) 
 <li>Energy differences between spin states are unexpectedly small</li>
 <li>The system has low-lying excited states (check literature)</li>
 </ul>
-<p>!!! info "Recommendation" For routine radical chemistry -- organic radical stability, BDEs, H-atom abstractions, radical additions -- AIMNet2-NSE is reliable and orders of magnitude faster than DFT. Reserve multi-reference methods (CASSCF, CASPT2, MRCI, NEVPT2) for the specific pathological cases listed above. Note that standard DFT is also a single-reference method and will fail for the same multi-reference cases.</p>
+<div class="admonition info">
+<p class="admonition-title">Recommendation</p>
+<p>For routine radical chemistry -- organic radical stability, BDEs, H-atom abstractions, radical additions -- AIMNet2-NSE is reliable and orders of magnitude faster than DFT. Reserve multi-reference methods (CASSCF, CASPT2, MRCI, NEVPT2) for the specific pathological cases listed above. Note that standard DFT is also a single-reference method and will fail for the same multi-reference cases.</p>
+</div>
 <h2 id="whats-next">What's Next<a class="headerlink" href="#whats-next" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="../../models/aimnet2nse/">AIMNet2-NSE model details</a> -- training data, accuracy benchmarks, element coverage</li>
