@@ -21,11 +21,18 @@ class AIMNet2ASE(Calculator):
         "dipole_moment",
     ]
 
-    def __init__(self, base_calc: AIMNet2Calculator | str = "aimnet2", charge=0, mult=1):
+    def __init__(
+        self,
+        base_calc: AIMNet2Calculator | str = "aimnet2",
+        charge=0,
+        mult=1,
+        validate_species: bool = True,
+    ):
         super().__init__()
         if isinstance(base_calc, str):
             base_calc = AIMNet2Calculator(base_calc)
         self.base_calc = base_calc
+        self.validate_species = validate_species
         if self.base_calc.is_nse:
             self.implemented_properties = [*self.__class__.implemented_properties, "spin_charges"]
         self.reset()
@@ -142,7 +149,12 @@ class AIMNet2ASE(Calculator):
                 _in[k] = v.unsqueeze(0)
             _unsqueezed = True
 
-        results = self.base_calc(_in, forces="forces" in properties, stress="stress" in properties)
+        results = self.base_calc(
+            _in,
+            forces="forces" in properties,
+            stress="stress" in properties,
+            validate_species=self.validate_species,
+        )
 
         for k, v in results.items():
             if _unsqueezed:
