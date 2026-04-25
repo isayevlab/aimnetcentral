@@ -1095,3 +1095,35 @@ def test_hessian_with_compile_raises():
 
     with pytest.raises(RuntimeError, match=r"Hessian computation is incompatible with compile_model=True"):
         calc(data, hessian=True)
+
+
+def test_set_lrcoulomb_method_warns_on_rxn_cutoff_change():
+    """For family='rxn', changing the coulomb cutoff away from coulomb_sr_rc
+    (4.6 A) must emit a UserWarning about SR/LR matching."""
+    import pytest
+    import warnings
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    calc.model._metadata = dict(calc.model._metadata)
+    calc.model._metadata["family"] = "rxn"
+    calc.model._metadata["coulomb_sr_rc"] = 4.6
+
+    with pytest.warns(UserWarning, match=r"SR/LR"):
+        calc.set_lrcoulomb_method("dsf", cutoff=10.0)
+
+
+def test_set_lrcoulomb_method_no_warn_on_matching_cutoff():
+    """No warning when cutoff matches coulomb_sr_rc, or for non-rxn families."""
+    import warnings
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    # Non-rxn family: never warn about SR/LR.
+    calc1 = AIMNet2Calculator("aimnet2", device="cpu")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        calc1.set_lrcoulomb_method("dsf", cutoff=10.0)
+    sr_lr_warnings = [w for w in caught if "SR/LR" in str(w.message)]
+    assert sr_lr_warnings == []

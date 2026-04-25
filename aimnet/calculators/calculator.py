@@ -647,6 +647,21 @@ class AIMNet2Calculator:
         if method not in ("simple", "dsf", "ewald"):
             raise ValueError(f"Invalid method: {method}")
 
+        # rxn-family guard: the 4.6 A SR/LR cancellation point is physically
+        # frozen for this family. Changing the cutoff silently breaks matching.
+        meta = self.metadata or {}
+        if meta.get("family") == "rxn":
+            sr_rc = meta.get("coulomb_sr_rc")
+            if sr_rc is not None and method in ("dsf", "ewald") and abs(cutoff - float(sr_rc)) > 1e-6:
+                warnings.warn(
+                    f"Setting Coulomb {method} cutoff to {cutoff} A on aimnet2-rxn breaks "
+                    f"the SR/LR cancellation matching (this family was trained with a "
+                    f"physically frozen crossover at coulomb_sr_rc={sr_rc} A). Use the "
+                    f"matching cutoff or revert to the default external Coulomb.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
         # Warn if model has embedded Coulomb (legacy models)
         if self._has_embedded_coulomb() and self.external_coulomb is None:
             warnings.warn(
