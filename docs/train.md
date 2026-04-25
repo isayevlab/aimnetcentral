@@ -6,7 +6,7 @@
 
 The training dataset must be formatted as an HDF5 file, with groups containing molecules of uniform size. For example, the dataset below contains 25,768 molecules with 28 atoms and 19,404 molecules with 29 atoms.
 
-```
+```bash
 $ h5ls -r dataset.h5
 /028                     Group
 /028/charge              Dataset {25768}
@@ -30,7 +30,7 @@ Units should be based on Angstrom, electron-volt, and electron charge.
 
 To access available options for the training script execute the following command:
 
-```
+```bash
 $ aimnet train --help
 ```
 
@@ -42,7 +42,7 @@ Key components for initiating training include:
 
 - **Self-Atomic Energies File:** This file can be generated using the following command:
 
-```
+```bash
 $ aimnet calc_sae dataset.h5 dataset_sae.yaml
 ```
 
@@ -54,13 +54,13 @@ The training script integrates with Weights & Biases (W&B), a platform for exper
 
 - **Online Account:**
 
-```
+```bash
 $ wandb login
 ```
 
 - **Project and Entity Configuration:** Create a configuration file (e.g., `extra_conf.yaml`) with your W&B project and entity details:
 
-```
+```yaml
 wandb:
   init:
     mode: online
@@ -74,19 +74,19 @@ Pass this configuration to the `aimnet train` command using the `--config` param
 
 For optimal data loader performance, it is recommended to disable numpy multithreading:
 
-```
+```bash
 $ export OMP_NUM_THREADS=1
 ```
 
 By default, training will utilize all available GPUs in a single-node, distributed data-parallel mode. To restrict training to a specific GPU (e.g., GPU 0):
 
-```
+```bash
 $ export CUDA_VISIBLE_DEVICES=0
 ```
 
 Finally, initiate the training script with default parameters and the specified `run_name`:
 
-```
+```bash
 $ aimnet train data.train=dataset.h5 data.sae.energy.file=dataset_sae.yaml run_name=firstrun
 ```
 
@@ -94,7 +94,7 @@ $ aimnet train data.train=dataset.h5 data.sae.energy.file=dataset_sae.yaml run_n
 
 To export a trained model for distribution and use with AIMNet calculators:
 
-```
+```bash
 $ aimnet export weights.pt model.pt --model config.yaml --sae model.sae
 ```
 
@@ -168,7 +168,7 @@ For legacy models, Coulomb and dispersion modules remain embedded in the model.
 
 To convert existing `.jpt` models to the new format:
 
-```
+```bash
 $ aimnet convert model.jpt config.yaml model_new.pt
 ```
 
