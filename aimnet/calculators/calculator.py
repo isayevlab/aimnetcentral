@@ -781,7 +781,9 @@ class AIMNet2Calculator:
         # Species validation — opt-out via validate_species=False.
         # Silent no-op for models that did not declare implemented_species (older .pt,
         # raw nn.Module).
-        if validate_species:
+        if validate_species and "numbers" in data:
+            # Guarded by "numbers" in data so prepare_input still owns the missing-key
+            # error path with its descriptive "Missing key numbers" message.
             impl = (self.metadata or {}).get("implemented_species") or []
             if impl:
                 # data["numbers"] may be a raw list, ndarray, or tensor — normalize first.
