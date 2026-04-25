@@ -689,6 +689,15 @@ def load_v1_model(
         print("Building model from YAML config...")
     core_model = build_module(copy.deepcopy(core_config))
 
+    # Cast atomic_shift to float64 BEFORE load_state_dict so the destination
+    # buffer can hold full precision when load_state_dict's internal copy_ runs.
+    # Order matters: doing this after load_state_dict + a redundant copy_ from
+    # the still-float32 source is the bug this fixes.
+    if hasattr(core_model, "outputs") and hasattr(core_model.outputs, "atomic_shift"):
+        core_model.outputs.atomic_shift.double()
+        if verbose:
+            print("  Atomic shift cast to float64 before load_state_dict")
+
     # Load weights from JIT model
     jit_sd = jit_model.state_dict()
     load_result = core_model.load_state_dict(jit_sd, strict=False)
@@ -701,15 +710,6 @@ def load_v1_model(
         print(f"WARNING: Unexpected extra keys: {real_unexpected}")
     if not real_missing and not real_unexpected and verbose:
         print("Loaded weights successfully")
-
-    # Convert atomic_shift to float64 to preserve SAE precision
-    if hasattr(core_model, "outputs") and hasattr(core_model.outputs, "atomic_shift"):
-        core_model.outputs.atomic_shift.double()
-        atomic_shift_key = "outputs.atomic_shift.shifts.weight"
-        if atomic_shift_key in jit_sd:
-            core_model.outputs.atomic_shift.shifts.weight.data.copy_(jit_sd[atomic_shift_key])
-            if verbose:
-                print("  Atomic shift converted to float64")
 
     core_model.eval()
 
