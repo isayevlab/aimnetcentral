@@ -148,3 +148,31 @@ def test_load_from_hf_repo_propagates_family_and_charge_fields(fake_hf_repo_with
     _, metadata = load_from_hf_repo(str(fake_hf_repo_with_family), ensemble_member=0, device="cpu")
     assert metadata.get("family") == "test-family"
     assert metadata.get("supports_charged_systems") is False
+
+
+@pytest.mark.hf
+def test_aimnet2_rxn_hf_load_matches_gcs_metadata():
+    """Loading aimnet2-rxn from the HF repo must produce metadata equivalent
+    to what the GCS .pt path would produce: same implemented_species, cutoff,
+    family, and supports_charged_systems.
+
+    This test EXPECTS the HF repo's config.json to have been updated with
+    `family: rxn` and `supports_charged_systems: false` (out-of-band task)."""
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("isayevlab/aimnet2-rxn", ensemble_member=0, device="cpu")
+
+    assert calc.metadata.get("implemented_species") == [1, 6, 7, 8]
+    assert abs(calc.metadata.get("cutoff") - 5.0) < 1e-6
+    assert calc.metadata.get("coulomb_mode") == "sr_embedded"
+    assert calc.metadata.get("needs_coulomb") is True
+    assert calc.metadata.get("needs_dispersion") is False
+
+    # The next two assertions REQUIRE the HF config.json to have the new fields.
+    # If they fail with None, the maintainer needs to update the HF config.json.
+    assert calc.metadata.get("family") == "rxn", (
+        "HF config.json missing `family: rxn` — maintainer must update HF repo."
+    )
+    assert calc.metadata.get("supports_charged_systems") is False, (
+        "HF config.json missing `supports_charged_systems: false` — maintainer must update HF repo."
+    )
