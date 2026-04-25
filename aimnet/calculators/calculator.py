@@ -763,6 +763,15 @@ class AIMNet2Calculator:
                         f"For ions use `isayevlab/aimnet2-wb97m-d3`. "
                         f"Pass validate_species=False to bypass."
                     )
+        # Hessian + torch.compile is known to hang on the double-backward
+        # path through GELU activations. Fail fast instead.
+        if hessian and getattr(self, "_was_compiled", False):
+            raise RuntimeError(
+                "Hessian computation is incompatible with compile_model=True "
+                "(Dynamo + double-backward through GELU hangs). Reconstruct calculator "
+                "with compile_model=False."
+            )
+
         data = self.prepare_input(data)
 
         if hessian and "mol_idx" in data and data["mol_idx"][-1] > 0:

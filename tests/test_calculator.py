@@ -1075,3 +1075,23 @@ def test_calculator_rejects_charged_input_when_unsupported(monkeypatch):
 
     # Bypass works
     calc(data, validate_species=False)
+
+
+def test_hessian_with_compile_raises():
+    """Calling with hessian=True on a calculator constructed with compile_model=True
+    must raise RuntimeError instead of hanging (Dynamo + double-backward on GELU)."""
+    import pytest
+    import torch
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    # Don't actually torch.compile (slow + may need GPU); just flip the flag.
+    calc._was_compiled = True
+
+    coords = torch.tensor([[0.0, 0.0, 0.0]])
+    numbers = torch.tensor([1])
+    data = {"coord": coords, "numbers": numbers, "charge": torch.tensor(0.0)}
+
+    with pytest.raises(RuntimeError, match=r"Hessian computation is incompatible with compile_model=True"):
+        calc(data, hessian=True)
