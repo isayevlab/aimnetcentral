@@ -1826,8 +1826,14 @@
 <span class="c1"># Forces has shape (12, 3) -- one force vector per atom</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Forces shape: </span><span class="si">{</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;forces&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! warning "mol_idx must be sorted in non-decreasing order" The <code>mol_idx</code> tensor <strong>must</strong> be sorted: all atoms for molecule 0 come first, then all atoms for molecule 1, and so on. Values like <code>[0, 1, 0, 1]</code> will produce incorrect results. Always use <code>[0, 0, 1, 1]</code>.</p>
-<p>!!! warning "charge shape must match number of molecules" When using <code>mol_idx</code>, the <code>charge</code> tensor must have shape <code>(num_molecules,)</code> with one charge value per molecule. A scalar charge only works for single-molecule calculations.</p>
+<div class="admonition warning">
+<p class="admonition-title">mol_idx must be sorted in non-decreasing order</p>
+<p>The <code>mol_idx</code> tensor <strong>must</strong> be sorted: all atoms for molecule 0 come first, then all atoms for molecule 1, and so on. Values like <code>[0, 1, 0, 1]</code> will produce incorrect results. Always use <code>[0, 0, 1, 1]</code>.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">charge shape must match number of molecules</p>
+<p>When using <code>mol_idx</code>, the <code>charge</code> tensor must have shape <code>(num_molecules,)</code> with one charge value per molecule. A scalar charge only works for single-molecule calculations.</p>
+</div>
 <h2 id="step-2-processing-a-multi-frame-xyz-file">Step 2: Processing a Multi-Frame XYZ File<a class="headerlink" href="#step-2-processing-a-multi-frame-xyz-file" title="Permanent link">&para;</a></h2>
 <p>A common workflow is reading conformers or trajectory frames from an XYZ file and processing them in batches. Here is how to do it with ASE for reading and the low-level calculator for batched inference:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -1863,7 +1869,10 @@
 <span class="n">relative</span> <span class="o">=</span> <span class="n">energies</span> <span class="o">-</span> <span class="n">energies</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Relative energies (eV): </span><span class="si">{</span><span class="n">relative</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! tip For conformers of the same molecule, the 3D batched format <code>(B, N, 3)</code> is more convenient than flat coordinates with <code>mol_idx</code>. The calculator automatically decides between dense mode (small molecules on GPU) and sparse mode (large molecules or CPU).</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>For conformers of the same molecule, the 3D batched format <code>(B, N, 3)</code> is more convenient than flat coordinates with <code>mol_idx</code>. The calculator automatically decides between dense mode (small molecules on GPU) and sparse mode (large molecules or CPU).</p>
+</div>
 <h3 id="different-size-molecules-flat-format-with-mol_idx">Different-Size Molecules (Flat Format with mol_idx)<a class="headerlink" href="#different-size-molecules-flat-format-with-mol_idx" title="Permanent link">&para;</a></h3>
 <p>When molecules have different atom counts, use the flat format:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Example: processing a dataset with varied molecules</span>
@@ -1931,7 +1940,10 @@
 <span class="n">forces</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">all_forces</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Processed </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">energies</span><span class="p">)</span><span class="si">}</span><span class="s2"> structures&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! tip "Memory management" Calling <code>.cpu()</code> on result tensors moves them off the GPU immediately. Combined with <code>torch.cuda.empty_cache()</code>, this prevents GPU memory from growing unboundedly across batches. This is especially important when processing thousands of structures.</p>
+<div class="admonition tip">
+<p class="admonition-title">Memory management</p>
+<p>Calling <code>.cpu()</code> on result tensors moves them off the GPU immediately. Combined with <code>torch.cuda.empty_cache()</code>, this prevents GPU memory from growing unboundedly across batches. This is especially important when processing thousands of structures.</p>
+</div>
 <h2 id="step-4-worked-example-conformer-ranking">Step 4: Worked Example -- Conformer Ranking<a class="headerlink" href="#step-4-worked-example-conformer-ranking" title="Permanent link">&para;</a></h2>
 <p>Here is a complete example that reads conformers, computes energies in batches, and ranks them by relative energy:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>

@@ -2110,7 +2110,10 @@
 </div>
 <h3 id="step-4-do-you-want-a-b97-3c-level-model">Step 4: Do you want a B97-3c-level model?<a class="headerlink" href="#step-4-do-you-want-a-b97-3c-level-model" title="Permanent link">&para;</a></h3>
 <p>If you prefer a B97-3c reference level (faster DFT, suitable for screening and large-scale studies), use <strong><code>aimnet2_2025</code></strong>. This is the recommended B97-3c model — it supersedes the original <code>aimnet2_b973c</code> with improved intermolecular interaction accuracy while retaining the same intramolecular performance.</p>
-<p>!!! note "AIMNet2-2025 supersedes AIMNet2-B97-3c" For all new work requiring a B97-3c-level model, use <code>aimnet2_2025</code>. The original <code>aimnet2_b973c</code> is retained for reproducibility of published results but is no longer the recommended choice. AIMNet2-2025 provides strictly better accuracy for non-covalent interactions with no regression for covalent chemistry.</p>
+<div class="admonition note">
+<p class="admonition-title">AIMNet2-2025 supersedes AIMNet2-B97-3c</p>
+<p>For all new work requiring a B97-3c-level model, use <code>aimnet2_2025</code>. The original <code>aimnet2_b973c</code> is retained for reproducibility of published results but is no longer the recommended choice. AIMNet2-2025 provides strictly better accuracy for non-covalent interactions with no regression for covalent chemistry.</p>
+</div>
 <h3 id="step-5-general-purpose">Step 5: General-purpose?<a class="headerlink" href="#step-5-general-purpose" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>General-purpose</strong> calculations: use <strong><code>aimnet2</code></strong> (the default). Trained on wB97M-D3, a well-validated range-separated hybrid functional.</li>

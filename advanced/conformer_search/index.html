@@ -1911,7 +1911,10 @@
 </tr>
 </tbody>
 </table>
-<p>!!! tip "Two-stage workflow" For large molecules with many conformers, use <code>aimnet2_2025</code> to screen and discard high-energy conformers (e.g., &gt; 5 kcal/mol above minimum), then re-optimize the survivors with <code>aimnet2</code> for final ranking.</p>
+<div class="admonition tip">
+<p class="admonition-title">Two-stage workflow</p>
+<p>For large molecules with many conformers, use <code>aimnet2_2025</code> to screen and discard high-energy conformers (e.g., &gt; 5 kcal/mol above minimum), then re-optimize the survivors with <code>aimnet2</code> for final ranking.</p>
+</div>
 <h2 id="step-1-generate-conformers-with-rdkit">Step 1: Generate Conformers with RDKit<a class="headerlink" href="#step-1-generate-conformers-with-rdkit" title="Permanent link">&para;</a></h2>
 <p>RDKit's ETKDG (Experimental Torsion Knowledge Distance Geometry) algorithm generates diverse 3D conformers using torsional preferences from experimental crystal structures.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">rdkit</span><span class="w"> </span><span class="kn">import</span> <span class="n">Chem</span>
@@ -2017,7 +2020,10 @@
 <span class="n">cumulative</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">populations</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Top 10 conformers cover </span><span class="si">{</span><span class="n">cumulative</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">*</span><span class="mi">100</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">% of population&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! note "Temperature matters" At room temperature (298 K), kT is about 0.6 kcal/mol. Conformers more than 3 kcal/mol above the minimum typically have negligible population (&lt; 1%). At higher temperatures or for entropy-driven processes, more conformers become relevant.</p>
+<div class="admonition note">
+<p class="admonition-title">Temperature matters</p>
+<p>At room temperature (298 K), kT is about 0.6 kcal/mol. Conformers more than 3 kcal/mol above the minimum typically have negligible population (&lt; 1%). At higher temperatures or for entropy-driven processes, more conformers become relevant.</p>
+</div>
 <h2 id="worked-example-alanine-dipeptide-ramachandran-plot">Worked Example: Alanine Dipeptide Ramachandran Plot<a class="headerlink" href="#worked-example-alanine-dipeptide-ramachandran-plot" title="Permanent link">&para;</a></h2>
 <p>The alanine dipeptide (Ace-Ala-NMe) is a classic benchmark in biomolecular simulation. Its conformational landscape is described by two backbone dihedral angles, phi and psi, which can be plotted as a Ramachandran diagram.</p>
 <h3 id="define-the-dihedral-angles">Define the Dihedral Angles<a class="headerlink" href="#define-the-dihedral-angles" title="Permanent link">&para;</a></h3>

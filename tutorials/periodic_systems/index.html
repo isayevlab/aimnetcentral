@@ -1868,14 +1868,20 @@
 <span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2ASE</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>
 <span class="n">atoms</span><span class="o">.</span><span class="n">calc</span> <span class="o">=</span> <span class="n">calc</span>
 </code></pre></div>
-<p>!!! note When <code>pbc=True</code>, the calculator always uses <strong>sparse mode</strong> with neighbor lists, regardless of system size or <code>nb_threshold</code>. This ensures periodic images are handled correctly through cell shift vectors.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>When <code>pbc=True</code>, the calculator always uses <strong>sparse mode</strong> with neighbor lists, regardless of system size or <code>nb_threshold</code>. This ensures periodic images are handled correctly through cell shift vectors.</p>
+</div>
 <h2 id="step-2-understanding-the-coulomb-auto-switch">Step 2: Understanding the Coulomb Auto-Switch<a class="headerlink" href="#step-2-understanding-the-coulomb-auto-switch" title="Permanent link">&para;</a></h2>
 <p>When you run a periodic calculation for the first time, the calculator detects that your system has a unit cell and automatically switches the Coulomb method:</p>
 <div class="highlight"><pre><span></span><code><span class="n">energy</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span>
 <span class="c1"># UserWarning: Switching to DSF Coulomb for PBC</span>
 </code></pre></div>
 <p><strong>Why does this happen?</strong> The default Coulomb method is <code>"simple"</code> (all-pairs 1/r sum), which does not account for periodic images. For periodic systems, this would give incorrect electrostatics. The calculator detects PBC and automatically switches to the <strong>Damped Shifted Force (DSF)</strong> method, which properly handles the infinite lattice sum with a smooth cutoff.</p>
-<p>!!! warning The auto-switch warning appears once per calculator when PBC is first detected. To avoid the warning entirely, set the Coulomb method explicitly before your first periodic calculation (see Step 3).</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The auto-switch warning appears once per calculator when PBC is first detected. To avoid the warning entirely, set the Coulomb method explicitly before your first periodic calculation (see Step 3).</p>
+</div>
 <h2 id="step-3-choosing-a-coulomb-method-for-pbc">Step 3: Choosing a Coulomb Method for PBC<a class="headerlink" href="#step-3-choosing-a-coulomb-method-for-pbc" title="Permanent link">&para;</a></h2>
 <p>For periodic systems, you have two options for long-range electrostatics. Set the method on the underlying <code>AIMNet2Calculator</code> via the <code>base_calc</code> attribute:</p>
 <h3 id="dsf-recommended-for-most-uses">DSF (Recommended for Most Uses)<a class="headerlink" href="#dsf-recommended-for-most-uses" title="Permanent link">&para;</a></h3>
@@ -1893,7 +1899,10 @@
 
 <span class="n">energy</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span>
 </code></pre></div>
-<p>!!! warning Ewald summation is currently limited to <strong>single-molecule (single-system) calculations</strong>. It uses a full interaction matrix rather than neighbor lists, so it does not support batched periodic systems. For routine PBC work, use DSF.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Ewald summation is currently limited to <strong>single-molecule (single-system) calculations</strong>. It uses a full interaction matrix rather than neighbor lists, so it does not support batched periodic systems. For routine PBC work, use DSF.</p>
+</div>
 <p><strong>When to use Ewald:</strong></p>
 <ul>
 <li>Validating DSF results for a new system type</li>
@@ -1930,7 +1939,10 @@
 <span class="n">stress</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_stress</span><span class="p">()</span>  <span class="c1"># Voigt notation (6,) in ASE</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Stress (Voigt): </span><span class="si">{</span><span class="n">stress</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! tip ASE returns stress in Voigt notation as a 6-element array (xx, yy, zz, yz, xz, xy). The AIMNet2 calculator internally computes the full 3x3 stress tensor, and ASE handles the conversion.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>ASE returns stress in Voigt notation as a 6-element array (xx, yy, zz, yz, xz, xy). The AIMNet2 calculator internally computes the full 3x3 stress tensor, and ASE handles the conversion.</p>
+</div>
 <h2 id="step-5-cell-optimization">Step 5: Cell Optimization<a class="headerlink" href="#step-5-cell-optimization" title="Permanent link">&para;</a></h2>
 <p>To optimize both atomic positions and cell parameters simultaneously, wrap the <code>Atoms</code> object in <code>ExpCellFilter</code> (or <code>FrechetCellFilter</code>):</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase.constraints</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExpCellFilter</span>
@@ -1987,7 +1999,10 @@
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cell lengths: </span><span class="si">{</span><span class="n">atoms</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">lengths</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cell angles:  </span><span class="si">{</span><span class="n">atoms</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">angles</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>!!! tip For reading crystal structures from CIF files, use <code>ase.io.read("structure.cif")</code>. ASE will parse the cell parameters and symmetry automatically.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>For reading crystal structures from CIF files, use <code>ase.io.read("structure.cif")</code>. ASE will parse the cell parameters and symmetry automatically.</p>
+</div>
 <h2 id="summary-of-coulomb-methods-for-pbc">Summary of Coulomb Methods for PBC<a class="headerlink" href="#summary-of-coulomb-methods-for-pbc" title="Permanent link">&para;</a></h2>
 <table>
 <thead>

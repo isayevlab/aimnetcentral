@@ -4080,7 +4080,10 @@
 
 <span class="n">H</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">hessian</span><span class="p">(</span><span class="n">energy_fn</span><span class="p">,</span> <span class="n">coords</span><span class="p">)</span>  <span class="c1"># shape (N, 3, N, 3)</span>
 </code></pre></div>
-<p>!!! note "Use <code>forces=False</code> for external Hessians" When computing higher-order derivatives from outside the calculator, pass <code>forces=False</code>. Requesting <code>forces=True</code> triggers an internal backward pass that frees intermediate activations, preventing a second differentiation through the graph.</p>
+<div class="admonition note">
+<p class="admonition-title">Use <code>forces=False</code> for external Hessians</p>
+<p>When computing higher-order derivatives from outside the calculator, pass <code>forces=False</code>. Requesting <code>forces=True</code> triggers an internal backward pass that frees intermediate activations, preventing a second differentiation through the graph.</p>
+</div>
 <p>When <code>coord</code> does <strong>not</strong> have <code>requires_grad=True</code> (the default), inputs are detached as before — optimization loops that call the calculator repeatedly incur no graph accumulation overhead.</p>
 <h2 id="output-format">Output Format<a class="headerlink" href="#output-format" title="Permanent link">&para;</a></h2>
 <table>
