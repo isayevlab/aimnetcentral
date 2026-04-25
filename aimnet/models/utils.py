@@ -656,8 +656,8 @@ def load_v1_model(
         else:
             # Check if D3TS is embedded
             outputs = model_config.get("kwargs", {}).get("outputs", {})
-            has_d3ts = any("D3TS" in outputs.get(k, {}).get("class", "") for k in ["dftd3", "d3bj", "d3ts"])
-            if has_d3ts:
+            has_embedded_d3ts = any("D3TS" in outputs.get(k, {}).get("class", "") for k in ["dftd3", "d3bj", "d3ts"])
+            if has_embedded_d3ts:
                 print("  D3TS dispersion kept embedded (uses NN-predicted C6/alpha)")
 
     # Detect if model has any embedded LR modules that need nbmat_lr
@@ -665,8 +665,8 @@ def load_v1_model(
     has_embedded_lr = False
 
     # Check for embedded D3TS
-    has_d3ts = any("D3TS" in outputs.get(k, {}).get("class", "") for k in ["dftd3", "d3bj", "d3ts"])
-    if has_d3ts:
+    has_embedded_d3ts = any("D3TS" in outputs.get(k, {}).get("class", "") for k in ["dftd3", "d3bj", "d3ts"])
+    if has_embedded_d3ts:
         has_embedded_lr = True
 
     # Check for embedded SRCoulomb (model had LRCoulomb before conversion)
