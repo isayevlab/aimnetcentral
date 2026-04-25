@@ -55,7 +55,9 @@ calc = AIMNet2ASE("aimnet2")
 atoms.calc = calc
 ```
 
-!!! note When `pbc=True`, the calculator always uses **sparse mode** with neighbor lists, regardless of system size or `nb_threshold`. This ensures periodic images are handled correctly through cell shift vectors.
+!!! note
+
+    When `pbc=True`, the calculator always uses **sparse mode** with neighbor lists, regardless of system size or `nb_threshold`. This ensures periodic images are handled correctly through cell shift vectors.
 
 ## Step 2: Understanding the Coulomb Auto-Switch
 
@@ -68,7 +70,9 @@ energy = atoms.get_potential_energy()
 
 **Why does this happen?** The default Coulomb method is `"simple"` (all-pairs 1/r sum), which does not account for periodic images. For periodic systems, this would give incorrect electrostatics. The calculator detects PBC and automatically switches to the **Damped Shifted Force (DSF)** method, which properly handles the infinite lattice sum with a smooth cutoff.
 
-!!! warning The auto-switch warning appears once per calculator when PBC is first detected. To avoid the warning entirely, set the Coulomb method explicitly before your first periodic calculation (see Step 3).
+!!! warning
+
+    The auto-switch warning appears once per calculator when PBC is first detected. To avoid the warning entirely, set the Coulomb method explicitly before your first periodic calculation (see Step 3).
 
 ## Step 3: Choosing a Coulomb Method for PBC
 
@@ -98,7 +102,9 @@ calc.base_calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-8)
 energy = atoms.get_potential_energy()
 ```
 
-!!! warning Ewald summation is currently limited to **single-molecule (single-system) calculations**. It uses a full interaction matrix rather than neighbor lists, so it does not support batched periodic systems. For routine PBC work, use DSF.
+!!! warning
+
+    Ewald summation is currently limited to **single-molecule (single-system) calculations**. It uses a full interaction matrix rather than neighbor lists, so it does not support batched periodic systems. For routine PBC work, use DSF.
 
 **When to use Ewald:**
 
@@ -144,7 +150,9 @@ stress = atoms.get_stress()  # Voigt notation (6,) in ASE
 print(f"Stress (Voigt): {stress}")
 ```
 
-!!! tip ASE returns stress in Voigt notation as a 6-element array (xx, yy, zz, yz, xz, xy). The AIMNet2 calculator internally computes the full 3x3 stress tensor, and ASE handles the conversion.
+!!! tip
+
+    ASE returns stress in Voigt notation as a 6-element array (xx, yy, zz, yz, xz, xy). The AIMNet2 calculator internally computes the full 3x3 stress tensor, and ASE handles the conversion.
 
 ## Step 5: Cell Optimization
 
@@ -211,7 +219,9 @@ print(f"Cell lengths: {atoms.cell.lengths()}")
 print(f"Cell angles:  {atoms.cell.angles()}")
 ```
 
-!!! tip For reading crystal structures from CIF files, use `ase.io.read("structure.cif")`. ASE will parse the cell parameters and symmetry automatically.
+!!! tip
+
+    For reading crystal structures from CIF files, use `ase.io.read("structure.cif")`. ASE will parse the cell parameters and symmetry automatically.
 
 ## Summary of Coulomb Methods for PBC
 

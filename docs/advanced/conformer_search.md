@@ -32,7 +32,9 @@ This combines the strengths of each method: RDKit provides broad sampling of con
 | `aimnet2_2025` | B97-3c (improved) | Faster | Initial screening, large libraries, many conformers |
 | `aimnet2` | wB97M-D3 | Baseline | Final ranking, publication-quality results |
 
-!!! tip "Two-stage workflow" For large molecules with many conformers, use `aimnet2_2025` to screen and discard high-energy conformers (e.g., > 5 kcal/mol above minimum), then re-optimize the survivors with `aimnet2` for final ranking.
+!!! tip "Two-stage workflow"
+
+    For large molecules with many conformers, use `aimnet2_2025` to screen and discard high-energy conformers (e.g., > 5 kcal/mol above minimum), then re-optimize the survivors with `aimnet2` for final ranking.
 
 ## Step 1: Generate Conformers with RDKit
 
@@ -151,7 +153,9 @@ cumulative = np.cumsum(populations[:10])
 print(f"\nTop 10 conformers cover {cumulative[-1]*100:.1f}% of population")
 ```
 
-!!! note "Temperature matters" At room temperature (298 K), kT is about 0.6 kcal/mol. Conformers more than 3 kcal/mol above the minimum typically have negligible population (< 1%). At higher temperatures or for entropy-driven processes, more conformers become relevant.
+!!! note "Temperature matters"
+
+    At room temperature (298 K), kT is about 0.6 kcal/mol. Conformers more than 3 kcal/mol above the minimum typically have negligible population (< 1%). At higher temperatures or for entropy-driven processes, more conformers become relevant.
 
 ## Worked Example: Alanine Dipeptide Ramachandran Plot
 

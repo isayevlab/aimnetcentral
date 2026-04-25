@@ -469,7 +469,9 @@ def energy_fn(x):
 H = torch.autograd.functional.hessian(energy_fn, coords)  # shape (N, 3, N, 3)
 ```
 
-!!! note "Use `forces=False` for external Hessians" When computing higher-order derivatives from outside the calculator, pass `forces=False`. Requesting `forces=True` triggers an internal backward pass that frees intermediate activations, preventing a second differentiation through the graph.
+!!! note "Use `forces=False` for external Hessians"
+
+    When computing higher-order derivatives from outside the calculator, pass `forces=False`. Requesting `forces=True` triggers an internal backward pass that frees intermediate activations, preventing a second differentiation through the graph.
 
 When `coord` does **not** have `requires_grad=True` (the default), inputs are detached as before — optimization loops that call the calculator repeatedly incur no graph accumulation overhead.
 
