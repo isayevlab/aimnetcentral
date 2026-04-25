@@ -997,3 +997,21 @@ def test_relative_path_with_slash_loads_correctly(tmp_path, monkeypatch):
     calc = AIMNet2Calculator("mymodels/aimnet2.pt")
     assert hasattr(calc, "model")
     assert calc.cutoff > 0
+
+
+def test_calculator_metadata_property_returns_model_metadata():
+    """AIMNet2Calculator.metadata must return the same dict as model._metadata."""
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    assert calc.metadata is calc.model._metadata
+    # Existing aimnet2 family declares neither family nor supports_charged_systems.
+    assert calc.metadata.get("family") is None
+    assert calc.metadata.get("supports_charged_systems") is None
+
+
+def test_calculator_was_compiled_flag_default_false():
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    assert calc._was_compiled is False

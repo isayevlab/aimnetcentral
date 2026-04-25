@@ -286,6 +286,7 @@ class AIMNet2Calculator:
             raise TypeError("Invalid model type/name.")
 
         # Compile model if requested
+        self._was_compiled = bool(compile_model)
         if compile_model:
             kwargs = compile_kwargs or {}
             self.model = torch.compile(self.model, **kwargs)
@@ -415,6 +416,17 @@ class AIMNet2Calculator:
         return self.eval(*args, **kwargs)
 
     @property
+    def metadata(self) -> dict | None:
+        """Read-only view of the model's metadata dict.
+
+        Returns the same object as ``model._metadata`` for v2 .pt models,
+        or ``None`` for raw ``nn.Module`` inputs that don't carry metadata.
+        Downstream consumers should prefer this accessor over reaching into
+        the private ``model._metadata`` attribute.
+        """
+        return getattr(self.model, "_metadata", None)
+
+    @property
     def has_external_coulomb(self) -> bool:
         """Check if calculator has external Coulomb module attached.
 
@@ -487,7 +499,7 @@ class AIMNet2Calculator:
         bool
             True if model has embedded dispersion module (D3TS or legacy DFTD3).
         """
-        meta = getattr(self.model, "_metadata", None)
+        meta = self.metadata
         if meta is None:
             return False  # Unknown, assume no embedded dispersion
 
@@ -512,7 +524,7 @@ class AIMNet2Calculator:
         bool
             True if model has embedded Coulomb module.
         """
-        meta = getattr(self.model, "_metadata", None)
+        meta = self.metadata
         if meta is None:
             return False  # Unknown, assume no embedded Coulomb
         # If needs_coulomb=False and coulomb_mode is not "none", Coulomb is embedded
