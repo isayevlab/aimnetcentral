@@ -741,7 +741,8 @@ class AIMNet2Calculator:
         if validate_species:
             impl = (self.metadata or {}).get("implemented_species") or []
             if impl:
-                seen = {int(z) for z in data["numbers"].flatten().tolist() if int(z) > 0}
+                # data["numbers"] may be a raw list, ndarray, or tensor — normalize first.
+                seen = {int(z) for z in torch.as_tensor(data["numbers"]).flatten().tolist() if int(z) > 0}
                 unsupported = sorted(seen - set(impl))
                 if unsupported:
                     raise ValueError(
