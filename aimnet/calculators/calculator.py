@@ -733,7 +733,25 @@ class AIMNet2Calculator:
             self.external_dftd3.set_smoothing(cutoff, smoothing_fraction)
         self._update_lr_nblists()
 
-    def eval(self, data: dict[str, Any], forces=False, stress=False, hessian=False) -> dict[str, Tensor]:
+    def eval(self, data: dict[str, Any], forces=False, stress=False, hessian=False,
+             *, validate_species: bool = True) -> dict[str, Tensor]:
+        # Species validation — opt-out via validate_species=False.
+        # Silent no-op for models that did not declare implemented_species (older .pt,
+        # raw nn.Module).
+        if validate_species:
+            impl = (self.metadata or {}).get("implemented_species") or []
+            if impl:
+                seen = {int(z) for z in data["numbers"].flatten().tolist() if int(z) > 0}
+                unsupported = sorted(seen - set(impl))
+                if unsupported:
+                    raise ValueError(
+                        f"Atomic numbers {unsupported} are not in this model's "
+                        f"implemented_species {sorted(impl)}. This model was trained on "
+                        f"a restricted element set; passing other elements yields undefined "
+                        f"output. For broader element coverage on equilibrium structures use "
+                        f"`isayevlab/aimnet2-wb97m-d3`; for radicals/open-shell systems use "
+                        f"`isayevlab/aimnet2-nse`. Pass validate_species=False to bypass."
+                    )
         data = self.prepare_input(data)
 
         if hessian and "mol_idx" in data and data["mol_idx"][-1] > 0:

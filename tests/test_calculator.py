@@ -1015,3 +1015,39 @@ def test_calculator_was_compiled_flag_default_false():
 
     calc = AIMNet2Calculator("aimnet2", device="cpu")
     assert calc._was_compiled is False
+
+
+def test_calculator_rejects_unsupported_species():
+    """Calling the calculator with an unsupported atomic number must raise ValueError
+    with chemistry context and pointers to alternative models."""
+    import pytest
+    import torch
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    # aimnet2's implemented_species does NOT include Z=92 (uranium).
+    coords = torch.tensor([[0.0, 0.0, 0.0], [1.4, 0.0, 0.0]])
+    numbers = torch.tensor([1, 92])  # H + U; U is unsupported
+    data = {"coord": coords, "numbers": numbers, "charge": torch.tensor(0.0)}
+
+    with pytest.raises(ValueError, match=r"implemented_species"):
+        calc(data)
+
+
+def test_calculator_validate_species_false_bypasses():
+    """Passing validate_species=False must skip the species check (no ValueError)."""
+    import torch
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    # H is supported by aimnet2, so this should not raise even without bypass;
+    # the test asserts the kwarg flows through and does not itself raise.
+    coords = torch.tensor([[0.0, 0.0, 0.0]])
+    numbers = torch.tensor([1])
+    data = {"coord": coords, "numbers": numbers, "charge": torch.tensor(0.0)}
+
+    # Both calls should succeed; validate_species=False is the explicit bypass path.
+    calc(data, validate_species=True)
+    calc(data, validate_species=False)
