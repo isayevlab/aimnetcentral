@@ -505,3 +505,15 @@ class TestNewFormat:
         # Verify shape is now (64, 2)
         assert module.disp_param0.shape == (64, 2)
         assert torch.allclose(module.disp_param0, disp_params)
+
+
+def test_model_metadata_typeddict_includes_family_and_charge_fields():
+    """ModelMetadata must declare family and supports_charged_systems as optional fields."""
+    from typing import get_type_hints
+    from aimnet.models.base import ModelMetadata
+
+    hints = get_type_hints(ModelMetadata, include_extras=False)
+    assert "family" in hints, "ModelMetadata missing 'family' field"
+    assert "supports_charged_systems" in hints, (
+        "ModelMetadata missing 'supports_charged_systems' field"
+    )
