@@ -96,6 +96,7 @@ include = [
 "aimnet/calculators/model_registry.yaml" = "aimnet/calculators/model_registry.yaml"
 "aimnet/models/aimnet2.yaml" = "aimnet/models/aimnet2.yaml"
 "aimnet/models/aimnet2_dftd3_wb97m.yaml" = "aimnet/models/aimnet2_dftd3_wb97m.yaml"
+"aimnet/models/aimnet2_rxn.yaml" = "aimnet/models/aimnet2_rxn.yaml"
 "aimnet/train/default_train.yaml" = "aimnet/train/default_train.yaml"
 
 # UV configuration

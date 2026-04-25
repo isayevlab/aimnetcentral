@@ -602,3 +602,24 @@ def test_load_v1_model_without_overrides_is_backward_compatible():
     assert isinstance(metadata["implemented_species"], list)
     assert metadata.get("family") is None
     assert metadata.get("supports_charged_systems") is None
+
+
+def test_aimnet2_rxn_yaml_builds():
+    """The architecture YAML for aimnet2-rxn must be loadable and produce a real AIMNet2 module."""
+    import importlib.resources
+    import yaml
+
+    from aimnet.config import build_module
+
+    yaml_text = importlib.resources.files("aimnet.models").joinpath("aimnet2_rxn.yaml").read_text()
+    cfg = yaml.safe_load(yaml_text)
+    model = build_module(cfg)
+
+    # The reconstructed module must have the rxn output heads.
+    assert hasattr(model, "outputs")
+    assert hasattr(model.outputs, "energy_mlp")
+    assert hasattr(model.outputs, "atomic_shift")
+    assert hasattr(model.outputs, "atomic_sum")
+    assert hasattr(model.outputs, "dipole")
+    assert hasattr(model.outputs, "quadrupole")
+    assert hasattr(model.outputs, "lrcoulomb")
