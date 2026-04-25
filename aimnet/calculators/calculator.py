@@ -214,6 +214,7 @@ class AIMNet2Calculator:
     }
     keys_out: ClassVar[list[str]] = ["energy", "charges", "spin_charges", "forces", "hessian", "stress"]
     atom_feature_keys: ClassVar[list[str]] = ["coord", "numbers", "charges", "spin_charges", "forces"]
+    _constructed_families: ClassVar[set[str]] = set()
 
     def __init__(
         self,
@@ -412,6 +413,8 @@ class AIMNet2Calculator:
                 for param in self.external_dftd3.parameters():
                     param.requires_grad_(False)
 
+        self._maybe_warn_family_mix((metadata or {}).get("family") if metadata else None)
+
     def __call__(self, *args, **kwargs):
         return self.eval(*args, **kwargs)
 
@@ -425,6 +428,31 @@ class AIMNet2Calculator:
         the private ``model._metadata`` attribute.
         """
         return getattr(self.model, "_metadata", None)
+
+    def _maybe_warn_family_mix(self, family: str | None) -> None:
+        """If multiple distinct families have been constructed in this process,
+        emit a one-time UserWarning about energy-scale incompatibility.
+
+        Bypass: set the AIMNET_QUIET_FAMILY_MIX environment variable to '1'.
+        """
+        if family is None:
+            return
+        if os.environ.get("AIMNET_QUIET_FAMILY_MIX") == "1":
+            self._constructed_families.add(family)
+            return
+        already_warned = family in self._constructed_families
+        self._constructed_families.add(family)
+        if not already_warned and len(self._constructed_families) > 1:
+            warnings.warn(
+                f"AIMNet2Calculator instances from different families have been "
+                f"constructed in this process: {sorted(self._constructed_families)}. "
+                f"Energy scales differ across families (e.g. rxn uses a learned "
+                f"shifted-electronic scale; aimnet2-wb97m-d3 uses absolute "
+                f"electronic energies on the ~-1100 eV scale). Do not mix or compare "
+                f"energies across families. Set AIMNET_QUIET_FAMILY_MIX=1 to silence.",
+                UserWarning,
+                stacklevel=2,
+            )
 
     @property
     def has_external_coulomb(self) -> bool:

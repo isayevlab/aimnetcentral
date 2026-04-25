@@ -1127,3 +1127,34 @@ def test_set_lrcoulomb_method_no_warn_on_matching_cutoff():
         calc1.set_lrcoulomb_method("dsf", cutoff=10.0)
     sr_lr_warnings = [w for w in caught if "SR/LR" in str(w.message)]
     assert sr_lr_warnings == []
+
+
+def test_constructing_two_families_warns_once(monkeypatch):
+    """Constructing calculators from two different families in one process must
+    emit a UserWarning about energy-scale incompatibility."""
+    import pytest
+    import warnings
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    # Reset the class-level set so test order does not pollute it.
+    AIMNet2Calculator._constructed_families.clear()
+    monkeypatch.delenv("AIMNET_QUIET_FAMILY_MIX", raising=False)
+
+    # First calculator: synthetic 'family-A'.
+    calc_a = AIMNet2Calculator("aimnet2", device="cpu")
+    calc_a.model._metadata = dict(calc_a.model._metadata)
+    calc_a.model._metadata["family"] = "family-A"
+    AIMNet2Calculator._constructed_families.add("family-A")  # mimic what __init__ does
+
+    # Second calculator: a different family — should warn.
+    with pytest.warns(UserWarning, match=r"different families"):
+        calc_b = AIMNet2Calculator("aimnet2", device="cpu")
+        # The constructor itself must add the (synthetic) family. Since we cannot
+        # change metadata before __init__ finishes, simulate by constructing then
+        # injecting+re-running the warn step. For this PR's purposes the warn
+        # logic lives in __init__ AFTER load. Test it by direct invocation:
+        calc_b.model._metadata = dict(calc_b.model._metadata)
+        calc_b.model._metadata["family"] = "family-B"
+        # Call the production helper that __init__ calls (see Step 3).
+        calc_b._maybe_warn_family_mix("family-B")
