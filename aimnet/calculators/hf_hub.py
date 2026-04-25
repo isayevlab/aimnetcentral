@@ -279,6 +279,8 @@ def load_from_hf_repo(
         "d3_params": _cfg("d3_params"),
         "has_embedded_lr": _cfg("has_embedded_lr", False),
         "implemented_species": _cfg("implemented_species", []),
+        "family": _cfg("family"),
+        "supports_charged_systems": _cfg("supports_charged_systems"),
     }
 
     model._metadata = metadata
