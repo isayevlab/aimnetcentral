@@ -587,6 +587,24 @@ def load_v1_model(
         Path to the model YAML configuration file.
     output_path : str, optional
         If provided, save the converted model to this path.
+    implemented_species : list[int] | None, optional
+        If given, overrides the species list derived from `afv.weight` and ALSO
+        NaN-pads `afv.weight` rows for atomic numbers outside this set. Use this
+        for models (like aimnet2-rxn) where `afv.weight` is fully populated but
+        only a restricted element subset was actually trained. NaN padding makes
+        `validate_species=False` at inference time produce immediate
+        NaN-propagation rather than plausible-looking nonsense from
+        populated-but-untrained rows.
+    family : str | None, optional
+        Family tag (e.g. `"rxn"`) written into the metadata. Used by the
+        calculator to route family-specific safeguards (charge guard, Coulomb
+        cutoff lock, cross-family mixing detection). Omit for legacy families
+        that don't declare a family.
+    supports_charged_systems : bool | None, optional
+        If `False`, the calculator's `validate_species=True` path will raise
+        `ValueError` on non-zero charge inputs. Use for families trained only
+        on net-neutral systems (zwitterions remain in scope). Omit for
+        families with no charge restriction.
     verbose : bool
         Whether to print progress messages.
 
@@ -605,12 +623,29 @@ def load_v1_model(
         - coulomb_sr_envelope: str | None
         - d3_params: dict | None
         - implemented_species: list[int]
+        - family: str | None (only present if `family` kwarg was given)
+        - supports_charged_systems: bool | None (only present if kwarg was given)
 
-    Example
-    -------
+    Examples
+    --------
+    Convert a single legacy JIT model to the v2 .pt format:
+
     >>> from aimnet.models.utils import load_v1_model
     >>> model, metadata = load_v1_model("model.jpt", "config.yaml")
-    >>> print(metadata["format_version"])  # 2
+
+    Convert the four aimnet2-rxn ensemble members with explicit species,
+    family, and charge-support declarations (writes AFV-sanitized .pt files
+    with rows for elements outside [1, 6, 7, 8] NaN-padded):
+
+    >>> for i in range(4):
+    ...     load_v1_model(
+    ...         f"_tmp/model_{i+1}.jpt",
+    ...         "aimnet/models/aimnet2_rxn.yaml",
+    ...         output_path=f"aimnet2_rxn_{i}.pt",
+    ...         implemented_species=[1, 6, 7, 8],
+    ...         family="rxn",
+    ...         supports_charged_systems=False,
+    ...     )
 
     Warnings
     --------
