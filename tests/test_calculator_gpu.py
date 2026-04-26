@@ -364,10 +364,11 @@ class TestCPUGPUConsistency:
 class TestVectorizedHessian:
     """End-to-end Hessian via vmap-based paths through the kernel.
 
-    These tests exercise the vmap rule on aimnet::conv_sv_2d_sp_bwd_bwd added in
-    PR A. They do NOT touch AIMNet2Calculator.calculate_hessian (still the loop
-    path); they call torch.func.hessian / torch.autograd.grad directly on a
-    closure that uses the calculator for energy.
+    These tests exercise the vmap rules on aimnet::conv_sv_2d_sp_bwd and
+    aimnet::conv_sv_2d_sp_bwd_bwd added in PR A. They do NOT touch
+    AIMNet2Calculator.calculate_hessian (still the loop path); they call
+    torch.func.vmap directly on a vjp closure built from the calculator's
+    energy graph.
     """
 
     def _water_inputs(self, device):
