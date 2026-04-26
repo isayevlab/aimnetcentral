@@ -514,3 +514,4 @@ For reactions with multiple transition states (e.g., addition-elimination mechan
 - [AIMNet2-NSE model details](../models/aimnet2nse.md) -- training data and accuracy benchmarks
 - [Geometry Optimization tutorial](../tutorials/geometry_optimization.md) -- structure relaxation fundamentals
 - [Model Selection Guide](../models/guide.md) -- choosing the right model for your reaction chemistry
+- [Sella](../external/sella.md) -- saddle-point optimizer for direct TS optimization with AIMNet2 Hessian feedback
