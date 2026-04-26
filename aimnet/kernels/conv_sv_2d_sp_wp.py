@@ -567,6 +567,14 @@ def conv_sv_2d_sp(a: Tensor, idx: Tensor, g: Tensor) -> Tensor:
     g : Tensor
         Gate tensor of shape (B, M, G, 4).
 
+    Notes
+    -----
+    Only the first- and second-order backward primitives are vmap-registered.
+    `torch.func.vmap` directly over the forward (e.g. vmap over a non-vjp
+    closure that calls this function) will raise `Batching rule not implemented
+    for aimnet::conv_sv_2d_sp_fwd`. The Hessian-via-vmap path uses a vjp closure
+    that does not vmap forward, so it is unaffected.
+
     Returns
     -------
     Tensor
