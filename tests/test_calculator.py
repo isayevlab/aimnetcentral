@@ -1184,6 +1184,39 @@ def test_constructing_two_families_warns_once(monkeypatch):
         calc_b._maybe_warn_family_mix("family-B")
 
 
+def test_has_embedded_dispersion_explicit_d3ts_flag():
+    """Calculator must detect embedded D3TS via the explicit `has_embedded_d3ts`
+    metadata flag — even when `coulomb_mode == 'sr_embedded'` (the both-set
+    case from PR #48 that the legacy heuristic missed)."""
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    calc.model._metadata = dict(calc.model._metadata)
+    # Reproduce the PR #48 failing combination: D3TS AND SRCoulomb both embedded.
+    calc.model._metadata["has_embedded_d3ts"] = True
+    calc.model._metadata["has_embedded_lr"] = True
+    calc.model._metadata["coulomb_mode"] = "sr_embedded"
+    calc.model._metadata["d3_params"] = None  # D3TS uses learned params, not tabulated
+    calc.model._metadata["needs_dispersion"] = False
+    assert calc._has_embedded_dispersion() is True
+
+
+def test_has_embedded_dispersion_legacy_heuristic_fallback():
+    """For pre-explicit-flag .pt files (no `has_embedded_d3ts` key), the legacy
+    heuristic still detects D3TS-only models (has_embedded_lr=True with
+    coulomb_mode != 'sr_embedded')."""
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    calc.model._metadata = dict(calc.model._metadata)
+    calc.model._metadata.pop("has_embedded_d3ts", None)  # legacy: flag absent
+    calc.model._metadata["has_embedded_lr"] = True
+    calc.model._metadata["coulomb_mode"] = "none"  # D3TS-only, no SRCoulomb
+    calc.model._metadata["d3_params"] = None
+    calc.model._metadata["needs_dispersion"] = False
+    assert calc._has_embedded_dispersion() is True
+
+
 @pytest.mark.network
 def test_aimnet2rxn_alias_calculator_e2e():
     """Alias 'aimnet2rxn' must resolve through the registry, the .pt must load,
