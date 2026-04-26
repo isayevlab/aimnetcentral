@@ -359,3 +359,35 @@ class TestConvSV2dSP:
         assert torch.allclose(batched[0][0], ref[0], atol=1e-5, rtol=1e-4)
         assert torch.allclose(batched[1][0], ref[1], atol=1e-5, rtol=1e-4)
         assert torch.allclose(batched[2][0], ref[2], atol=1e-5, rtol=1e-4)
+
+    def test_vmap_bwd_kernel_rule(self, test_data_small_cuda):
+        """vmap over the first-backward kernel must dispatch via the registered rule.
+
+        Without the rule torch.vmap raises `RuntimeError: Batching rule not
+        implemented for aimnet::conv_sv_2d_sp_bwd`. With the rule it produces a
+        (K, ...) batched result whose k-th slice equals the un-vmapped call with
+        the k-th probe.
+        """
+        a, idx, g = test_data_small_cuda
+        B, A, G = a.shape
+        _, M = idx.shape
+        K = 5
+        device = a.device
+        dtype = a.dtype
+
+        grad_output = torch.randn(K, B, A, G, 4, device=device, dtype=dtype)
+        a_in = a.detach()
+        g_in = g.detach()
+
+        def call_kernel(go):
+            return torch.ops.aimnet.conv_sv_2d_sp_bwd(go, a_in, idx, g_in)
+
+        batched = torch.vmap(call_kernel, in_dims=(0,))(grad_output)
+
+        assert len(batched) == 2
+        assert batched[0].shape == (K, B, A, G)
+        assert batched[1].shape == (K, B, M, G, 4)
+
+        ref = call_kernel(grad_output[0])
+        assert torch.allclose(batched[0][0], ref[0], atol=1e-5, rtol=1e-4)
+        assert torch.allclose(batched[1][0], ref[1], atol=1e-5, rtol=1e-4)
