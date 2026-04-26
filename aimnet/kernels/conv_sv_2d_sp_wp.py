@@ -458,6 +458,42 @@ torch.library.register_autograd(
 # =============================================================================
 
 
+@torch.library.register_vmap("aimnet::conv_sv_2d_sp_bwd")
+def _vmap_conv_sv_2d_sp_bwd(info, in_dims, grad_output, a, idx, g):
+    """vmap rule for the first-backward primitive.
+
+    Hit when is_grads_batched=True (or torch.func.vmap over a vjp) traverses the
+    first-order backward.  The realistic in_dims is (0, None, None, None) — only the
+    cotangent flowing from the upstream batch carries a vmap dim.  The rule still
+    handles arbitrary in_dims for robustness.
+
+    Strategy: K-loop, same reasoning as the bwd_bwd rule.
+    """
+    K = info.batch_size
+
+    def _slice(t: Tensor, d: int | None, k: int) -> Tensor:
+        if d is None:
+            return t
+        return t.movedim(d, 0)[k]
+
+    out0: list[Tensor] = []
+    out1: list[Tensor] = []
+    for k in range(K):
+        outs = torch.ops.aimnet.conv_sv_2d_sp_bwd(
+            _slice(grad_output, in_dims[0], k),
+            _slice(a, in_dims[1], k),
+            _slice(idx, in_dims[2], k),
+            _slice(g, in_dims[3], k),
+        )
+        out0.append(outs[0])
+        out1.append(outs[1])
+
+    return (
+        [torch.stack(out0, dim=0), torch.stack(out1, dim=0)],
+        [0, 0],
+    )
+
+
 @torch.library.register_vmap("aimnet::conv_sv_2d_sp_bwd_bwd")
 def _vmap_conv_sv_2d_sp_bwd_bwd(info, in_dims, grad_output, grad2_a, grad2_g, a, idx, g):
     """vmap rule for the double-backward primitive.
