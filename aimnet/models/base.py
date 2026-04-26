@@ -46,6 +46,8 @@ class ModelMetadata(TypedDict):
 
     family: NotRequired[str | None]  # e.g. "rxn"; None for legacy/families that don't declare
     supports_charged_systems: NotRequired[bool | None]  # False for rxn; None for legacy
+    has_embedded_d3ts: NotRequired[bool]  # True when D3TS module is embedded (distinct from has_embedded_lr,
+    # which conflates D3TS with SRCoulomb — see _has_embedded_dispersion)
 
 
 def load_model(path: str, device: str = "cpu") -> tuple[nn.Module, ModelMetadata]:
@@ -124,6 +126,7 @@ def load_model(path: str, device: str = "cpu") -> tuple[nn.Module, ModelMetadata
             "implemented_species": data.get("implemented_species", []),
             "family": data.get("family"),
             "supports_charged_systems": data.get("supports_charged_systems"),
+            "has_embedded_d3ts": data.get("has_embedded_d3ts", False),
         }
 
         # Attach metadata to model for easy access
