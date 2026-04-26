@@ -7,8 +7,6 @@ See ``docs/external/gromacs.md`` for blocker details and the plan at
 ``docs/superpowers/plans/2026-04-26-torchscript-export.md``.
 """
 
-from typing import Optional
-
 import torch
 from torch import Tensor, nn
 
@@ -52,8 +50,8 @@ class AIMNet2Gromacs(nn.Module):
         self,
         positions: Tensor,
         atomic_numbers: Tensor,
-        box: Optional[Tensor] = None,
-        pbc: Optional[Tensor] = None,
+        box: Tensor | None = None,
+        pbc: Tensor | None = None,
     ) -> Tensor:
         n = positions.shape[0]
         # n==1 produces a (1, 0) nbmat which is degenerate downstream.
@@ -61,14 +59,9 @@ class AIMNet2Gromacs(nn.Module):
         # PBC is out of scope for v1. Refuse non-trivial box/pbc rather than
         # silently producing open-boundary energies for a periodic GROMACS run.
         if box is not None:
-            assert torch.all(box == 0), (
-                "AIMNet2Gromacs does not support periodic systems; "
-                "pass box=None or zeros"
-            )
+            assert torch.all(box == 0), "AIMNet2Gromacs does not support periodic systems; pass box=None or zeros"
         if pbc is not None:
-            assert not bool(pbc.any()), (
-                "AIMNet2Gromacs does not support periodic boundary conditions"
-            )
+            assert not bool(pbc.any()), "AIMNet2Gromacs does not support periodic boundary conditions"
         device = positions.device
 
         # GROMACS may feed float64 positions in double-precision builds; the
@@ -117,7 +110,7 @@ def build_gromacs_nnpot_model(
     model_name: str = "aimnet2",
     *,
     charge: float = 0.0,
-    output_path: Optional[str] = None,
+    output_path: str | None = None,
 ) -> torch.jit.ScriptModule:
     """Stub. Always raises ``NotImplementedError``.
 

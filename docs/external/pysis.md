@@ -2,9 +2,7 @@
 
 **Status: supported (in-tree calculator).**
 
-AIMNet2 ships a pysisyphus `Calculator` implementation (`AIMNet2Pysis`)
-for use inside pysisyphus workflows: optimisations, intrinsic reaction
-coordinate following, transition-state searches, NEB, growing-string, etc.
+AIMNet2 ships a pysisyphus `Calculator` implementation (`AIMNet2Pysis`) for use inside pysisyphus workflows: optimisations, intrinsic reaction coordinate following, transition-state searches, NEB, growing-string, etc.
 
 ## Install
 
@@ -26,10 +24,7 @@ forces = geom.forces        # Hartree/Bohr
 
 ## Use from a pysisyphus YAML run
 
-`aimnet2pysis` is a console script that wraps `pysis` and registers the
-calculator under the YAML key `aimnet`. Run your pysisyphus input file
-with `aimnet2pysis input.yaml` instead of `pysis input.yaml`, and select
-the calculator with:
+`aimnet2pysis` is a console script that wraps `pysis` and registers the calculator under the YAML key `aimnet`. Run your pysisyphus input file with `aimnet2pysis input.yaml` instead of `pysis input.yaml`, and select the calculator with:
 
 ```yaml
 calc:
@@ -41,15 +36,11 @@ calc:
 
 ## Units
 
-Pysisyphus uses Hartree / Bohr internally; the wrapper converts AIMNet2's
-native eV / Angstrom output transparently.
+Pysisyphus uses Hartree / Bohr internally; the wrapper converts AIMNet2's native eV / Angstrom output transparently.
 
 ## Model coverage
 
-All AIMNet2 model families are accessible by passing the model name to
-the constructor: wb97m-d3, b97-3c, NSE, rxn, Pd. AIMNet2-rxn is
-particularly relevant for reaction-path / TS work in pysisyphus -- see
-the linked guide.
+All AIMNet2 model families are accessible by passing the model name to the constructor: wb97m-d3, b97-3c, NSE, rxn, Pd. AIMNet2-rxn is particularly relevant for reaction-path / TS work in pysisyphus -- see the linked guide.
 
 ## See also
 
