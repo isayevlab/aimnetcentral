@@ -108,8 +108,11 @@ class AIMNet2ASE(Calculator):
                 self._t_mult = None
 
     def update_tensors(self):
-        if self._t_numbers is None and getattr(self, "atoms", None):
-            self._t_numbers = torch.tensor(self.atoms.numbers, dtype=torch.int64, device=self.base_calc.device)
+        atoms = getattr(self, "atoms", None)
+        if atoms is not None:
+            new_numbers = torch.as_tensor(atoms.numbers, dtype=torch.int64, device=self.base_calc.device)
+            if self._t_numbers is None or self._t_numbers.shape != new_numbers.shape or not torch.equal(self._t_numbers, new_numbers):
+                self._t_numbers = new_numbers
         if self._t_charge is None:
             self._t_charge = torch.tensor(self.charge, dtype=torch.float32, device=self.base_calc.device)
         if self._t_mult is None:
@@ -146,10 +149,13 @@ class AIMNet2ASE(Calculator):
 
         self._update_charge_spin_from_info()
         self.update_tensors()
-        if self._t_numbers is None or self._t_numbers.shape[0] != len(atoms):
-            self._t_numbers = torch.tensor(
-                atoms.numbers, dtype=torch.int64, device=self.base_calc.device
-            )
+        # Element-wise cache check: rebuild if atoms differ from the previously
+        # cached numbers (length OR species changed). update_tensors() handles
+        # the case where `atoms is self.atoms`; this path covers the case where
+        # the caller passed a different atoms argument.
+        new_numbers = torch.as_tensor(atoms.numbers, dtype=torch.int64, device=self.base_calc.device)
+        if self._t_numbers is None or self._t_numbers.shape != new_numbers.shape or not torch.equal(self._t_numbers, new_numbers):
+            self._t_numbers = new_numbers
 
         # Pass coord as 2D (N, 3) — not batched — so mol_flatten takes the
         # ndim==2 path and calculate_hessian sees the expected (N+1, 3) coord
