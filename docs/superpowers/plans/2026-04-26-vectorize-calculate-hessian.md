@@ -66,30 +66,29 @@ def calculate_hessian(forces: Tensor, coord: Tensor) -> Tensor:
     return hessian
 ```
 
-with one of two equivalent forms (benchmark both):
+with the `torch.func.vmap`-over-vjp-closure form:
 
 ```python
-# Option A: is_grads_batched
 @staticmethod
 def calculate_hessian(forces: Tensor, coord: Tensor) -> Tensor:
     n = forces.numel()
-    grad_outputs = torch.eye(n, device=forces.device, dtype=forces.dtype)
-    hessian = -torch.autograd.grad(
-        forces.flatten(),
-        coord,
-        grad_outputs=grad_outputs,
-        retain_graph=True,
-        is_grads_batched=True,
-    )[0]
+    eye = torch.eye(n, device=forces.device, dtype=forces.dtype)
+
+    def vjp(go):
+        return torch.autograd.grad(
+            forces.flatten(),
+            coord,
+            grad_outputs=go,
+            retain_graph=True,
+            allow_unused=True,
+        )[0]
+
+    hessian = -torch.func.vmap(vjp, 0)(eye)
     # hessian shape: (n, N+1, 3) → reshape, slice off padding rows/cols
     return hessian.view(-1, 3, coord.shape[0], 3)[:-1, :, :-1, :]
 ```
 
-```python
-# Option B: torch.func.hessian over a closure
-# (requires a separate energy_fn closure that re-runs the model — adds a forward,
-# but for N>2 the savings on backward dominate)
-```
+**Why not `is_grads_batched=True` or `autograd.functional.hessian(vectorize=True)`:** Both go through the legacy C++ batching dispatch, which does NOT consult `torch.library.register_vmap` rules. They will continue to raise `RuntimeError: Batching rule not implemented` even after PR 1 registers rules on the kernel. Only `torch.func.vmap` (and `torch.vmap`, its alias) dispatch through the functorch path that consults `register_vmap`. Verified empirically during PR 1 development. See `docs/superpowers/plans/2026-04-26-vectorize-calculate-hessian-pr-a-vmap-rule.md` for details.
 
 **Acceptance**:
 
