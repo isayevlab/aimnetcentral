@@ -81,6 +81,9 @@ pip install "aimnet[ase]"
 # PySisyphus integration
 pip install "aimnet[pysis]"
 
+# Sella TS optimizer
+pip install "aimnet[sella]"
+
 # Training tools
 pip install "aimnet[train]"
 ```
