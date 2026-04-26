@@ -33,7 +33,7 @@ dyn.run(fmax=0.01)
 
 ## Why pass `hessian_function`
 
-By default Sella refines its Hessian via an iterative Davidson eigensolver that costs ~10–30 extra gradient calls per refinement (every `nsteps_per_diag=3` steps). Wiring `AIMNet2ASE.get_hessian` into `hessian_function=` replaces that loop with a single double-backward through the AIMNet2 energy graph. This pattern was validated by [Schreiner et al. (Nature Comms 2024)](https://www.nature.com/articles/s41467-024-52481-5) for NewtonNet, where it cut TS optimization step counts by 2–3x.
+By default Sella refines its Hessian via an iterative Davidson eigensolver that costs ~10–30 extra gradient calls per refinement (every `nsteps_per_diag=3` steps). Wiring `AIMNet2ASE.get_hessian` into `hessian_function=` replaces that loop with one analytic Hessian call (O(3N) backward passes through the AIMNet2 energy graph). This pattern was validated by [Schreiner et al. (Nature Comms 2024)](https://www.nature.com/articles/s41467-024-52481-5) for NewtonNet, where it cut TS optimization step counts by 2–3x.
 
 The Hessian is computed in eV/Å² and shaped `(3N, 3N)` to match Sella's convention.
 
