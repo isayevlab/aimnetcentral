@@ -365,10 +365,9 @@ class TestVectorizedHessian:
     """End-to-end Hessian via vmap-based paths through the kernel.
 
     These tests exercise the vmap rules on aimnet::conv_sv_2d_sp_bwd and
-    aimnet::conv_sv_2d_sp_bwd_bwd added in PR A. They do NOT touch
-    AIMNet2Calculator.calculate_hessian (still the loop path); they call
-    torch.func.vmap directly on a vjp closure built from the calculator's
-    energy graph.
+    aimnet::conv_sv_2d_sp_bwd_bwd by calling torch.func.vmap directly on a vjp
+    closure built from the calculator's energy graph. AIMNet2Calculator's own
+    Hessian path is not invoked.
     """
 
     def _water_inputs(self, device):
@@ -400,7 +399,6 @@ class TestVectorizedHessian:
             {"coord": coords.unsqueeze(0).clone(), "numbers": nums, "charge": charge},
             hessian=True,
         )["hessian"]
-        # H_internal shape: (N, 3, N, 3) with N=3 → (3, 3, 3, 3)
         assert H_internal.shape == (3, 3, 3, 3)
 
         def energy_fn(x):
@@ -408,7 +406,6 @@ class TestVectorizedHessian:
             return out["energy"][0]
 
         coord_req = coords.clone().requires_grad_(True)
-        # First-order gradient with graph retained for the second pass
         dEdx_flat = torch.autograd.grad(energy_fn(coord_req), coord_req, create_graph=True)[0].flatten()
 
         n = dEdx_flat.numel()
@@ -423,8 +420,6 @@ class TestVectorizedHessian:
                 allow_unused=True,
             )[0]
 
-        # torch.func.vmap routes through the register_vmap rule on
-        # aimnet::conv_sv_2d_sp_bwd and aimnet::conv_sv_2d_sp_bwd_bwd.
         H_func = torch.func.vmap(vjp, 0)(eye).reshape(3, 3, 3, 3)
         assert H_func.shape == (3, 3, 3, 3)
         assert torch.isfinite(H_func).all()

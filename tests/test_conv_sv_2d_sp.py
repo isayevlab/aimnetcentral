@@ -318,20 +318,19 @@ class TestConvSV2dSP:
     def test_vmap_bwd_bwd_kernel_rule(self, test_data_small_cuda):
         """vmap over the second-backward kernel must dispatch via the registered rule.
 
-        Before PR A this raises RuntimeError("Batching rule not implemented for
-        aimnet::conv_sv_2d_sp_bwd_bwd"). After PR A it produces a (K, ...) batched
-        result whose k-th slice equals the un-vmapped call with the k-th probe.
+        Without the rule torch.vmap raises `RuntimeError: Batching rule not
+        implemented for aimnet::conv_sv_2d_sp_bwd_bwd`. With the rule it produces a
+        (K, ...) batched result whose k-th slice equals the un-vmapped call with
+        the k-th probe.
         """
-        a, idx, g = test_data_small_cuda  # B=2, A=4, G=3, M=4
+        a, idx, g = test_data_small_cuda
         B, A, G = a.shape
         _, M = idx.shape
         K = 5
         device = a.device
         dtype = a.dtype
 
-        # Build inputs for conv_sv_2d_sp_bwd_bwd directly. None of these are
-        # required to come from a real autograd trace for this unit test —
-        # we just need shape-consistent tensors that exercise the kernel.
+        # Synthetic inputs — no real autograd trace needed; shapes must be consistent.
         grad_output = torch.randn(B, A, G, 4, device=device, dtype=dtype)
         grad2_a = torch.randn(K, B, A, G, device=device, dtype=dtype)
         grad2_g = torch.randn(K, B, M, G, 4, device=device, dtype=dtype)
@@ -348,13 +347,11 @@ class TestConvSV2dSP:
             in_dims=(0, 0),
         )(grad2_a, grad2_g)
 
-        # batched is a list of 3 tensors, each with leading K dim
         assert len(batched) == 3
         assert batched[0].shape == (K, B, A, G, 4)
         assert batched[1].shape == (K, B, A, G)
         assert batched[2].shape == (K, B, M, G, 4)
 
-        # Spot-check k=0 against the un-vmapped call
         ref = call_kernel(grad2_a[0], grad2_g[0])
         assert torch.allclose(batched[0][0], ref[0], atol=1e-5, rtol=1e-4)
         assert torch.allclose(batched[1][0], ref[1], atol=1e-5, rtol=1e-4)
