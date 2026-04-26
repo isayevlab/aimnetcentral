@@ -381,16 +381,16 @@ class TestVectorizedHessian:
         charge = torch.tensor([0.0], device=device)
         return coords, nums, charge
 
-    def test_func_hessian_matches_internal(self):
+    def test_func_vmap_hessian_matches_internal(self):
         """torch.func.vmap-based Hessian matches the calculator's loop hessian.
 
         torch.func.hessian is not used directly here because it pushes vmap through
-        the entire forward pass, including the nvalchemiops neighbor-list op which
-        does not support functorch transforms.  Instead we use the equivalent
-        explicit form: compute dE/dr with create_graph=True, then vmap over
-        autograd.grad for the second derivative.  This exercises exactly the same
-        vmap rule on aimnet::conv_sv_2d_sp_bwd_bwd (and on conv_sv_2d_sp_bwd) as
-        torch.func.hessian would, but confines the vmap to the backward graph.
+        the entire forward pass, which is blocked by an upstream non-vmap-compatible
+        op.  Instead we use the equivalent explicit form: compute dE/dr with
+        create_graph=True, then vmap over autograd.grad for the second derivative.
+        This exercises exactly the same vmap rules on aimnet::conv_sv_2d_sp_bwd and
+        aimnet::conv_sv_2d_sp_bwd_bwd as torch.func.hessian would, but confines the
+        vmap to the backward graph.
         """
         device = torch.device("cuda")
         calc = AIMNet2Calculator("aimnet2", device=device, nb_threshold=0)

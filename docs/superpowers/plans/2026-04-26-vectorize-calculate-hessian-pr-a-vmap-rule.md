@@ -251,7 +251,7 @@ class TestVectorizedHessian:
         charge = torch.tensor([0.0], device=device)
         return coords, nums, charge
 
-    def test_func_hessian_matches_internal(self):
+    def test_func_vmap_hessian_matches_internal(self):
         """torch.func.vmap-based Hessian matches the calculator's loop hessian.
 
         torch.func.hessian is not used directly here because it pushes vmap through
@@ -303,7 +303,7 @@ class TestVectorizedHessian:
 
 - [ ] **Step 2: Run the new test**
 
-Run: `pytest tests/test_calculator_gpu.py::TestVectorizedHessian::test_func_hessian_matches_internal -v -m gpu`
+Run: `pytest tests/test_calculator_gpu.py::TestVectorizedHessian::test_func_vmap_hessian_matches_internal -v -m gpu`
 
 Expected: PASS. Tolerance `5e-3` matches the existing internal/external Hessian regression at `tests/test_calculator.py:318`. Empirically the agreement lands at ~3.81e-6, three orders of magnitude under budget.
 
@@ -360,7 +360,7 @@ git commit -m "test(calculator): torch.func.vmap hessian end-to-end on water (CU
 
 The original Task 4 was an end-to-end test using `torch.autograd.grad(..., is_grads_batched=True)` to mirror PR B's then-planned implementation strategy. During Task 3 it was verified empirically that `is_grads_batched=True` and `torch.autograd.functional.hessian(..., vectorize=True)` go through the legacy C++ batching dispatch and do NOT consult `torch.library.register_vmap` rules — they continue to raise `Batching rule not implemented` even after PR A's rules are registered. Adding a test that asserts a permanent-by-design failure would be brittle (if torch ever wires legacy dispatch to consult `register_vmap`, the test would have to be removed) and would cover no production behavior.
 
-PR B's implementation must therefore use `torch.func.vmap` over a vjp closure — the same form Task 3 already tests. Task 3's `test_func_hessian_matches_internal` is the end-to-end coverage that PR B will rely on; no second test is needed at the PR A boundary.
+PR B's implementation must therefore use `torch.func.vmap` over a vjp closure — the same form Task 3 already tests. Task 3's `test_func_vmap_hessian_matches_internal` is the end-to-end coverage that PR B will rely on; no second test is needed at the PR A boundary.
 
 ---
 
@@ -404,13 +404,13 @@ All must hold before PR A can land:
 
 1. `pytest tests/test_conv_sv_2d_sp.py -v -m gpu` → all green, including `test_vmap_bwd_bwd_kernel_rule`.
 2. `pytest tests/test_calculator.py -v` → all green; the loop-based Hessian regressions are unchanged.
-3. `pytest tests/test_calculator_gpu.py -v -m gpu` → all green, including the new `TestVectorizedHessian::test_func_hessian_matches_internal`.
+3. `pytest tests/test_calculator_gpu.py -v -m gpu` → all green, including the new `TestVectorizedHessian::test_func_vmap_hessian_matches_internal`.
 4. `pytest tests/test_model_registry.py tests/test_hf_hub.py` → all green (CLAUDE.md gate).
 5. No change to `aimnet/calculators/calculator.py`. No change to `aimnet/modules/aev.py`. No change to wrappers. The only files modified are `aimnet/kernels/conv_sv_2d_sp_wp.py`, `tests/test_conv_sv_2d_sp.py`, `tests/test_calculator_gpu.py`.
 
 ## Out of scope (PR B)
 
-- Replacing the row-wise loop in `AIMNet2Calculator.calculate_hessian` (`aimnet/calculators/calculator.py:1135-1142`) with the vectorized form. PR B owns this swap and the caffeine N=24 GPU benchmark target (~10× minimum, ~20–25× expected). PR B MUST use `torch.func.vmap` over a vjp closure (the form exercised by `test_func_hessian_matches_internal`); it MUST NOT use `is_grads_batched=True` or `autograd.functional.hessian(vectorize=True)` because those dispatch paths do not consult `register_vmap`.
+- Replacing the row-wise loop in `AIMNet2Calculator.calculate_hessian` (`aimnet/calculators/calculator.py:1135-1142`) with the vectorized form. PR B owns this swap and the caffeine N=24 GPU benchmark target (~10× minimum, ~20–25× expected). PR B MUST use `torch.func.vmap` over a vjp closure (the form exercised by `test_func_vmap_hessian_matches_internal`); it MUST NOT use `is_grads_batched=True` or `autograd.functional.hessian(vectorize=True)` because those dispatch paths do not consult `register_vmap`.
 - Plumbing a `create_graph` knob through the calculator's forces path (`aimnet/calculators/calculator.py:1107-1118`). Today the only way to get a force graph from the calculator is via `hessian=True` (which also runs the loop hessian). PR B will need either a new flag or a direct closure that bypasses `get_derivatives`.
 - Optimizing the vmap rules beyond the K-loop. A fully-batched kernel that respects the padding sentinel is a possible follow-up if the K-loop dominates wall-clock for very large K (it almost certainly will not at N≤100).
 - A vmap rule for `aimnet::conv_sv_2d_sp_fwd`. The `torch.func.vmap`-over-vjp-closure form does not push vmap through forward, so the forward kernel is never seen by the rule dispatcher. Add only if a future caller demands it.
