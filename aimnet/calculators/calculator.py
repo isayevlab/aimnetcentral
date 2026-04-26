@@ -433,6 +433,10 @@ class AIMNet2Calculator:
         """If multiple distinct families have been constructed in this process,
         emit a one-time UserWarning about energy-scale incompatibility.
 
+        ``family=None`` is the no-op contract — calculators built from raw
+        ``nn.Module`` inputs or from .pt files that don't declare ``family``
+        in metadata pass ``None`` here and skip both tracking and warning.
+
         Bypass: set the AIMNET_QUIET_FAMILY_MIX environment variable to '1'.
         """
         if family is None:
@@ -800,11 +804,15 @@ class AIMNet2Calculator:
                     )
             meta = self.metadata or {}
             if meta.get("supports_charged_systems") is False:
-                charge_val = float(data.get("charge", 0.0))
-                if abs(charge_val) > 1e-6:
+                # torch.as_tensor handles scalars, lists, ndarrays, 0-d and N-d tensors
+                # uniformly so per-system charges in batched inputs (e.g. batched-NEB)
+                # don't raise the misleading "only one element tensors..." from float().
+                charge_t = torch.as_tensor(data.get("charge", 0.0))
+                if charge_t.numel() > 0 and float(charge_t.abs().max().item()) > 1e-6:
+                    bad = charge_t[charge_t.abs() > 1e-6].flatten().tolist()
                     raise ValueError(
                         f"This model does not support net-charged systems "
-                        f"(got charge={charge_val}). Net-neutral zwitterions are supported. "
+                        f"(got non-zero charge(s) {bad}). Net-neutral zwitterions are supported. "
                         f"For ions use `isayevlab/aimnet2-wb97m-d3`. "
                         f"Pass validate_species=False to bypass."
                     )

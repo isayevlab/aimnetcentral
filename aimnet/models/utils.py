@@ -773,11 +773,15 @@ def load_v1_model(
     # validate_species=False at inference time produces NaN-propagation
     # instead of plausible-looking garbage from populated-but-untrained rows.
     if _species_kwarg is not None:
-        species_set = set(implemented_species_list)
         afv = core_model.afv.weight.data
-        for z in range(1, afv.shape[0]):
-            if z not in species_set:
-                afv[z] = float("nan")
+        # Build a row-mask: True for rows to NaN (everything except row 0 placeholder
+        # and the supported species rows).
+        mask = torch.ones(afv.shape[0], dtype=torch.bool, device=afv.device)
+        mask[0] = False
+        for z in implemented_species_list:
+            if 0 <= z < afv.shape[0]:
+                mask[z] = False
+        afv[mask] = float("nan")
 
     # Save if output path provided
     if output_path is not None:

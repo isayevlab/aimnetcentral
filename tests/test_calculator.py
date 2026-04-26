@@ -1077,6 +1077,30 @@ def test_calculator_rejects_charged_input_when_unsupported(monkeypatch):
     calc(data, validate_species=False)
 
 
+def test_calculator_charge_guard_handles_batched_charges():
+    """Batched 1-d charge tensors (e.g. per-system in batched-NEB) must raise the
+    documented chemistry ValueError — NOT the misleading 'only one element
+    tensors can be converted...' RuntimeError that the old `float(tensor)` path
+    produced for multi-element tensors."""
+    import pytest
+    import torch
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    calc.model._metadata = dict(calc.model._metadata)
+    calc.model._metadata["supports_charged_systems"] = False
+
+    coords = torch.tensor([[0.0, 0.0, 0.0]])
+    numbers = torch.tensor([1])
+    # Batched: two systems, one neutral one anionic. The guard must raise the
+    # documented ValueError (not a generic float() RuntimeError on multi-element).
+    data = {"coord": coords, "numbers": numbers, "charge": torch.tensor([0.0, -1.0])}
+
+    with pytest.raises(ValueError, match=r"net-charged systems"):
+        calc(data)
+
+
 def test_hessian_with_compile_raises():
     """Calling with hessian=True on a calculator constructed with compile_model=True
     must raise RuntimeError instead of hanging (Dynamo + double-backward on GELU)."""
