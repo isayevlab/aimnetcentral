@@ -440,6 +440,66 @@ class TestAtomsInfoChargeSpin:
         assert atoms.calc.charge == 1.0
 
 
+class TestHessian:
+    """Hessian property — used by Sella analytic-Hessian callback."""
+
+    def test_hessian_shape_and_finite(self):
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase.io import read
+
+        from aimnet.calculators import AIMNet2ASE
+
+        atoms = read(CAFFEINE_FILE)
+        atoms.calc = AIMNet2ASE("aimnet2")
+
+        H = atoms.calc.get_hessian(atoms)
+        N = len(atoms)
+        assert H.shape == (3 * N, 3 * N)
+        assert np.isfinite(H).all()
+
+    def test_hessian_symmetric(self):
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase.io import read
+
+        from aimnet.calculators import AIMNet2ASE
+
+        atoms = read(CAFFEINE_FILE)
+        atoms.calc = AIMNet2ASE("aimnet2")
+
+        H = atoms.calc.get_hessian(atoms)
+        assert np.max(np.abs(H - H.T)) < 5e-3
+
+    def test_hessian_callback_signature(self):
+        """Must be usable as Sella's hessian_function=callable callback."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase import Atoms
+
+        from aimnet.calculators import AIMNet2ASE
+
+        atoms = Atoms("OH2", positions=[[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+        atoms.calc = AIMNet2ASE("aimnet2")
+
+        callback = atoms.calc.get_hessian
+        assert callable(callback)
+        H = callback(atoms)
+        assert H.shape == (9, 9)
+        assert isinstance(H, np.ndarray)
+
+    def test_hessian_default_atoms(self):
+        """get_hessian() with no argument should use the attached atoms."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase import Atoms
+
+        from aimnet.calculators import AIMNet2ASE
+
+        atoms = Atoms("OH2", positions=[[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+        calc = AIMNet2ASE("aimnet2")
+        atoms.calc = calc
+        atoms.get_potential_energy()
+        H = calc.get_hessian()
+        assert H.shape == (9, 9)
+
+
 @pytest.mark.ase
 def test_aimnet2ase_propagates_validate_species(monkeypatch):
     """AIMNet2ASE.calculate(..., validate_species=False) must propagate the kwarg

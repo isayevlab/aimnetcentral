@@ -125,6 +125,57 @@ class AIMNet2ASE(Calculator):
             raise PropertyNotImplementedError("spin_charges is not available. Use an NSE model (e.g. 'aimnet2nse').")
         return self.results["spin_charges"]
 
+    def get_hessian(self, atoms=None):
+        """Return Cartesian Hessian as a (3N, 3N) ndarray in eV/Å^2.
+
+        Designed for use as ``Sella(atoms, hessian_function=atoms.calc.get_hessian)``.
+        Computed via double-backward through the AIMNet2 energy graph; cost scales
+        as O(3N) backward passes. Not supported when ``compile_model=True`` or
+        for batched / multi-molecule input.
+        """
+        if atoms is None:
+            atoms = getattr(self, "atoms", None)
+            if atoms is None:
+                raise PropertyNotImplementedError(
+                    "get_hessian() requires an attached Atoms object or an explicit argument."
+                )
+        if atoms.pbc.any():
+            raise PropertyNotImplementedError(
+                "Hessian for periodic systems is not supported by AIMNet2ASE.get_hessian()."
+            )
+
+        self._update_charge_spin_from_info()
+        self.update_tensors()
+        if self._t_numbers is None or self._t_numbers.shape[0] != len(atoms):
+            self._t_numbers = torch.tensor(
+                atoms.numbers, dtype=torch.int64, device=self.base_calc.device
+            )
+
+        # Pass coord as 2D (N, 3) — not batched — so mol_flatten takes the
+        # ndim==2 path and calculate_hessian sees the expected (N+1, 3) coord
+        # after padding. Batching (unsqueeze(0)) triggers the ndim==3 path
+        # which may skip flattening when N < nb_threshold on GPU, causing
+        # calculate_hessian to produce an incorrect (N, 3, 1, 3) shape.
+        coord = torch.tensor(
+            atoms.positions, dtype=torch.float32, device=self.base_calc.device
+        )
+        _in = {
+            "coord": coord,
+            "numbers": self._t_numbers,
+            "charge": self._t_charge,
+            "mult": self._t_mult,
+        }
+
+        results = self.base_calc(
+            _in,
+            forces=True,
+            hessian=True,
+            validate_species=self.validate_species,
+        )
+        H = results["hessian"].detach()  # (N, 3, N, 3)
+        N = H.shape[0]
+        return H.reshape(N * 3, N * 3).cpu().numpy()
+
     def calculate(self, atoms=None, properties=None, system_changes=all_changes):
         if properties is None:
             properties = ["energy"]
