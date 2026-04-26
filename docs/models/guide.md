@@ -71,7 +71,9 @@ Radicals, triplet states, or any system with unpaired electrons should use **`ai
 
 If you prefer a B97-3c reference level (faster DFT, suitable for screening and large-scale studies), use **`aimnet2_2025`**. This is the recommended B97-3c model — it supersedes the original `aimnet2_b973c` with improved intermolecular interaction accuracy while retaining the same intramolecular performance.
 
-!!! note "AIMNet2-2025 supersedes AIMNet2-B97-3c" For all new work requiring a B97-3c-level model, use `aimnet2_2025`. The original `aimnet2_b973c` is retained for reproducibility of published results but is no longer the recommended choice. AIMNet2-2025 provides strictly better accuracy for non-covalent interactions with no regression for covalent chemistry.
+!!! note "AIMNet2-2025 supersedes AIMNet2-B97-3c"
+
+    For all new work requiring a B97-3c-level model, use `aimnet2_2025`. The original `aimnet2_b973c` is retained for reproducibility of published results but is no longer the recommended choice. AIMNet2-2025 provides strictly better accuracy for non-covalent interactions with no regression for covalent chemistry.
 
 ### Step 5: General-purpose?
 

@@ -52,7 +52,9 @@ result = calc({
 }, forces=True)
 ```
 
-!!! note Warp caches compiled kernels in `~/.cache/warp/` (or the directory set by `WARP_CACHE_PATH`). If you delete this cache, the next run will recompile.
+!!! note
+
+    Warp caches compiled kernels in `~/.cache/warp/` (or the directory set by `WARP_CACHE_PATH`). If you delete this cache, the next run will recompile.
 
 ## Step 2: Using torch.compile (compile_model)
 
@@ -107,7 +109,9 @@ calc = AIMNet2Calculator(
 )
 ```
 
-!!! warning "Do not use reduce-overhead with varying input sizes" The `reduce-overhead` mode uses CUDA graphs, which record a fixed execution pattern. If your input sizes vary between calls (different numbers of atoms or neighbors), this causes **graph breaks** and can actually slow things down or produce errors. Only use `reduce-overhead` when the system size is truly constant.
+!!! warning "Do not use reduce-overhead with varying input sizes"
+
+    The `reduce-overhead` mode uses CUDA graphs, which record a fixed execution pattern. If your input sizes vary between calls (different numbers of atoms or neighbors), this causes **graph breaks** and can actually slow things down or produce errors. Only use `reduce-overhead` when the system size is truly constant.
 
     ```python
     # AVOID for varying sizes
@@ -150,7 +154,9 @@ calc = AIMNet2Calculator("aimnet2", nb_threshold=80)
 calc = AIMNet2Calculator("aimnet2", nb_threshold=200)
 ```
 
-!!! warning "Avoid crossing the dense/sparse boundary with torch.compile" If you use `compile_model=True`, make sure all your inputs consistently land in the same mode (all dense or all sparse). Crossing the boundary (e.g., some calls with 100 atoms in dense mode, others with 150 atoms in sparse mode) causes recompilation each time, negating the benefits. Set `nb_threshold` so that your typical workload stays in one mode.
+!!! warning "Avoid crossing the dense/sparse boundary with torch.compile"
+
+    If you use `compile_model=True`, make sure all your inputs consistently land in the same mode (all dense or all sparse). Crossing the boundary (e.g., some calls with 100 atoms in dense mode, others with 150 atoms in sparse mode) causes recompilation each time, negating the benefits. Set `nb_threshold` so that your typical workload stays in one mode.
 
 ## Step 4: GPU Memory Considerations
 
@@ -166,7 +172,9 @@ The `AdaptiveNeighborList` starts with a buffer sized from an initial density es
 
 Hessian calculation requires O(N^2) memory because the full second-derivative matrix has shape `(N, 3, N, 3)`. For a 100-atom molecule, this is 100 x 3 x 100 x 3 = 90,000 float values (~360 KB in float32), and for 1000 atoms it becomes 1000 x 3 x 1000 x 3 = 9,000,000 values (~36 MB in float32).
 
-!!! warning Hessian computation is limited to **single molecules** and scales quadratically with atom count. For molecules larger than ~200 atoms, you may run out of GPU memory. Consider computing the Hessian on a CPU for large systems, or using finite-difference approaches for specific vibrational modes.
+!!! warning
+
+    Hessian computation is limited to **single molecules** and scales quadratically with atom count. For molecules larger than ~200 atoms, you may run out of GPU memory. Consider computing the Hessian on a CPU for large systems, or using finite-difference approaches for specific vibrational modes.
 
 ### Synchronization Points
 
@@ -260,7 +268,9 @@ calc = AIMNet2Calculator("aimnet2", train=True)
 calc = AIMNet2Calculator("aimnet2")  # train=False by default
 ```
 
-!!! note `train=False` (the default) disables `requires_grad` on all model parameters. This reduces memory usage and improves `torch.compile` compatibility. The calculator still computes forces and Hessians correctly via autograd on the input coordinates.
+!!! note
+
+    `train=False` (the default) disables `requires_grad` on all model parameters. This reduces memory usage and improves `torch.compile` compatibility. The calculator still computes forces and Hessians correctly via autograd on the input coordinates.
 
 ### Do Not Use Multiple GPUs
 

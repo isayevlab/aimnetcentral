@@ -73,6 +73,7 @@ AIMNet2Calculator(
     device: str | None = None,
     compile_model: bool = False,
     compile_kwargs: dict | None = None,
+    train: bool = False,
     ensemble_member: int = 0,
     revision: str | None = None,
     token: str | None = None,
@@ -168,6 +169,17 @@ calc = AIMNet2Calculator("aimnet2", compile_model=True, compile_kwargs={"mode": 
 ```
 
 See [torch.compile documentation](https://pytorch.org/docs/stable/generated/torch.compile.html) for available options.
+
+#### `train`
+
+Whether to put the model in training mode. Default: `False`.
+
+| Value | Behavior |
+| --- | --- |
+| `False` (default) | Inference mode: model set to `.eval()`, all parameters set to `requires_grad_(False)` |
+| `True` | Training mode: model set to `.train()`, parameters keep `requires_grad` |
+
+For ordinary energy/force/charge inference (including external autograd through the calculator), leave this `False`. Set `True` only when using the calculator inside a training loop where model parameters need gradients.
 
 #### `ensemble_member`
 
@@ -457,7 +469,9 @@ def energy_fn(x):
 H = torch.autograd.functional.hessian(energy_fn, coords)  # shape (N, 3, N, 3)
 ```
 
-!!! note "Use `forces=False` for external Hessians" When computing higher-order derivatives from outside the calculator, pass `forces=False`. Requesting `forces=True` triggers an internal backward pass that frees intermediate activations, preventing a second differentiation through the graph.
+!!! note "Use `forces=False` for external Hessians"
+
+    When computing higher-order derivatives from outside the calculator, pass `forces=False`. Requesting `forces=True` triggers an internal backward pass that frees intermediate activations, preventing a second differentiation through the graph.
 
 When `coord` does **not** have `requires_grad=True` (the default), inputs are detached as before — optimization loops that call the calculator repeatedly incur no graph accumulation overhead.
 

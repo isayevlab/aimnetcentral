@@ -18,7 +18,7 @@ _default_config = os.path.join(os.path.dirname(__file__), "default_train.yaml")
     type=click.Path(exists=True),
     default=None,
     multiple=True,
-    help="Path to the extra configuration file (overrides values, could be preficied multiple times).",
+    help="Path to the extra configuration file (overrides values, can be specified multiple times).",
 )
 @click.option(
     "--model", type=click.Path(exists=True), default=_default_model, help="Path to the model definition file."
