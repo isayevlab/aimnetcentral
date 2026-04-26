@@ -73,6 +73,42 @@
          <lastmod>2026-04-26</lastmod>
     </url>
     <url>
+         <loc>https://isayevlab.github.io/aimnetcentral/external/</loc>
+         <lastmod>2026-04-26</lastmod>
+    </url>
+    <url>
+         <loc>https://isayevlab.github.io/aimnetcentral/external/amber/</loc>
+         <lastmod>2026-04-26</lastmod>
+    </url>
+    <url>
+         <loc>https://isayevlab.github.io/aimnetcentral/external/ams/</loc>
+         <lastmod>2026-04-26</lastmod>
+    </url>
+    <url>
+         <loc>https://isayevlab.github.io/aimnetcentral/external/ase/</loc>
+         <lastmod>2026-04-26</lastmod>
+    </url>
+    <url>
+         <loc>https://isayevlab.github.io/aimnetcentral/external/gromacs/</loc>
+         <lastmod>2026-04-26</lastmod>
+    </url>
+    <url>
+         <loc>https://isayevlab.github.io/aimnetcentral/external/lammps/</loc>
+         <lastmod>2026-04-26</lastmod>
+    </url>
+    <url>
+         <loc>https://isayevlab.github.io/aimnetcentral/external/openmm/</loc>
+         <lastmod>2026-04-26</lastmod>
+    </url>
+    <url>
+         <loc>https://isayevlab.github.io/aimnetcentral/external/orca/</loc>
+         <lastmod>2026-04-26</lastmod>
+    </url>
+    <url>
+         <loc>https://isayevlab.github.io/aimnetcentral/external/pysis/</loc>
+         <lastmod>2026-04-26</lastmod>
+    </url>
+    <url>
          <loc>https://isayevlab.github.io/aimnetcentral/models/aimnet2/</loc>
          <lastmod>2026-04-26</lastmod>
     </url>
@@ -110,6 +146,10 @@
     </url>
     <url>
          <loc>https://isayevlab.github.io/aimnetcentral/superpowers/plans/2026-04-25-aimnet2-rxn-integration/</loc>
+         <lastmod>2026-04-26</lastmod>
+    </url>
+    <url>
+         <loc>https://isayevlab.github.io/aimnetcentral/superpowers/plans/2026-04-26-torchscript-export/</loc>
          <lastmod>2026-04-26</lastmod>
     </url>
     <url>

@@ -12,29 +12,31 @@
         <meta name="author" content="Roman Zubatyuk">
       
       
-        <link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/">
+        <link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/external/">
       
       
+        <link rel="prev" href="../advanced/charged_systems/">
       
-        <link rel="next" href="getting_started/">
+      
+        <link rel="next" href="ase/">
       
       
         
       
       
-      <link rel="icon" href="assets/images/favicon.png">
+      <link rel="icon" href="../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
     
     
       
-        <title>AIMNet Machine-Learned Interatomic Potential - AIMNetCentral</title>
+        <title>Overview - AIMNetCentral</title>
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.618322db.min.css">
       
         
-        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -53,9 +55,9 @@
       
     
     
-      <link rel="stylesheet" href="assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -80,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#aimnet2-machine-learned-interatomic-potential" class="md-skip">
+        <a href="#external-packages" class="md-skip">
           Skip to content
         </a>
       
@@ -96,7 +98,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="." title="AIMNetCentral" class="md-header__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
+    <a href=".." title="AIMNetCentral" class="md-header__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -116,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              AIMNet Machine-Learned Interatomic Potential
+              Overview
             
           </span>
         </div>
@@ -234,7 +236,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="." title="AIMNetCentral" class="md-nav__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
+    <a href=".." title="AIMNetCentral" class="md-nav__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -261,37 +263,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Home
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="." class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -307,236 +282,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#what-is-aimnet2" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What is AIMNet2?
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#explore-aimnet2" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Explore AIMNet2
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Explore AIMNet2">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#choose-a-model" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Choose a Model
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#learn-the-basics" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Learn the Basics
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#advanced-workflows" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Advanced Workflows
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Quick Start
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#available-models" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Available Models
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#installation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Installation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#documentation-guide" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Documentation Guide
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Documentation Guide">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#first-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        First Steps
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#models" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Models
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#tutorials" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tutorials
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#advanced-use-cases" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Advanced Use Cases
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#reference" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Reference
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#api-reference" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        API Reference
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#support-and-contributing" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Support and Contributing
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#citation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Citation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#license" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        License
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -548,7 +293,7 @@
   
   
     <li class="md-nav__item">
-      <a href="getting_started/" class="md-nav__link">
+      <a href="../getting_started/" class="md-nav__link">
         
   
   
@@ -622,7 +367,7 @@
   
   
     <li class="md-nav__item">
-      <a href="models/guide/" class="md-nav__link">
+      <a href="../models/guide/" class="md-nav__link">
         
   
   
@@ -650,7 +395,7 @@
   
   
     <li class="md-nav__item">
-      <a href="models/architecture/" class="md-nav__link">
+      <a href="../models/architecture/" class="md-nav__link">
         
   
   
@@ -678,7 +423,7 @@
   
   
     <li class="md-nav__item">
-      <a href="models/aimnet2/" class="md-nav__link">
+      <a href="../models/aimnet2/" class="md-nav__link">
         
   
   
@@ -706,7 +451,7 @@
   
   
     <li class="md-nav__item">
-      <a href="models/aimnet2_b973c/" class="md-nav__link">
+      <a href="../models/aimnet2_b973c/" class="md-nav__link">
         
   
   
@@ -734,7 +479,7 @@
   
   
     <li class="md-nav__item">
-      <a href="models/aimnet2_2025/" class="md-nav__link">
+      <a href="../models/aimnet2_2025/" class="md-nav__link">
         
   
   
@@ -762,7 +507,7 @@
   
   
     <li class="md-nav__item">
-      <a href="models/aimnet2nse/" class="md-nav__link">
+      <a href="../models/aimnet2nse/" class="md-nav__link">
         
   
   
@@ -790,7 +535,7 @@
   
   
     <li class="md-nav__item">
-      <a href="models/aimnet2pd/" class="md-nav__link">
+      <a href="../models/aimnet2pd/" class="md-nav__link">
         
   
   
@@ -818,7 +563,7 @@
   
   
     <li class="md-nav__item">
-      <a href="models/aimnet2_rxn/" class="md-nav__link">
+      <a href="../models/aimnet2_rxn/" class="md-nav__link">
         
   
   
@@ -900,7 +645,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/single_point/" class="md-nav__link">
+      <a href="../tutorials/single_point/" class="md-nav__link">
         
   
   
@@ -928,7 +673,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/geometry_optimization/" class="md-nav__link">
+      <a href="../tutorials/geometry_optimization/" class="md-nav__link">
         
   
   
@@ -956,7 +701,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/molecular_dynamics/" class="md-nav__link">
+      <a href="../tutorials/molecular_dynamics/" class="md-nav__link">
         
   
   
@@ -984,7 +729,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/periodic_systems/" class="md-nav__link">
+      <a href="../tutorials/periodic_systems/" class="md-nav__link">
         
   
   
@@ -1012,7 +757,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/batch_processing/" class="md-nav__link">
+      <a href="../tutorials/batch_processing/" class="md-nav__link">
         
   
   
@@ -1040,7 +785,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/performance/" class="md-nav__link">
+      <a href="../tutorials/performance/" class="md-nav__link">
         
   
   
@@ -1068,7 +813,7 @@
   
   
     <li class="md-nav__item">
-      <a href="tutorials/hugging_face/" class="md-nav__link">
+      <a href="../tutorials/hugging_face/" class="md-nav__link">
         
   
   
@@ -1150,7 +895,7 @@
   
   
     <li class="md-nav__item">
-      <a href="advanced/open_shell/" class="md-nav__link">
+      <a href="../advanced/open_shell/" class="md-nav__link">
         
   
   
@@ -1178,7 +923,7 @@
   
   
     <li class="md-nav__item">
-      <a href="advanced/conformer_search/" class="md-nav__link">
+      <a href="../advanced/conformer_search/" class="md-nav__link">
         
   
   
@@ -1206,7 +951,7 @@
   
   
     <li class="md-nav__item">
-      <a href="advanced/reaction_paths/" class="md-nav__link">
+      <a href="../advanced/reaction_paths/" class="md-nav__link">
         
   
   
@@ -1234,7 +979,7 @@
   
   
     <li class="md-nav__item">
-      <a href="advanced/intermolecular_interactions/" class="md-nav__link">
+      <a href="../advanced/intermolecular_interactions/" class="md-nav__link">
         
   
   
@@ -1262,7 +1007,7 @@
   
   
     <li class="md-nav__item">
-      <a href="advanced/transition_metal_catalysis/" class="md-nav__link">
+      <a href="../advanced/transition_metal_catalysis/" class="md-nav__link">
         
   
   
@@ -1290,7 +1035,7 @@
   
   
     <li class="md-nav__item">
-      <a href="advanced/charged_systems/" class="md-nav__link">
+      <a href="../advanced/charged_systems/" class="md-nav__link">
         
   
   
@@ -1322,18 +1067,20 @@
       
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
         
           
           <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
@@ -1354,7 +1101,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1369,10 +1116,19 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="external/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1388,6 +1144,7 @@
   
 
       </a>
+      
     </li>
   
 
@@ -1400,7 +1157,7 @@
   
   
     <li class="md-nav__item">
-      <a href="external/ase/" class="md-nav__link">
+      <a href="ase/" class="md-nav__link">
         
   
   
@@ -1428,7 +1185,7 @@
   
   
     <li class="md-nav__item">
-      <a href="external/pysis/" class="md-nav__link">
+      <a href="pysis/" class="md-nav__link">
         
   
   
@@ -1456,7 +1213,7 @@
   
   
     <li class="md-nav__item">
-      <a href="external/openmm/" class="md-nav__link">
+      <a href="openmm/" class="md-nav__link">
         
   
   
@@ -1484,7 +1241,7 @@
   
   
     <li class="md-nav__item">
-      <a href="external/amber/" class="md-nav__link">
+      <a href="amber/" class="md-nav__link">
         
   
   
@@ -1512,7 +1269,7 @@
   
   
     <li class="md-nav__item">
-      <a href="external/ams/" class="md-nav__link">
+      <a href="ams/" class="md-nav__link">
         
   
   
@@ -1540,7 +1297,7 @@
   
   
     <li class="md-nav__item">
-      <a href="external/orca/" class="md-nav__link">
+      <a href="orca/" class="md-nav__link">
         
   
   
@@ -1568,7 +1325,7 @@
   
   
     <li class="md-nav__item">
-      <a href="external/gromacs/" class="md-nav__link">
+      <a href="gromacs/" class="md-nav__link">
         
   
   
@@ -1596,7 +1353,7 @@
   
   
     <li class="md-nav__item">
-      <a href="external/lammps/" class="md-nav__link">
+      <a href="lammps/" class="md-nav__link">
         
   
   
@@ -1678,7 +1435,7 @@
   
   
     <li class="md-nav__item">
-      <a href="calculator/" class="md-nav__link">
+      <a href="../calculator/" class="md-nav__link">
         
   
   
@@ -1706,7 +1463,7 @@
   
   
     <li class="md-nav__item">
-      <a href="long_range/" class="md-nav__link">
+      <a href="../long_range/" class="md-nav__link">
         
   
   
@@ -1734,7 +1491,7 @@
   
   
     <li class="md-nav__item">
-      <a href="model_format/" class="md-nav__link">
+      <a href="../model_format/" class="md-nav__link">
         
   
   
@@ -1762,7 +1519,7 @@
   
   
     <li class="md-nav__item">
-      <a href="train/" class="md-nav__link">
+      <a href="../train/" class="md-nav__link">
         
   
   
@@ -1790,7 +1547,7 @@
   
   
     <li class="md-nav__item">
-      <a href="cli/" class="md-nav__link">
+      <a href="../cli/" class="md-nav__link">
         
   
   
@@ -1872,7 +1629,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/" class="md-nav__link">
+      <a href="../api/" class="md-nav__link">
         
   
   
@@ -1900,7 +1657,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/calculators/" class="md-nav__link">
+      <a href="../api/calculators/" class="md-nav__link">
         
   
   
@@ -1928,7 +1685,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/modules/" class="md-nav__link">
+      <a href="../api/modules/" class="md-nav__link">
         
   
   
@@ -1956,7 +1713,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/data/" class="md-nav__link">
+      <a href="../api/data/" class="md-nav__link">
         
   
   
@@ -1984,7 +1741,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api/config/" class="md-nav__link">
+      <a href="../api/config/" class="md-nav__link">
         
   
   
@@ -2032,224 +1789,6 @@
     
   
   
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#what-is-aimnet2" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What is AIMNet2?
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#explore-aimnet2" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Explore AIMNet2
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Explore AIMNet2">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#choose-a-model" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Choose a Model
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#learn-the-basics" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Learn the Basics
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#advanced-workflows" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Advanced Workflows
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Quick Start
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#available-models" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Available Models
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#installation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Installation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#documentation-guide" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Documentation Guide
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Documentation Guide">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#first-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        First Steps
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#models" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Models
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#tutorials" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tutorials
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#advanced-use-cases" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Advanced Use Cases
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#reference" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Reference
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#api-reference" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        API Reference
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#support-and-contributing" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Support and Contributing
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#citation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Citation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#license" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        License
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
 </nav>
                   </div>
                 </div>
@@ -2268,140 +1807,66 @@
   
 
 
-<h1 id="aimnet2-machine-learned-interatomic-potential">AIMNet2: Machine-Learned Interatomic Potential<a class="headerlink" href="#aimnet2-machine-learned-interatomic-potential" title="Permanent link">&para;</a></h1>
-<p><a href="https://img.shields.io/github/v/release/isayevlab/aimnetcentral"><img alt="Release" src="https://img.shields.io/github/v/release/isayevlab/aimnetcentral" /></a> <a href="https://github.com/isayevlab/aimnetcentral/actions/workflows/main.yml?query=branch%3Amain"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/isayevlab/aimnetcentral/main.yml?branch=main" /></a> <a href="https://img.shields.io/github/license/isayevlab/aimnetcentral"><img alt="License" src="https://img.shields.io/github/license/isayevlab/aimnetcentral" /></a></p>
-<h2 id="what-is-aimnet2">What is AIMNet2?<a class="headerlink" href="#what-is-aimnet2" title="Permanent link">&para;</a></h2>
-<p>AIMNet2 is a neural network potential for fast and accurate atomistic simulations. Built on PyTorch, it provides:</p>
-<ul>
-<li>Accurate predictions for neutral, charged, organic, and elemental-organic systems</li>
-<li>Fast inference on both CPU and GPU</li>
-<li>Integration with popular simulation packages (ASE, PySisyphus)</li>
-<li>Configurable long-range electrostatics (DSF, Ewald) for periodic systems</li>
-</ul>
-<p>AIMNet2 combines a graph neural network architecture with flexible long-range interactions, making it suitable for molecular dynamics, geometry optimization, and property prediction across diverse chemical systems.</p>
-<h2 id="explore-aimnet2">Explore AIMNet2<a class="headerlink" href="#explore-aimnet2" title="Permanent link">&para;</a></h2>
-<h3 id="choose-a-model">Choose a Model<a class="headerlink" href="#choose-a-model" title="Permanent link">&para;</a></h3>
-<p>Find the right model for your chemistry -- general organic, open-shell radicals, Pd catalysis, non-covalent interactions, or high-throughput screening.</p>
-<p><a href="models/guide/">Model Selection Guide</a></p>
-<h3 id="learn-the-basics">Learn the Basics<a class="headerlink" href="#learn-the-basics" title="Permanent link">&para;</a></h3>
-<p>Step-by-step tutorials from your first single-point calculation through geometry optimization, molecular dynamics, and batch processing.</p>
-<p><a href="tutorials/single_point/">Start with Single-Point Calculations</a></p>
-<h3 id="advanced-workflows">Advanced Workflows<a class="headerlink" href="#advanced-workflows" title="Permanent link">&para;</a></h3>
-<p>Conformer search, reaction paths and transition states, transition metal catalysis, non-covalent interactions, and charged systems.</p>
-<p><a href="advanced/conformer_search/">Advanced Use Cases</a></p>
-<h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
-
-<span class="c1"># Load model</span>
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>
-
-<span class="c1"># Run inference</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">calc</span><span class="p">({</span>
-    <span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">coords</span><span class="p">,</span>    <span class="c1"># (N, 3) array in Angstrom</span>
-    <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="n">numbers</span><span class="p">,</span> <span class="c1"># (N,) atomic numbers</span>
-    <span class="s2">&quot;charge&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>      <span class="c1"># molecular charge</span>
-<span class="p">},</span> <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
-<span class="c1"># Access results</span>
-<span class="n">energy</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>   <span class="c1"># eV</span>
-<span class="n">forces</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]</span>   <span class="c1"># eV/Angstrom</span>
-<span class="n">charges</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;charges&quot;</span><span class="p">]</span> <span class="c1"># partial charges</span>
-</code></pre></div>
-<h2 id="available-models">Available Models<a class="headerlink" href="#available-models" title="Permanent link">&para;</a></h2>
-<p>AIMNet2 provides five model families covering a wide range of chemistry -- from general organic molecules to open-shell radicals and palladium catalysis. Each model has ensemble members (append <code>_0</code> to <code>_3</code>) for uncertainty estimation.</p>
-<p>See the <strong><a href="models/guide/">Model Selection Guide</a></strong> for a detailed comparison and decision flowchart.</p>
-<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
-<p>Basic installation:</p>
-<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>aimnet
-</code></pre></div>
-<p>With optional features:</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># ASE integration</span>
-pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;aimnet[ase]&quot;</span>
-
-<span class="c1"># PySisyphus integration</span>
-pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;aimnet[pysis]&quot;</span>
-
-<span class="c1"># Training tools</span>
-pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;aimnet[train]&quot;</span>
-</code></pre></div>
-<p><strong>Requirements:</strong> Python 3.11 or 3.12. GPU support optional (PyTorch with CUDA).</p>
-<h2 id="documentation-guide">Documentation Guide<a class="headerlink" href="#documentation-guide" title="Permanent link">&para;</a></h2>
-<h3 id="first-steps">First Steps<a class="headerlink" href="#first-steps" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong><a href="getting_started/">Getting Started</a></strong> - Installation, setup, and verifying your environment</li>
-</ul>
-<h3 id="models">Models<a class="headerlink" href="#models" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong><a href="models/guide/">Model Selection Guide</a></strong> - Decision flowchart for choosing the right model</li>
-<li><strong><a href="models/architecture/">Architecture Overview</a></strong> - AEV descriptors, ConvSV, charge equilibration internals</li>
-<li><strong><a href="models/aimnet2/">AIMNet2 (wB97M-D3)</a></strong> - General-purpose default model</li>
-<li><strong><a href="models/aimnet2_2025/">AIMNet2-2025</a></strong> - Recommended B97-3c model (supersedes B97-3c)</li>
-<li><strong><a href="models/aimnet2_b973c/">AIMNet2-B97-3c</a></strong> - Legacy B97-3c (for reproducibility)</li>
-<li><strong><a href="models/aimnet2nse/">AIMNet2-NSE</a></strong> - Open-shell and radical chemistry</li>
-<li><strong><a href="models/aimnet2pd/">AIMNet2-Pd</a></strong> - Palladium-containing systems</li>
-</ul>
-<h3 id="tutorials">Tutorials<a class="headerlink" href="#tutorials" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong><a href="tutorials/single_point/">Single-Point Calculations</a></strong> - Your first calculation</li>
-<li><strong><a href="tutorials/geometry_optimization/">Geometry Optimization</a></strong> - Structure relaxation with ASE</li>
-<li><strong><a href="tutorials/molecular_dynamics/">Molecular Dynamics</a></strong> - NVT/NPT simulations</li>
-<li><strong><a href="tutorials/periodic_systems/">Periodic Systems</a></strong> - Crystals, surfaces, and PBC</li>
-<li><strong><a href="tutorials/batch_processing/">Batch Processing</a></strong> - Processing molecular datasets</li>
-<li><strong><a href="tutorials/performance/">Performance Tuning</a></strong> - <code>compile_model=True</code>, GPU optimization</li>
-</ul>
-<h3 id="advanced-use-cases">Advanced Use Cases<a class="headerlink" href="#advanced-use-cases" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong><a href="advanced/open_shell/">Open-Shell Chemistry</a></strong> - Radicals and spin states</li>
-<li><strong><a href="advanced/transition_metal_catalysis/">Pd Catalysis</a></strong> - Transition metal reactions</li>
-<li><strong><a href="advanced/intermolecular_interactions/">Non-Covalent Interactions</a></strong> - H-bonding, pi-stacking</li>
-<li><strong><a href="advanced/conformer_search/">Conformer Search</a></strong> - Conformational sampling</li>
-<li><strong><a href="advanced/reaction_paths/">Reaction Paths &amp; TS</a></strong> - Transition states with PySisyphus</li>
-<li><strong><a href="advanced/charged_systems/">Charged Systems</a></strong> - Ions and zwitterions</li>
-</ul>
-<h3 id="reference">Reference<a class="headerlink" href="#reference" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong><a href="calculator/">Calculator API</a></strong> - Comprehensive reference for <code>AIMNet2Calculator</code></li>
-<li><strong><a href="long_range/">Long Range Methods</a></strong> - Coulomb and dispersion methods</li>
-<li><strong><a href="model_format/">Model Format</a></strong> - Understanding model files and metadata</li>
-<li><strong><a href="train/">Training</a></strong> - Training custom models</li>
-<li><strong><a href="cli/">CLI Reference</a></strong> - Command-line tools</li>
-</ul>
-<h3 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong><a href="api/calculators/">Calculators</a></strong> - <code>AIMNet2Calculator</code>, <code>AIMNet2ASE</code>, <code>AIMNet2Pysis</code></li>
-<li><strong><a href="api/modules/">Modules</a></strong> - Core neural network modules</li>
-<li><strong><a href="api/data/">Data</a></strong> - Dataset and sampling utilities</li>
-<li><strong><a href="api/config/">Config</a></strong> - Configuration utilities</li>
-</ul>
-<h2 id="support-and-contributing">Support and Contributing<a class="headerlink" href="#support-and-contributing" title="Permanent link">&para;</a></h2>
-<ul>
-<li><strong>Issues</strong>: <a href="https://github.com/isayevlab/aimnetcentral/issues">GitHub Issues</a></li>
-<li><strong>Discussions</strong>: <a href="https://github.com/isayevlab/aimnetcentral/discussions">GitHub Discussions</a></li>
-<li><strong>Repository</strong>: <a href="https://github.com/isayevlab/aimnetcentral">github.com/isayevlab/aimnetcentral</a></li>
-</ul>
-<h2 id="citation">Citation<a class="headerlink" href="#citation" title="Permanent link">&para;</a></h2>
-<p>If you use AIMNet2, please cite:</p>
-<div class="highlight"><pre><span></span><code><span class="nc">@article</span><span class="p">{</span><span class="nl">aimnet2</span><span class="p">,</span>
-<span class="w">  </span><span class="na">title</span><span class="p">=</span><span class="s">{AIMNet2: A Neural Network Potential to Meet Your Neutral, Charged, Organic, and Elemental-Organic Needs}</span><span class="p">,</span>
-<span class="w">  </span><span class="na">author</span><span class="p">=</span><span class="s">{Anstine, Dylan M and Zubatyuk, Roman and Isayev, Olexandr}</span><span class="p">,</span>
-<span class="w">  </span><span class="na">journal</span><span class="p">=</span><span class="s">{Chemical Science}</span><span class="p">,</span>
-<span class="w">  </span><span class="na">volume</span><span class="p">=</span><span class="s">{16}</span><span class="p">,</span>
-<span class="w">  </span><span class="na">pages</span><span class="p">=</span><span class="s">{10228--10244}</span><span class="p">,</span>
-<span class="w">  </span><span class="na">year</span><span class="p">=</span><span class="s">{2025}</span><span class="p">,</span>
-<span class="w">  </span><span class="na">doi</span><span class="p">=</span><span class="s">{10.1039/D4SC08572H}</span>
-<span class="p">}</span>
-</code></pre></div>
-<h2 id="license">License<a class="headerlink" href="#license" title="Permanent link">&para;</a></h2>
-<p>See <a href="https://github.com/isayevlab/aimnetcentral/blob/main/LICENSE">LICENSE</a> for details.</p>
+<h1 id="external-packages">External Packages<a class="headerlink" href="#external-packages" title="Permanent link">&para;</a></h1>
+<p>AIMNet2 is consumed by several external simulation and analysis packages. This section is the entry point for users coming from one of those tools. Each package's per-page banner is the canonical status; the table here is a navigation aid only.</p>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>Status</th>
+<th>Page</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ASE</td>
+<td>Supported</td>
+<td><a href="ase/">ASE</a></td>
+</tr>
+<tr>
+<td>pysisyphus</td>
+<td>Supported</td>
+<td><a href="pysis/">pysisyphus</a></td>
+</tr>
+<tr>
+<td>OpenMM (<code>openmmml</code>)</td>
+<td>Supported upstream</td>
+<td><a href="openmm/">OpenMM</a></td>
+</tr>
+<tr>
+<td>AMBER (<code>torchani-amber</code>)</td>
+<td>Supported upstream</td>
+<td><a href="amber/">AMBER</a></td>
+</tr>
+<tr>
+<td>SCM AMS (<code>MLPotential</code> engine)</td>
+<td>Supported upstream</td>
+<td><a href="ams/">SCM AMS</a></td>
+</tr>
+<tr>
+<td>ORCA (<code>!ExtOpt</code>)</td>
+<td>Supported upstream</td>
+<td><a href="orca/">ORCA</a></td>
+</tr>
+<tr>
+<td>GROMACS NNPot</td>
+<td>Blocked on TorchScript export</td>
+<td><a href="gromacs/">GROMACS</a></td>
+</tr>
+<tr>
+<td>LAMMPS (<code>pair_style mliap</code>)</td>
+<td>Blocked on TorchScript export</td>
+<td><a href="lammps/">LAMMPS</a></td>
+</tr>
+</tbody>
+</table>
+<p>The TorchScript-export blockers shared by GROMACS and LAMMPS are tracked in <a href="../superpowers/plans/2026-04-26-torchscript-export/"><code>docs/superpowers/plans/2026-04-26-torchscript-export.md</code></a>. AMBER also benefits from that work -- <code>torchani-amber</code> accepts a TorchScript <code>.pt</code> via the <code>model_type</code> keyword, so the same export pathway would let us ship a self-contained AIMNet2 jit asset.</p>
 
 
 
 
 
 
-
-  
-  
 
 
 
@@ -2445,12 +1910,12 @@ pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["search.highlight", "search.suggest", "content.code.copy"], "search": "assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["search.highlight", "search.suggest", "content.code.copy"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
       
-        <script src="javascripts/mathjax.js"></script>
+        <script src="../javascripts/mathjax.js"></script>
       
         <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
       

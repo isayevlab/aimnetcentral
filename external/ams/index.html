@@ -12,13 +12,13 @@
         <meta name="author" content="Roman Zubatyuk">
       
       
-        <link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/models/aimnet2_b973c/">
+        <link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/external/ams/">
       
       
-        <link rel="prev" href="../aimnet2/">
+        <link rel="prev" href="../amber/">
       
       
-        <link rel="next" href="../aimnet2_2025/">
+        <link rel="next" href="../orca/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>AIMNet2-B97-3c - AIMNetCentral</title>
+        <title>SCM AMS (MLPotential) - AIMNetCentral</title>
       
     
     
@@ -82,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#aimnet2-b97-3c" class="md-skip">
+        <a href="#scm-ams-amsterdam-modeling-suite" class="md-skip">
           Skip to content
         </a>
       
@@ -118,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              AIMNet2-B97-3c
+              SCM AMS (MLPotential)
             
           </span>
         </div>
@@ -317,20 +317,18 @@
       
   
   
-    
   
   
-  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
@@ -351,7 +349,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -369,7 +367,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/" class="md-nav__link">
+      <a href="../../models/guide/" class="md-nav__link">
         
   
   
@@ -397,7 +395,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../architecture/" class="md-nav__link">
+      <a href="../../models/architecture/" class="md-nav__link">
         
   
   
@@ -425,7 +423,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../aimnet2/" class="md-nav__link">
+      <a href="../../models/aimnet2/" class="md-nav__link">
         
   
   
@@ -450,37 +448,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    AIMNet2-B97-3c
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../models/aimnet2_b973c/" class="md-nav__link">
         
   
   
@@ -496,187 +467,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Overview
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#strengths-and-limitations" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Strengths and Limitations
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Strengths and Limitations">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#strengths" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Strengths
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#limitations" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Limitations
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#typical-use-cases" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Typical Use Cases
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#quick-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Quick Example
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Quick Example">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#ase-integration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        ASE Integration
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#computational-details" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Computational Details
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Computational Details">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#training-data" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Training Data
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#long-range-corrections" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Long-Range Corrections
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#ensemble-averaging" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Ensemble Averaging
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#when-to-upgrade-to-wb97m-d3" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        When to Upgrade to wB97M-D3
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#references" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        References
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -689,7 +479,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../aimnet2_2025/" class="md-nav__link">
+      <a href="../../models/aimnet2_2025/" class="md-nav__link">
         
   
   
@@ -717,7 +507,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../aimnet2nse/" class="md-nav__link">
+      <a href="../../models/aimnet2nse/" class="md-nav__link">
         
   
   
@@ -745,7 +535,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../aimnet2pd/" class="md-nav__link">
+      <a href="../../models/aimnet2pd/" class="md-nav__link">
         
   
   
@@ -773,7 +563,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../aimnet2_rxn/" class="md-nav__link">
+      <a href="../../models/aimnet2_rxn/" class="md-nav__link">
         
   
   
@@ -1277,18 +1067,20 @@
       
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
         
           
           <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
@@ -1309,7 +1101,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1327,7 +1119,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../external/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
@@ -1355,7 +1147,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../external/ase/" class="md-nav__link">
+      <a href="../ase/" class="md-nav__link">
         
   
   
@@ -1383,7 +1175,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../external/pysis/" class="md-nav__link">
+      <a href="../pysis/" class="md-nav__link">
         
   
   
@@ -1411,7 +1203,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../external/openmm/" class="md-nav__link">
+      <a href="../openmm/" class="md-nav__link">
         
   
   
@@ -1439,7 +1231,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../external/amber/" class="md-nav__link">
+      <a href="../amber/" class="md-nav__link">
         
   
   
@@ -1464,10 +1256,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../external/ams/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SCM AMS (MLPotential)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1483,6 +1302,59 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#minimal-ams-input" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Minimal AMS input
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#workflows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflows
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1495,7 +1367,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../external/orca/" class="md-nav__link">
+      <a href="../orca/" class="md-nav__link">
         
   
   
@@ -1523,7 +1395,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../external/gromacs/" class="md-nav__link">
+      <a href="../gromacs/" class="md-nav__link">
         
   
   
@@ -1551,7 +1423,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../external/lammps/" class="md-nav__link">
+      <a href="../lammps/" class="md-nav__link">
         
   
   
@@ -1994,10 +1866,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
+  <a href="#minimal-ams-input" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Overview
+        Minimal AMS input
       
     </span>
   </a>
@@ -2005,49 +1877,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#strengths-and-limitations" class="md-nav__link">
+  <a href="#workflows" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Strengths and Limitations
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Strengths and Limitations">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#strengths" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Strengths
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#limitations" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Limitations
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#typical-use-cases" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Typical Use Cases
+        Workflows
       
     </span>
   </a>
@@ -2055,99 +1888,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#quick-example" class="md-nav__link">
+  <a href="#see-also" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Quick Example
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Quick Example">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#ase-integration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        ASE Integration
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#computational-details" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Computational Details
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Computational Details">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#training-data" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Training Data
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#long-range-corrections" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Long-Range Corrections
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#ensemble-averaging" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Ensemble Averaging
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#when-to-upgrade-to-wb97m-d3" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        When to Upgrade to wB97M-D3
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#references" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        References
+        See also
       
     </span>
   </a>
@@ -2174,113 +1918,40 @@
   
 
 
-<h1 id="aimnet2-b97-3c">AIMNet2-B97-3c<a class="headerlink" href="#aimnet2-b97-3c" title="Permanent link">&para;</a></h1>
-<div class="admonition warning">
-<p class="admonition-title">Superseded by AIMNet2-2025</p>
-<p>This model has been superseded by <a href="../aimnet2_2025/">AIMNet2-2025</a>, which provides improved intermolecular interaction accuracy with no regression for intramolecular chemistry. <strong>Use <code>aimnet2_2025</code> for all new work.</strong> The original <code>aimnet2_b973c</code> is retained only for reproducing previously published results.</p>
-</div>
-<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
-<p>AIMNet2-B97-3c is the <strong>original B97-3c screening model</strong> trained against B97-3c reference data. B97-3c is a composite density functional designed for speed, combining the B97 GGA functional with a small basis set (def2-mTZVP) and geometric counterpoise corrections. While the reference level is less accurate than wB97M-D3, the resulting ML potential inherits different error characteristics that can be advantageous for rapid ranking and filtering tasks.</p>
-<p><strong>Supported elements:</strong> H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I (14 elements)</p>
-<p><strong>Registry alias:</strong> <code>aimnet2_b973c</code> (loads ensemble member <code>aimnet2_b973c_d3_0</code>)</p>
-<p><strong>Ensemble members:</strong> <code>aimnet2_b973c_d3_0</code> through <code>aimnet2_b973c_d3_3</code> (4 models)</p>
-<h2 id="strengths-and-limitations">Strengths and Limitations<a class="headerlink" href="#strengths-and-limitations" title="Permanent link">&para;</a></h2>
-<h3 id="strengths">Strengths<a class="headerlink" href="#strengths" title="Permanent link">&para;</a></h3>
+<h1 id="scm-ams-amsterdam-modeling-suite">SCM AMS (Amsterdam Modeling Suite)<a class="headerlink" href="#scm-ams-amsterdam-modeling-suite" title="Permanent link">&para;</a></h1>
+<p><strong>Status: supported upstream.</strong></p>
+<p>The <a href="https://www.scm.com/amsterdam-modeling-suite/">Amsterdam Modeling Suite</a> ships first-class support for AIMNet2 through the <a href="https://www.scm.com/doc/MLPotential/"><code>MLPotential</code></a> engine, introduced in <strong>AMS2024.1</strong>. Two AIMNet2 variants are exposed as named models:</p>
 <ul>
-<li>Same element coverage as the default AIMNet2 model</li>
-<li>Trained on a cost-effective but well-established composite functional</li>
-<li>Useful as a complementary model for cross-checking results from <a href="../aimnet2/">AIMNet2 (wB97M-D3)</a></li>
-<li>Good for relative energy rankings in conformer searches and high-throughput workflows</li>
+<li><code>AIMNet2-wB97MD3</code></li>
+<li><code>AIMNet2-B973c</code></li>
 </ul>
-<h3 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h3>
-<div class="admonition warning">
-<p class="admonition-title">Lower reference accuracy</p>
-<p>B97-3c is a GGA-level composite method. It is systematically less accurate than wB97M-D3 for barrier heights, reaction energies involving significant electron correlation changes, and non-covalent interaction energies. For higher accuracy, use <a href="../aimnet2/">AIMNet2 (wB97M-D3)</a>.</p>
-</div>
-<div class="admonition warning">
-<p class="admonition-title">Barrier heights</p>
-<p>GGA functionals tend to underestimate reaction barriers. If accurate transition state energies are important, prefer the wB97M-D3 model or use <a href="../aimnet2nse/">AIMNet2-NSE</a> for open-shell transition states.</p>
-</div>
-<div class="admonition warning">
-<p class="admonition-title">Same scope restrictions as AIMNet2</p>
-<p>No transition metals, closed-shell only, molecular (gas-phase) training data. See the <a href="../aimnet2/">AIMNet2 page</a> for the full list of limitations.</p>
-</div>
-<h2 id="typical-use-cases">Typical Use Cases<a class="headerlink" href="#typical-use-cases" title="Permanent link">&para;</a></h2>
+<p>Per the SCM documentation, "these are currently the only ML potential models that support charged systems (ions), and that predict atomic charges and dipole moments and that give IR intensities when calculating normal modes" -- a meaningful capability gap over the other backends in the same engine (TorchANI, M3GNet, MACE, NequIP, FAIRChem).</p>
+<p>Element coverage: H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I. The AMS integration exposes AIMNet2 for <strong>aperiodic systems only</strong> -- this is a property of AMS's <code>MLPotential</code> wrapper, not of AIMNet2 itself, which supports PBC via the in-tree <code>AIMNet2Calculator</code>.</p>
+<p><strong>Model coverage in this engine</strong>: AIMNet2-wB97MD3 and AIMNet2-B973c only. The NSE (open-shell) and rxn (reactive) AIMNet2 model families are not currently exposed by AMS.</p>
+<h2 id="minimal-ams-input">Minimal AMS input<a class="headerlink" href="#minimal-ams-input" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>Task SinglePoint
+
+System
+  Atoms
+    O 0.0 0.0 0.0
+    H 0.0 0.7 0.6
+    H 0.0 -0.7 0.6
+  End
+End
+
+Engine MLPotential
+  Model AIMNet2-wB97MD3
+EndEngine
+</code></pre></div>
+<p>The <code>Model</code> keyword is sufficient -- the AIMNet2 backend is activated implicitly when an AIMNet2-prefixed model is selected. Other backends in the same engine (FAIRChem, M3GNet, MACE, NequIP, TorchANI) are selected via <code>Backend</code> directly.</p>
+<h2 id="workflows">Workflows<a class="headerlink" href="#workflows" title="Permanent link">&para;</a></h2>
+<p><code>Engine MLPotential</code> works with the standard AMS driver tasks: single-point, geometry optimization, transition-state search, vibrational analysis, molecular dynamics. AIMNet2's atomic-charge and dipole predictions feed AMS's normal-mode IR intensity reporting.</p>
+<h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Reproducing published results</strong> -- use when replicating calculations from papers that used <code>aimnet2_b973c</code></li>
-<li><strong>Cross-validation</strong> -- compare B97-3c and wB97M-D3 predictions to gauge sensitivity to the reference method</li>
+<li><a href="https://www.scm.com/doc/MLPotential/general.html">SCM MLPotential general docs</a></li>
+<li><a href="https://www.scm.com/doc/MLPotential/ModelsAndBackends.html">Models &amp; backends</a></li>
+<li><a href="https://www.scm.com/news/ams-webinar-2024-aimnet2/">SCM webinar on AIMNet2 (2024)</a></li>
 </ul>
-<div class="admonition tip">
-<p class="admonition-title">For new projects, use AIMNet2-2025</p>
-<p>For high-throughput screening, conformer ranking, and any new B97-3c-level work, switch to <a href="../aimnet2_2025/"><code>aimnet2_2025</code></a> which provides strictly better accuracy for the same computational cost.</p>
-</div>
-<h2 id="quick-example">Quick Example<a class="headerlink" href="#quick-example" title="Permanent link">&para;</a></h2>
-<p>Ranking conformer energies for a flexible molecule:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
-
-<span class="c1"># Use B97-3c model for fast screening</span>
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2_b973c&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
-<span class="c1"># Load multiple conformers (example: 3 conformers of butane, 14 atoms each)</span>
-<span class="c1"># In practice, read from a multi-frame XYZ file</span>
-<span class="n">conformer_coords</span> <span class="o">=</span> <span class="p">[</span><span class="o">...</span><span class="p">]</span>  <span class="c1"># list of (N, 3) tensors</span>
-<span class="n">numbers</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>  <span class="c1"># C4H10</span>
-
-<span class="n">energies</span> <span class="o">=</span> <span class="p">[]</span>
-<span class="k">for</span> <span class="n">coords</span> <span class="ow">in</span> <span class="n">conformer_coords</span><span class="p">:</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="n">calc</span><span class="p">({</span>
-        <span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">coords</span><span class="p">,</span>
-        <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="n">numbers</span><span class="p">,</span>
-        <span class="s2">&quot;charge&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">0.0</span><span class="p">),</span>
-    <span class="p">})</span>
-    <span class="n">energies</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
-
-<span class="c1"># Rank by relative energy</span>
-<span class="n">e_min</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">energies</span><span class="p">)</span>
-<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">e</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">energies</span><span class="p">):</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Conformer </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="p">(</span><span class="n">e</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">e_min</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1000</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> meV relative&quot;</span><span class="p">)</span>
-</code></pre></div>
-<h3 id="ase-integration">ASE Integration<a class="headerlink" href="#ase-integration" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">read</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">ase.optimize</span><span class="w"> </span><span class="kn">import</span> <span class="n">BFGS</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2ASE</span><span class="p">,</span> <span class="n">AIMNet2Calculator</span>
-
-<span class="n">base_calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2_b973c&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="n">atoms</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="s2">&quot;molecule.xyz&quot;</span><span class="p">)</span>
-<span class="n">atoms</span><span class="o">.</span><span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2ASE</span><span class="p">(</span><span class="n">base_calc</span><span class="p">,</span> <span class="n">charge</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-
-<span class="n">opt</span> <span class="o">=</span> <span class="n">BFGS</span><span class="p">(</span><span class="n">atoms</span><span class="p">)</span>
-<span class="n">opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">fmax</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>  <span class="c1"># Looser threshold for screening</span>
-
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Energy: </span><span class="si">{</span><span class="n">atoms</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
-</code></pre></div>
-<h2 id="computational-details">Computational Details<a class="headerlink" href="#computational-details" title="Permanent link">&para;</a></h2>
-<h3 id="training-data">Training Data<a class="headerlink" href="#training-data" title="Permanent link">&para;</a></h3>
-<p>The model is trained on molecular structures computed at the B97-3c level of theory. B97-3c uses the B97 GGA functional with a modified triple-zeta basis set (def2-mTZVP) and includes geometric counterpoise (gCP), DFT-D3, and short-range basis set incompleteness (SRB) corrections.</p>
-<h3 id="long-range-corrections">Long-Range Corrections<a class="headerlink" href="#long-range-corrections" title="Permanent link">&para;</a></h3>
-<p>Like all AIMNet2 models, external DFT-D3 dispersion and long-range Coulomb modules are included. Configuration is identical to the default model:</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># For periodic systems</span>
-<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">)</span>
-</code></pre></div>
-<h3 id="ensemble-averaging">Ensemble Averaging<a class="headerlink" href="#ensemble-averaging" title="Permanent link">&para;</a></h3>
-<p>Four ensemble members are available for uncertainty estimation:</p>
-<div class="highlight"><pre><span></span><code><span class="n">models</span> <span class="o">=</span> <span class="p">[</span><span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;aimnet2_b973c_d3_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">)]</span>
-<span class="n">results</span> <span class="o">=</span> <span class="p">[</span><span class="n">m</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">models</span><span class="p">]</span>
-
-<span class="n">energies</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="p">])</span>
-<span class="n">spread</span> <span class="o">=</span> <span class="n">energies</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># Large spread signals unreliable prediction</span>
-</code></pre></div>
-<h3 id="when-to-upgrade-to-wb97m-d3">When to Upgrade to wB97M-D3<a class="headerlink" href="#when-to-upgrade-to-wb97m-d3" title="Permanent link">&para;</a></h3>
-<p>Consider switching to the default <a href="../aimnet2/">AIMNet2 (wB97M-D3)</a> model when:</p>
-<ul>
-<li>Absolute energy accuracy matters (not just relative rankings)</li>
-<li>Computing reaction barrier heights</li>
-<li>Studying non-covalent interactions where dispersion accuracy is critical</li>
-<li>Publishing results that require a higher reference level</li>
-</ul>
-<h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h2>
-<p>Anstine, D. M.; Zubatyuk, R.; Isayev, O. AIMNet2: A Neural Network Potential to Meet your Neutral, Charged, Organic, and Elemental-Organic Needs. <em>Chemical Science</em> <strong>2025</strong>, <em>16</em>, 10228--10244. DOI: <a href="https://doi.org/10.1039/D4SC08572H">10.1039/D4SC08572H</a></p>
 
 
 
