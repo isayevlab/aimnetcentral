@@ -9,6 +9,7 @@
 **Tech Stack:** Python 3.11+, PyTorch (existing AIMNet2 autograd Hessian path at `aimnet/calculators/calculator.py:1135-1142`), ASE ≥ 3.27, Sella ≥ 2.4.0 (required — v2.4.0 March 2026 added MLIP-targeted vectorization that gave ~22× wall-clock improvement on a 50-atom test case).
 
 **Out of scope (explicitly deferred):**
+
 - Vectorizing `AIMNet2Calculator.calculate_hessian` with `torch.func.hessian` — orthogonal optimization that benefits both Sella and pysisyphus; track as a separate plan once we have a Sella-driven benchmark.
 - Wrapping the energy-only path in `torch.inference_mode()` — micro-optimization, not on Sella's hot path (Sella always asks for forces).
 - A batched many-Sella driver — workflow-level project, not a Sella code change.
@@ -19,7 +20,7 @@
 ## File Structure
 
 | File | Status | Responsibility |
-|------|--------|----------------|
+| --- | --- | --- |
 | `pyproject.toml` | modify | Add `sella` extra, pytest marker, deptry ignore entries |
 | `aimnet/calculators/aimnet2ase.py` | modify | Add `get_hessian(atoms=None) -> np.ndarray` method |
 | `tests/test_ase.py` | modify | Add Hessian unit test (no Sella dep) |
@@ -36,6 +37,7 @@
 ## Task 1: Wire `sella` into project metadata
 
 **Files:**
+
 - Modify: `pyproject.toml:47-56` (optional-dependencies)
 - Modify: `pyproject.toml:199-206` (pytest markers)
 - Modify: `pyproject.toml:226-230` (deptry per-rule ignores)
@@ -95,11 +97,9 @@ DEP004 = ["ase", "pysisyphus", "sella"]
 
 - [ ] **Step 4: Verify metadata is parseable**
 
-Run: `python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['optional-dependencies']['sella'])"`
-Expected: `['ase>=3.27.0,<4', 'sella>=2.4.0']`
+Run: `python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['optional-dependencies']['sella'])"` Expected: `['ase>=3.27.0,<4', 'sella>=2.4.0']`
 
-Run: `pytest --collect-only -m sella tests/ 2>&1 | tail -5`
-Expected: `0 tests collected` and **no warning about unknown marker `sella`**.
+Run: `pytest --collect-only -m sella tests/ 2>&1 | tail -5` Expected: `0 tests collected` and **no warning about unknown marker `sella`**.
 
 - [ ] **Step 5: Commit**
 
@@ -113,6 +113,7 @@ git commit -m "chore: add sella optional extra and pytest marker"
 ## Task 2: Add `get_hessian` to `AIMNet2ASE` (TDD)
 
 **Files:**
+
 - Modify: `aimnet/calculators/aimnet2ase.py:1-174`
 - Test: `tests/test_ase.py` (append new test class)
 
@@ -189,8 +190,7 @@ class TestHessian:
 
 - [ ] **Step 2: Run the test to confirm it fails**
 
-Run: `pytest tests/test_ase.py::TestHessian -x -v 2>&1 | tail -20`
-Expected: FAIL with `AttributeError: 'AIMNet2ASE' object has no attribute 'get_hessian'`
+Run: `pytest tests/test_ase.py::TestHessian -x -v 2>&1 | tail -20` Expected: FAIL with `AttributeError: 'AIMNet2ASE' object has no attribute 'get_hessian'`
 
 - [ ] **Step 3: Implement `get_hessian` on `AIMNet2ASE`**
 
@@ -248,13 +248,11 @@ The `coord` tensor is built fresh (not reused from `_in` in `calculate`) because
 
 - [ ] **Step 4: Run the test to confirm it passes**
 
-Run: `pytest tests/test_ase.py::TestHessian -x -v 2>&1 | tail -20`
-Expected: 4 passed.
+Run: `pytest tests/test_ase.py::TestHessian -x -v 2>&1 | tail -20` Expected: 4 passed.
 
 - [ ] **Step 5: Run the existing ASE test suite to confirm no regressions**
 
-Run: `pytest tests/test_ase.py -m ase 2>&1 | tail -5`
-Expected: all previously-passing tests still pass.
+Run: `pytest tests/test_ase.py -m ase 2>&1 | tail -5` Expected: all previously-passing tests still pass.
 
 - [ ] **Step 6: Commit**
 
@@ -268,6 +266,7 @@ git commit -m "feat(ase): expose analytic Hessian via AIMNet2ASE.get_hessian"
 ## Task 3: Add a Sella smoke test
 
 **Files:**
+
 - Create: `tests/test_sella.py`
 
 The point of this test is twofold: (1) verify that the `hessian_function=atoms.calc.get_hessian` wiring actually flows through Sella without exception, and (2) act as a contract test that Sella ≥ 2.4.0 still accepts our callback signature.
@@ -351,18 +350,15 @@ class TestSellaIntegration:
 
 - [ ] **Step 2: Verify the test is collected and skipped without Sella installed**
 
-Run: `pytest tests/test_sella.py --collect-only 2>&1 | tail -10`
-Expected: collection shows the two tests under `TestSellaIntegration`.
+Run: `pytest tests/test_sella.py --collect-only 2>&1 | tail -10` Expected: collection shows the two tests under `TestSellaIntegration`.
 
-Run (without `sella` installed, default state): `pytest tests/test_sella.py -v 2>&1 | tail -10`
-Expected: both tests are SKIPPED with reason `Sella not installed`.
+Run (without `sella` installed, default state): `pytest tests/test_sella.py -v 2>&1 | tail -10` Expected: both tests are SKIPPED with reason `Sella not installed`.
 
 - [ ] **Step 3: Run the test with Sella installed (optional local check)**
 
 If `sella` and `ase` are available locally:
 
-Run: `pip install "sella>=2.4.0" && pytest tests/test_sella.py -m sella -v 2>&1 | tail -20`
-Expected: 2 passed.
+Run: `pip install "sella>=2.4.0" && pytest tests/test_sella.py -m sella -v 2>&1 | tail -20` Expected: 2 passed.
 
 If Sella is not available, skip this step — CI will not run Sella tests by default since `pytestmark = [pytest.mark.sella, pytest.mark.ase]` deselects them unless `-m sella` is requested.
 
@@ -378,6 +374,7 @@ git commit -m "test(sella): smoke test analytic Hessian callback through Sella"
 ## Task 4: Add a Sella TS example
 
 **Files:**
+
 - Create: `examples/sella_ts.py`
 
 The example must be runnable, reproducible, and demonstrate the analytic Hessian callback (the whole point of the integration). It mirrors `examples/ase_opt.py` for tone and structure.
@@ -445,8 +442,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Smoke-check syntax**
 
-Run: `python -c "import ast; ast.parse(open('examples/sella_ts.py').read()); print('ok')"`
-Expected: `ok`.
+Run: `python -c "import ast; ast.parse(open('examples/sella_ts.py').read()); print('ok')"` Expected: `ok`.
 
 - [ ] **Step 3: Commit**
 
@@ -460,6 +456,7 @@ git commit -m "docs(examples): add Sella TS search example with analytic Hessian
 ## Task 5: Add the Sella docs page and link it from navigation
 
 **Files:**
+
 - Create: `docs/external/sella.md`
 - Modify: `docs/external/index.md`
 - Modify: `mkdocs.yml:36-46` (External Packages nav block)
@@ -470,7 +467,7 @@ git commit -m "docs(examples): add Sella TS search example with analytic Hessian
 
 Create `docs/external/sella.md` with this exact content:
 
-```markdown
+````markdown
 # Sella
 
 **Status: supported (uses AIMNet2's existing ASE calculator).**
@@ -482,6 +479,7 @@ Create `docs/external/sella.md` with this exact content:
 ```bash
 pip install "aimnet[sella]"
 ```
+````
 
 `sella>=2.4.0` is required. The 2.4.0 release (March 2026) introduced MLIP-targeted vectorization that made Sella usable for large systems (~22x wall-clock improvement on a 50-atom benchmark, [PR #64](https://github.com/zadorlab/sella/pull/64)).
 
@@ -527,7 +525,8 @@ For minima (not TS), the [Rowan optimizer benchmark](https://rowansci.com/blog/w
 - [Reaction paths and transition states](../advanced/reaction_paths.md)
 - [Sella v2.4.0 release notes](https://github.com/zadorlab/sella/releases/tag/v2.4.0)
 - [Sella JCTC 2022 paper](https://pubs.acs.org/doi/10.1021/acs.jctc.2c00395)
-```
+
+````
 
 - [ ] **Step 2: Add Sella to the External Packages overview index**
 
@@ -535,7 +534,7 @@ Read the current state of `docs/external/index.md` to find where ASE / pysisyphu
 
 ```markdown
 | [Sella](sella.md) | TS / minima optimizer (saddle-point search) | supported |
-```
+````
 
 If `index.md` uses a bullet list, append:
 
@@ -550,17 +549,17 @@ If `index.md` uses a bullet list, append:
 Edit `mkdocs.yml`. In the `External Packages:` block (currently `mkdocs.yml:36-46`), insert a Sella entry directly after pysisyphus so the block reads:
 
 ```yaml
-    - External Packages:
-          - Overview: external/index.md
-          - ASE: external/ase.md
-          - pysisyphus: external/pysis.md
-          - Sella: external/sella.md
-          - OpenMM (openmm-ml): external/openmm.md
-          - AMBER (torchani-amber): external/amber.md
-          - SCM AMS (MLPotential): external/ams.md
-          - ORCA (ExtOpt): external/orca.md
-          - GROMACS (NNPot): external/gromacs.md
-          - LAMMPS (mliap): external/lammps.md
+- External Packages:
+    - Overview: external/index.md
+    - ASE: external/ase.md
+    - pysisyphus: external/pysis.md
+    - Sella: external/sella.md
+    - OpenMM (openmm-ml): external/openmm.md
+    - AMBER (torchani-amber): external/amber.md
+    - SCM AMS (MLPotential): external/ams.md
+    - ORCA (ExtOpt): external/orca.md
+    - GROMACS (NNPot): external/gromacs.md
+    - LAMMPS (mliap): external/lammps.md
 ```
 
 - [ ] **Step 4: Add the install line to `docs/index.md`**
@@ -588,8 +587,7 @@ pip install "aimnet[ase,pysis,sella,train]" # All extras
 
 - [ ] **Step 6: Build the docs locally to validate the nav**
 
-Run: `mkdocs build --strict 2>&1 | tail -20`
-Expected: build succeeds with no warnings about missing pages or broken links. If `mkdocs` is not installed, skip this step — CI will catch it.
+Run: `mkdocs build --strict 2>&1 | tail -20` Expected: build succeeds with no warnings about missing pages or broken links. If `mkdocs` is not installed, skip this step — CI will catch it.
 
 - [ ] **Step 7: Commit**
 

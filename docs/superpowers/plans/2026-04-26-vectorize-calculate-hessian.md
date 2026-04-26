@@ -92,6 +92,7 @@ def calculate_hessian(forces: Tensor, coord: Tensor) -> Tensor:
 ```
 
 **Acceptance**:
+
 - `pytest tests/test_calculator.py::test_external_hessian_matches_internal` — passes (proves correctness vs. analytical reference).
 - `pytest tests/test_calculator.py -k hessian` — passes (broader Hessian suite).
 - `pytest tests/test_ase.py::TestHessian` — passes (ASE wrapper tests).

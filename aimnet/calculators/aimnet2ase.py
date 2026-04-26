@@ -115,7 +115,11 @@ class AIMNet2ASE(Calculator):
             atoms = getattr(self, "atoms", None)
         if atoms is not None:
             new_numbers = torch.as_tensor(atoms.numbers, dtype=torch.int64, device=self.base_calc.device)
-            if self._t_numbers is None or self._t_numbers.shape != new_numbers.shape or not torch.equal(self._t_numbers, new_numbers):
+            if (
+                self._t_numbers is None
+                or self._t_numbers.shape != new_numbers.shape
+                or not torch.equal(self._t_numbers, new_numbers)
+            ):
                 self._t_numbers = new_numbers
         if self._t_charge is None:
             self._t_charge = torch.tensor(self.charge, dtype=torch.float32, device=self.base_calc.device)
@@ -179,9 +183,7 @@ class AIMNet2ASE(Calculator):
         # after padding. Batching (unsqueeze(0)) triggers the ndim==3 path
         # which may skip flattening when N < nb_threshold on GPU, causing
         # calculate_hessian to produce an incorrect (N, 3, 1, 3) shape.
-        coord = torch.tensor(
-            atoms.positions, dtype=self.base_calc.keys_in["coord"], device=self.base_calc.device
-        )
+        coord = torch.tensor(atoms.positions, dtype=self.base_calc.keys_in["coord"], device=self.base_calc.device)
         _in = {
             "coord": coord,
             "numbers": self._t_numbers,
