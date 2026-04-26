@@ -2218,7 +2218,7 @@
 </div>
 <h2 id="step-4-comparing-models">Step 4: Comparing Models<a class="headerlink" href="#step-4-comparing-models" title="Permanent link">&para;</a></h2>
 <p>AIMNet2 provides several models trained on different DFT functionals. Each is suitable for different chemistry. You can compare them on the same molecule to understand how model choice affects predictions:</p>
-<div class="highlight"><pre><span></span><code><span class="n">model_names</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="s2">&quot;aimnet2_b973c&quot;</span><span class="p">,</span> <span class="s2">&quot;aimnet2_2025&quot;</span><span class="p">]</span>
+<div class="highlight"><pre><span></span><code><span class="n">model_names</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="s2">&quot;aimnet2-b973c&quot;</span><span class="p">,</span> <span class="s2">&quot;aimnet2-2025&quot;</span><span class="p">]</span>
 
 <span class="n">input_data</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">aspirin_coords</span><span class="p">,</span>
@@ -2256,28 +2256,33 @@
 <td>General organic chemistry</td>
 </tr>
 <tr>
-<td><code>aimnet2_2025</code></td>
+<td><code>aimnet2-2025</code></td>
 <td>B97-3c (improved)</td>
 <td>Recommended B97-3c model</td>
 </tr>
 <tr>
-<td><code>aimnet2_b973c</code></td>
+<td><code>aimnet2-b973c</code></td>
 <td>B97-3c</td>
 <td>Legacy (superseded by 2025)</td>
 </tr>
 <tr>
-<td><code>aimnet2nse</code></td>
+<td><code>aimnet2-nse</code></td>
 <td>wB97M-D3</td>
 <td>Open-shell / radical systems</td>
 </tr>
 <tr>
-<td><code>aimnet2pd</code></td>
-<td>wB97M-D3</td>
+<td><code>aimnet2-pd</code></td>
+<td>B97-3c/CPCM (THF)</td>
 <td>Palladium-containing systems</td>
+</tr>
+<tr>
+<td><code>aimnet2-rxn</code></td>
+<td>wB97M-V</td>
+<td>Reactive chemistry / TS / IRC</td>
 </tr>
 </tbody>
 </table>
-<p>Each alias points to ensemble member <code>_0</code> by default. For uncertainty estimation, you can load all four ensemble members (e.g., <code>aimnet2_wb97m_d3_0</code> through <code>aimnet2_wb97m_d3_3</code>) and compare their predictions.</p>
+<p>Each alias points to ensemble member <code>_0</code> by default. For uncertainty estimation, you can load all four ensemble members (e.g., <code>aimnet2-wb97m-d3_0</code> through <code>aimnet2-wb97m-d3_3</code>) and compare their predictions. Previously published aliases (<code>aimnet2_2025</code>, <code>aimnet2nse</code>, etc.) continue to resolve.</p>
 <h2 id="step-5-using-compile_model-for-repeated-calculations">Step 5: Using <code>compile_model</code> for Repeated Calculations<a class="headerlink" href="#step-5-using-compile_model-for-repeated-calculations" title="Permanent link">&para;</a></h2>
 <p>If you plan to run many calculations on similar-sized molecules (e.g., scanning a potential energy surface), enable model compilation for a significant speedup:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">time</span>

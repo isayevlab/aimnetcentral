@@ -2433,7 +2433,7 @@ q_i^{\text{final}} = q_i^{\text{raw}} + f_i \cdot \frac{Q_{\text{total}} - \sum_
 </ul>
 <p>This ensures exact charge conservation at every pass without constraining the network outputs directly.</p>
 <h3 id="open-shell-extension-num_charge_channels2">Open-Shell Extension (num_charge_channels=2)<a class="headerlink" href="#open-shell-extension-num_charge_channels2" title="Permanent link">&para;</a></h3>
-<p>For the NSE model (<code>aimnet2nse</code>), charges have two channels: alpha-spin and beta-spin. The model sets <code>num_charge_channels=2</code>.</p>
+<p>For the NSE model (<code>aimnet2-nse</code>), charges have two channels: alpha-spin and beta-spin. The model sets <code>num_charge_channels=2</code>.</p>
 <p><strong>Preprocessing:</strong> The total charge <code>Q</code> and multiplicity <code>M</code> are converted to two-channel targets:</p>
 <div class="highlight"><pre><span></span><code>Q_alpha = 0.5 * (Q + (M - 1))
 Q_beta  = 0.5 * (Q - (M - 1))

@@ -2158,10 +2158,14 @@
 <p>AIMNet2-2025 is the <strong>recommended B97-3c-level model</strong> and supersedes the original <a href="../aimnet2_b973c/">AIMNet2-B97-3c</a>. It provides improved intermolecular interaction accuracy with no regression for intramolecular chemistry. Use this model for all new work requiring a B97-3c reference level.</p>
 </div>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
-<p>AIMNet2-2025 is the <strong>current-generation B97-3c model</strong>, combining the cost-effective B97-3c reference level with improved training for non-covalent chemistry. It supersedes the original AIMNet2-B97-3c (<code>aimnet2_b973c</code>) and is recommended for all applications: high-throughput screening, conformer ranking, binding energy calculations, and any workflow where B97-3c-level accuracy is appropriate.</p>
+<p>AIMNet2-2025 is the <strong>current-generation B97-3c model</strong>, combining the cost-effective B97-3c reference level with improved training for non-covalent chemistry. It supersedes the original AIMNet2-B97-3c (<code>aimnet2-b973c</code>) and is recommended for all applications: high-throughput screening, conformer ranking, binding energy calculations, and any workflow where B97-3c-level accuracy is appropriate.</p>
 <p><strong>Supported elements:</strong> H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I (14 elements)</p>
-<p><strong>Registry alias:</strong> <code>aimnet2_2025</code> (loads ensemble member <code>aimnet2_b973c_2025_d3_0</code>)</p>
-<p><strong>Ensemble members:</strong> <code>aimnet2_b973c_2025_d3_0</code> through <code>aimnet2_b973c_2025_d3_3</code> (4 models)</p>
+<p><strong>Registry alias:</strong> <code>aimnet2-2025</code> (loads ensemble member <code>aimnet2-b973c-2025-d3_0</code>)</p>
+<p><strong>Ensemble members:</strong> <code>aimnet2-b973c-2025-d3_0</code> through <code>aimnet2-b973c-2025-d3_3</code> (4 models)</p>
+<div class="admonition note">
+<p class="admonition-title">Legacy names</p>
+<p>The previously published short alias <code>aimnet2_2025</code> and the member-level keys <code>aimnet2_b973c_2025_d3_0</code> … <code>aimnet2_b973c_2025_d3_3</code> still resolve and remain supported.</p>
+</div>
 <h2 id="strengths-and-limitations">Strengths and Limitations<a class="headerlink" href="#strengths-and-limitations" title="Permanent link">&para;</a></h2>
 <h3 id="strengths">Strengths<a class="headerlink" href="#strengths" title="Permanent link">&para;</a></h3>
 <ul>
@@ -2186,7 +2190,7 @@
 </div>
 <h2 id="typical-use-cases">Typical Use Cases<a class="headerlink" href="#typical-use-cases" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>General-purpose B97-3c calculations</strong> -- recommended replacement for <code>aimnet2_b973c</code> in all workflows</li>
+<li><strong>General-purpose B97-3c calculations</strong> -- recommended replacement for <code>aimnet2-b973c</code> in all workflows</li>
 <li><strong>High-throughput conformer screening</strong> -- rapid ranking of large conformer sets with B97-3c accuracy</li>
 <li><strong>Binding energy calculations</strong> -- compute interaction energies for molecular dimers and complexes using the supramolecular approach (complex minus monomers)</li>
 <li><strong>Hydrogen-bonded systems</strong> -- study water clusters, nucleobase pairs, protein-ligand hydrogen bonds</li>
@@ -2198,7 +2202,7 @@
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
 
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2_2025&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-2025&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 <span class="c1"># Water dimer coordinates (Angstrom)</span>
 <span class="n">dimer_coords</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span>
@@ -2249,7 +2253,7 @@
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase.build</span><span class="w"> </span><span class="kn">import</span> <span class="n">molecule</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2ASE</span><span class="p">,</span> <span class="n">AIMNet2Calculator</span>
 
-<span class="n">base_calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2_2025&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">base_calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-2025&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="n">atoms</span> <span class="o">=</span> <span class="n">molecule</span><span class="p">(</span><span class="s2">&quot;H2O&quot;</span><span class="p">)</span>
 <span class="n">atoms</span><span class="o">.</span><span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2ASE</span><span class="p">(</span><span class="n">base_calc</span><span class="p">,</span> <span class="n">charge</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 
@@ -2269,7 +2273,7 @@
 </code></pre></div>
 <h3 id="ensemble-averaging">Ensemble Averaging<a class="headerlink" href="#ensemble-averaging" title="Permanent link">&para;</a></h3>
 <p>For binding energy calculations, ensemble averaging across all four members is recommended to assess reliability:</p>
-<div class="highlight"><pre><span></span><code><span class="n">models</span> <span class="o">=</span> <span class="p">[</span><span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;aimnet2_b973c_2025_d3_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">)]</span>
+<div class="highlight"><pre><span></span><code><span class="n">models</span> <span class="o">=</span> <span class="p">[</span><span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;aimnet2-b973c-2025-d3_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">)]</span>
 
 <span class="n">binding_energies</span> <span class="o">=</span> <span class="p">[]</span>
 <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">models</span><span class="p">:</span>

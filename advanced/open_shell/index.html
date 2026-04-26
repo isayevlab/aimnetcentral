@@ -1062,10 +1062,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#side-by-side-aimnet2-vs-aimnet2nse" class="md-nav__link">
+  <a href="#side-by-side-aimnet2-vs-aimnet2-nse" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Side-by-Side: aimnet2 vs aimnet2nse
+        Side-by-Side: aimnet2 vs aimnet2-nse
       
     </span>
   </a>
@@ -2076,10 +2076,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#side-by-side-aimnet2-vs-aimnet2nse" class="md-nav__link">
+  <a href="#side-by-side-aimnet2-vs-aimnet2-nse" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Side-by-Side: aimnet2 vs aimnet2nse
+        Side-by-Side: aimnet2 vs aimnet2-nse
       
     </span>
   </a>
@@ -2145,10 +2145,10 @@
 <li>Installation: <code>pip install "aimnet[ase]"</code></li>
 </ul>
 <h2 id="why-closed-shell-models-fail-for-radicals">Why Closed-Shell Models Fail for Radicals<a class="headerlink" href="#why-closed-shell-models-fail-for-radicals" title="Permanent link">&para;</a></h2>
-<p>Standard AIMNet2 models (<code>aimnet2</code>, <code>aimnet2_b973c</code>, <code>aimnet2_2025</code>) use a single charge channel internally (<code>num_charge_channels=1</code>). This means the model predicts one set of atomic partial charges and implicitly assumes all electrons are paired. When applied to a radical -- a species with one or more unpaired electrons -- the model has no mechanism to represent the spin density distribution and produces unreliable energies and forces.</p>
+<p>Standard AIMNet2 models (<code>aimnet2</code>, <code>aimnet2-b973c</code>, <code>aimnet2-2025</code>) use a single charge channel internally (<code>num_charge_channels=1</code>). This means the model predicts one set of atomic partial charges and implicitly assumes all electrons are paired. When applied to a radical -- a species with one or more unpaired electrons -- the model has no mechanism to represent the spin density distribution and produces unreliable energies and forces.</p>
 <div class="admonition warning">
 <p class="admonition-title">Do not use closed-shell models for open-shell systems</p>
-<p>Applying <code>aimnet2</code> to a doublet radical or triplet state will silently produce results that look reasonable but have large systematic errors. Always use <code>aimnet2nse</code> when unpaired electrons are present.</p>
+<p>Applying <code>aimnet2</code> to a doublet radical or triplet state will silently produce results that look reasonable but have large systematic errors. Always use <code>aimnet2-nse</code> when unpaired electrons are present.</p>
 </div>
 <p>Common symptoms of using the wrong model:</p>
 <ul>
@@ -2217,7 +2217,7 @@
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
 
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2nse&quot;</span><span class="p">)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-nse&quot;</span><span class="p">)</span>
 
 <span class="n">result</span> <span class="o">=</span> <span class="n">calc</span><span class="p">({</span>
     <span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">coords</span><span class="p">,</span>
@@ -2230,14 +2230,14 @@
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2ASE</span>
 
 <span class="c1"># Doublet radical</span>
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2ASE</span><span class="p">(</span><span class="s2">&quot;aimnet2nse&quot;</span><span class="p">,</span> <span class="n">charge</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">mult</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2ASE</span><span class="p">(</span><span class="s2">&quot;aimnet2-nse&quot;</span><span class="p">,</span> <span class="n">charge</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">mult</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 
 <span class="c1"># Change multiplicity later</span>
 <span class="n">calc</span><span class="o">.</span><span class="n">set_mult</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>  <span class="c1"># Switch to triplet</span>
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Default multiplicity</p>
-<p>If <code>mult</code> is not provided, the calculator defaults to <code>mult=1</code> (singlet). For closed-shell molecules with <code>aimnet2nse</code>, this is correct and the model reduces to standard behavior. You do not need to switch models for closed-shell species.</p>
+<p>If <code>mult</code> is not provided, the calculator defaults to <code>mult=1</code> (singlet). For closed-shell molecules with <code>aimnet2-nse</code>, this is correct and the model reduces to standard behavior. You do not need to switch models for closed-shell species.</p>
 </div>
 <h2 id="worked-example-c-h-bond-dissociation-energy">Worked Example: C-H Bond Dissociation Energy<a class="headerlink" href="#worked-example-c-h-bond-dissociation-energy" title="Permanent link">&para;</a></h2>
 <p>Bond dissociation energy (BDE) measures the energy required to break a bond homolytically, producing two radical fragments. This is a fundamental test for open-shell models because it requires accurate energies for both the parent molecule and the radical products.</p>
@@ -2249,7 +2249,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">ase.optimize</span><span class="w"> </span><span class="kn">import</span> <span class="n">BFGS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2ASE</span><span class="p">,</span> <span class="n">AIMNet2Calculator</span>
 
-<span class="n">base_calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">base_calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 <span class="c1"># --- Step 1: Optimize toluene (closed-shell singlet) ---</span>
 <span class="n">toluene</span> <span class="o">=</span> <span class="n">Atoms</span><span class="p">(</span>
@@ -2321,7 +2321,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">ase.optimize</span><span class="w"> </span><span class="kn">import</span> <span class="n">BFGS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2ASE</span><span class="p">,</span> <span class="n">AIMNet2Calculator</span>
 
-<span class="n">base_calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">base_calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">compute_bde</span><span class="p">(</span><span class="n">parent_atoms</span><span class="p">,</span> <span class="n">radical_atoms</span><span class="p">,</span> <span class="n">h_energy</span><span class="p">):</span>
@@ -2351,7 +2351,7 @@
 <span class="c1"># (Use your own geometry definitions for each species)</span>
 <span class="c1"># Results should show: methyl &gt; ethyl &gt; isopropyl &gt; tert-butyl</span>
 </code></pre></div>
-<h2 id="side-by-side-aimnet2-vs-aimnet2nse">Side-by-Side: aimnet2 vs aimnet2nse<a class="headerlink" href="#side-by-side-aimnet2-vs-aimnet2nse" title="Permanent link">&para;</a></h2>
+<h2 id="side-by-side-aimnet2-vs-aimnet2-nse">Side-by-Side: aimnet2 vs aimnet2-nse<a class="headerlink" href="#side-by-side-aimnet2-vs-aimnet2-nse" title="Permanent link">&para;</a></h2>
 <p>This comparison demonstrates the systematic error of using a closed-shell model for radical species.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">ase</span><span class="w"> </span><span class="kn">import</span> <span class="n">Atoms</span>
@@ -2380,19 +2380,19 @@
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;aimnet2 (closed-shell): </span><span class="si">{</span><span class="n">E_closed</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
 
 <span class="c1"># --- Open-shell model (CORRECT) ---</span>
-<span class="n">calc_nse</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">calc_nse</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="n">ch3_nse</span> <span class="o">=</span> <span class="n">ch3</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 <span class="n">ch3_nse</span><span class="o">.</span><span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2ASE</span><span class="p">(</span><span class="n">calc_nse</span><span class="p">,</span> <span class="n">charge</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">mult</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <span class="n">opt</span> <span class="o">=</span> <span class="n">BFGS</span><span class="p">(</span><span class="n">ch3_nse</span><span class="p">,</span> <span class="n">logfile</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
 <span class="n">opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">fmax</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
 <span class="n">E_nse</span> <span class="o">=</span> <span class="n">ch3_nse</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;aimnet2nse (open-shell): </span><span class="si">{</span><span class="n">E_nse</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;aimnet2-nse (open-shell): </span><span class="si">{</span><span class="n">E_nse</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Energy difference: </span><span class="si">{</span><span class="nb">abs</span><span class="p">(</span><span class="n">E_closed</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">E_nse</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">23.0609</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> kcal/mol&quot;</span><span class="p">)</span>
 </code></pre></div>
 <div class="admonition tip">
-<p class="admonition-title">When in doubt, use aimnet2nse</p>
-<p>The NSE model handles closed-shell species correctly (mult=1 reduces to standard behavior). If your workflow involves a mix of closed-shell and open-shell species -- for example, computing BDEs -- use <code>aimnet2nse</code> throughout for consistent energetics.</p>
+<p class="admonition-title">When in doubt, use aimnet2-nse</p>
+<p>The NSE model handles closed-shell species correctly (mult=1 reduces to standard behavior). If your workflow involves a mix of closed-shell and open-shell species -- for example, computing BDEs -- use <code>aimnet2-nse</code> throughout for consistent energetics.</p>
 </div>
 <h2 id="when-to-fall-back-to-multi-reference-methods">When to Fall Back to Multi-Reference Methods<a class="headerlink" href="#when-to-fall-back-to-multi-reference-methods" title="Permanent link">&para;</a></h2>
 <p>AIMNet2-NSE handles most radical chemistry well, but certain electronic structure situations are beyond the reach of any single-reference method (including both AIMNet2 and standard DFT):</p>

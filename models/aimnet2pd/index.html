@@ -2200,8 +2200,12 @@
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
 <p>AIMNet2-Pd extends AIMNet2 to <strong>palladium-catalyzed organometallic chemistry</strong>. It is the first AIMNet2 variant to include a transition metal, enabling fast and accurate simulations of Pd-containing complexes, catalytic intermediates, and reaction profiles at near-DFT accuracy.</p>
 <p><strong>Supported elements:</strong> H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I (14 elements)</p>
-<p><strong>Registry alias:</strong> <code>aimnet2pd</code> (loads ensemble member <code>aimnet2-pd_0</code>)</p>
+<p><strong>Registry alias:</strong> <code>aimnet2-pd</code> (loads ensemble member <code>aimnet2-pd_0</code>)</p>
 <p><strong>Ensemble members:</strong> <code>aimnet2-pd_0</code> through <code>aimnet2-pd_3</code> (4 models)</p>
+<div class="admonition note">
+<p class="admonition-title">Legacy alias</p>
+<p>The previously published short alias <code>aimnet2pd</code> still resolves to <code>aimnet2-pd_0</code> and remains supported. The member-level keys <code>aimnet2-pd_0</code> … <code>aimnet2-pd_3</code> are unchanged.</p>
+</div>
 <p><strong>DFT reference:</strong> B97-3c with CPCM implicit solvation (THF solvent)</p>
 <div class="admonition warning">
 <p class="admonition-title">Element coverage difference</p>
@@ -2335,7 +2339,7 @@
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Ensemble member naming</p>
-<p>The Pd model ensemble members use a hyphen: <code>aimnet2-pd_0</code> through <code>aimnet2-pd_3</code> (note the hyphen between "aimnet2" and "pd").</p>
+<p>The Pd model ensemble members follow the registry convention <code>aimnet2-&lt;family&gt;_&lt;index&gt;</code>: <code>aimnet2-pd_0</code> through <code>aimnet2-pd_3</code> (dash separates "aimnet2" from the family tag, underscore precedes the ensemble index).</p>
 </div>
 <h3 id="performance">Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <p>Pd complexes are typically moderate in size (20-80 atoms). Using <code>compile_model=True</code> is recommended for reaction profile scans or molecular dynamics where many sequential evaluations are performed on similarly-sized systems.</p>

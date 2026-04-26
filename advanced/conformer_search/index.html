@@ -2200,7 +2200,7 @@
 <h2 id="what-you-will-learn">What You Will Learn<a class="headerlink" href="#what-you-will-learn" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Building a conformer search pipeline with RDKit and AIMNet2</li>
-<li>Choosing between <code>aimnet2</code> (accuracy) and <code>aimnet2_2025</code> (B97-3c speed) for screening</li>
+<li>Choosing between <code>aimnet2</code> (accuracy) and <code>aimnet2-2025</code> (B97-3c speed) for screening</li>
 <li>Batch geometry optimization of conformer ensembles</li>
 <li>Boltzmann-weighted population analysis</li>
 <li>Computing dihedral angles for Ramachandran-style analysis</li>
@@ -2232,7 +2232,7 @@
 </thead>
 <tbody>
 <tr>
-<td><code>aimnet2_2025</code></td>
+<td><code>aimnet2-2025</code></td>
 <td>B97-3c (improved)</td>
 <td>Faster</td>
 <td>Initial screening, large libraries, many conformers</td>
@@ -2247,7 +2247,7 @@
 </table>
 <div class="admonition tip">
 <p class="admonition-title">Two-stage workflow</p>
-<p>For large molecules with many conformers, use <code>aimnet2_2025</code> to screen and discard high-energy conformers (e.g., &gt; 5 kcal/mol above minimum), then re-optimize the survivors with <code>aimnet2</code> for final ranking.</p>
+<p>For large molecules with many conformers, use <code>aimnet2-2025</code> to screen and discard high-energy conformers (e.g., &gt; 5 kcal/mol above minimum), then re-optimize the survivors with <code>aimnet2</code> for final ranking.</p>
 </div>
 <h2 id="step-1-generate-conformers-with-rdkit">Step 1: Generate Conformers with RDKit<a class="headerlink" href="#step-1-generate-conformers-with-rdkit" title="Permanent link">&para;</a></h2>
 <p>RDKit's ETKDG (Experimental Torsion Knowledge Distance Geometry) algorithm generates diverse 3D conformers using torsional preferences from experimental crystal structures.</p>
@@ -2537,7 +2537,7 @@
 </code></pre></div>
 <h2 id="whats-next">What's Next<a class="headerlink" href="#whats-next" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="../../models/guide/">Model Selection Guide</a> -- choosing <code>aimnet2</code> vs <code>aimnet2_2025</code> for your workflow</li>
+<li><a href="../../models/guide/">Model Selection Guide</a> -- choosing <code>aimnet2</code> vs <code>aimnet2-2025</code> for your workflow</li>
 <li><a href="../../tutorials/batch_processing/">Batch Processing tutorial</a> -- efficient processing of molecular datasets</li>
 <li><a href="../../tutorials/performance/">Performance Tuning tutorial</a> -- <code>compile_model=True</code> and GPU optimization</li>
 <li><a href="../reaction_paths/">Reaction Paths and Transition States</a> -- finding transition states between conformers</li>

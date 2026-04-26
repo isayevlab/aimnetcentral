@@ -2248,13 +2248,14 @@
 <div class="highlight"><pre><span></span><code>gsutil<span class="w"> </span>cp<span class="w"> </span>aimnet2_wb97m_d3_0.pt<span class="w"> </span>gs://aimnetcentral/AIMNet2/aimnet2_wb97m_d3_0.pt
 </code></pre></div>
 <ol>
-<li><strong>Update model_registry.yaml:</strong>
-   <div class="highlight"><pre><span></span><code><span class="nt">models</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">aimnet2_wb97m_d3_0</span><span class="p">:</span>
+<li><strong>Update model_registry.yaml:</strong></li>
+</ol>
+<div class="highlight"><pre><span></span><code><span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">aimnet2-wb97m-d3_0</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet2_wb97m_d3_0.pt</span>
 <span class="w">    </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_wb97m_d3_0.pt</span>
-</code></pre></div></li>
-</ol>
+</code></pre></div>
+<p>Registry keys follow the convention <code>aimnet2-&lt;family&gt;_&lt;member&gt;</code> (dash separates <code>aimnet2</code> from the family tag, trailing <code>_&lt;int&gt;</code> is the ensemble member index). The <code>file:</code> field keeps the original filename so cached <code>.pt</code> downloads remain valid.</p>
 
 
 

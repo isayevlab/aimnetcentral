@@ -2100,7 +2100,7 @@
 <li>How to compute interaction energies for molecular complexes</li>
 <li>Scanning potential energy surfaces for non-covalent dimers</li>
 <li>Why BSSE is different for ML potentials versus quantum chemistry</li>
-<li>Comparing <code>aimnet2</code> and <code>aimnet2_2025</code> for intermolecular accuracy</li>
+<li>Comparing <code>aimnet2</code> and <code>aimnet2-2025</code> for intermolecular accuracy</li>
 <li>Configuring long-range electrostatics for non-covalent systems</li>
 </ul>
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
@@ -2110,7 +2110,7 @@
 <li>ASE installation for geometry optimization examples</li>
 </ul>
 <h2 id="spotlight-model-aimnet2-2025">Spotlight Model: AIMNet2-2025<a class="headerlink" href="#spotlight-model-aimnet2-2025" title="Permanent link">&para;</a></h2>
-<p>The <code>aimnet2_2025</code> model was specifically trained with improved sampling of intermolecular configurations, making it the best choice for non-covalent interaction studies. It shares the same element coverage as the standard models (H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I) but provides significantly better accuracy for hydrogen bonding, pi-stacking, and dispersion-dominated complexes.</p>
+<p>The <code>aimnet2-2025</code> model was specifically trained with improved sampling of intermolecular configurations, making it the best choice for non-covalent interaction studies. It shares the same element coverage as the standard models (H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I) but provides significantly better accuracy for hydrogen bonding, pi-stacking, and dispersion-dominated complexes.</p>
 <p>See the <a href="../../models/guide/">Model Selection Guide</a> for choosing between models.</p>
 <h2 id="interaction-energy-the-supramolecular-approach">Interaction Energy: The Supramolecular Approach<a class="headerlink" href="#interaction-energy-the-supramolecular-approach" title="Permanent link">&para;</a></h2>
 <p>The interaction energy of a complex AB is computed as the difference between the energy of the complex and the sum of the isolated monomers:</p>
@@ -2120,7 +2120,7 @@
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
 
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2_2025&quot;</span><span class="p">)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-2025&quot;</span><span class="p">)</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">interaction_energy</span><span class="p">(</span><span class="n">coords_ab</span><span class="p">,</span> <span class="n">numbers_ab</span><span class="p">,</span> <span class="n">charge_ab</span><span class="p">,</span>
                        <span class="n">coords_a</span><span class="p">,</span> <span class="n">numbers_a</span><span class="p">,</span> <span class="n">charge_a</span><span class="p">,</span>
@@ -2140,7 +2140,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
 
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2_2025&quot;</span><span class="p">)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-2025&quot;</span><span class="p">)</span>
 
 <span class="c1"># Water monomer A (acceptor): O at origin, H atoms in xz-plane</span>
 <span class="n">water_a_coords</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span>
@@ -2205,13 +2205,13 @@
 <span class="c1"># Reference: approximately -5.0 kcal/mol at ~2.9 A (CCSD(T)/CBS)</span>
 </code></pre></div>
 <h2 id="comparing-models-on-the-water-dimer">Comparing Models on the Water Dimer<a class="headerlink" href="#comparing-models-on-the-water-dimer" title="Permanent link">&para;</a></h2>
-<p>The <code>aimnet2_2025</code> model shows improved accuracy over the original <code>aimnet2</code> for intermolecular interactions. You can compare them directly:</p>
+<p>The <code>aimnet2-2025</code> model shows improved accuracy over the original <code>aimnet2</code> for intermolecular interactions. You can compare them directly:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
 
 <span class="n">calc_orig</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>
-<span class="n">calc_2025</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2_2025&quot;</span><span class="p">)</span>
+<span class="n">calc_2025</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-2025&quot;</span><span class="p">)</span>
 
 <span class="c1"># Use the same water dimer geometry at near-equilibrium distance</span>
 <span class="c1"># Acceptor at origin, donor at 2.9 A along x with one H pointing toward acceptor O</span>
@@ -2232,7 +2232,7 @@
 
 <span class="n">ev_to_kcal</span> <span class="o">=</span> <span class="mf">23.0609</span>
 
-<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">calc</span> <span class="ow">in</span> <span class="p">[(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">calc_orig</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;aimnet2_2025&quot;</span><span class="p">,</span> <span class="n">calc_2025</span><span class="p">)]:</span>
+<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">calc</span> <span class="ow">in</span> <span class="p">[(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">calc_orig</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;aimnet2-2025&quot;</span><span class="p">,</span> <span class="n">calc_2025</span><span class="p">)]:</span>
     <span class="n">e_dimer</span> <span class="o">=</span> <span class="n">calc</span><span class="p">({</span><span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">dimer</span><span class="p">,</span> <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="n">numbers_dimer</span><span class="p">,</span>
                      <span class="s2">&quot;charge&quot;</span><span class="p">:</span> <span class="n">charge</span><span class="p">})[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
     <span class="n">e_a</span> <span class="o">=</span> <span class="n">calc</span><span class="p">({</span><span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">water_a</span><span class="p">,</span> <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="n">numbers_mono</span><span class="p">,</span>
@@ -2248,7 +2248,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
 
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2_2025&quot;</span><span class="p">)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-2025&quot;</span><span class="p">)</span>
 
 <span class="c1"># Benzene monomer (planar, in xy-plane centered at origin)</span>
 <span class="n">benzene_c</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span>
@@ -2301,7 +2301,7 @@
 <p class="admonition-title">No Basis Set Superposition Error in the Traditional Sense</p>
 <p>In quantum chemistry, BSSE arises because the basis functions of monomer A artificially improve the description of monomer B (and vice versa) when computing the dimer energy. The counterpoise correction removes this artifact.</p>
 <p>ML potentials like AIMNet2 have <strong>no basis set</strong> and therefore <strong>no BSSE</strong> in the traditional sense. The interaction energy computed as <code>E(AB) - E(A) - E(B)</code> does not suffer from basis set incompleteness.</p>
-<p>However, a subtlety remains: the DFT reference data used for training <strong>was</strong> computed with a finite basis set (def2-TZVPP for <code>aimnet2</code>/<code>aimnet2nse</code>; def2-mTZVP for <code>aimnet2_2025</code>/<code>aimnet2_b973c</code>). If the training data was not counterpoise-corrected, the model may have learned an implicit BSSE from the reference energies. For AIMNet2 models, these basis sets minimize this effect, but it is not entirely absent.</p>
+<p>However, a subtlety remains: the DFT reference data used for training <strong>was</strong> computed with a finite basis set (def2-TZVPP for <code>aimnet2</code>/<code>aimnet2-nse</code>; def2-mTZVP for <code>aimnet2-2025</code>/<code>aimnet2-b973c</code>). If the training data was not counterpoise-corrected, the model may have learned an implicit BSSE from the reference energies. For AIMNet2 models, these basis sets minimize this effect, but it is not entirely absent.</p>
 <p><strong>In practice:</strong> Do not apply counterpoise corrections to AIMNet2 results. The supramolecular approach (<code>E(AB) - E(A) - E(B)</code>) is the correct way to compute interaction energies with ML potentials.</p>
 </div>
 <h2 id="long-range-method-guidance">Long-Range Method Guidance<a class="headerlink" href="#long-range-method-guidance" title="Permanent link">&para;</a></h2>
@@ -2309,7 +2309,7 @@
 <p>For larger aggregates or periodic systems with non-covalent contacts:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
 
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2_2025&quot;</span><span class="p">)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-2025&quot;</span><span class="p">)</span>
 
 <span class="c1"># For non-periodic clusters: simple method is fine (default)</span>
 <span class="c1"># For periodic systems: use DSF or Ewald</span>
@@ -2341,31 +2341,31 @@
 <td>Hydrogen bonding</td>
 <td>Water dimer, DNA base pairs</td>
 <td>3-20 kcal/mol</td>
-<td><code>aimnet2_2025</code></td>
+<td><code>aimnet2-2025</code></td>
 </tr>
 <tr>
 <td>pi-pi stacking</td>
 <td>Benzene dimer, nucleobases</td>
 <td>1-5 kcal/mol</td>
-<td><code>aimnet2_2025</code></td>
+<td><code>aimnet2-2025</code></td>
 </tr>
 <tr>
 <td>CH-pi</td>
 <td>Methane-benzene</td>
 <td>0.5-2 kcal/mol</td>
-<td><code>aimnet2_2025</code></td>
+<td><code>aimnet2-2025</code></td>
 </tr>
 <tr>
 <td>Halogen bonding</td>
 <td>R-X...Y (X = Cl, Br, I)</td>
 <td>2-10 kcal/mol</td>
-<td><code>aimnet2_2025</code></td>
+<td><code>aimnet2-2025</code></td>
 </tr>
 <tr>
 <td>Dispersion (vdW)</td>
 <td>Alkane dimers</td>
 <td>0.5-3 kcal/mol</td>
-<td><code>aimnet2_2025</code></td>
+<td><code>aimnet2-2025</code></td>
 </tr>
 </tbody>
 </table>

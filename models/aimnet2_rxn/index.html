@@ -1924,11 +1924,15 @@
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
 
 <span class="c1"># From the GCS-backed registry (alias):</span>
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2rxn&quot;</span><span class="p">,</span> <span class="n">ensemble_member</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-rxn&quot;</span><span class="p">,</span> <span class="n">ensemble_member</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 
 <span class="c1"># From Hugging Face Hub:</span>
 <span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;isayevlab/aimnet2-rxn&quot;</span><span class="p">,</span> <span class="n">ensemble_member</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 </code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Legacy alias</p>
+<p>The previously published short alias <code>aimnet2rxn</code> and member-level keys <code>aimnet2_rxn_0</code> … <code>aimnet2_rxn_3</code> still resolve and remain supported.</p>
+</div>
 <p>Both paths produce equivalent calculators. The HF path requires <code>pip install "aimnet[hf]"</code>.</p>
 <h2 id="calculator-enforced-safeguards-this-family">Calculator-enforced safeguards (this family)<a class="headerlink" href="#calculator-enforced-safeguards-this-family" title="Permanent link">&para;</a></h2>
 <p>The calculator applies the following checks automatically when <code>validate_species=True</code> (the default). Each can be bypassed with <code>validate_species=False</code>:</p>

@@ -2494,7 +2494,7 @@
 <p>Finding transition states with DFT typically requires hundreds to thousands of gradient evaluations, each taking minutes to hours. AIMNet2 provides near-DFT gradients in milliseconds, making reaction path calculations that would take days at the DFT level complete in minutes.</p>
 <div class="admonition tip">
 <p class="admonition-title">Model selection for reaction paths</p>
-<p>Use <code>aimnet2nse</code> for reactions involving bond breaking or forming, especially homolytic processes (radical mechanisms, H-atom abstractions). For heterolytic processes (SN2, proton transfers), the standard <code>aimnet2</code> model may also work, but <code>aimnet2nse</code> is the safer default because it handles both closed-shell and open-shell regions of the potential energy surface.</p>
+<p>Use <code>aimnet2-nse</code> for reactions involving bond breaking or forming, especially homolytic processes (radical mechanisms, H-atom abstractions). For heterolytic processes (SN2, proton transfers), the standard <code>aimnet2</code> model may also work, but <code>aimnet2-nse</code> is the safer default because it handles both closed-shell and open-shell regions of the potential energy surface.</p>
 </div>
 <h2 id="pysisyphus-integration">PySisyphus Integration<a class="headerlink" href="#pysisyphus-integration" title="Permanent link">&para;</a></h2>
 <p>AIMNet2 integrates with PySisyphus through the <code>AIMNet2Pysis</code> calculator class. PySisyphus is a Python framework for exploring potential energy surfaces, providing NEB, growing string, and IRC methods.</p>
@@ -2510,10 +2510,10 @@
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Pysis</span><span class="p">,</span> <span class="n">AIMNet2Calculator</span>
 
 <span class="c1"># From model name (creates AIMNet2Calculator internally)</span>
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Pysis</span><span class="p">(</span><span class="s2">&quot;aimnet2nse&quot;</span><span class="p">,</span> <span class="n">charge</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">mult</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Pysis</span><span class="p">(</span><span class="s2">&quot;aimnet2-nse&quot;</span><span class="p">,</span> <span class="n">charge</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">mult</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
 <span class="c1"># From existing calculator (reuse across workflows)</span>
-<span class="n">base</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">base</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Pysis</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">charge</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">mult</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="the-run_pysis-entry-point">The run_pysis() Entry Point<a class="headerlink" href="#the-run_pysis-entry-point" title="Permanent link">&para;</a></h3>
@@ -2532,7 +2532,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">ase.optimize</span><span class="w"> </span><span class="kn">import</span> <span class="n">BFGS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2ASE</span><span class="p">,</span> <span class="n">AIMNet2Calculator</span>
 
-<span class="n">base_calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">base_calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 <span class="c1"># Reactant complex: Cl- approaching CH3Cl from the back side</span>
 <span class="n">reactant</span> <span class="o">=</span> <span class="n">Atoms</span><span class="p">(</span>
@@ -2584,7 +2584,7 @@
 
 <span class="nt">calc</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet</span>
-<span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet2nse</span>
+<span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet2-nse</span>
 <span class="w">  </span><span class="nt">charge</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-1</span>
 <span class="w">  </span><span class="nt">mult</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 
@@ -2625,7 +2625,7 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;f
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
 
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 <span class="c1"># TS geometry (from NEB climbing image)</span>
 <span class="c1"># Replace with actual TS coordinates from your NEB result</span>
@@ -2720,7 +2720,7 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;f
 
 <span class="nt">calc</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet</span>
-<span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet2nse</span>
+<span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet2-nse</span>
 <span class="w">  </span><span class="nt">charge</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-1</span>
 <span class="w">  </span><span class="nt">mult</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 
@@ -2741,7 +2741,7 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;f
 
 <span class="nt">calc</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet</span>
-<span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet2nse</span>
+<span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet2-nse</span>
 <span class="w">  </span><span class="nt">charge</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-1</span>
 <span class="w">  </span><span class="nt">mult</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 
@@ -2809,7 +2809,7 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;f
 <span class="kn">from</span><span class="w"> </span><span class="nn">ase.optimize</span><span class="w"> </span><span class="kn">import</span> <span class="n">BFGS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2ASE</span><span class="p">,</span> <span class="n">AIMNet2Calculator</span>
 
-<span class="n">base_calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">base_calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 <span class="c1"># 1. Optimize reactant complex</span>
 <span class="n">reactant</span> <span class="o">=</span> <span class="n">Atoms</span><span class="p">(</span>
@@ -2871,7 +2871,7 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;f
 
 <span class="s2">calc:</span>
 <span class="s2">  type: aimnet</span>
-<span class="s2">  model: aimnet2nse</span>
+<span class="s2">  model: aimnet2-nse</span>
 <span class="s2">  charge: -1</span>
 <span class="s2">  mult: 1</span>
 
@@ -2894,7 +2894,7 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;f
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">SN2 reactions and model choice</p>
-<p>The SN2 reaction involves heterolytic bond breaking (the leaving group departs with both bonding electrons). For heterolytic processes like this, the standard <code>aimnet2</code> model may perform adequately. However, <code>aimnet2nse</code> is recommended as the default for all reaction path calculations because it handles mixed closed-shell/open-shell regions correctly and introduces no penalty for closed-shell species (<code>mult=1</code> reduces to standard behavior).</p>
+<p>The SN2 reaction involves heterolytic bond breaking (the leaving group departs with both bonding electrons). For heterolytic processes like this, the standard <code>aimnet2</code> model may perform adequately. However, <code>aimnet2-nse</code> is recommended as the default for all reaction path calculations because it handles mixed closed-shell/open-shell regions correctly and introduces no penalty for closed-shell species (<code>mult=1</code> reduces to standard behavior).</p>
 </div>
 <h2 id="practical-tips">Practical Tips<a class="headerlink" href="#practical-tips" title="Permanent link">&para;</a></h2>
 <h3 id="convergence-troubleshooting">Convergence Troubleshooting<a class="headerlink" href="#convergence-troubleshooting" title="Permanent link">&para;</a></h3>

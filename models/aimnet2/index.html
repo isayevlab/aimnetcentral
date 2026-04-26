@@ -2178,8 +2178,12 @@
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
 <p>AIMNet2 is the <strong>default general-purpose model</strong> for organic and main-group molecular chemistry. It is trained against wB97M-D3/def2-TZVPP reference data, a modern range-separated hybrid functional with DFT-D3 dispersion correction widely regarded as one of the most accurate for thermochemistry and non-covalent interactions.</p>
 <p><strong>Supported elements:</strong> H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I (14 elements)</p>
-<p><strong>Registry alias:</strong> <code>aimnet2</code> (loads ensemble member <code>aimnet2_wb97m_d3_0</code>)</p>
-<p><strong>Ensemble members:</strong> <code>aimnet2_wb97m_d3_0</code> through <code>aimnet2_wb97m_d3_3</code> (4 models)</p>
+<p><strong>Registry alias:</strong> <code>aimnet2</code> (loads ensemble member <code>aimnet2-wb97m-d3_0</code>)</p>
+<p><strong>Ensemble members:</strong> <code>aimnet2-wb97m-d3_0</code> through <code>aimnet2-wb97m-d3_3</code> (4 models)</p>
+<div class="admonition note">
+<p class="admonition-title">Legacy names</p>
+<p>The previously published short alias <code>aimnet2_wb97m</code> and the member-level keys <code>aimnet2_wb97m_d3_0</code> … <code>aimnet2_wb97m_d3_3</code> still resolve and remain supported.</p>
+</div>
 <p>If you are unsure which model to use, start here. AIMNet2 provides the best balance of accuracy and element coverage for most molecular chemistry applications.</p>
 <h2 id="strengths-and-limitations">Strengths and Limitations<a class="headerlink" href="#strengths-and-limitations" title="Permanent link">&para;</a></h2>
 <h3 id="strengths">Strengths<a class="headerlink" href="#strengths" title="Permanent link">&para;</a></h3>
@@ -2286,8 +2290,8 @@
 </code></pre></div>
 <p>See <a href="../../long_range/">Long-Range Methods</a> for details on DSF vs Ewald.</p>
 <h3 id="ensemble-averaging">Ensemble Averaging<a class="headerlink" href="#ensemble-averaging" title="Permanent link">&para;</a></h3>
-<p>Four independently trained ensemble members are available (<code>aimnet2_wb97m_d3_0</code> through <code>aimnet2_wb97m_d3_3</code>). Use ensemble averaging for production calculations to improve accuracy and estimate prediction uncertainty:</p>
-<div class="highlight"><pre><span></span><code><span class="n">models</span> <span class="o">=</span> <span class="p">[</span><span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;aimnet2_wb97m_d3_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">)]</span>
+<p>Four independently trained ensemble members are available (<code>aimnet2-wb97m-d3_0</code> through <code>aimnet2-wb97m-d3_3</code>). Use ensemble averaging for production calculations to improve accuracy and estimate prediction uncertainty:</p>
+<div class="highlight"><pre><span></span><code><span class="n">models</span> <span class="o">=</span> <span class="p">[</span><span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;aimnet2-wb97m-d3_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">)]</span>
 <span class="n">results</span> <span class="o">=</span> <span class="p">[</span><span class="n">m</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">models</span><span class="p">]</span>
 
 <span class="n">energies</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="p">])</span>
