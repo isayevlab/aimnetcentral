@@ -16,8 +16,14 @@ charges and dipole moments and that give IR intensities when calculating
 normal modes" -- a meaningful capability gap over the other backends in
 the same engine (TorchANI, M3GNet, MACE, NequIP, FAIRChem).
 
-Element coverage: H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I (aperiodic
-systems).
+Element coverage: H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I. The AMS
+integration exposes AIMNet2 for **aperiodic systems only** -- this is a
+property of AMS's `MLPotential` wrapper, not of AIMNet2 itself, which
+supports PBC via the in-tree `AIMNet2Calculator`.
+
+**Model coverage in this engine**: AIMNet2-wB97MD3 and AIMNet2-B973c
+only. The NSE (open-shell) and rxn (reactive) AIMNet2 model families are
+not currently exposed by AMS.
 
 ## Minimal AMS input
 

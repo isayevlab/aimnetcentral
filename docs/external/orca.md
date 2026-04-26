@@ -62,6 +62,14 @@ end
 For standalone mode, point `ProgExt` at the AIMNet2 standalone wrapper
 script (also installed by `install.py`) instead of `oet_client`.
 
+!!! warning "Closed-shell only"
+    Charge / multiplicity in the `*XYZfile` line are passed through to
+    the wrapper. Charged closed-shell systems work (e.g.
+    `*XYZfile -1 1 mol.xyz`); open-shell multiplicities (`mult > 1`)
+    are not exposed by the upstream `aimnet2` wrapper -- the wb97m-d3
+    model is closed-shell only. Verify with the wrapper's own docs if
+    you need radicals.
+
 ## Compatible workflows
 
 ORCA's external-methods interface composes with:
@@ -71,10 +79,13 @@ ORCA's external-methods interface composes with:
 - `!GOAT` -- conformer sampling
 - `!FREQ` / `!NUMFREQ` -- numerical frequencies
 
+## Model coverage
+
+The upstream ORCA-External-Tools `aimnet2` wrapper exposes the wb97m-d3
+model only. NSE (open-shell) and rxn (reactive) AIMNet2 families are
+not currently wrapped.
+
 ## See also
 
 - [ORCA 6.1 ExtOpt tutorial](https://www.faccts.de/docs/orca/6.1/tutorials/workflows/extopt.html)
-- [ORCA-External-Tools repo](https://github.com/grimme-lab/ORCA-External-Tools)
-  (search GitHub for the current canonical fork; the wrapper scripts and
-  installer live there)
 - [OPI (ORCA Python Interface) external-methods notebook](https://www.faccts.de/docs/opi/nightly/docs/contents/notebooks/extopt.html)

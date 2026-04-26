@@ -42,7 +42,15 @@ For QM/MM-style workflows that do not require GROMACS specifically:
 
 - `AIMNet2ASE` + ASE's MD drivers (Langevin, NVT, NVE) for pure ML
   trajectories, with [pysisyphus](pysis.md) for path following.
-- For QM/MM where AMBER is acceptable, the
-  [AMBER `sander` ML interface](amber.md) accepts Python callbacks and
-  does not require a TorchScript export. This route is unblocked but not
-  yet wrapped here.
+- [OpenMM via openmm-ml](openmm.md) -- pip-installable, runs the
+  AIMNet2 calculator behind `openmm.PythonForce` (no TorchScript
+  needed); supports periodic systems and `createMixedSystem` for QM/MM.
+- [AMBER via torchani-amber](amber.md) -- compiled-in C++/Fortran
+  integration for `sander` and `pmemd`; supports both full-ML and
+  ML/MM modes via the `&extpot` and `&qmmm` mdin namelists.
+
+A future GROMACS wrapper must include AIMNet2's D3 dispersion (the
+embedded D3 in the wb97m-d3 model is part of the published level of
+theory). A no-dispersion shortcut would silently shift conformer
+rankings, intermolecular binding, and torsion barriers by 1-10 kcal/mol
+vs the published numbers.

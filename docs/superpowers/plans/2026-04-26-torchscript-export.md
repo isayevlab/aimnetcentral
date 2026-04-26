@@ -23,8 +23,12 @@ TorchScript archives.
 
 ## Concrete upstream blockers
 
-1. **`aimnet/nbops.py:51`** uses `tensor.data_ptr()` as a cache key for
-   neighbor-list reuse. `torch.jit.script` errors on this:
+(File:line references current as of commit 9b89166; symbol references
+are intended to survive line drift.)
+
+1. **The neighbor-cache `data_ptr()` call in `aimnet/nbops.py`** uses
+   `tensor.data_ptr()` as a cache key for neighbor-list reuse.
+   `torch.jit.script` errors on this with:
    ```
    'Tensor' object has no attribute or method 'data_ptr'.
    ```
@@ -37,9 +41,9 @@ TorchScript archives.
    - Pass cache-bust hints in via the input dict (e.g. an explicit
      `data["_recompute_nb"]` bool) and do membership checks on a dict key.
 
-2. **`aimnet/modules/lr.py` DFTD3 autograd** -- the `DFTD3` class
-   (`aimnet/modules/lr.py:356`) calls `torch.autograd.grad` at line 596
-   with a signature TorchScript cannot match. Verified runtime error:
+2. **The `DFTD3` external module's autograd in `aimnet/modules/lr.py`**
+   calls `torch.autograd.grad` with a signature TorchScript cannot match.
+   Verified runtime error:
    `Expected a value of type 'List[Tensor]' for argument 'outputs' but
    instead found type 'Tensor'.`. Fix options:
    - Wrap in a proper `torch.autograd.Function` with explicit `forward` /
@@ -60,36 +64,45 @@ TorchScript archives.
 
 ## Already done (parked)
 
-- `aimnet/interfaces/__init__.py` -- new package, no public exports until
-  the wrapper actually works.
-- `aimnet/interfaces/gromacs.py` -- starter wrapper with the GROMACS NNPot
-  forward signature, unit conversions, and an all-pairs neighbor-list
-  construction. Verified to `jit.script` cleanly with a *dummy* inner
-  ScriptModule, save+reload round-trip OK, autograd-derived forces OK.
-  `build_gromacs_nnpot_model("aimnet2")` correctly raises for every shipped
-  model today (model isn't a ScriptModule + has external LR).
+- `aimnet/interfaces/__init__.py` -- new namespace; no public exports.
+- `aimnet/interfaces/gromacs.py` -- starter `AIMNet2Gromacs` class with the
+  GROMACS NNPot forward signature, unit conversions, and all-pairs
+  neighbor-list construction. Verified to `jit.script` cleanly with a
+  *dummy* inner ScriptModule, save+reload round-trip OK, autograd-derived
+  forces OK. `build_gromacs_nnpot_model()` is a stub that raises
+  `NotImplementedError` unconditionally; the class definition is preserved
+  as a starting point.
 
 ## Per-engine status
 
-| Engine | Needs TorchScript? | Status |
-|---|---|---|
-| GROMACS NNPot | yes | Blocked (this plan) |
-| LAMMPS `pair_style mliap` (mliappy) | yes | Blocked (this plan) |
-| OpenMM (openmm-ml) | no -- uses `openmm.PythonForce` with a Python callback | **Already supported upstream** via `MLPotential('aimnet2')`. A TorchScript path would still cut per-step Python overhead. |
-| AMBER `sander` / `pmemd` (`torchani-amber`) | yes (jit-compiled `.pt`), but with a different harness | **Supported upstream** via the [`torchani-amber`](https://github.com/roitberg-group/torchani-amber) integration, which ships pre-built support for AimNet2 (and Nutmeg). Requires recompiling AmberTools 25/26 with the integration; not pip-installable. Models are jit-compiled `.pt` files passed as `model_type` -- the same TorchScript-export work in this plan unblocks shipping a self-contained AIMNet2 jit asset for that path. |
+See [`docs/external/`](../../external/index.md) for the canonical
+per-engine status. Summary in this plan: GROMACS NNPot and LAMMPS
+`pair_style mliap` are blocked here. OpenMM is supported today via
+`openmm-ml` (Python callback, no TorchScript). AMBER is supported today
+via `torchani-amber` (compiled-in C++/Fortran, accepts a jit `.pt` via
+`model_type`). Resolving this plan also enables shipping a
+self-contained jit AIMNet2 for AMBER and an optional TorchScript
+fast-path for OpenMM.
 
 ## Suggested ordering
 
 1. Refactor `nbops.py` to remove `data_ptr` from the script path.
 2. Refactor `DFTD3` autograd into `torch.autograd.Function`.
-3. Land the bundled `GromacsNNPotWrapper` and an export CLI
-   (`examples/export_gromacs.py`, removed from this branch).
-4. Land docs/external/gromacs.md as a real "how to use" page (not a
-   blocker page).
-5. LAMMPS pair_pytorch then follows with a thin per-engine wrapper
-   around the same scripted core. OpenMM gets an optional TorchScript
-   fast-path that replaces the existing `PythonForce` callback in
-   `openmm-ml`.
+3. Promote `aimnet/interfaces/gromacs.py` from parked to functional
+   (drop the `NotImplementedError` stub, add tests, ship a CLI driver
+   under `examples/`).
+4. Rewrite `docs/external/gromacs.md` as a real "how to use" page.
+5. Surface a documented "external input contract" on the calculator
+   side (e.g. `AIMNet2Calculator.build_input_dict(coord, numbers, charge)`)
+   so future export wrappers depend on a documented surface rather than
+   reaching into private helpers like `_add_padding_row`.
+6. LAMMPS `pair_style mliap` then follows with a thin per-engine wrapper.
+   OpenMM gets an optional TorchScript fast-path that replaces the
+   existing `PythonForce` callback in `openmm-ml`.
+7. Once a second TorchScript export wrapper exists, factor out a shared
+   base (unit conversions + neighbor-list builder + padding-row
+   construction) under `aimnet/interfaces/_torchscript_base.py` rather
+   than duplicating across wrappers.
 
 ## Out of scope here
 

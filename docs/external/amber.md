@@ -31,8 +31,9 @@ source**:
    (`run-cmake`).
 3. Build AmberTools 25/26 from source with `CMAKE_PREFIX_PATH` pointing
    at the `torchani-amber` install. AMBER auto-links it.
-4. For ML/MM with charged systems on AimNet2 and Nutmeg, AmberTools 25
-   needs an additional patch (replace
+4. For ML/MM where the QM region has a non-zero net charge (i.e.
+   `qm_charge != 0`) with AimNet2 or Nutmeg, AmberTools 25 needs an
+   additional patch (replace
    `amber_src/AmberTools/sander/qm2_extern_torchani_module.F90`).
    AmberTools 26 includes the patch.
 
@@ -57,7 +58,8 @@ Minimal AIMNet2 example (full ML):
 /
 ```
 
-ML/MM example with charge-coupled embedding:
+ML/MM example with electrostatic embedding via AIMNet2's predicted
+atomic charges:
 
 ```
 &cntrl
@@ -72,10 +74,18 @@ ML/MM example with charge-coupled embedding:
 /
 ```
 
-Custom `.pt` files can be loaded by passing a full path as `model_type`,
-which is where the [TorchScript-export work](../superpowers/plans/2026-04-26-torchscript-export.md)
-in this repo would let users ship a self-contained AIMNet2 jit asset for
-`torchani-amber` rather than relying on the upstream-bundled model.
+The `mlmm_coupling` keyword selects the QM/MM coupling scheme. The
+exact embedding details (which AIMNet2 charges are used, whether MM
+point charges polarise the QM region within a step, etc.) are
+documented in the upstream `torchani-amber` reference paper and source.
+
+`model_type` may also be a full path to a **TorchScript-jit-compiled**
+`.pt` file. The v2 `.pt` assets shipped in
+`aimnet/calculators/assets/` are `torch.save` state-dict archives, not
+TorchScript -- they cannot currently be passed as `model_type` directly.
+The [TorchScript-export work](../superpowers/plans/2026-04-26-torchscript-export.md)
+in this repo would unblock shipping a self-contained AIMNet2 jit asset
+for `torchani-amber` rather than relying on the upstream-bundled model.
 
 ## Caveats
 
@@ -85,6 +95,12 @@ in this repo would let users ship a self-contained AIMNet2 jit asset for
 - The integration is tied to the `torchani_sandbox` build; the AIMNet2
   model selection is constrained to what `torchani-amber` exposes
   upstream until a custom jit `.pt` path is provided.
+
+## Model coverage
+
+What `torchani-amber` exposes upstream as `model_type = "aimnet2"`. The
+NSE (open-shell) and rxn (reactive) AIMNet2 families are not currently
+exposed by the upstream integration.
 
 ## Alternatives
 

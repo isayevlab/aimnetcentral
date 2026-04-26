@@ -27,3 +27,8 @@ scripted module instead.
 
 The shared remediation plan lives at
 [`docs/superpowers/plans/2026-04-26-torchscript-export.md`](../superpowers/plans/2026-04-26-torchscript-export.md).
+
+A future LAMMPS wrapper must include AIMNet2's D3 dispersion to match
+the published wb97m-d3 level of theory. A no-dispersion shortcut would
+silently shift conformer rankings, intermolecular binding, and torsion
+barriers by 1-10 kcal/mol vs the published numbers.
