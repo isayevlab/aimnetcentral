@@ -57,7 +57,7 @@ pysis = [
 
 # Sella saddle-point optimizer integration (requires ASE)
 sella = [
-    "ase>=3.27.0,<4",
+    "ase>=3.27.0,<4",  # keep in sync with the [ase] extra above
     "sella>=2.4.0",
 ]
 

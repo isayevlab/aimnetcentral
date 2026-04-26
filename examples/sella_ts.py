@@ -2,11 +2,11 @@
 
 Demonstrates the recommended configuration for using Sella with AIMNet2:
 - Minimum-mode following on internal coordinates (order=1, internal=True).
-- Analytic Hessian callback via AIMNet2ASE.get_hessian — replaces Sella's
-  iterative Davidson finite-difference loop with one analytic Hessian call
-  (O(3N) backward passes through the AIMNet2 energy graph).
+- Analytic Hessian callback via AIMNet2ASE.get_hessian — replaces each
+  Davidson refresh with one analytic Hessian call (O(3N) backward passes
+  per refresh through the AIMNet2 energy graph).
 
-Reference: Schreiner et al., Nature Communications 2024
+Reference: Yuan et al., Nature Communications 2024
 (https://www.nature.com/articles/s41467-024-52481-5) showed that providing
 analytic ML Hessians to Sella reduces step count by 2-3x.
 
