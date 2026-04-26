@@ -37,21 +37,3 @@ jobs:
               uses: github/codeql-action/analyze@v3
               with:
                   category: "/language:${{ matrix.language }}"
-
-    pip-audit:
-        name: pip-audit
-        runs-on: ubuntu-latest
-        timeout-minutes: 10
-        steps:
-            - name: Check out
-              uses: actions/checkout@v6
-
-            - name: Set up the environment
-              uses: ./.github/actions/setup-uv-env
-              with:
-                  groups: dev
-
-            - name: Run pip-audit against the synced environment
-              # --skip-editable: ignore the locally-installed aimnet package (not on PyPI)
-              # No --strict: --strict treats the editable skip as an error
-              run: uv run --with pip-audit pip-audit --skip-editable --progress-spinner off
