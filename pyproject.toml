@@ -55,6 +55,12 @@ pysis = [
     "pysisyphus",
 ]
 
+# Sella saddle-point optimizer integration (requires ASE)
+sella = [
+    "ase>=3.27.0,<4",
+    "sella>=2.4.0",
+]
+
 # Training dependencies
 train = [
     "omegaconf>=2.3.0",
@@ -202,6 +208,7 @@ markers = [
     "hf: marks tests that require Hugging Face extras (deselect with: -m 'not hf')",
     "network: marks tests that hit external services (deselect with: -m 'not network')",
     "pysis: marks tests that require PySisyphus (deselect with: -m 'not pysis')",
+    "sella: marks tests that require Sella (deselect with: -m 'not sella')",
     "train: marks tests that require training dependencies (deselect with: -m 'not train')",
 ]
 
@@ -224,7 +231,7 @@ exclude_lines = [
 package_module_name_map = { "pytorch-ignite" = "ignite" }
 
 [tool.deptry.per_rule_ignores]
-# Optional extras (ase, pysisyphus) — installed via [project.optional-dependencies]; deptry can't see them statically
-DEP001 = ["ase", "pysisyphus"]
-DEP003 = ["ase", "pysisyphus"]
-DEP004 = ["ase", "pysisyphus"]
+# Optional extras (ase, pysisyphus, sella) — installed via [project.optional-dependencies]; deptry can't see them statically
+DEP001 = ["ase", "pysisyphus", "sella"]
+DEP003 = ["ase", "pysisyphus", "sella"]
+DEP004 = ["ase", "pysisyphus", "sella"]
