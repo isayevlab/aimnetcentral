@@ -3,7 +3,7 @@
 ## What You Will Learn
 
 - Building a conformer search pipeline with RDKit and AIMNet2
-- Choosing between `aimnet2` (accuracy) and `aimnet2_2025` (B97-3c speed) for screening
+- Choosing between `aimnet2` (accuracy) and `aimnet2-2025` (B97-3c speed) for screening
 - Batch geometry optimization of conformer ensembles
 - Boltzmann-weighted population analysis
 - Computing dihedral angles for Ramachandran-style analysis
@@ -29,12 +29,12 @@ This combines the strengths of each method: RDKit provides broad sampling of con
 
 | Model | Functional | Relative Speed | Best For |
 | --- | --- | --- | --- |
-| `aimnet2_2025` | B97-3c (improved) | Faster | Initial screening, large libraries, many conformers |
+| `aimnet2-2025` | B97-3c (improved) | Faster | Initial screening, large libraries, many conformers |
 | `aimnet2` | wB97M-D3 | Baseline | Final ranking, publication-quality results |
 
 !!! tip "Two-stage workflow"
 
-    For large molecules with many conformers, use `aimnet2_2025` to screen and discard high-energy conformers (e.g., > 5 kcal/mol above minimum), then re-optimize the survivors with `aimnet2` for final ranking.
+    For large molecules with many conformers, use `aimnet2-2025` to screen and discard high-energy conformers (e.g., > 5 kcal/mol above minimum), then re-optimize the survivors with `aimnet2` for final ranking.
 
 ## Step 1: Generate Conformers with RDKit
 
@@ -355,7 +355,7 @@ print(f"Unique conformers: {len(unique_conformers)} (from {len(all_results)})")
 
 ## What's Next
 
-- [Model Selection Guide](../models/guide.md) -- choosing `aimnet2` vs `aimnet2_2025` for your workflow
+- [Model Selection Guide](../models/guide.md) -- choosing `aimnet2` vs `aimnet2-2025` for your workflow
 - [Batch Processing tutorial](../tutorials/batch_processing.md) -- efficient processing of molecular datasets
 - [Performance Tuning tutorial](../tutorials/performance.md) -- `compile_model=True` and GPU optimization
 - [Reaction Paths and Transition States](reaction_paths.md) -- finding transition states between conformers

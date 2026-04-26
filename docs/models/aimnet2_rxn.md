@@ -8,11 +8,15 @@ A neural network interatomic potential specialized for **closed-shell organic re
 from aimnet.calculators import AIMNet2Calculator
 
 # From the GCS-backed registry (alias):
-calc = AIMNet2Calculator("aimnet2rxn", ensemble_member=0)
+calc = AIMNet2Calculator("aimnet2-rxn", ensemble_member=0)
 
 # From Hugging Face Hub:
 calc = AIMNet2Calculator("isayevlab/aimnet2-rxn", ensemble_member=0)
 ```
+
+!!! note "Legacy alias"
+
+    The previously published short alias `aimnet2rxn` and member-level keys `aimnet2_rxn_0` … `aimnet2_rxn_3` still resolve and remain supported.
 
 Both paths produce equivalent calculators. The HF path requires `pip install "aimnet[hf]"`.
 

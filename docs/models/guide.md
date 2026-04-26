@@ -42,10 +42,11 @@ The Pd model replaces As with Pd:
 | Model | Alias | Functional | Best For | Key Strength |
 | --- | --- | --- | --- | --- |
 | AIMNet2 | `aimnet2` | wB97M-D3 | General organic chemistry | Reliable default, broad coverage |
-| **AIMNet2-2025** | **`aimnet2_2025`** | **B97-3c (improved)** | **General-purpose B97-3c** | **Recommended B97-3c model; supersedes B97-3c** |
-| AIMNet2-B97-3c | `aimnet2_b973c` | B97-3c | Legacy B97-3c screening | Superseded by AIMNet2-2025 |
-| AIMNet2-NSE | `aimnet2nse` | wB97M-D3 | Open-shell systems | Radicals, triplet states, bond dissociation |
-| AIMNet2-Pd | `aimnet2pd` | B97-3c/CPCM (THF) | Pd catalysis | Pd organometallics with implicit THF solvation |
+| **AIMNet2-2025** | **`aimnet2-2025`** | **B97-3c (improved)** | **General-purpose B97-3c** | **Recommended B97-3c model; supersedes B97-3c** |
+| AIMNet2-B97-3c | `aimnet2-b973c` | B97-3c | Legacy B97-3c screening | Superseded by AIMNet2-2025 |
+| AIMNet2-NSE | `aimnet2-nse` | wB97M-D3 | Open-shell systems | Radicals, triplet states, bond dissociation |
+| AIMNet2-Pd | `aimnet2-pd` | B97-3c/CPCM (THF) | Pd catalysis | Pd organometallics with implicit THF solvation |
+| AIMNet2-rxn | `aimnet2-rxn` | wB97M-D3 | Reactive chemistry | Bond breaking/forming, transition states |
 
 ## Decision Flowchart
 
@@ -57,28 +58,28 @@ Check the [element table](#supported-elements) above. If your system contains el
 
 ### Step 2: Does your system contain palladium?
 
-If yes, use **`aimnet2pd`**. This is the only model that supports Pd. Note that it does **not** support As (which the other models do).
+If yes, use **`aimnet2-pd`**. This is the only model that supports Pd. Note that it does **not** support As (which the other models do).
 
 ### Step 3: Is your system open-shell?
 
-Radicals, triplet states, or any system with unpaired electrons should use **`aimnet2nse`**. The NSE (Neutral Spin Equilibrated) scheme handles spin polarization through two charge channels instead of one.
+Radicals, triplet states, or any system with unpaired electrons should use **`aimnet2-nse`**. The NSE (Neutral Spin Equilibrated) scheme handles spin polarization through two charge channels instead of one.
 
 !!! note "When to use NSE"
 
-    Use `aimnet2nse` whenever you need to set `mult > 1`, or when bonds are breaking or forming (e.g., transition states, bond dissociation curves). Even for closed-shell transition states, NSE often gives more reliable energies because the NN can represent partial bond breaking.
+    Use `aimnet2-nse` whenever you need to set `mult > 1`, or when bonds are breaking or forming (e.g., transition states, bond dissociation curves). Even for closed-shell transition states, NSE often gives more reliable energies because the NN can represent partial bond breaking.
 
 ### Step 4: Do you want a B97-3c-level model?
 
-If you prefer a B97-3c reference level (faster DFT, suitable for screening and large-scale studies), use **`aimnet2_2025`**. This is the recommended B97-3c model — it supersedes the original `aimnet2_b973c` with improved intermolecular interaction accuracy while retaining the same intramolecular performance.
+If you prefer a B97-3c reference level (faster DFT, suitable for screening and large-scale studies), use **`aimnet2-2025`**. This is the recommended B97-3c model — it supersedes the original `aimnet2-b973c` with improved intermolecular interaction accuracy while retaining the same intramolecular performance.
 
 !!! note "AIMNet2-2025 supersedes AIMNet2-B97-3c"
 
-    For all new work requiring a B97-3c-level model, use `aimnet2_2025`. The original `aimnet2_b973c` is retained for reproducibility of published results but is no longer the recommended choice. AIMNet2-2025 provides strictly better accuracy for non-covalent interactions with no regression for covalent chemistry.
+    For all new work requiring a B97-3c-level model, use `aimnet2-2025`. The original `aimnet2-b973c` is retained for reproducibility of published results but is no longer the recommended choice. AIMNet2-2025 provides strictly better accuracy for non-covalent interactions with no regression for covalent chemistry.
 
 ### Step 5: General-purpose?
 
 - **General-purpose** calculations: use **`aimnet2`** (the default). Trained on wB97M-D3, a well-validated range-separated hybrid functional.
-- **Legacy B97-3c**: `aimnet2_b973c` is available for reproducing previous results but new projects should use `aimnet2_2025` instead.
+- **Legacy B97-3c**: `aimnet2-b973c` is available for reproducing previous results but new projects should use `aimnet2-2025` instead.
 
 ## Loading Models
 
@@ -91,23 +92,26 @@ from aimnet.calculators import AIMNet2Calculator
 calc = AIMNet2Calculator("aimnet2")
 
 # B97-3c model
-calc = AIMNet2Calculator("aimnet2_b973c")
+calc = AIMNet2Calculator("aimnet2-b973c")
 
 # 2025 improved model
-calc = AIMNet2Calculator("aimnet2_2025")
+calc = AIMNet2Calculator("aimnet2-2025")
 
 # NSE open-shell model
-calc = AIMNet2Calculator("aimnet2nse")
+calc = AIMNet2Calculator("aimnet2-nse")
 
 # Palladium model
-calc = AIMNet2Calculator("aimnet2pd")
+calc = AIMNet2Calculator("aimnet2-pd")
+
+# Reactive chemistry model
+calc = AIMNet2Calculator("aimnet2-rxn")
 ```
 
 Each alias loads ensemble member `_0` by default. To load a specific member, use the full model name:
 
 ```python
 # Load member 2 of the wB97M-D3 ensemble
-calc = AIMNet2Calculator("aimnet2_wb97m_d3_2")
+calc = AIMNet2Calculator("aimnet2-wb97m-d3_2")
 ```
 
 ## Ensemble Models and Uncertainty Estimation
@@ -129,7 +133,7 @@ import torch
 from aimnet.calculators import AIMNet2Calculator
 
 # Load all 4 ensemble members
-calcs = [AIMNet2Calculator(f"aimnet2_wb97m_d3_{i}") for i in range(4)]
+calcs = [AIMNet2Calculator(f"aimnet2-wb97m-d3_{i}") for i in range(4)]
 
 # Run inference with each member
 data = {
@@ -160,56 +164,70 @@ print(f"Energy: {mean_energy.item():.6f} +/- {energy_variance.sqrt().item():.6f}
 
 The following table shows all available model names and their aliases:
 
+Registry keys follow the convention `aimnet2-<family>_<index>`: a dash separates `aimnet2` from the model-family tag, and the trailing `_<int>` is the ensemble member index. The previously published forms (`aimnet2nse_*`, `aimnet2_wb97m_d3_*`, etc.) remain supported as aliases.
+
 | Alias | Resolves To | Ensemble Members |
 | --- | --- | --- |
-| `aimnet2` | `aimnet2_wb97m_d3_0` | `aimnet2_wb97m_d3_{0,1,2,3}` |
-| `aimnet2_wb97m` | `aimnet2_wb97m_d3_0` | (same as above) |
-| `aimnet2_b973c` | `aimnet2_b973c_d3_0` | `aimnet2_b973c_d3_{0,1,2,3}` |
-| `aimnet2_2025` | `aimnet2_b973c_2025_d3_0` | `aimnet2_b973c_2025_d3_{0,1,2,3}` |
-| `aimnet2nse` | `aimnet2nse_0` | `aimnet2nse_{0,1,2,3}` |
-| `aimnet2pd` | `aimnet2-pd_0` | `aimnet2-pd_{0,1,2,3}` |
+| `aimnet2` | `aimnet2-wb97m-d3_0` | `aimnet2-wb97m-d3_{0,1,2,3}` |
+| `aimnet2-wb97m` | `aimnet2-wb97m-d3_0` | (same as above) |
+| `aimnet2-b973c` | `aimnet2-b973c-d3_0` | `aimnet2-b973c-d3_{0,1,2,3}` |
+| `aimnet2-2025` | `aimnet2-b973c-2025-d3_0` | `aimnet2-b973c-2025-d3_{0,1,2,3}` |
+| `aimnet2-nse` | `aimnet2-nse_0` | `aimnet2-nse_{0,1,2,3}` |
+| `aimnet2-pd` | `aimnet2-pd_0` | `aimnet2-pd_{0,1,2,3}` |
+| `aimnet2-rxn` | `aimnet2-rxn_0` | `aimnet2-rxn_{0,1,2,3}` |
+
+Legacy aliases that still resolve (kept for backwards compat):
+
+| Legacy alias                                   | Resolves to               |
+| ---------------------------------------------- | ------------------------- |
+| `aimnet2_wb97m`, `aimnet2_wb97m_d3_{0..3}`     | `aimnet2-wb97m-d3_*`      |
+| `aimnet2_b973c`, `aimnet2_b973c_d3_{0..3}`     | `aimnet2-b973c-d3_*`      |
+| `aimnet2_2025`, `aimnet2_b973c_2025_d3_{0..3}` | `aimnet2-b973c-2025-d3_*` |
+| `aimnet2nse`, `aimnet2nse_{0..3}`              | `aimnet2-nse_*`           |
+| `aimnet2pd`                                    | `aimnet2-pd_0`            |
+| `aimnet2rxn`, `aimnet2_rxn_{0..3}`             | `aimnet2-rxn_*`           |
 
 ## Direct Model Downloads
 
 All model files are downloaded automatically the first time you call `AIMNet2Calculator("alias")`. To download manually or inspect files, use the links below. All files are in PyTorch v2 `.pt` format.
 
-### AIMNet2 (wB97M-D3) — alias `aimnet2` / `aimnet2_wb97m`
+### AIMNet2 (wB97M-D3) — alias `aimnet2` / `aimnet2-wb97m`
 
 | Registry name | File | Download |
 | --- | --- | --- |
-| `aimnet2_wb97m_d3_0` | aimnet2_wb97m_d3_0.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_0.pt) |
-| `aimnet2_wb97m_d3_1` | aimnet2_wb97m_d3_1.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_1.pt) |
-| `aimnet2_wb97m_d3_2` | aimnet2_wb97m_d3_2.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_2.pt) |
-| `aimnet2_wb97m_d3_3` | aimnet2_wb97m_d3_3.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_3.pt) |
+| `aimnet2-wb97m-d3_0` | aimnet2_wb97m_d3_0.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_0.pt) |
+| `aimnet2-wb97m-d3_1` | aimnet2_wb97m_d3_1.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_1.pt) |
+| `aimnet2-wb97m-d3_2` | aimnet2_wb97m_d3_2.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_2.pt) |
+| `aimnet2-wb97m-d3_3` | aimnet2_wb97m_d3_3.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_3.pt) |
 
-### AIMNet2-B97-3c — alias `aimnet2_b973c`
-
-| Registry name | File | Download |
-| --- | --- | --- |
-| `aimnet2_b973c_d3_0` | aimnet2_b973c_d3_0.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_0.pt) |
-| `aimnet2_b973c_d3_1` | aimnet2_b973c_d3_1.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_1.pt) |
-| `aimnet2_b973c_d3_2` | aimnet2_b973c_d3_2.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_2.pt) |
-| `aimnet2_b973c_d3_3` | aimnet2_b973c_d3_3.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_3.pt) |
-
-### AIMNet2-2025 — alias `aimnet2_2025`
+### AIMNet2-B97-3c — alias `aimnet2-b973c`
 
 | Registry name | File | Download |
 | --- | --- | --- |
-| `aimnet2_b973c_2025_d3_0` | aimnet2_2025_b973c_d3_0.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_0.pt) |
-| `aimnet2_b973c_2025_d3_1` | aimnet2_2025_b973c_d3_1.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_1.pt) |
-| `aimnet2_b973c_2025_d3_2` | aimnet2_2025_b973c_d3_2.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_2.pt) |
-| `aimnet2_b973c_2025_d3_3` | aimnet2_2025_b973c_d3_3.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_3.pt) |
+| `aimnet2-b973c-d3_0` | aimnet2_b973c_d3_0.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_0.pt) |
+| `aimnet2-b973c-d3_1` | aimnet2_b973c_d3_1.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_1.pt) |
+| `aimnet2-b973c-d3_2` | aimnet2_b973c_d3_2.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_2.pt) |
+| `aimnet2-b973c-d3_3` | aimnet2_b973c_d3_3.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_3.pt) |
 
-### AIMNet2-NSE — alias `aimnet2nse`
+### AIMNet2-2025 — alias `aimnet2-2025`
 
 | Registry name | File | Download |
 | --- | --- | --- |
-| `aimnet2nse_0` | aimnet2nse_wb97m_0.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_0.pt) |
-| `aimnet2nse_1` | aimnet2nse_wb97m_1.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_1.pt) |
-| `aimnet2nse_2` | aimnet2nse_wb97m_2.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_2.pt) |
-| `aimnet2nse_3` | aimnet2nse_wb97m_3.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_3.pt) |
+| `aimnet2-b973c-2025-d3_0` | aimnet2_2025_b973c_d3_0.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_0.pt) |
+| `aimnet2-b973c-2025-d3_1` | aimnet2_2025_b973c_d3_1.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_1.pt) |
+| `aimnet2-b973c-2025-d3_2` | aimnet2_2025_b973c_d3_2.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_2.pt) |
+| `aimnet2-b973c-2025-d3_3` | aimnet2_2025_b973c_d3_3.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_3.pt) |
 
-### AIMNet2-Pd — alias `aimnet2pd`
+### AIMNet2-NSE — alias `aimnet2-nse`
+
+| Registry name | File | Download |
+| --- | --- | --- |
+| `aimnet2-nse_0` | aimnet2nse_wb97m_0.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_0.pt) |
+| `aimnet2-nse_1` | aimnet2nse_wb97m_1.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_1.pt) |
+| `aimnet2-nse_2` | aimnet2nse_wb97m_2.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_2.pt) |
+| `aimnet2-nse_3` | aimnet2nse_wb97m_3.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_3.pt) |
+
+### AIMNet2-Pd — alias `aimnet2-pd`
 
 | Registry name | File | Download |
 | --- | --- | --- |
@@ -217,6 +235,15 @@ All model files are downloaded automatically the first time you call `AIMNet2Cal
 | `aimnet2-pd_1` | aimnet2-pd_1.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2Pd/aimnet2-pd_1.pt) |
 | `aimnet2-pd_2` | aimnet2-pd_2.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2Pd/aimnet2-pd_2.pt) |
 | `aimnet2-pd_3` | aimnet2-pd_3.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2Pd/aimnet2-pd_3.pt) |
+
+### AIMNet2-rxn — alias `aimnet2-rxn`
+
+| Registry name | File | Download |
+| --- | --- | --- |
+| `aimnet2-rxn_0` | aimnet2_rxn_0.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_0.pt) |
+| `aimnet2-rxn_1` | aimnet2_rxn_1.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_1.pt) |
+| `aimnet2-rxn_2` | aimnet2_rxn_2.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_2.pt) |
+| `aimnet2-rxn_3` | aimnet2_rxn_3.pt | [download](https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_3.pt) |
 
 ## What's Next
 

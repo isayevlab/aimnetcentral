@@ -6,9 +6,13 @@ AIMNet2-NSE (Neutral Spin Equilibrated) is the model for **open-shell molecular 
 
 **Supported elements:** H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I (14 elements)
 
-**Registry alias:** `aimnet2nse` (loads ensemble member `aimnet2nse_0`)
+**Registry alias:** `aimnet2-nse` (loads ensemble member `aimnet2-nse_0`)
 
-**Ensemble members:** `aimnet2nse_0` through `aimnet2nse_3` (4 models)
+**Ensemble members:** `aimnet2-nse_0` through `aimnet2-nse_3` (4 models)
+
+!!! note "Legacy names"
+
+    The previously published `aimnet2nse` alias and `aimnet2nse_0` … `aimnet2nse_3` member keys still resolve and remain supported.
 
 **DFT reference:** wB97M-D3/def2-TZVPP (same functional as the default AIMNet2)
 

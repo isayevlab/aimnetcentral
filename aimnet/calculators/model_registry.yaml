@@ -1,51 +1,59 @@
-# map file name to url
+# map model name to file/url
+# Convention for `models:` keys:  aimnet2-<family>_<ensemble-member>
+#   - dash separates "aimnet2" from the family tag and is the only separator inside the family tag
+#   - trailing `_<int>` is reserved for the ensemble member index
+#   - family tags must NOT contain `_` and must NOT end in `_<int>` (so `key.rsplit("_", 1)`
+#     unambiguously yields (family, member))
+#   - convention applies to entries under `models:` only; entries under `aliases:` are not parsed
+# File names on the GCS bucket are unchanged; the key→file mapping below absorbs
+# the historical naming so consumers never need to track the bucket layout.
 models:
-    aimnet2_wb97m_d3_0:
+    aimnet2-wb97m-d3_0:
         file: aimnet2_wb97m_d3_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_0.pt
-    aimnet2_wb97m_d3_1:
+    aimnet2-wb97m-d3_1:
         file: aimnet2_wb97m_d3_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_1.pt
-    aimnet2_wb97m_d3_2:
+    aimnet2-wb97m-d3_2:
         file: aimnet2_wb97m_d3_2.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_2.pt
-    aimnet2_wb97m_d3_3:
+    aimnet2-wb97m-d3_3:
         file: aimnet2_wb97m_d3_3.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_3.pt
-    aimnet2_b973c_d3_0:
+    aimnet2-b973c-d3_0:
         file: aimnet2_b973c_d3_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_0.pt
-    aimnet2_b973c_d3_1:
+    aimnet2-b973c-d3_1:
         file: aimnet2_b973c_d3_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_1.pt
-    aimnet2_b973c_d3_2:
+    aimnet2-b973c-d3_2:
         file: aimnet2_b973c_d3_2.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_2.pt
-    aimnet2_b973c_d3_3:
+    aimnet2-b973c-d3_3:
         file: aimnet2_b973c_d3_3.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_3.pt
-    aimnet2_b973c_2025_d3_0:
+    aimnet2-b973c-2025-d3_0:
         file: aimnet2_2025_b973c_d3_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_0.pt
-    aimnet2_b973c_2025_d3_1:
+    aimnet2-b973c-2025-d3_1:
         file: aimnet2_2025_b973c_d3_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_1.pt
-    aimnet2_b973c_2025_d3_2:
+    aimnet2-b973c-2025-d3_2:
         file: aimnet2_2025_b973c_d3_2.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_2.pt
-    aimnet2_b973c_2025_d3_3:
+    aimnet2-b973c-2025-d3_3:
         file: aimnet2_2025_b973c_d3_3.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_3.pt
-    aimnet2nse_0:
+    aimnet2-nse_0:
         file: aimnet2nse_wb97m_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_0.pt
-    aimnet2nse_1:
+    aimnet2-nse_1:
         file: aimnet2nse_wb97m_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_1.pt
-    aimnet2nse_2:
+    aimnet2-nse_2:
         file: aimnet2nse_wb97m_2.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_2.pt
-    aimnet2nse_3:
+    aimnet2-nse_3:
         file: aimnet2nse_wb97m_3.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_3.pt
     aimnet2-pd_0:
@@ -60,25 +68,56 @@ models:
     aimnet2-pd_3:
         file: aimnet2-pd_3.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2Pd/aimnet2-pd_3.pt
-    aimnet2_rxn_0:
+    aimnet2-rxn_0:
         file: aimnet2_rxn_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_0.pt
-    aimnet2_rxn_1:
+    aimnet2-rxn_1:
         file: aimnet2_rxn_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_1.pt
-    aimnet2_rxn_2:
+    aimnet2-rxn_2:
         file: aimnet2_rxn_2.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_2.pt
-    aimnet2_rxn_3:
+    aimnet2-rxn_3:
         file: aimnet2_rxn_3.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_3.pt
 
-# map model alias to file name
+# map model alias to model name
 aliases:
-    aimnet2: aimnet2_wb97m_d3_0
-    aimnet2_wb97m: aimnet2_wb97m_d3_0
-    aimnet2_b973c: aimnet2_b973c_d3_0
-    aimnet2nse: aimnet2nse_0
+    # canonical short aliases (recommended)
+    aimnet2: aimnet2-wb97m-d3_0
+    aimnet2-wb97m: aimnet2-wb97m-d3_0
+    aimnet2-b973c: aimnet2-b973c-d3_0
+    aimnet2-2025: aimnet2-b973c-2025-d3_0
+    aimnet2-nse: aimnet2-nse_0
+    aimnet2-pd: aimnet2-pd_0
+    aimnet2-rxn: aimnet2-rxn_0
+    # legacy short aliases (kept for backwards compat with published configs and downstream tools).
+    # Back-compat horizon: every alias/key released in v0.1.0 onward must continue to resolve.
+    aimnet2_wb97m: aimnet2-wb97m-d3_0
+    aimnet2_b973c: aimnet2-b973c-d3_0
+    aimnet2_2025: aimnet2-b973c-2025-d3_0
+    aimnet2nse: aimnet2-nse_0
     aimnet2pd: aimnet2-pd_0
-    aimnet2_2025: aimnet2_b973c_2025_d3_0
-    aimnet2rxn: aimnet2_rxn_0
+    aimnet2rxn: aimnet2-rxn_0
+    # legacy member-level aliases — every previously published member key whose canonical
+    # form is now different (Pd member keys are unchanged, so they need no aliases).
+    aimnet2_wb97m_d3_0: aimnet2-wb97m-d3_0
+    aimnet2_wb97m_d3_1: aimnet2-wb97m-d3_1
+    aimnet2_wb97m_d3_2: aimnet2-wb97m-d3_2
+    aimnet2_wb97m_d3_3: aimnet2-wb97m-d3_3
+    aimnet2_b973c_d3_0: aimnet2-b973c-d3_0
+    aimnet2_b973c_d3_1: aimnet2-b973c-d3_1
+    aimnet2_b973c_d3_2: aimnet2-b973c-d3_2
+    aimnet2_b973c_d3_3: aimnet2-b973c-d3_3
+    aimnet2_b973c_2025_d3_0: aimnet2-b973c-2025-d3_0
+    aimnet2_b973c_2025_d3_1: aimnet2-b973c-2025-d3_1
+    aimnet2_b973c_2025_d3_2: aimnet2-b973c-2025-d3_2
+    aimnet2_b973c_2025_d3_3: aimnet2-b973c-2025-d3_3
+    aimnet2nse_0: aimnet2-nse_0
+    aimnet2nse_1: aimnet2-nse_1
+    aimnet2nse_2: aimnet2-nse_2
+    aimnet2nse_3: aimnet2-nse_3
+    aimnet2_rxn_0: aimnet2-rxn_0
+    aimnet2_rxn_1: aimnet2-rxn_1
+    aimnet2_rxn_2: aimnet2-rxn_2
+    aimnet2_rxn_3: aimnet2-rxn_3

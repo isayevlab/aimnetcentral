@@ -6,9 +6,13 @@ AIMNet2 is the **default general-purpose model** for organic and main-group mole
 
 **Supported elements:** H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I (14 elements)
 
-**Registry alias:** `aimnet2` (loads ensemble member `aimnet2_wb97m_d3_0`)
+**Registry alias:** `aimnet2` (loads ensemble member `aimnet2-wb97m-d3_0`)
 
-**Ensemble members:** `aimnet2_wb97m_d3_0` through `aimnet2_wb97m_d3_3` (4 models)
+**Ensemble members:** `aimnet2-wb97m-d3_0` through `aimnet2-wb97m-d3_3` (4 models)
+
+!!! note "Legacy names"
+
+    The previously published short alias `aimnet2_wb97m` and the member-level keys `aimnet2_wb97m_d3_0` … `aimnet2_wb97m_d3_3` still resolve and remain supported.
 
 If you are unsure which model to use, start here. AIMNet2 provides the best balance of accuracy and element coverage for most molecular chemistry applications.
 
@@ -135,10 +139,10 @@ See [Long-Range Methods](../long_range.md) for details on DSF vs Ewald.
 
 ### Ensemble Averaging
 
-Four independently trained ensemble members are available (`aimnet2_wb97m_d3_0` through `aimnet2_wb97m_d3_3`). Use ensemble averaging for production calculations to improve accuracy and estimate prediction uncertainty:
+Four independently trained ensemble members are available (`aimnet2-wb97m-d3_0` through `aimnet2-wb97m-d3_3`). Use ensemble averaging for production calculations to improve accuracy and estimate prediction uncertainty:
 
 ```python
-models = [AIMNet2Calculator(f"aimnet2_wb97m_d3_{i}") for i in range(4)]
+models = [AIMNet2Calculator(f"aimnet2-wb97m-d3_{i}") for i in range(4)]
 results = [m(data, forces=True) for m in models]
 
 energies = torch.stack([r["energy"] for r in results])

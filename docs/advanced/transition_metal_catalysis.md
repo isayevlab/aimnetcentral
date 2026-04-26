@@ -2,7 +2,7 @@
 
 ## What You'll Learn
 
-- How to use the `aimnet2pd` model for palladium organometallic chemistry
+- How to use the `aimnet2-pd` model for palladium organometallic chemistry
 - Computing relative stabilities of Pd coordination geometries
 - Modeling a step of a Suzuki cross-coupling catalytic cycle
 - Understanding the limitations of transition metal ML potentials
@@ -15,17 +15,17 @@
 
 ## Spotlight Model: AIMNet2-Pd
 
-The `aimnet2pd` model extends AIMNet2 to palladium-containing organometallic systems. It is trained on B97-3c/CPCM reference data with **THF implicit solvation**, so predicted energetics include continuum solvent effects relevant to homogeneous catalysis. This enables rapid exploration of catalytic reaction profiles at near-DFT accuracy with solvent stabilization built in.
+The `aimnet2-pd` model extends AIMNet2 to palladium-containing organometallic systems. It is trained on B97-3c/CPCM reference data with **THF implicit solvation**, so predicted energetics include continuum solvent effects relevant to homogeneous catalysis. This enables rapid exploration of catalytic reaction profiles at near-DFT accuracy with solvent stabilization built in.
 
 **Supported elements:** H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I (14 elements)
 
 !!! warning "No Arsenic"
 
-    The Pd model replaces As with Pd in the element set. You **cannot** use AsPh3 ligands or any arsenic-containing species with `aimnet2pd`. Common phosphine ligands (PPh3, PMe3, etc.) are fully supported.
+    The Pd model replaces As with Pd in the element set. You **cannot** use AsPh3 ligands or any arsenic-containing species with `aimnet2-pd`. Common phosphine ligands (PPh3, PMe3, etc.) are fully supported.
 
 !!! warning "Palladium Only"
 
-    `aimnet2pd` supports Pd as the only transition metal. It does **not** cover Ni, Cu, Fe, Ru, Rh, Ir, or any other transition metals. For reactions catalyzed by other metals, DFT remains necessary.
+    `aimnet2-pd` supports Pd as the only transition metal. It does **not** cover Ni, Cu, Fe, Ru, Rh, Ir, or any other transition metals. For reactions catalyzed by other metals, DFT remains necessary.
 
 ## Loading the Pd Model
 
@@ -33,11 +33,11 @@ The `aimnet2pd` model extends AIMNet2 to palladium-containing organometallic sys
 from aimnet.calculators import AIMNet2Calculator, AIMNet2ASE
 
 # Direct calculator
-calc = AIMNet2Calculator("aimnet2pd")
+calc = AIMNet2Calculator("aimnet2-pd")
 
 # ASE interface
 from ase import Atoms
-base_calc = AIMNet2Calculator("aimnet2pd", compile_model=True)
+base_calc = AIMNet2Calculator("aimnet2-pd", compile_model=True)
 ase_calc = AIMNet2ASE(base_calc, charge=0)
 ```
 
@@ -49,7 +49,7 @@ Pd(II) complexes typically adopt square planar geometry, while Pd(0) prefers lin
 import torch
 from aimnet.calculators import AIMNet2Calculator
 
-calc = AIMNet2Calculator("aimnet2pd")
+calc = AIMNet2Calculator("aimnet2-pd")
 
 # PdCl4(2-): ideal square planar
 # Pd at origin, 4 Cl in xy-plane
@@ -82,7 +82,7 @@ print(f"Max force: {result_sq['forces'].abs().max().item():.4f} eV/A")
     from ase.optimize import BFGS
     from aimnet.calculators import AIMNet2ASE, AIMNet2Calculator
 
-    base_calc = AIMNet2Calculator("aimnet2pd", compile_model=True)
+    base_calc = AIMNet2Calculator("aimnet2-pd", compile_model=True)
     atoms = Atoms("PdCl4", positions=sq_planar.numpy())
     atoms.calc = AIMNet2ASE(base_calc, charge=-2)
 
@@ -112,7 +112,7 @@ from ase import Atoms
 from ase.optimize import BFGS
 from aimnet.calculators import AIMNet2ASE, AIMNet2Calculator
 
-base_calc = AIMNet2Calculator("aimnet2pd", compile_model=True)
+base_calc = AIMNet2Calculator("aimnet2-pd", compile_model=True)
 
 # Pd(PH3)2: linear Pd(0) complex
 # Pd at origin, two PH3 along x-axis
@@ -235,7 +235,7 @@ print(f"Oxidative addition energy: {e_rxn_kcal:.1f} kcal/mol")
 
 !!! tip "CPCM solvation is built in"
 
-    Unlike other AIMNet2 models, `aimnet2pd` is trained on B97-3c/CPCM reference data with **THF as the implicit solvent**. All predicted energetics include continuum solvent stabilization effects appropriate for homogeneous catalysis in THF or similar non-polar aprotic solvents.
+    Unlike other AIMNet2 models, `aimnet2-pd` is trained on B97-3c/CPCM reference data with **THF as the implicit solvent**. All predicted energetics include continuum solvent stabilization effects appropriate for homogeneous catalysis in THF or similar non-polar aprotic solvents.
 
     For reactions in very different solvent environments (e.g., water, DMSO, DMF), the THF solvation model may not capture the correct solvent effects. In those cases, additional solvation corrections or explicit solvent modeling may be needed.
 
@@ -269,7 +269,7 @@ print(f"Oxidative addition energy: {e_rxn_kcal:.1f} kcal/mol")
 
 !!! warning "No AsPh3 or Arsenic Ligands"
 
-    Arsenic is **not** in the `aimnet2pd` element set. Triphenylarsine (AsPh3) and other As-containing ligands cannot be used. Use the standard `aimnet2` model for As-containing systems (but without Pd).
+    Arsenic is **not** in the `aimnet2-pd` element set. Triphenylarsine (AsPh3) and other As-containing ligands cannot be used. Use the standard `aimnet2` model for As-containing systems (but without Pd).
 
 ## Tips for Catalytic Cycle Modeling
 

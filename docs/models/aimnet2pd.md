@@ -6,9 +6,13 @@ AIMNet2-Pd extends AIMNet2 to **palladium-catalyzed organometallic chemistry**. 
 
 **Supported elements:** H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I (14 elements)
 
-**Registry alias:** `aimnet2pd` (loads ensemble member `aimnet2-pd_0`)
+**Registry alias:** `aimnet2-pd` (loads ensemble member `aimnet2-pd_0`)
 
 **Ensemble members:** `aimnet2-pd_0` through `aimnet2-pd_3` (4 models)
+
+!!! note "Legacy alias"
+
+    The previously published short alias `aimnet2pd` still resolves to `aimnet2-pd_0` and remains supported. The member-level keys `aimnet2-pd_0` … `aimnet2-pd_3` are unchanged.
 
 **DFT reference:** B97-3c with CPCM implicit solvation (THF solvent)
 
@@ -163,7 +167,7 @@ print(f"Energy: {energies.mean().item():.6f} +/- {energies.std().item():.6f} eV"
 
 !!! note "Ensemble member naming"
 
-    The Pd model ensemble members use a hyphen: `aimnet2-pd_0` through `aimnet2-pd_3` (note the hyphen between "aimnet2" and "pd").
+    The Pd model ensemble members follow the registry convention `aimnet2-<family>_<index>`: `aimnet2-pd_0` through `aimnet2-pd_3` (dash separates "aimnet2" from the family tag, underscore precedes the ensemble index).
 
 ### Performance
 
