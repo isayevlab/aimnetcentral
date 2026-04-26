@@ -44,13 +44,9 @@ def test_short_alias_forms_match():
         ("aimnet2-2025", ["aimnet2_2025"], "aimnet2-b973c-2025-d3_0"),
     ]
     for canonical_alias, legacy_aliases, expected_target in expectations:
-        assert aliases.get(canonical_alias) == expected_target, (
-            f"{canonical_alias} should resolve to {expected_target}"
-        )
+        assert aliases.get(canonical_alias) == expected_target, f"{canonical_alias} should resolve to {expected_target}"
         for legacy in legacy_aliases:
-            assert aliases.get(legacy) == expected_target, (
-                f"legacy alias {legacy} should resolve to {expected_target}"
-            )
+            assert aliases.get(legacy) == expected_target, f"legacy alias {legacy} should resolve to {expected_target}"
 
 
 def test_canonical_keys_for_all_families():
@@ -88,30 +84,41 @@ def test_legacy_member_aliases_resolve_via_loader(monkeypatch):
     # stub the download step so the loader collapses to pure lookup; return
     # the expected on-disk path get_registry_model_path would normally hand back
     monkeypatch.setattr(
-        mr, "_maybe_download_asset",
+        mr,
+        "_maybe_download_asset",
         lambda file, url: f"/assets/{file}",
     )
 
     registry = mr.load_model_registry()
     legacy_keys = [
         # underscore-form legacy keys (the previous shape of every default model)
-        "aimnet2_wb97m_d3_0", "aimnet2_wb97m_d3_1",
-        "aimnet2_wb97m_d3_2", "aimnet2_wb97m_d3_3",
-        "aimnet2_b973c_d3_0", "aimnet2_b973c_d3_1",
-        "aimnet2_b973c_d3_2", "aimnet2_b973c_d3_3",
-        "aimnet2_b973c_2025_d3_0", "aimnet2_b973c_2025_d3_1",
-        "aimnet2_b973c_2025_d3_2", "aimnet2_b973c_2025_d3_3",
-        "aimnet2_rxn_0", "aimnet2_rxn_1", "aimnet2_rxn_2", "aimnet2_rxn_3",
+        "aimnet2_wb97m_d3_0",
+        "aimnet2_wb97m_d3_1",
+        "aimnet2_wb97m_d3_2",
+        "aimnet2_wb97m_d3_3",
+        "aimnet2_b973c_d3_0",
+        "aimnet2_b973c_d3_1",
+        "aimnet2_b973c_d3_2",
+        "aimnet2_b973c_d3_3",
+        "aimnet2_b973c_2025_d3_0",
+        "aimnet2_b973c_2025_d3_1",
+        "aimnet2_b973c_2025_d3_2",
+        "aimnet2_b973c_2025_d3_3",
+        "aimnet2_rxn_0",
+        "aimnet2_rxn_1",
+        "aimnet2_rxn_2",
+        "aimnet2_rxn_3",
         # no-separator-form legacy keys
-        "aimnet2nse_0", "aimnet2nse_1", "aimnet2nse_2", "aimnet2nse_3",
+        "aimnet2nse_0",
+        "aimnet2nse_1",
+        "aimnet2nse_2",
+        "aimnet2nse_3",
     ]
     for legacy in legacy_keys:
         path = mr.get_registry_model_path(legacy)
         canonical = registry["aliases"][legacy]
         expected_file = registry["models"][canonical]["file"]
-        assert path == f"/assets/{expected_file}", (
-            f"{legacy} resolved to {path}, expected /assets/{expected_file}"
-        )
+        assert path == f"/assets/{expected_file}", f"{legacy} resolved to {path}, expected /assets/{expected_file}"
 
 
 def test_no_alias_to_alias_chains():
@@ -124,6 +131,4 @@ def test_no_alias_to_alias_chains():
 
     for src, dst in aliases.items():
         assert dst in models, f"alias {src!r} -> {dst!r} is not a model entry"
-        assert dst not in aliases, (
-            f"alias {src!r} -> {dst!r} is itself an alias (would require >1 hop)"
-        )
+        assert dst not in aliases, f"alias {src!r} -> {dst!r} is itself an alias (would require >1 hop)"

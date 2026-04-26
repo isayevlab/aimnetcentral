@@ -178,14 +178,14 @@ Registry keys follow the convention `aimnet2-<family>_<index>`: a dash separates
 
 Legacy aliases that still resolve (kept for backwards compat):
 
-| Legacy alias | Resolves to |
-| --- | --- |
-| `aimnet2_wb97m`, `aimnet2_wb97m_d3_{0..3}` | `aimnet2-wb97m-d3_*` |
-| `aimnet2_b973c`, `aimnet2_b973c_d3_{0..3}` | `aimnet2-b973c-d3_*` |
+| Legacy alias                                   | Resolves to               |
+| ---------------------------------------------- | ------------------------- |
+| `aimnet2_wb97m`, `aimnet2_wb97m_d3_{0..3}`     | `aimnet2-wb97m-d3_*`      |
+| `aimnet2_b973c`, `aimnet2_b973c_d3_{0..3}`     | `aimnet2-b973c-d3_*`      |
 | `aimnet2_2025`, `aimnet2_b973c_2025_d3_{0..3}` | `aimnet2-b973c-2025-d3_*` |
-| `aimnet2nse`, `aimnet2nse_{0..3}` | `aimnet2-nse_*` |
-| `aimnet2pd` | `aimnet2-pd_0` |
-| `aimnet2rxn`, `aimnet2_rxn_{0..3}` | `aimnet2-rxn_*` |
+| `aimnet2nse`, `aimnet2nse_{0..3}`              | `aimnet2-nse_*`           |
+| `aimnet2pd`                                    | `aimnet2-pd_0`            |
+| `aimnet2rxn`, `aimnet2_rxn_{0..3}`             | `aimnet2-rxn_*`           |
 
 ## Direct Model Downloads
 

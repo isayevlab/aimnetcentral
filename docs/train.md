@@ -211,6 +211,7 @@ For maintainers migrating the model registry from legacy `.jpt` to new `.pt` for
    ```
 
 4. **Update model_registry.yaml:**
+
    ```yaml
    models:
      aimnet2-wb97m-d3_0:
