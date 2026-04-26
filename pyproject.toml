@@ -96,6 +96,7 @@ include = [
 "aimnet/calculators/model_registry.yaml" = "aimnet/calculators/model_registry.yaml"
 "aimnet/models/aimnet2.yaml" = "aimnet/models/aimnet2.yaml"
 "aimnet/models/aimnet2_dftd3_wb97m.yaml" = "aimnet/models/aimnet2_dftd3_wb97m.yaml"
+"aimnet/models/aimnet2_rxn.yaml" = "aimnet/models/aimnet2_rxn.yaml"
 "aimnet/train/default_train.yaml" = "aimnet/train/default_train.yaml"
 
 # UV configuration
@@ -199,6 +200,7 @@ markers = [
     "ase: marks tests that require ASE (deselect with: -m 'not ase')",
     "gpu: marks tests that require GPU/CUDA (deselect with: -m 'not gpu')",
     "hf: marks tests that require Hugging Face extras (deselect with: -m 'not hf')",
+    "network: marks tests that hit external services (deselect with: -m 'not network')",
     "pysis: marks tests that require PySisyphus (deselect with: -m 'not pysis')",
     "train: marks tests that require training dependencies (deselect with: -m 'not train')",
 ]

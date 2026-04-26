@@ -1,0 +1,52 @@
+class: aimnet.models.AIMNet2
+kwargs:
+    nfeature: 16
+    d2features: true
+    ncomb_v: 12
+    hidden:
+        - [512, 380]
+        - [512, 380]
+        - [512, 380, 380]
+    aim_size: 256
+    num_charge_channels: 1
+    aev:
+        rc_s: 5.0
+        nshifts_s: 16
+    outputs:
+        energy_mlp:
+            class: aimnet.modules.Output
+            kwargs:
+                n_in: 256
+                n_out: 1
+                key_in: aim
+                key_out: energy
+                mlp:
+                    activation_fn: torch.nn.GELU
+                    last_linear: true
+                    hidden: [128, 128]
+        atomic_shift:
+            class: aimnet.modules.AtomicShift
+            kwargs:
+                key_in: energy
+                key_out: energy
+        atomic_sum:
+            class: aimnet.modules.AtomicSum
+            kwargs:
+                key_in: energy
+                key_out: energy
+        dipole:
+            class: aimnet.modules.Dipole
+            kwargs:
+                key_in: charges
+                key_out: dipole
+        quadrupole:
+            class: aimnet.modules.Quadrupole
+            kwargs:
+                key_in: charges
+                key_out: quadrupole
+        lrcoulomb:
+            class: aimnet.modules.LRCoulomb
+            kwargs:
+                rc: 4.6
+                key_in: charges
+                key_out: energy
