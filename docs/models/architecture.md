@@ -135,7 +135,7 @@ This ensures exact charge conservation at every pass without constraining the ne
 
 ### Open-Shell Extension (num_charge_channels=2)
 
-For the NSE model (`aimnet2nse`), charges have two channels: alpha-spin and beta-spin. The model sets `num_charge_channels=2`.
+For the NSE model (`aimnet2-nse`), charges have two channels: alpha-spin and beta-spin. The model sets `num_charge_channels=2`.
 
 **Preprocessing:** The total charge `Q` and multiplicity `M` are converted to two-channel targets:
 

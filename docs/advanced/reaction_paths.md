@@ -21,7 +21,7 @@ Finding transition states with DFT typically requires hundreds to thousands of g
 
 !!! tip "Model selection for reaction paths"
 
-    Use `aimnet2nse` for reactions involving bond breaking or forming, especially homolytic processes (radical mechanisms, H-atom abstractions). For heterolytic processes (SN2, proton transfers), the standard `aimnet2` model may also work, but `aimnet2nse` is the safer default because it handles both closed-shell and open-shell regions of the potential energy surface.
+    Use `aimnet2-nse` for reactions involving bond breaking or forming, especially homolytic processes (radical mechanisms, H-atom abstractions). For heterolytic processes (SN2, proton transfers), the standard `aimnet2` model may also work, but `aimnet2-nse` is the safer default because it handles both closed-shell and open-shell regions of the potential energy surface.
 
 ## PySisyphus Integration
 
@@ -42,10 +42,10 @@ AIMNet2 integrates with PySisyphus through the `AIMNet2Pysis` calculator class. 
 from aimnet.calculators import AIMNet2Pysis, AIMNet2Calculator
 
 # From model name (creates AIMNet2Calculator internally)
-calc = AIMNet2Pysis("aimnet2nse", charge=-1, mult=1)
+calc = AIMNet2Pysis("aimnet2-nse", charge=-1, mult=1)
 
 # From existing calculator (reuse across workflows)
-base = AIMNet2Calculator("aimnet2nse", compile_model=True)
+base = AIMNet2Calculator("aimnet2-nse", compile_model=True)
 calc = AIMNet2Pysis(base, charge=-1, mult=1)
 ```
 
@@ -75,7 +75,7 @@ from ase import Atoms
 from ase.optimize import BFGS
 from aimnet.calculators import AIMNet2ASE, AIMNet2Calculator
 
-base_calc = AIMNet2Calculator("aimnet2nse", compile_model=True)
+base_calc = AIMNet2Calculator("aimnet2-nse", compile_model=True)
 
 # Reactant complex: Cl- approaching CH3Cl from the back side
 reactant = Atoms(
@@ -131,7 +131,7 @@ geom:
 
 calc:
   type: aimnet
-  model: aimnet2nse
+  model: aimnet2-nse
   charge: -1
   mult: 1
 
@@ -184,7 +184,7 @@ import torch
 import numpy as np
 from aimnet.calculators import AIMNet2Calculator
 
-calc = AIMNet2Calculator("aimnet2nse", compile_model=True)
+calc = AIMNet2Calculator("aimnet2-nse", compile_model=True)
 
 # TS geometry (from NEB climbing image)
 # Replace with actual TS coordinates from your NEB result
@@ -286,7 +286,7 @@ geom:
 
 calc:
   type: aimnet
-  model: aimnet2nse
+  model: aimnet2-nse
   charge: -1
   mult: 1
 
@@ -312,7 +312,7 @@ geom:
 
 calc:
   type: aimnet
-  model: aimnet2nse
+  model: aimnet2-nse
   charge: -1
   mult: 1
 
@@ -393,7 +393,7 @@ from ase.io import write
 from ase.optimize import BFGS
 from aimnet.calculators import AIMNet2ASE, AIMNet2Calculator
 
-base_calc = AIMNet2Calculator("aimnet2nse", compile_model=True)
+base_calc = AIMNet2Calculator("aimnet2-nse", compile_model=True)
 
 # 1. Optimize reactant complex
 reactant = Atoms(
@@ -455,7 +455,7 @@ geom:
 
 calc:
   type: aimnet
-  model: aimnet2nse
+  model: aimnet2-nse
   charge: -1
   mult: 1
 
@@ -479,7 +479,7 @@ print("Run with: python -c 'from aimnet.calculators.aimnet2pysis import run_pysi
 
 !!! note "SN2 reactions and model choice"
 
-    The SN2 reaction involves heterolytic bond breaking (the leaving group departs with both bonding electrons). For heterolytic processes like this, the standard `aimnet2` model may perform adequately. However, `aimnet2nse` is recommended as the default for all reaction path calculations because it handles mixed closed-shell/open-shell regions correctly and introduces no penalty for closed-shell species (`mult=1` reduces to standard behavior).
+    The SN2 reaction involves heterolytic bond breaking (the leaving group departs with both bonding electrons). For heterolytic processes like this, the standard `aimnet2` model may perform adequately. However, `aimnet2-nse` is recommended as the default for all reaction path calculations because it handles mixed closed-shell/open-shell regions correctly and introduces no penalty for closed-shell species (`mult=1` reduces to standard behavior).
 
 ## Practical Tips
 

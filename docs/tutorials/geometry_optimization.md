@@ -130,7 +130,7 @@ You should see the energy decrease monotonically (or nearly so) and the maximum 
        of `BFGS` for the first phase.
     2. **Charge**: An incorrect net charge leads to wrong forces. Verify with
        `calc.charge`.
-    3. **Multiplicity**: For open-shell systems, use `AIMNet2ASE("aimnet2nse")`
+    3. **Multiplicity**: For open-shell systems, use `AIMNet2ASE("aimnet2-nse")`
        and set `mult` appropriately.
 
 ## Step 4: Verify the Minimum with Frequency Analysis

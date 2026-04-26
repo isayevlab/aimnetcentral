@@ -42,10 +42,11 @@ The Pd model replaces As with Pd:
 | Model | Alias | Functional | Best For | Key Strength |
 | --- | --- | --- | --- | --- |
 | AIMNet2 | `aimnet2` | wB97M-D3 | General organic chemistry | Reliable default, broad coverage |
-| **AIMNet2-2025** | **`aimnet2_2025`** | **B97-3c (improved)** | **General-purpose B97-3c** | **Recommended B97-3c model; supersedes B97-3c** |
-| AIMNet2-B97-3c | `aimnet2_b973c` | B97-3c | Legacy B97-3c screening | Superseded by AIMNet2-2025 |
-| AIMNet2-NSE | `aimnet2nse` | wB97M-D3 | Open-shell systems | Radicals, triplet states, bond dissociation |
-| AIMNet2-Pd | `aimnet2pd` | B97-3c/CPCM (THF) | Pd catalysis | Pd organometallics with implicit THF solvation |
+| **AIMNet2-2025** | **`aimnet2-2025`** | **B97-3c (improved)** | **General-purpose B97-3c** | **Recommended B97-3c model; supersedes B97-3c** |
+| AIMNet2-B97-3c | `aimnet2-b973c` | B97-3c | Legacy B97-3c screening | Superseded by AIMNet2-2025 |
+| AIMNet2-NSE | `aimnet2-nse` | wB97M-D3 | Open-shell systems | Radicals, triplet states, bond dissociation |
+| AIMNet2-Pd | `aimnet2-pd` | B97-3c/CPCM (THF) | Pd catalysis | Pd organometallics with implicit THF solvation |
+| AIMNet2-rxn | `aimnet2-rxn` | wB97M-D3 | Reactive chemistry | Bond breaking/forming, transition states |
 
 ## Decision Flowchart
 
@@ -57,28 +58,28 @@ Check the [element table](#supported-elements) above. If your system contains el
 
 ### Step 2: Does your system contain palladium?
 
-If yes, use **`aimnet2pd`**. This is the only model that supports Pd. Note that it does **not** support As (which the other models do).
+If yes, use **`aimnet2-pd`**. This is the only model that supports Pd. Note that it does **not** support As (which the other models do).
 
 ### Step 3: Is your system open-shell?
 
-Radicals, triplet states, or any system with unpaired electrons should use **`aimnet2nse`**. The NSE (Neutral Spin Equilibrated) scheme handles spin polarization through two charge channels instead of one.
+Radicals, triplet states, or any system with unpaired electrons should use **`aimnet2-nse`**. The NSE (Neutral Spin Equilibrated) scheme handles spin polarization through two charge channels instead of one.
 
 !!! note "When to use NSE"
 
-    Use `aimnet2nse` whenever you need to set `mult > 1`, or when bonds are breaking or forming (e.g., transition states, bond dissociation curves). Even for closed-shell transition states, NSE often gives more reliable energies because the NN can represent partial bond breaking.
+    Use `aimnet2-nse` whenever you need to set `mult > 1`, or when bonds are breaking or forming (e.g., transition states, bond dissociation curves). Even for closed-shell transition states, NSE often gives more reliable energies because the NN can represent partial bond breaking.
 
 ### Step 4: Do you want a B97-3c-level model?
 
-If you prefer a B97-3c reference level (faster DFT, suitable for screening and large-scale studies), use **`aimnet2_2025`**. This is the recommended B97-3c model — it supersedes the original `aimnet2_b973c` with improved intermolecular interaction accuracy while retaining the same intramolecular performance.
+If you prefer a B97-3c reference level (faster DFT, suitable for screening and large-scale studies), use **`aimnet2-2025`**. This is the recommended B97-3c model — it supersedes the original `aimnet2-b973c` with improved intermolecular interaction accuracy while retaining the same intramolecular performance.
 
 !!! note "AIMNet2-2025 supersedes AIMNet2-B97-3c"
 
-    For all new work requiring a B97-3c-level model, use `aimnet2_2025`. The original `aimnet2_b973c` is retained for reproducibility of published results but is no longer the recommended choice. AIMNet2-2025 provides strictly better accuracy for non-covalent interactions with no regression for covalent chemistry.
+    For all new work requiring a B97-3c-level model, use `aimnet2-2025`. The original `aimnet2-b973c` is retained for reproducibility of published results but is no longer the recommended choice. AIMNet2-2025 provides strictly better accuracy for non-covalent interactions with no regression for covalent chemistry.
 
 ### Step 5: General-purpose?
 
 - **General-purpose** calculations: use **`aimnet2`** (the default). Trained on wB97M-D3, a well-validated range-separated hybrid functional.
-- **Legacy B97-3c**: `aimnet2_b973c` is available for reproducing previous results but new projects should use `aimnet2_2025` instead.
+- **Legacy B97-3c**: `aimnet2-b973c` is available for reproducing previous results but new projects should use `aimnet2-2025` instead.
 
 ## Loading Models
 
@@ -91,23 +92,26 @@ from aimnet.calculators import AIMNet2Calculator
 calc = AIMNet2Calculator("aimnet2")
 
 # B97-3c model
-calc = AIMNet2Calculator("aimnet2_b973c")
+calc = AIMNet2Calculator("aimnet2-b973c")
 
 # 2025 improved model
-calc = AIMNet2Calculator("aimnet2_2025")
+calc = AIMNet2Calculator("aimnet2-2025")
 
 # NSE open-shell model
-calc = AIMNet2Calculator("aimnet2nse")
+calc = AIMNet2Calculator("aimnet2-nse")
 
 # Palladium model
-calc = AIMNet2Calculator("aimnet2pd")
+calc = AIMNet2Calculator("aimnet2-pd")
+
+# Reactive chemistry model
+calc = AIMNet2Calculator("aimnet2-rxn")
 ```
 
 Each alias loads ensemble member `_0` by default. To load a specific member, use the full model name:
 
 ```python
 # Load member 2 of the wB97M-D3 ensemble
-calc = AIMNet2Calculator("aimnet2_wb97m_d3_2")
+calc = AIMNet2Calculator("aimnet2-wb97m-d3_2")
 ```
 
 ## Ensemble Models and Uncertainty Estimation
@@ -129,7 +133,7 @@ import torch
 from aimnet.calculators import AIMNet2Calculator
 
 # Load all 4 ensemble members
-calcs = [AIMNet2Calculator(f"aimnet2_wb97m_d3_{i}") for i in range(4)]
+calcs = [AIMNet2Calculator(f"aimnet2-wb97m-d3_{i}") for i in range(4)]
 
 # Run inference with each member
 data = {

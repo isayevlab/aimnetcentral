@@ -213,7 +213,9 @@ For maintainers migrating the model registry from legacy `.jpt` to new `.pt` for
 4. **Update model_registry.yaml:**
    ```yaml
    models:
-     aimnet2_wb97m_d3_0:
+     aimnet2-wb97m-d3_0:
        file: aimnet2_wb97m_d3_0.pt
        url: https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_wb97m_d3_0.pt
    ```
+
+   Registry keys follow the convention `aimnet2-<family>_<member>` (dash separates `aimnet2` from the family tag, trailing `_<int>` is the ensemble member index). The `file:` field keeps the original filename so cached `.pt` downloads remain valid.

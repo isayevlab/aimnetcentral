@@ -78,12 +78,13 @@ source .venv/bin/activate
 | Model | Elements | Description |
 | --- | --- | --- |
 | `aimnet2` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | wB97M-D3 (default) |
-| `aimnet2_2025` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c + improved intermolecular (recommended) |
-| `aimnet2_b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c (superseded by aimnet2_2025) |
-| `aimnet2nse` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | Open-shell / radical chemistry |
-| `aimnet2pd` | H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I | Pd systems with CPCM solvation (THF) |
+| `aimnet2-2025` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c + improved intermolecular (recommended) |
+| `aimnet2-b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c (superseded by aimnet2-2025) |
+| `aimnet2-nse` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | Open-shell / radical chemistry |
+| `aimnet2-pd` | H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I | Pd systems with CPCM solvation (THF) |
+| `aimnet2-rxn` | H, C, N, O | Reactive chemistry (TS, NEB, IRC) |
 
-Each model has 4 ensemble members (0-3). Models are auto-downloaded on first use.
+Each model has 4 ensemble members (0-3). Models are auto-downloaded on first use. Previously published aliases (`aimnet2_2025`, `aimnet2nse`, `aimnet2pd`, etc.) continue to resolve.
 
 ## Quick Start
 

@@ -5,7 +5,7 @@
 - How to compute interaction energies for molecular complexes
 - Scanning potential energy surfaces for non-covalent dimers
 - Why BSSE is different for ML potentials versus quantum chemistry
-- Comparing `aimnet2` and `aimnet2_2025` for intermolecular accuracy
+- Comparing `aimnet2` and `aimnet2-2025` for intermolecular accuracy
 - Configuring long-range electrostatics for non-covalent systems
 
 ## Prerequisites
@@ -16,7 +16,7 @@
 
 ## Spotlight Model: AIMNet2-2025
 
-The `aimnet2_2025` model was specifically trained with improved sampling of intermolecular configurations, making it the best choice for non-covalent interaction studies. It shares the same element coverage as the standard models (H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I) but provides significantly better accuracy for hydrogen bonding, pi-stacking, and dispersion-dominated complexes.
+The `aimnet2-2025` model was specifically trained with improved sampling of intermolecular configurations, making it the best choice for non-covalent interaction studies. It shares the same element coverage as the standard models (H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I) but provides significantly better accuracy for hydrogen bonding, pi-stacking, and dispersion-dominated complexes.
 
 See the [Model Selection Guide](../models/guide.md) for choosing between models.
 
@@ -34,7 +34,7 @@ Each monomer is computed at its geometry within the complex (no re-optimization)
 import torch
 from aimnet.calculators import AIMNet2Calculator
 
-calc = AIMNet2Calculator("aimnet2_2025")
+calc = AIMNet2Calculator("aimnet2-2025")
 
 def interaction_energy(coords_ab, numbers_ab, charge_ab,
                        coords_a, numbers_a, charge_a,
@@ -58,7 +58,7 @@ import torch
 import numpy as np
 from aimnet.calculators import AIMNet2Calculator
 
-calc = AIMNet2Calculator("aimnet2_2025")
+calc = AIMNet2Calculator("aimnet2-2025")
 
 # Water monomer A (acceptor): O at origin, H atoms in xz-plane
 water_a_coords = torch.tensor([
@@ -125,7 +125,7 @@ print(f"Interaction energy = {energies_kcal[min_idx]:.2f} kcal/mol")
 
 ## Comparing Models on the Water Dimer
 
-The `aimnet2_2025` model shows improved accuracy over the original `aimnet2` for intermolecular interactions. You can compare them directly:
+The `aimnet2-2025` model shows improved accuracy over the original `aimnet2` for intermolecular interactions. You can compare them directly:
 
 ```python
 import torch
@@ -133,7 +133,7 @@ import numpy as np
 from aimnet.calculators import AIMNet2Calculator
 
 calc_orig = AIMNet2Calculator("aimnet2")
-calc_2025 = AIMNet2Calculator("aimnet2_2025")
+calc_2025 = AIMNet2Calculator("aimnet2-2025")
 
 # Use the same water dimer geometry at near-equilibrium distance
 # Acceptor at origin, donor at 2.9 A along x with one H pointing toward acceptor O
@@ -154,7 +154,7 @@ charge = torch.tensor(0.0)
 
 ev_to_kcal = 23.0609
 
-for name, calc in [("aimnet2", calc_orig), ("aimnet2_2025", calc_2025)]:
+for name, calc in [("aimnet2", calc_orig), ("aimnet2-2025", calc_2025)]:
     e_dimer = calc({"coord": dimer, "numbers": numbers_dimer,
                      "charge": charge})["energy"].item()
     e_a = calc({"coord": water_a, "numbers": numbers_mono,
@@ -174,7 +174,7 @@ import torch
 import numpy as np
 from aimnet.calculators import AIMNet2Calculator
 
-calc = AIMNet2Calculator("aimnet2_2025")
+calc = AIMNet2Calculator("aimnet2-2025")
 
 # Benzene monomer (planar, in xy-plane centered at origin)
 benzene_c = torch.tensor([
@@ -231,7 +231,7 @@ print(f"Benzene dimer (PD) interaction energy: {e_int:.2f} kcal/mol")
 
     ML potentials like AIMNet2 have **no basis set** and therefore **no BSSE** in the traditional sense. The interaction energy computed as `E(AB) - E(A) - E(B)` does not suffer from basis set incompleteness.
 
-    However, a subtlety remains: the DFT reference data used for training **was** computed with a finite basis set (def2-TZVPP for `aimnet2`/`aimnet2nse`; def2-mTZVP for `aimnet2_2025`/`aimnet2_b973c`). If the training data was not counterpoise-corrected, the model may have learned an implicit BSSE from the reference energies. For AIMNet2 models, these basis sets minimize this effect, but it is not entirely absent.
+    However, a subtlety remains: the DFT reference data used for training **was** computed with a finite basis set (def2-TZVPP for `aimnet2`/`aimnet2-nse`; def2-mTZVP for `aimnet2-2025`/`aimnet2-b973c`). If the training data was not counterpoise-corrected, the model may have learned an implicit BSSE from the reference energies. For AIMNet2 models, these basis sets minimize this effect, but it is not entirely absent.
 
     **In practice:** Do not apply counterpoise corrections to AIMNet2 results. The supramolecular approach (`E(AB) - E(A) - E(B)`) is the correct way to compute interaction energies with ML potentials.
 
@@ -244,7 +244,7 @@ For larger aggregates or periodic systems with non-covalent contacts:
 ```python
 from aimnet.calculators import AIMNet2Calculator
 
-calc = AIMNet2Calculator("aimnet2_2025")
+calc = AIMNet2Calculator("aimnet2-2025")
 
 # For non-periodic clusters: simple method is fine (default)
 # For periodic systems: use DSF or Ewald
@@ -270,11 +270,11 @@ AIMNet2 models handle several classes of non-covalent interactions:
 
 | Interaction Type | Example | Typical Strength | Model Recommendation |
 | --- | --- | --- | --- |
-| Hydrogen bonding | Water dimer, DNA base pairs | 3-20 kcal/mol | `aimnet2_2025` |
-| pi-pi stacking | Benzene dimer, nucleobases | 1-5 kcal/mol | `aimnet2_2025` |
-| CH-pi | Methane-benzene | 0.5-2 kcal/mol | `aimnet2_2025` |
-| Halogen bonding | R-X...Y (X = Cl, Br, I) | 2-10 kcal/mol | `aimnet2_2025` |
-| Dispersion (vdW) | Alkane dimers | 0.5-3 kcal/mol | `aimnet2_2025` |
+| Hydrogen bonding | Water dimer, DNA base pairs | 3-20 kcal/mol | `aimnet2-2025` |
+| pi-pi stacking | Benzene dimer, nucleobases | 1-5 kcal/mol | `aimnet2-2025` |
+| CH-pi | Methane-benzene | 0.5-2 kcal/mol | `aimnet2-2025` |
+| Halogen bonding | R-X...Y (X = Cl, Br, I) | 2-10 kcal/mol | `aimnet2-2025` |
+| Dispersion (vdW) | Alkane dimers | 0.5-3 kcal/mol | `aimnet2-2025` |
 
 !!! note "Accuracy Expectations"
 

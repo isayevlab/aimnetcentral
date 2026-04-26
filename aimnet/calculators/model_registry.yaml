@@ -1,7 +1,10 @@
 # map model name to file/url
-# Convention: aimnet2-<model-family-tag>_<ensemble-member>
-#   - dash separates "aimnet2" from the model-family tag (which may contain its own dashes)
-#   - the trailing _<int> is reserved for the ensemble member index
+# Convention for `models:` keys:  aimnet2-<family>_<ensemble-member>
+#   - dash separates "aimnet2" from the family tag and is the only separator inside the family tag
+#   - trailing `_<int>` is reserved for the ensemble member index
+#   - family tags must NOT contain `_` and must NOT end in `_<int>` (so `key.rsplit("_", 1)`
+#     unambiguously yields (family, member))
+#   - convention applies to entries under `models:` only; entries under `aliases:` are not parsed
 # File names on the GCS bucket are unchanged; the key→file mapping below absorbs
 # the historical naming so consumers never need to track the bucket layout.
 models:
@@ -88,14 +91,16 @@ aliases:
     aimnet2-nse: aimnet2-nse_0
     aimnet2-pd: aimnet2-pd_0
     aimnet2-rxn: aimnet2-rxn_0
-    # legacy short aliases (kept for backwards compat with published configs and downstream tools)
+    # legacy short aliases (kept for backwards compat with published configs and downstream tools).
+    # Back-compat horizon: every alias/key released in v0.1.0 onward must continue to resolve.
     aimnet2_wb97m: aimnet2-wb97m-d3_0
     aimnet2_b973c: aimnet2-b973c-d3_0
     aimnet2_2025: aimnet2-b973c-2025-d3_0
     aimnet2nse: aimnet2-nse_0
     aimnet2pd: aimnet2-pd_0
     aimnet2rxn: aimnet2-rxn_0
-    # legacy member-level aliases (full ensemble of every published key form)
+    # legacy member-level aliases — every previously published member key whose canonical
+    # form is now different (Pd member keys are unchanged, so they need no aliases).
     aimnet2_wb97m_d3_0: aimnet2-wb97m-d3_0
     aimnet2_wb97m_d3_1: aimnet2-wb97m-d3_1
     aimnet2_wb97m_d3_2: aimnet2-wb97m-d3_2

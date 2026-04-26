@@ -6,13 +6,17 @@
 
 ## Overview
 
-AIMNet2-2025 is the **current-generation B97-3c model**, combining the cost-effective B97-3c reference level with improved training for non-covalent chemistry. It supersedes the original AIMNet2-B97-3c (`aimnet2_b973c`) and is recommended for all applications: high-throughput screening, conformer ranking, binding energy calculations, and any workflow where B97-3c-level accuracy is appropriate.
+AIMNet2-2025 is the **current-generation B97-3c model**, combining the cost-effective B97-3c reference level with improved training for non-covalent chemistry. It supersedes the original AIMNet2-B97-3c (`aimnet2-b973c`) and is recommended for all applications: high-throughput screening, conformer ranking, binding energy calculations, and any workflow where B97-3c-level accuracy is appropriate.
 
 **Supported elements:** H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I (14 elements)
 
-**Registry alias:** `aimnet2_2025` (loads ensemble member `aimnet2_b973c_2025_d3_0`)
+**Registry alias:** `aimnet2-2025` (loads ensemble member `aimnet2-b973c-2025-d3_0`)
 
-**Ensemble members:** `aimnet2_b973c_2025_d3_0` through `aimnet2_b973c_2025_d3_3` (4 models)
+**Ensemble members:** `aimnet2-b973c-2025-d3_0` through `aimnet2-b973c-2025-d3_3` (4 models)
+
+!!! note "Legacy names"
+
+    The previously published short alias `aimnet2_2025` and the member-level keys `aimnet2_b973c_2025_d3_0` … `aimnet2_b973c_2025_d3_3` still resolve and remain supported.
 
 ## Strengths and Limitations
 
@@ -40,7 +44,7 @@ AIMNet2-2025 is the **current-generation B97-3c model**, combining the cost-effe
 
 ## Typical Use Cases
 
-- **General-purpose B97-3c calculations** -- recommended replacement for `aimnet2_b973c` in all workflows
+- **General-purpose B97-3c calculations** -- recommended replacement for `aimnet2-b973c` in all workflows
 - **High-throughput conformer screening** -- rapid ranking of large conformer sets with B97-3c accuracy
 - **Binding energy calculations** -- compute interaction energies for molecular dimers and complexes using the supramolecular approach (complex minus monomers)
 - **Hydrogen-bonded systems** -- study water clusters, nucleobase pairs, protein-ligand hydrogen bonds
@@ -55,7 +59,7 @@ Computing the binding energy of a water dimer:
 import torch
 from aimnet.calculators import AIMNet2Calculator
 
-calc = AIMNet2Calculator("aimnet2_2025", compile_model=True)
+calc = AIMNet2Calculator("aimnet2-2025", compile_model=True)
 
 # Water dimer coordinates (Angstrom)
 dimer_coords = torch.tensor([
@@ -109,7 +113,7 @@ print(f"Binding energy: {binding_energy * 23.0609:.2f} kcal/mol")
 from ase.build import molecule
 from aimnet.calculators import AIMNet2ASE, AIMNet2Calculator
 
-base_calc = AIMNet2Calculator("aimnet2_2025", compile_model=True)
+base_calc = AIMNet2Calculator("aimnet2-2025", compile_model=True)
 atoms = molecule("H2O")
 atoms.calc = AIMNet2ASE(base_calc, charge=0)
 
@@ -140,7 +144,7 @@ calc.set_lrcoulomb_method("dsf", cutoff=15.0)
 For binding energy calculations, ensemble averaging across all four members is recommended to assess reliability:
 
 ```python
-models = [AIMNet2Calculator(f"aimnet2_b973c_2025_d3_{i}") for i in range(4)]
+models = [AIMNet2Calculator(f"aimnet2-b973c-2025-d3_{i}") for i in range(4)]
 
 binding_energies = []
 for m in models:
