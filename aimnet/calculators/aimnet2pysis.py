@@ -18,11 +18,14 @@ EV2AU = 1 / AU2EV
 class AIMNet2Pysis(Calculator):
     implemented_properties: ClassVar = ["energy", "forces", "free_energy", "charges", "stress"]
 
-    def __init__(self, model: AIMNet2Calculator | str = "aimnet2", charge=0, mult=1, **kwargs):
+    def __init__(
+        self, model: AIMNet2Calculator | str = "aimnet2", charge=0, mult=1, validate_species: bool = True, **kwargs
+    ):
         super().__init__(charge=charge, mult=mult, **kwargs)
         if isinstance(model, str):
             model = AIMNet2Calculator(model)
         self.model = model
+        self.validate_species = validate_species
 
     def _prepare_input(self, atoms, coord):
         device = self.model.device
@@ -51,20 +54,20 @@ class AIMNet2Pysis(Calculator):
 
     def get_energy(self, atoms, coords):
         _in = self._prepare_input(atoms, coords)
-        res = self.model(_in)
+        res = self.model(_in, validate_species=self.validate_species)
         energy = self._results_get_energy(res)
         return {"energy": energy}
 
     def get_forces(self, atoms, coords):
         _in = self._prepare_input(atoms, coords)
-        res = self.model(_in, forces=True)
+        res = self.model(_in, forces=True, validate_species=self.validate_species)
         energy = self._results_get_energy(res)
         forces = self._results_get_forces(res)
         return {"energy": energy, "forces": forces}
 
     def get_hessian(self, atoms, coords):
         _in = self._prepare_input(atoms, coords)
-        res = self.model(_in, forces=True, hessian=True)
+        res = self.model(_in, forces=True, hessian=True, validate_species=self.validate_species)
         energy = self._results_get_energy(res)
         forces = self._results_get_forces(res)
         hessian = self._results_get_hessian(res)
