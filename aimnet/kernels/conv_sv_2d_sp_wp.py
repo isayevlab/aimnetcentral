@@ -454,6 +454,54 @@ torch.library.register_autograd(
 
 
 # =============================================================================
+# vmap Registration
+# =============================================================================
+
+
+@torch.library.register_vmap("aimnet::conv_sv_2d_sp_bwd_bwd")
+def _vmap_conv_sv_2d_sp_bwd_bwd(info, in_dims, grad_output, grad2_a, grad2_g, a, idx, g):
+    """vmap rule for the double-backward primitive.
+
+    Used by Hessian-via-vmap paths (torch.func.hessian, is_grads_batched=True).
+    The realistic in_dims is (None, 0, 0, None, None, None) — only the cotangents
+    flowing into the second backward carry the vmap batch dim. The rule still
+    handles arbitrary in_dims for robustness.
+
+    Strategy: K-loop. Folding K into the kernel's leading B dim is unsafe because
+    the kernels rely on a single padding-row sentinel at index B-1; stacking K
+    copies would scatter padding rows. The K calls queue async on the CUDA
+    stream, so the loop's per-call cost is dominated by GPU work, not Python.
+    """
+    K = info.batch_size
+
+    def _slice(t: Tensor, d: int | None, k: int) -> Tensor:
+        if d is None:
+            return t
+        return t.movedim(d, 0)[k]
+
+    out0: list[Tensor] = []
+    out1: list[Tensor] = []
+    out2: list[Tensor] = []
+    for k in range(K):
+        outs = torch.ops.aimnet.conv_sv_2d_sp_bwd_bwd(
+            _slice(grad_output, in_dims[0], k),
+            _slice(grad2_a, in_dims[1], k),
+            _slice(grad2_g, in_dims[2], k),
+            _slice(a, in_dims[3], k),
+            _slice(idx, in_dims[4], k),
+            _slice(g, in_dims[5], k),
+        )
+        out0.append(outs[0])
+        out1.append(outs[1])
+        out2.append(outs[2])
+
+    return (
+        [torch.stack(out0, dim=0), torch.stack(out1, dim=0), torch.stack(out2, dim=0)],
+        [0, 0, 0],
+    )
+
+
+# =============================================================================
 # Public API
 # =============================================================================
 
