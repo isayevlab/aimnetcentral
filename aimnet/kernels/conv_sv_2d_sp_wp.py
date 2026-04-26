@@ -462,10 +462,14 @@ torch.library.register_autograd(
 def _vmap_conv_sv_2d_sp_bwd(info, in_dims, grad_output, a, idx, g):
     """vmap rule for the first-backward primitive.
 
-    Hit when is_grads_batched=True (or torch.func.vmap over a vjp) traverses the
-    first-order backward.  The realistic in_dims is (0, None, None, None) — only the
-    cotangent flowing from the upstream batch carries a vmap dim.  The rule still
-    handles arbitrary in_dims for robustness.
+    Hit when torch.func.vmap traverses a vjp closure that reaches the first-order
+    backward (e.g. vmap over autograd.grad with create_graph=True).  The realistic
+    in_dims is (0, None, None, None) — only the cotangent flowing from the upstream
+    batch carries a vmap dim.  The rule still handles arbitrary in_dims for robustness.
+
+    Note: register_vmap is consulted ONLY by the functorch dispatch (torch.func.vmap,
+    aka torch.vmap).  The legacy batching dispatch used by is_grads_batched=True and
+    autograd.functional.hessian(vectorize=True) does not consult this rule.
 
     Strategy: K-loop, same reasoning as the bwd_bwd rule.
     """
@@ -498,10 +502,15 @@ def _vmap_conv_sv_2d_sp_bwd(info, in_dims, grad_output, a, idx, g):
 def _vmap_conv_sv_2d_sp_bwd_bwd(info, in_dims, grad_output, grad2_a, grad2_g, a, idx, g):
     """vmap rule for the double-backward primitive.
 
-    Used by Hessian-via-vmap paths (torch.func.hessian, is_grads_batched=True).
-    The realistic in_dims is (None, 0, 0, None, None, None) — only the cotangents
-    flowing into the second backward carry the vmap batch dim. The rule still
-    handles arbitrary in_dims for robustness.
+    Hit when torch.func.vmap traverses a vjp closure that reaches the second-order
+    backward (the Hessian-via-vmap path).  The realistic in_dims is
+    (None, 0, 0, None, None, None) — only the cotangents flowing into the second
+    backward carry the vmap batch dim. The rule still handles arbitrary in_dims for
+    robustness.
+
+    Note: register_vmap is consulted ONLY by the functorch dispatch (torch.func.vmap,
+    aka torch.vmap).  The legacy batching dispatch used by is_grads_batched=True and
+    autograd.functional.hessian(vectorize=True) does not consult this rule.
 
     Strategy: K-loop. Folding K into the kernel's leading B dim is unsafe because
     the kernels rely on a single padding-row sentinel at index B-1; stacking K
