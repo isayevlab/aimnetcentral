@@ -761,6 +761,7 @@ def load_v1_model(
         "coulomb_sr_envelope": coulomb_sr_envelope if needs_coulomb else None,
         "d3_params": d3_params if needs_dispersion else None,
         "has_embedded_lr": has_embedded_lr,
+        "has_embedded_d3ts": has_embedded_d3ts,
         "implemented_species": implemented_species_list,
     }
     if family is not None:

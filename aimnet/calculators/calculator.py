@@ -524,7 +524,10 @@ class AIMNet2Calculator:
     def _has_embedded_dispersion(self) -> bool:
         """Check if model has embedded dispersion (not externalized).
 
-        Uses model metadata when available, otherwise returns False (unknown).
+        Reads `has_embedded_d3ts` from metadata when present (the authoritative
+        source for new conversions). Falls back to heuristics for legacy .pt
+        files that don't carry the explicit flag. Returns False when no metadata
+        is available.
 
         Returns
         -------
@@ -535,15 +538,19 @@ class AIMNet2Calculator:
         if meta is None:
             return False  # Unknown, assume no embedded dispersion
 
-        # New format: Check for embedded D3TS via has_embedded_lr
-        # If has_embedded_lr=True and coulomb_mode != "sr_embedded", it's D3TS
-        if meta.get("has_embedded_lr", False):
-            coulomb_mode = meta.get("coulomb_mode", "none")
-            if coulomb_mode != "sr_embedded":
-                return True  # Must be D3TS (embedded dispersion)
+        # Authoritative path (new conversions): explicit flag.
+        if meta.get("has_embedded_d3ts", False):
+            return True
 
-        # Legacy format: If needs_dispersion=False and d3_params exist, dispersion is embedded
-        # (legacy JIT models have dispersion embedded)
+        # Legacy heuristic (pre-explicit-flag .pt files): if has_embedded_lr=True
+        # AND coulomb_mode != "sr_embedded", the LR module must be D3TS — but
+        # this misses the both-set case (D3TS + SRCoulomb), which is exactly the
+        # bug fixed by the explicit flag above. Kept here only as a fallback for
+        # legacy files; new conversions take the path above.
+        if meta.get("has_embedded_lr", False) and meta.get("coulomb_mode", "none") != "sr_embedded":
+            return True
+
+        # Legacy JIT format: needs_dispersion=False + d3_params present means dispersion is embedded.
         return not meta.get("needs_dispersion", False) and meta.get("d3_params") is not None
 
     def _has_embedded_coulomb(self) -> bool:
