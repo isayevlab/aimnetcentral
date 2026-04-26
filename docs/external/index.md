@@ -6,6 +6,7 @@ AIMNet2 is consumed by several external simulation and analysis packages. This s
 | --- | --- | --- |
 | ASE | Supported | [ASE](ase.md) |
 | pysisyphus | Supported | [pysisyphus](pysis.md) |
+| Sella | Supported | [Sella](sella.md) |
 | OpenMM (`openmmml`) | Supported upstream | [OpenMM](openmm.md) |
 | AMBER (`torchani-amber`) | Supported upstream | [AMBER](amber.md) |
 | SCM AMS (`MLPotential` engine) | Supported upstream | [SCM AMS](ams.md) |
