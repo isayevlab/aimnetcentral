@@ -17,11 +17,11 @@
 
 ## Why Closed-Shell Models Fail for Radicals
 
-Standard AIMNet2 models (`aimnet2`, `aimnet2_b973c`, `aimnet2_2025`) use a single charge channel internally (`num_charge_channels=1`). This means the model predicts one set of atomic partial charges and implicitly assumes all electrons are paired. When applied to a radical -- a species with one or more unpaired electrons -- the model has no mechanism to represent the spin density distribution and produces unreliable energies and forces.
+Standard AIMNet2 models (`aimnet2`, `aimnet2-b973c`, `aimnet2-2025`) use a single charge channel internally (`num_charge_channels=1`). This means the model predicts one set of atomic partial charges and implicitly assumes all electrons are paired. When applied to a radical -- a species with one or more unpaired electrons -- the model has no mechanism to represent the spin density distribution and produces unreliable energies and forces.
 
 !!! warning "Do not use closed-shell models for open-shell systems"
 
-    Applying `aimnet2` to a doublet radical or triplet state will silently produce results that look reasonable but have large systematic errors. Always use `aimnet2nse` when unpaired electrons are present.
+    Applying `aimnet2` to a doublet radical or triplet state will silently produce results that look reasonable but have large systematic errors. Always use `aimnet2-nse` when unpaired electrons are present.
 
 Common symptoms of using the wrong model:
 
@@ -63,7 +63,7 @@ The `mult` parameter specifies the spin multiplicity (2S+1):
 import torch
 from aimnet.calculators import AIMNet2Calculator
 
-calc = AIMNet2Calculator("aimnet2nse")
+calc = AIMNet2Calculator("aimnet2-nse")
 
 result = calc({
     "coord": coords,
@@ -79,7 +79,7 @@ result = calc({
 from aimnet.calculators import AIMNet2ASE
 
 # Doublet radical
-calc = AIMNet2ASE("aimnet2nse", charge=0, mult=2)
+calc = AIMNet2ASE("aimnet2-nse", charge=0, mult=2)
 
 # Change multiplicity later
 calc.set_mult(3)  # Switch to triplet
@@ -87,7 +87,7 @@ calc.set_mult(3)  # Switch to triplet
 
 !!! note "Default multiplicity"
 
-    If `mult` is not provided, the calculator defaults to `mult=1` (singlet). For closed-shell molecules with `aimnet2nse`, this is correct and the model reduces to standard behavior. You do not need to switch models for closed-shell species.
+    If `mult` is not provided, the calculator defaults to `mult=1` (singlet). For closed-shell molecules with `aimnet2-nse`, this is correct and the model reduces to standard behavior. You do not need to switch models for closed-shell species.
 
 ## Worked Example: C-H Bond Dissociation Energy
 
@@ -105,7 +105,7 @@ from ase import Atoms
 from ase.optimize import BFGS
 from aimnet.calculators import AIMNet2ASE, AIMNet2Calculator
 
-base_calc = AIMNet2Calculator("aimnet2nse", compile_model=True)
+base_calc = AIMNet2Calculator("aimnet2-nse", compile_model=True)
 
 # --- Step 1: Optimize toluene (closed-shell singlet) ---
 toluene = Atoms(
@@ -184,7 +184,7 @@ from ase import Atoms
 from ase.optimize import BFGS
 from aimnet.calculators import AIMNet2ASE, AIMNet2Calculator
 
-base_calc = AIMNet2Calculator("aimnet2nse", compile_model=True)
+base_calc = AIMNet2Calculator("aimnet2-nse", compile_model=True)
 
 
 def compute_bde(parent_atoms, radical_atoms, h_energy):
@@ -215,7 +215,7 @@ E_H = H_atom.get_potential_energy()
 # Results should show: methyl > ethyl > isopropyl > tert-butyl
 ```
 
-## Side-by-Side: aimnet2 vs aimnet2nse
+## Side-by-Side: aimnet2 vs aimnet2-nse
 
 This comparison demonstrates the systematic error of using a closed-shell model for radical species.
 
@@ -247,20 +247,20 @@ E_closed = ch3_closed.get_potential_energy()
 print(f"aimnet2 (closed-shell): {E_closed:.4f} eV")
 
 # --- Open-shell model (CORRECT) ---
-calc_nse = AIMNet2Calculator("aimnet2nse", compile_model=True)
+calc_nse = AIMNet2Calculator("aimnet2-nse", compile_model=True)
 ch3_nse = ch3.copy()
 ch3_nse.calc = AIMNet2ASE(calc_nse, charge=0, mult=2)
 opt = BFGS(ch3_nse, logfile=None)
 opt.run(fmax=0.01)
 E_nse = ch3_nse.get_potential_energy()
-print(f"aimnet2nse (open-shell): {E_nse:.4f} eV")
+print(f"aimnet2-nse (open-shell): {E_nse:.4f} eV")
 
 print(f"Energy difference: {abs(E_closed - E_nse) * 23.0609:.1f} kcal/mol")
 ```
 
-!!! tip "When in doubt, use aimnet2nse"
+!!! tip "When in doubt, use aimnet2-nse"
 
-    The NSE model handles closed-shell species correctly (mult=1 reduces to standard behavior). If your workflow involves a mix of closed-shell and open-shell species -- for example, computing BDEs -- use `aimnet2nse` throughout for consistent energetics.
+    The NSE model handles closed-shell species correctly (mult=1 reduces to standard behavior). If your workflow involves a mix of closed-shell and open-shell species -- for example, computing BDEs -- use `aimnet2-nse` throughout for consistent energetics.
 
 ## When to Fall Back to Multi-Reference Methods
 

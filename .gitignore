@@ -159,7 +159,7 @@ cython_debug/
 
 # Claude Code
 .claude/
-CLAUDE.md
+# CLAUDE.md is checked in as a project rule reference for contributors using Claude Code
 
 # Other AI assistants
 AGENTS.md

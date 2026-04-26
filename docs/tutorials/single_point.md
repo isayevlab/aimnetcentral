@@ -175,7 +175,7 @@ print(f"Hessian shape: {hessian.shape}")  # (21, 3, 21, 3) for aspirin
 AIMNet2 provides several models trained on different DFT functionals. Each is suitable for different chemistry. You can compare them on the same molecule to understand how model choice affects predictions:
 
 ```python
-model_names = ["aimnet2", "aimnet2_b973c", "aimnet2_2025"]
+model_names = ["aimnet2", "aimnet2-b973c", "aimnet2-2025"]
 
 input_data = {
     "coord": aspirin_coords,
@@ -200,15 +200,16 @@ for name in model_names:
 
 The available model aliases are:
 
-| Alias           | DFT Functional    | Best for                     |
-| --------------- | ----------------- | ---------------------------- |
-| `aimnet2`       | wB97M-D3          | General organic chemistry    |
-| `aimnet2_2025`  | B97-3c (improved) | Recommended B97-3c model     |
-| `aimnet2_b973c` | B97-3c            | Legacy (superseded by 2025)  |
-| `aimnet2nse`    | wB97M-D3          | Open-shell / radical systems |
-| `aimnet2pd`     | wB97M-D3          | Palladium-containing systems |
+| Alias           | DFT Functional    | Best for                      |
+| --------------- | ----------------- | ----------------------------- |
+| `aimnet2`       | wB97M-D3          | General organic chemistry     |
+| `aimnet2-2025`  | B97-3c (improved) | Recommended B97-3c model      |
+| `aimnet2-b973c` | B97-3c            | Legacy (superseded by 2025)   |
+| `aimnet2-nse`   | wB97M-D3          | Open-shell / radical systems  |
+| `aimnet2-pd`    | B97-3c/CPCM (THF) | Palladium-containing systems  |
+| `aimnet2-rxn`   | wB97M-V           | Reactive chemistry / TS / IRC |
 
-Each alias points to ensemble member `_0` by default. For uncertainty estimation, you can load all four ensemble members (e.g., `aimnet2_wb97m_d3_0` through `aimnet2_wb97m_d3_3`) and compare their predictions.
+Each alias points to ensemble member `_0` by default. For uncertainty estimation, you can load all four ensemble members (e.g., `aimnet2-wb97m-d3_0` through `aimnet2-wb97m-d3_3`) and compare their predictions. Previously published aliases (`aimnet2_2025`, `aimnet2nse`, etc.) continue to resolve.
 
 ## Step 5: Using `compile_model` for Repeated Calculations
 

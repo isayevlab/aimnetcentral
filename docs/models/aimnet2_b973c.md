@@ -2,7 +2,7 @@
 
 !!! warning "Superseded by AIMNet2-2025"
 
-    This model has been superseded by [AIMNet2-2025](aimnet2_2025.md), which provides improved intermolecular interaction accuracy with no regression for intramolecular chemistry. **Use `aimnet2_2025` for all new work.** The original `aimnet2_b973c` is retained only for reproducing previously published results.
+    This model has been superseded by [AIMNet2-2025](aimnet2_2025.md), which provides improved intermolecular interaction accuracy with no regression for intramolecular chemistry. **Use `aimnet2-2025` for all new work.** The original `aimnet2-b973c` is retained only for reproducing previously published results.
 
 ## Overview
 
@@ -10,9 +10,13 @@ AIMNet2-B97-3c is the **original B97-3c screening model** trained against B97-3c
 
 **Supported elements:** H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I (14 elements)
 
-**Registry alias:** `aimnet2_b973c` (loads ensemble member `aimnet2_b973c_d3_0`)
+**Registry alias:** `aimnet2-b973c` (loads ensemble member `aimnet2-b973c-d3_0`)
 
-**Ensemble members:** `aimnet2_b973c_d3_0` through `aimnet2_b973c_d3_3` (4 models)
+**Ensemble members:** `aimnet2-b973c-d3_0` through `aimnet2-b973c-d3_3` (4 models)
+
+!!! note "Legacy names"
+
+    The previously published short alias `aimnet2_b973c` and the member-level keys `aimnet2_b973c_d3_0` … `aimnet2_b973c_d3_3` still resolve and remain supported.
 
 ## Strengths and Limitations
 
@@ -39,12 +43,12 @@ AIMNet2-B97-3c is the **original B97-3c screening model** trained against B97-3c
 
 ## Typical Use Cases
 
-- **Reproducing published results** -- use when replicating calculations from papers that used `aimnet2_b973c`
+- **Reproducing published results** -- use when replicating calculations from papers that used `aimnet2-b973c`
 - **Cross-validation** -- compare B97-3c and wB97M-D3 predictions to gauge sensitivity to the reference method
 
 !!! tip "For new projects, use AIMNet2-2025"
 
-    For high-throughput screening, conformer ranking, and any new B97-3c-level work, switch to [`aimnet2_2025`](aimnet2_2025.md) which provides strictly better accuracy for the same computational cost.
+    For high-throughput screening, conformer ranking, and any new B97-3c-level work, switch to [`aimnet2-2025`](aimnet2_2025.md) which provides strictly better accuracy for the same computational cost.
 
 ## Quick Example
 
@@ -55,7 +59,7 @@ import torch
 from aimnet.calculators import AIMNet2Calculator
 
 # Use B97-3c model for fast screening
-calc = AIMNet2Calculator("aimnet2_b973c", compile_model=True)
+calc = AIMNet2Calculator("aimnet2-b973c", compile_model=True)
 
 # Load multiple conformers (example: 3 conformers of butane, 14 atoms each)
 # In practice, read from a multi-frame XYZ file
@@ -84,7 +88,7 @@ from ase.io import read
 from ase.optimize import BFGS
 from aimnet.calculators import AIMNet2ASE, AIMNet2Calculator
 
-base_calc = AIMNet2Calculator("aimnet2_b973c", compile_model=True)
+base_calc = AIMNet2Calculator("aimnet2-b973c", compile_model=True)
 atoms = read("molecule.xyz")
 atoms.calc = AIMNet2ASE(base_calc, charge=0)
 
@@ -114,7 +118,7 @@ calc.set_lrcoulomb_method("dsf", cutoff=15.0)
 Four ensemble members are available for uncertainty estimation:
 
 ```python
-models = [AIMNet2Calculator(f"aimnet2_b973c_d3_{i}") for i in range(4)]
+models = [AIMNet2Calculator(f"aimnet2-b973c-d3_{i}") for i in range(4)]
 results = [m(data) for m in models]
 
 energies = torch.stack([r["energy"] for r in results])
