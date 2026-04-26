@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import torch
 
@@ -85,8 +87,9 @@ class AIMNet2ASE(Calculator):
         self._t_mult = None
         self.update_tensors()
 
-    def _update_charge_spin_from_info(self):
-        atoms = getattr(self, "atoms", None)
+    def _update_charge_spin_from_info(self, atoms=None):
+        if atoms is None:
+            atoms = getattr(self, "atoms", None)
         if atoms is None:
             return
         info = getattr(atoms, "info", {})
@@ -107,8 +110,9 @@ class AIMNet2ASE(Calculator):
                 self.mult = mult
                 self._t_mult = None
 
-    def update_tensors(self):
-        atoms = getattr(self, "atoms", None)
+    def update_tensors(self, atoms=None):
+        if atoms is None:
+            atoms = getattr(self, "atoms", None)
         if atoms is not None:
             new_numbers = torch.as_tensor(atoms.numbers, dtype=torch.int64, device=self.base_calc.device)
             if self._t_numbers is None or self._t_numbers.shape != new_numbers.shape or not torch.equal(self._t_numbers, new_numbers):
@@ -133,8 +137,20 @@ class AIMNet2ASE(Calculator):
 
         Designed for use as ``Sella(atoms, hessian_function=atoms.calc.get_hessian)``.
         Computed via double-backward through the AIMNet2 energy graph; cost scales
-        as O(3N) backward passes. Not supported when ``compile_model=True`` or
-        for batched / multi-molecule input.
+        as O(3N) backward passes per call. Not supported when ``compile_model=True``
+        or for batched / multi-molecule input.
+
+        This method intentionally bypasses the standard ASE
+        ``Calculator.calculate(properties=['hessian'])`` flow and ``self.results``
+        cache. The Sella callback contract is ``(atoms) -> ndarray``, so a direct
+        method is the simplest match. ``"hessian"`` is therefore not advertised in
+        ``implemented_properties``; if that ever changes, the two paths must be
+        reconciled.
+
+        When called with an explicit ``atoms`` argument that differs from
+        ``self.atoms``, the passed ``atoms.info`` is consulted for charge/mult
+        precedence (and the calculator's stored ``self.charge``/``self.mult`` may
+        be updated as a side effect, mirroring the ``calculate()`` behavior).
         """
         if atoms is None:
             atoms = getattr(self, "atoms", None)
@@ -144,18 +160,19 @@ class AIMNet2ASE(Calculator):
                 )
         if atoms.pbc.any():
             raise PropertyNotImplementedError(
-                "Hessian for periodic systems is not supported by AIMNet2ASE.get_hessian()."
+                "Hessian for periodic systems is not supported by AIMNet2ASE.get_hessian(). "
+                "For periodic transition states, use pysisyphus dimer or climbing-image NEB."
+            )
+        if len(atoms) > 100:
+            warnings.warn(
+                f"Computing AIMNet2 Hessian for {len(atoms)} atoms; "
+                "the forces+hessian path retains a much larger autograd graph than forces alone "
+                "(peak GPU memory is roughly 5-10x a forces-only call). Risk of OOM on smaller GPUs.",
+                stacklevel=2,
             )
 
-        self._update_charge_spin_from_info()
-        self.update_tensors()
-        # Element-wise cache check: rebuild if atoms differ from the previously
-        # cached numbers (length OR species changed). update_tensors() handles
-        # the case where `atoms is self.atoms`; this path covers the case where
-        # the caller passed a different atoms argument.
-        new_numbers = torch.as_tensor(atoms.numbers, dtype=torch.int64, device=self.base_calc.device)
-        if self._t_numbers is None or self._t_numbers.shape != new_numbers.shape or not torch.equal(self._t_numbers, new_numbers):
-            self._t_numbers = new_numbers
+        self._update_charge_spin_from_info(atoms)
+        self.update_tensors(atoms)
 
         # Pass coord as 2D (N, 3) — not batched — so mol_flatten takes the
         # ndim==2 path and calculate_hessian sees the expected (N+1, 3) coord
@@ -163,7 +180,7 @@ class AIMNet2ASE(Calculator):
         # which may skip flattening when N < nb_threshold on GPU, causing
         # calculate_hessian to produce an incorrect (N, 3, 1, 3) shape.
         coord = torch.tensor(
-            atoms.positions, dtype=torch.float32, device=self.base_calc.device
+            atoms.positions, dtype=self.base_calc.keys_in["coord"], device=self.base_calc.device
         )
         _in = {
             "coord": coord,
