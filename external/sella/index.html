@@ -12,27 +12,31 @@
         <meta name="author" content="Roman Zubatyuk">
       
       
-        <link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/superpowers/plans/2026-04-26-torchscript-export/">
+        <link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/external/sella/">
       
       
+        <link rel="prev" href="../pysis/">
+      
+      
+        <link rel="next" href="../openmm/">
       
       
         
       
       
-      <link rel="icon" href="../../../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
     
     
       
-        <title>TorchScript export pathway for external MD engines - AIMNetCentral</title>
+        <title>Sella - AIMNetCentral</title>
       
     
     
-      <link rel="stylesheet" href="../../../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
       
         
-        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -51,9 +55,9 @@
       
     
     
-      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -78,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#torchscript-export-pathway-for-external-md-engines" class="md-skip">
+        <a href="#sella" class="md-skip">
           Skip to content
         </a>
       
@@ -94,7 +98,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../.." title="AIMNetCentral" class="md-header__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
+    <a href="../.." title="AIMNetCentral" class="md-header__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -114,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              TorchScript export pathway for external MD engines
+              Sella
             
           </span>
         </div>
@@ -232,7 +236,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../.." title="AIMNetCentral" class="md-nav__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
+    <a href="../.." title="AIMNetCentral" class="md-nav__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -262,7 +266,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../.." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -289,7 +293,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../getting_started/" class="md-nav__link">
+      <a href="../../getting_started/" class="md-nav__link">
         
   
   
@@ -363,7 +367,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../models/guide/" class="md-nav__link">
+      <a href="../../models/guide/" class="md-nav__link">
         
   
   
@@ -391,7 +395,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../models/architecture/" class="md-nav__link">
+      <a href="../../models/architecture/" class="md-nav__link">
         
   
   
@@ -419,7 +423,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../models/aimnet2/" class="md-nav__link">
+      <a href="../../models/aimnet2/" class="md-nav__link">
         
   
   
@@ -447,7 +451,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../models/aimnet2_b973c/" class="md-nav__link">
+      <a href="../../models/aimnet2_b973c/" class="md-nav__link">
         
   
   
@@ -475,7 +479,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../models/aimnet2_2025/" class="md-nav__link">
+      <a href="../../models/aimnet2_2025/" class="md-nav__link">
         
   
   
@@ -503,7 +507,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../models/aimnet2nse/" class="md-nav__link">
+      <a href="../../models/aimnet2nse/" class="md-nav__link">
         
   
   
@@ -531,7 +535,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../models/aimnet2pd/" class="md-nav__link">
+      <a href="../../models/aimnet2pd/" class="md-nav__link">
         
   
   
@@ -559,7 +563,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../models/aimnet2_rxn/" class="md-nav__link">
+      <a href="../../models/aimnet2_rxn/" class="md-nav__link">
         
   
   
@@ -641,7 +645,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../tutorials/single_point/" class="md-nav__link">
+      <a href="../../tutorials/single_point/" class="md-nav__link">
         
   
   
@@ -669,7 +673,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../tutorials/geometry_optimization/" class="md-nav__link">
+      <a href="../../tutorials/geometry_optimization/" class="md-nav__link">
         
   
   
@@ -697,7 +701,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../tutorials/molecular_dynamics/" class="md-nav__link">
+      <a href="../../tutorials/molecular_dynamics/" class="md-nav__link">
         
   
   
@@ -725,7 +729,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../tutorials/periodic_systems/" class="md-nav__link">
+      <a href="../../tutorials/periodic_systems/" class="md-nav__link">
         
   
   
@@ -753,7 +757,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../tutorials/batch_processing/" class="md-nav__link">
+      <a href="../../tutorials/batch_processing/" class="md-nav__link">
         
   
   
@@ -781,7 +785,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../tutorials/performance/" class="md-nav__link">
+      <a href="../../tutorials/performance/" class="md-nav__link">
         
   
   
@@ -809,7 +813,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../tutorials/hugging_face/" class="md-nav__link">
+      <a href="../../tutorials/hugging_face/" class="md-nav__link">
         
   
   
@@ -891,7 +895,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../advanced/open_shell/" class="md-nav__link">
+      <a href="../../advanced/open_shell/" class="md-nav__link">
         
   
   
@@ -919,7 +923,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../advanced/conformer_search/" class="md-nav__link">
+      <a href="../../advanced/conformer_search/" class="md-nav__link">
         
   
   
@@ -947,7 +951,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../advanced/reaction_paths/" class="md-nav__link">
+      <a href="../../advanced/reaction_paths/" class="md-nav__link">
         
   
   
@@ -975,7 +979,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../advanced/intermolecular_interactions/" class="md-nav__link">
+      <a href="../../advanced/intermolecular_interactions/" class="md-nav__link">
         
   
   
@@ -1003,7 +1007,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../advanced/transition_metal_catalysis/" class="md-nav__link">
+      <a href="../../advanced/transition_metal_catalysis/" class="md-nav__link">
         
   
   
@@ -1031,7 +1035,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../advanced/charged_systems/" class="md-nav__link">
+      <a href="../../advanced/charged_systems/" class="md-nav__link">
         
   
   
@@ -1063,18 +1067,20 @@
       
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
         
           
           <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
@@ -1095,7 +1101,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1113,7 +1119,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../external/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
@@ -1141,7 +1147,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../external/ase/" class="md-nav__link">
+      <a href="../ase/" class="md-nav__link">
         
   
   
@@ -1169,7 +1175,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../external/pysis/" class="md-nav__link">
+      <a href="../pysis/" class="md-nav__link">
         
   
   
@@ -1194,10 +1200,151 @@
                 
   
   
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sella
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sella
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#install" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recommended-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recommended configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-pass-hessian_function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why pass hessian_function
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limitations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#minima-with-sella" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Minima with Sella
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
   
   
     <li class="md-nav__item">
-      <a href="../../../external/openmm/" class="md-nav__link">
+      <a href="../openmm/" class="md-nav__link">
         
   
   
@@ -1225,7 +1372,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../external/amber/" class="md-nav__link">
+      <a href="../amber/" class="md-nav__link">
         
   
   
@@ -1253,7 +1400,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../external/ams/" class="md-nav__link">
+      <a href="../ams/" class="md-nav__link">
         
   
   
@@ -1281,7 +1428,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../external/orca/" class="md-nav__link">
+      <a href="../orca/" class="md-nav__link">
         
   
   
@@ -1309,7 +1456,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../external/gromacs/" class="md-nav__link">
+      <a href="../gromacs/" class="md-nav__link">
         
   
   
@@ -1337,7 +1484,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../external/lammps/" class="md-nav__link">
+      <a href="../lammps/" class="md-nav__link">
         
   
   
@@ -1419,7 +1566,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../calculator/" class="md-nav__link">
+      <a href="../../calculator/" class="md-nav__link">
         
   
   
@@ -1447,7 +1594,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../long_range/" class="md-nav__link">
+      <a href="../../long_range/" class="md-nav__link">
         
   
   
@@ -1475,7 +1622,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../model_format/" class="md-nav__link">
+      <a href="../../model_format/" class="md-nav__link">
         
   
   
@@ -1503,7 +1650,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../train/" class="md-nav__link">
+      <a href="../../train/" class="md-nav__link">
         
   
   
@@ -1531,7 +1678,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../cli/" class="md-nav__link">
+      <a href="../../cli/" class="md-nav__link">
         
   
   
@@ -1613,7 +1760,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../api/" class="md-nav__link">
+      <a href="../../api/" class="md-nav__link">
         
   
   
@@ -1641,7 +1788,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../api/calculators/" class="md-nav__link">
+      <a href="../../api/calculators/" class="md-nav__link">
         
   
   
@@ -1669,7 +1816,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../api/modules/" class="md-nav__link">
+      <a href="../../api/modules/" class="md-nav__link">
         
   
   
@@ -1697,7 +1844,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../api/data/" class="md-nav__link">
+      <a href="../../api/data/" class="md-nav__link">
         
   
   
@@ -1725,7 +1872,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../api/config/" class="md-nav__link">
+      <a href="../../api/config/" class="md-nav__link">
         
   
   
@@ -1780,10 +1927,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#goal" class="md-nav__link">
+  <a href="#install" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Goal
+        Install
       
     </span>
   </a>
@@ -1791,10 +1938,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#concrete-upstream-blockers" class="md-nav__link">
+  <a href="#recommended-configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Concrete upstream blockers
+        Recommended configuration
       
     </span>
   </a>
@@ -1802,10 +1949,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#already-done-parked" class="md-nav__link">
+  <a href="#why-pass-hessian_function" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Already done (parked)
+        Why pass hessian_function
       
     </span>
   </a>
@@ -1813,10 +1960,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#per-engine-status" class="md-nav__link">
+  <a href="#limitations" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Per-engine status
+        Limitations
       
     </span>
   </a>
@@ -1824,10 +1971,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#suggested-ordering" class="md-nav__link">
+  <a href="#minima-with-sella" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Suggested ordering
+        Minima with Sella
       
     </span>
   </a>
@@ -1835,10 +1982,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#out-of-scope-here" class="md-nav__link">
+  <a href="#see-also" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Out of scope here
+        See also
       
     </span>
   </a>
@@ -1865,60 +2012,47 @@
   
 
 
-<h1 id="torchscript-export-pathway-for-external-md-engines">TorchScript export pathway for external MD engines<a class="headerlink" href="#torchscript-export-pathway-for-external-md-engines" title="Permanent link">&para;</a></h1>
-<p><strong>Status:</strong> Open / parked. Created 2026-04-26 from issue #19 (GROMACS) follow-up.</p>
-<h2 id="goal">Goal<a class="headerlink" href="#goal" title="Permanent link">&para;</a></h2>
-<p>Make AIMNet2 models exportable as a single self-contained TorchScript <code>.pt</code> file usable by:</p>
-<ul>
-<li><strong>GROMACS NNPot</strong> (<code>nnpot-modelfile</code>, GROMACS &gt;= 2025.0)</li>
-<li><strong>LAMMPS</strong> (<code>pair_pytorch</code> plugin)</li>
-<li>Any other engine that loads via <code>torch.jit.load</code></li>
-</ul>
-<p>Note: OpenMM is <strong>not</strong> in this list. <code>openmm-ml</code> already ships an <code>AIMNet2PotentialImpl</code> that wraps <code>AIMNet2Calculator</code> behind <code>openmm.PythonForce</code>, sidestepping TorchScript entirely. A TorchScript path would still benefit OpenMM by removing the per-step Python callback overhead, but it is not a prerequisite for OpenMM support.</p>
-<p>Today: <strong>none of the shipped <code>aimnet/calculators/assets/*.pt</code> files are loadable as TorchScript.</strong> They are <code>torch.save</code> state-dict archives, not TorchScript archives.</p>
-<h2 id="concrete-upstream-blockers">Concrete upstream blockers<a class="headerlink" href="#concrete-upstream-blockers" title="Permanent link">&para;</a></h2>
-<p>(File:line references current as of commit 9b89166; symbol references are intended to survive line drift.)</p>
-<ol>
-<li><strong>The neighbor-cache <code>data_ptr()</code> call in <code>aimnet/nbops.py</code></strong> uses <code>tensor.data_ptr()</code> as a cache key for neighbor-list reuse. <code>torch.jit.script</code> errors on this with:</li>
-</ol>
-<div class="highlight"><pre><span></span><code>&#39;Tensor&#39; object has no attribute or method &#39;data_ptr&#39;.
+<h1 id="sella">Sella<a class="headerlink" href="#sella" title="Permanent link">&para;</a></h1>
+<p><strong>Status: supported (uses AIMNet2's existing ASE calculator).</strong></p>
+<p><a href="https://github.com/zadorlab/sella">Sella</a> is a saddle-point optimizer for ASE that targets transition states (<code>order=1</code>) and minima (<code>order=0</code>) with partitioned rational function optimization on internal coordinates. Sella consumes any ASE <code>Calculator</code>, so AIMNet2 works through the existing <code>AIMNet2ASE</code> class. The optional extra installs Sella ≥ 2.4.0 alongside ASE.</p>
+<h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;aimnet[sella]&quot;</span>
 </code></pre></div>
-<p>Fix options:
-   - Replace <code>data_ptr</code> cache key with the <code>id(tensor)</code> Python builtin (forbidden in script too) -- not viable.
-   - Drop the cache from the script path entirely; only use it when running in eager Python. Refactor so the script path recomputes neighbor pieces unconditionally.
-   - Pass cache-bust hints in via the input dict (e.g. an explicit <code>data["_recompute_nb"]</code> bool) and do membership checks on a dict key.</p>
-<ol>
-<li><strong>The <code>DFTD3</code> external module's autograd in <code>aimnet/modules/lr.py</code></strong> calls <code>torch.autograd.grad</code> with a signature TorchScript cannot match. Verified runtime error: <code>Expected a value of type 'List[Tensor]' for argument 'outputs' but instead found type 'Tensor'.</code>. Fix options:</li>
-<li>Wrap in a proper <code>torch.autograd.Function</code> with explicit <code>forward</code> / <code>backward</code> static methods (TorchScript supports these).</li>
-<li>Split into a script-only forward path + a Python-only training path, since GROMACS only needs forces via autograd of energy w.r.t. positions.</li>
-<li>
-<p>Note: <code>aimnet/modules/ops.py</code> contains a separate <code>_DFTD3Function</code> wrapping <code>nvalchemiops</code> -- that one is unrelated to the script failure.</p>
-</li>
-<li>
-<p><strong>Bundled-export wrapper</strong> -- once 1 and 2 are fixed, wrap <code>(model, external_coulomb, external_dftd3)</code> together so a single scripted module reproduces full <code>AIMNet2Calculator.eval()</code> energies without <code>nvalchemiops</code> (which is NVIDIA-only and not jit-able anyway). This means writing a TorchScript-friendly all-pairs / cutoff neighbor list inside the wrapper.</p>
-</li>
-</ol>
-<h2 id="already-done-parked">Already done (parked)<a class="headerlink" href="#already-done-parked" title="Permanent link">&para;</a></h2>
+<p><code>sella&gt;=2.4.0</code> is required. The 2.4.0 release (March 2026) introduced MLIP-targeted vectorization that made Sella usable for large systems (~22x wall-clock improvement on a 50-atom benchmark, <a href="https://github.com/zadorlab/sella/pull/64">PR #64</a>). Older Sella versions do not accept the <code>hessian_function=</code> callback shown below and will raise <code>TypeError</code>.</p>
+<h2 id="recommended-configuration">Recommended configuration<a class="headerlink" href="#recommended-configuration" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">ase.io</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sella</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sella</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2ASE</span>
+
+<span class="n">atoms</span> <span class="o">=</span> <span class="n">ase</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;ts_guess.xyz&quot;</span><span class="p">)</span>
+<span class="n">atoms</span><span class="o">.</span><span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2ASE</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>
+
+<span class="n">dyn</span> <span class="o">=</span> <span class="n">Sella</span><span class="p">(</span>
+    <span class="n">atoms</span><span class="p">,</span>
+    <span class="n">order</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>                                    <span class="c1"># 1 = saddle, 0 = minimum</span>
+    <span class="n">internal</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>                              <span class="c1"># internal coordinates (recommended)</span>
+    <span class="n">hessian_function</span><span class="o">=</span><span class="n">atoms</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">get_hessian</span><span class="p">,</span>    <span class="c1"># analytic Hessian callback</span>
+<span class="p">)</span>
+<span class="n">dyn</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">fmax</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="why-pass-hessian_function">Why pass <code>hessian_function</code><a class="headerlink" href="#why-pass-hessian_function" title="Permanent link">&para;</a></h2>
+<p>By default Sella refines its Hessian via an iterative Davidson eigensolver that costs ~10–30 extra gradient calls per refinement (every <code>nsteps_per_diag=3</code> steps in saddle mode). Wiring <code>AIMNet2ASE.get_hessian</code> into <code>hessian_function=</code> replaces each refresh with one analytic Hessian call (O(3N) backward passes per refresh through the AIMNet2 energy graph). This pattern was validated by <a href="https://www.nature.com/articles/s41467-024-52481-5">Yuan et al. (Nature Comms 2024)</a> for NewtonNet, where it cut TS optimization step counts by 2–3x.</p>
+<p>The Hessian is computed in eV/Å² and shaped <code>(3N, 3N)</code> to match Sella's convention.</p>
+<h2 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h2>
 <ul>
-<li><code>aimnet/interfaces/__init__.py</code> -- new namespace; no public exports.</li>
-<li><code>aimnet/interfaces/gromacs.py</code> -- starter <code>AIMNet2Gromacs</code> class with the GROMACS NNPot forward signature, unit conversions, and all-pairs neighbor-list construction. Verified to <code>jit.script</code> cleanly with a <em>dummy</em> inner ScriptModule, save+reload round-trip OK, autograd-derived forces OK. <code>build_gromacs_nnpot_model()</code> is a stub that raises <code>NotImplementedError</code> unconditionally; the class definition is preserved as a starting point.</li>
+<li>Gas-phase only. The <code>internal=True</code> path assumes molecular topology; periodic TS searches are not supported by <code>AIMNet2ASE.get_hessian</code>.</li>
+<li><code>compile_model=True</code> is incompatible with the Hessian path — Dynamo + double-backward through GELU hangs (<code>AIMNet2Calculator</code> raises <code>RuntimeError</code> if you combine them).</li>
+<li>Multi-molecule batching is not available for the Hessian; each <code>Sella</code> instance must hold one structure.</li>
 </ul>
-<h2 id="per-engine-status">Per-engine status<a class="headerlink" href="#per-engine-status" title="Permanent link">&para;</a></h2>
-<p>See <a href="../../../external/"><code>docs/external/</code></a> for the canonical per-engine status. Summary in this plan: GROMACS NNPot and LAMMPS <code>pair_style mliap</code> are blocked here. OpenMM is supported today via <code>openmm-ml</code> (Python callback, no TorchScript). AMBER is supported today via <code>torchani-amber</code> (compiled-in C++/Fortran, accepts a jit <code>.pt</code> via <code>model_type</code>). Resolving this plan also enables shipping a self-contained jit AIMNet2 for AMBER and an optional TorchScript fast-path for OpenMM.</p>
-<h2 id="suggested-ordering">Suggested ordering<a class="headerlink" href="#suggested-ordering" title="Permanent link">&para;</a></h2>
-<ol>
-<li>Refactor <code>nbops.py</code> to remove <code>data_ptr</code> from the script path.</li>
-<li>Refactor <code>DFTD3</code> autograd into <code>torch.autograd.Function</code>.</li>
-<li>Promote <code>aimnet/interfaces/gromacs.py</code> from parked to functional (drop the <code>NotImplementedError</code> stub, add tests, ship a CLI driver under <code>examples/</code>).</li>
-<li>Rewrite <code>docs/external/gromacs.md</code> as a real "how to use" page.</li>
-<li>Surface a documented "external input contract" on the calculator side (e.g. <code>AIMNet2Calculator.build_input_dict(coord, numbers, charge)</code>) so future export wrappers depend on a documented surface rather than reaching into private helpers like <code>_add_padding_row</code>.</li>
-<li>LAMMPS <code>pair_style mliap</code> then follows with a thin per-engine wrapper. OpenMM gets an optional TorchScript fast-path that replaces the existing <code>PythonForce</code> callback in <code>openmm-ml</code>.</li>
-<li>Once a second TorchScript export wrapper exists, factor out a shared base (unit conversions + neighbor-list builder + padding-row construction) under <code>aimnet/interfaces/_torchscript_base.py</code> rather than duplicating across wrappers.</li>
-</ol>
-<h2 id="out-of-scope-here">Out of scope here<a class="headerlink" href="#out-of-scope-here" title="Permanent link">&para;</a></h2>
+<h2 id="minima-with-sella">Minima with Sella<a class="headerlink" href="#minima-with-sella" title="Permanent link">&para;</a></h2>
+<p>For minima (not TS), the <a href="https://rowansci.com/blog/which-optimizer-should-you-use-with-nnps">Rowan optimizer benchmark</a> (September 2025) recommends <code>Sella(order=0, internal=True)</code> as a strong plug-and-play optimizer for AIMNet2 — often converging in fewer steps than LBFGS, and without requiring an analytic Hessian.</p>
+<h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
-<li>PBC support inside the scripted wrapper (nvalchemiops neighbor lists are NVIDIA-only and not script-able). PBC AIMNet2 stays on the Python ASE path.</li>
-<li>NSE / open-shell models. Separate model family, separate wrapper later.</li>
+<li><a href="../ase/">ASE calculator interface</a></li>
+<li><a href="../pysis/">pysisyphus integration</a> — alternative for IRC, NEB, growing-string</li>
+<li><a href="../../advanced/reaction_paths/">Reaction paths and transition states</a></li>
+<li><a href="https://github.com/zadorlab/sella/releases/tag/v2.4.0">Sella v2.4.0 release notes</a></li>
+<li><a href="https://pubs.acs.org/doi/10.1021/acs.jctc.2c00395">Sella JCTC 2022 paper</a></li>
 </ul>
 
 
@@ -1969,12 +2103,12 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["search.highlight", "search.suggest", "content.code.copy"], "search": "../../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["search.highlight", "search.suggest", "content.code.copy"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
       
-        <script src="../../../javascripts/mathjax.js"></script>
+        <script src="../../javascripts/mathjax.js"></script>
       
         <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
       

@@ -1201,6 +1201,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../external/sella/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sella
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../external/openmm/" class="md-nav__link">
         
   
@@ -2077,6 +2105,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="AIMNet2ASE">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#aimnet.calculators.aimnet2ase.AIMNet2ASE.get_hessian" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_hessian
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2636,6 +2681,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="AIMNet2ASE">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#aimnet.calculators.aimnet2ase.AIMNet2ASE.get_hessian" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_hessian
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -3895,9 +3957,7 @@ cannot be modified at runtime.</p>
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>aimnet/calculators/aimnet2ase.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">24</span>
-<span class="normal">25</span>
-<span class="normal">26</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">26</span>
 <span class="normal">27</span>
 <span class="normal">28</span>
 <span class="normal">29</span>
@@ -3916,7 +3976,9 @@ cannot be modified at runtime.</p>
 <span class="normal">42</span>
 <span class="normal">43</span>
 <span class="normal">44</span>
-<span class="normal">45</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+<span class="normal">45</span>
+<span class="normal">46</span>
+<span class="normal">47</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">base_calc</span><span class="p">:</span> <span class="n">AIMNet2Calculator</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span>
     <span class="n">charge</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
@@ -3953,6 +4015,169 @@ cannot be modified at runtime.</p>
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="aimnet.calculators.aimnet2ase.AIMNet2ASE.get_hessian" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">get_hessian</span><span class="p">(</span><span class="n">atoms</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#aimnet.calculators.aimnet2ase.AIMNet2ASE.get_hessian" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return Cartesian Hessian as a (3N, 3N) ndarray in eV/Å^2.</p>
+<p>Designed for use as <code>Sella(atoms, hessian_function=atoms.calc.get_hessian)</code>.
+Computed via double-backward through the AIMNet2 energy graph; cost scales
+as O(3N) backward passes per call. Not supported when <code>compile_model=True</code>
+or for batched / multi-molecule input.</p>
+<p>This method intentionally bypasses the standard ASE
+<code>Calculator.calculate(properties=['hessian'])</code> flow and <code>self.results</code>
+cache. The Sella callback contract is <code>(atoms) -&gt; ndarray</code>, so a direct
+method is the simplest match. <code>"hessian"</code> is therefore not advertised in
+<code>implemented_properties</code>; if that ever changes, the two paths must be
+reconciled.</p>
+<p>When called with an explicit <code>atoms</code> argument that differs from
+<code>self.atoms</code>, the passed <code>atoms.info</code> is consulted for charge/mult
+precedence (and the calculator's stored <code>self.charge</code>/<code>self.mult</code> may
+be updated as a side effect, mirroring the <code>calculate()</code> behavior).</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>aimnet/calculators/aimnet2ase.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">139</span>
+<span class="normal">140</span>
+<span class="normal">141</span>
+<span class="normal">142</span>
+<span class="normal">143</span>
+<span class="normal">144</span>
+<span class="normal">145</span>
+<span class="normal">146</span>
+<span class="normal">147</span>
+<span class="normal">148</span>
+<span class="normal">149</span>
+<span class="normal">150</span>
+<span class="normal">151</span>
+<span class="normal">152</span>
+<span class="normal">153</span>
+<span class="normal">154</span>
+<span class="normal">155</span>
+<span class="normal">156</span>
+<span class="normal">157</span>
+<span class="normal">158</span>
+<span class="normal">159</span>
+<span class="normal">160</span>
+<span class="normal">161</span>
+<span class="normal">162</span>
+<span class="normal">163</span>
+<span class="normal">164</span>
+<span class="normal">165</span>
+<span class="normal">166</span>
+<span class="normal">167</span>
+<span class="normal">168</span>
+<span class="normal">169</span>
+<span class="normal">170</span>
+<span class="normal">171</span>
+<span class="normal">172</span>
+<span class="normal">173</span>
+<span class="normal">174</span>
+<span class="normal">175</span>
+<span class="normal">176</span>
+<span class="normal">177</span>
+<span class="normal">178</span>
+<span class="normal">179</span>
+<span class="normal">180</span>
+<span class="normal">181</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_hessian</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">atoms</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return Cartesian Hessian as a (3N, 3N) ndarray in eV/Å^2.</span>
+
+<span class="sd">    Designed for use as ``Sella(atoms, hessian_function=atoms.calc.get_hessian)``.</span>
+<span class="sd">    Computed via double-backward through the AIMNet2 energy graph; cost scales</span>
+<span class="sd">    as O(3N) backward passes per call. Not supported when ``compile_model=True``</span>
+<span class="sd">    or for batched / multi-molecule input.</span>
+
+<span class="sd">    This method intentionally bypasses the standard ASE</span>
+<span class="sd">    ``Calculator.calculate(properties=[&#39;hessian&#39;])`` flow and ``self.results``</span>
+<span class="sd">    cache. The Sella callback contract is ``(atoms) -&gt; ndarray``, so a direct</span>
+<span class="sd">    method is the simplest match. ``&quot;hessian&quot;`` is therefore not advertised in</span>
+<span class="sd">    ``implemented_properties``; if that ever changes, the two paths must be</span>
+<span class="sd">    reconciled.</span>
+
+<span class="sd">    When called with an explicit ``atoms`` argument that differs from</span>
+<span class="sd">    ``self.atoms``, the passed ``atoms.info`` is consulted for charge/mult</span>
+<span class="sd">    precedence (and the calculator&#39;s stored ``self.charge``/``self.mult`` may</span>
+<span class="sd">    be updated as a side effect, mirroring the ``calculate()`` behavior).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">atoms</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">atoms</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;atoms&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">atoms</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">PropertyNotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;get_hessian() requires an attached Atoms object or an explicit argument.&quot;</span>
+            <span class="p">)</span>
+    <span class="k">if</span> <span class="n">atoms</span><span class="o">.</span><span class="n">pbc</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="n">PropertyNotImplementedError</span><span class="p">(</span>
+            <span class="s2">&quot;Hessian for periodic systems is not supported by AIMNet2ASE.get_hessian(). &quot;</span>
+            <span class="s2">&quot;For periodic transition states, use pysisyphus dimer or climbing-image NEB.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">atoms</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">100</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Computing AIMNet2 Hessian for </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">atoms</span><span class="p">)</span><span class="si">}</span><span class="s2"> atoms; &quot;</span>
+            <span class="s2">&quot;the forces+hessian path retains a much larger autograd graph than forces alone &quot;</span>
+            <span class="s2">&quot;(peak GPU memory is roughly 5-10x a forces-only call). Risk of OOM on smaller GPUs.&quot;</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">_update_charge_spin_from_info</span><span class="p">(</span><span class="n">atoms</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">update_tensors</span><span class="p">(</span><span class="n">atoms</span><span class="p">)</span>
+
+    <span class="c1"># Pass coord as 2D (N, 3) — not batched — so mol_flatten takes the</span>
+    <span class="c1"># ndim==2 path and calculate_hessian sees the expected (N+1, 3) coord</span>
+    <span class="c1"># after padding. Batching (unsqueeze(0)) triggers the ndim==3 path</span>
+    <span class="c1"># which may skip flattening when N &lt; nb_threshold on GPU, causing</span>
+    <span class="c1"># calculate_hessian to produce an incorrect (N, 3, 1, 3) shape.</span>
+    <span class="n">coord</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">atoms</span><span class="o">.</span><span class="n">positions</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">base_calc</span><span class="o">.</span><span class="n">keys_in</span><span class="p">[</span><span class="s2">&quot;coord&quot;</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">base_calc</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">_in</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">coord</span><span class="p">,</span>
+        <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_t_numbers</span><span class="p">,</span>
+        <span class="s2">&quot;charge&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_t_charge</span><span class="p">,</span>
+        <span class="s2">&quot;mult&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_t_mult</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_calc</span><span class="p">(</span>
+        <span class="n">_in</span><span class="p">,</span>
+        <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">hessian</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">validate_species</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">validate_species</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">H</span> <span class="o">=</span> <span class="n">results</span><span class="p">[</span><span class="s2">&quot;hessian&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>  <span class="c1"># (N, 3, N, 3)</span>
+    <span class="n">N</span> <span class="o">=</span> <span class="n">H</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">H</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">N</span> <span class="o">*</span> <span class="mi">3</span><span class="p">,</span> <span class="n">N</span> <span class="o">*</span> <span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
 
 
 
