@@ -2,18 +2,39 @@
 # https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
 version: 2
 updates:
-    # Python dependencies (pip ecosystem)
+    # Python dependencies (pip ecosystem) — weekly Mondays
+    # Aggressive grouping: one PR per update-type tier (patch/minor/major),
+    # security updates bundled at the same tier granularity.
     - package-ecosystem: "pip"
       directory: "/"
       schedule:
           interval: "weekly"
           day: "monday"
-      open-pull-requests-limit: 5
+      open-pull-requests-limit: 10
       labels:
           - "dependencies"
           - "python"
+      groups:
+          python-patch:
+              applies-to: version-updates
+              update-types: ["patch"]
+          python-minor:
+              applies-to: version-updates
+              update-types: ["minor"]
+          python-major:
+              applies-to: version-updates
+              update-types: ["major"]
+          python-security-patch:
+              applies-to: security-updates
+              update-types: ["patch"]
+          python-security-minor:
+              applies-to: security-updates
+              update-types: ["minor"]
+          python-security-major:
+              applies-to: security-updates
+              update-types: ["major"]
 
-    # GitHub Actions versions
+    # GitHub Actions versions — monthly, single bundled PR
     - package-ecosystem: "github-actions"
       directory: "/"
       schedule:
@@ -22,3 +43,10 @@ updates:
       labels:
           - "dependencies"
           - "ci"
+      groups:
+          github-actions:
+              applies-to: version-updates
+              patterns: ["*"]
+          github-actions-security:
+              applies-to: security-updates
+              patterns: ["*"]
