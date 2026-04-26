@@ -6,6 +6,13 @@ site_author: Roman Zubatyuk
 edit_uri: edit/main/docs/
 repo_name: isayevlab/aimnetcentral
 
+# Internal-only plans/specs are kept under docs/superpowers/ but not published.
+# They contain historical implementation context with relative links that
+# are valid relative to other docs but not relative to plans/, so excluding
+# them avoids spurious mkdocs --strict warnings.
+exclude_docs: |
+    superpowers/
+
 nav:
     - Home: index.md
     - Getting Started: getting_started.md
@@ -37,6 +44,7 @@ nav:
           - Overview: external/index.md
           - ASE: external/ase.md
           - pysisyphus: external/pysis.md
+          - Sella: external/sella.md
           - OpenMM (openmm-ml): external/openmm.md
           - AMBER (torchani-amber): external/amber.md
           - SCM AMS (MLPotential): external/ams.md

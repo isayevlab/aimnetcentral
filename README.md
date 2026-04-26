@@ -60,8 +60,9 @@ pip install aimnet 'nvalchemi-toolkit-ops[torch]'
 ```bash
 pip install "aimnet[ase]"             # ASE calculator interface
 pip install "aimnet[pysis]"           # PySisyphus reaction path calculator
+pip install "aimnet[sella]"           # Sella TS optimizer (includes ASE)
 pip install "aimnet[train]"           # Training pipeline (W&B, ignite)
-pip install "aimnet[ase,pysis,train]" # All extras
+pip install "aimnet[ase,pysis,sella,train]" # All extras
 ```
 
 ### Development Setup

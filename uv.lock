@@ -36,6 +36,10 @@ hf = [
 pysis = [
     { name = "pysisyphus" },
 ]
+sella = [
+    { name = "ase" },
+    { name = "sella" },
+]
 train = [
     { name = "omegaconf" },
     { name = "pytorch-ignite" },
@@ -70,6 +74,7 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "ase", marker = "extra == 'ase'", specifier = ">=3.27.0,<4" },
+    { name = "ase", marker = "extra == 'sella'", specifier = ">=3.27.0,<4" },
     { name = "click", specifier = ">=8.1.7" },
     { name = "h5py", specifier = ">=3.12.1" },
     { name = "huggingface-hub", marker = "extra == 'hf'", specifier = ">=0.20" },
@@ -82,11 +87,12 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "safetensors", marker = "extra == 'hf'", specifier = ">=0.4" },
+    { name = "sella", marker = "extra == 'sella'", specifier = ">=2.4.0" },
     { name = "torch", specifier = ">=2.8" },
     { name = "wandb", marker = "extra == 'train'", specifier = ">=0.18.5" },
     { name = "warp-lang", specifier = ">=1.11,<2" },
 ]
-provides-extras = ["ase", "hf", "pysis", "train"]
+provides-extras = ["ase", "hf", "pysis", "sella", "train"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -3130,6 +3136,29 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ac/70/64b4d7ca92f9cf2e6fc6aaa2eecf80bb9b6b985043a9583f32f8177ea122/scipy-1.16.3-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:ffa6eea95283b2b8079b821dc11f50a17d0571c92b43e2b5b12764dc5f9b285d", size = 38802779, upload-time = "2025-10-28T17:37:59.393Z" },
     { url = "https://files.pythonhosted.org/packages/61/82/8d0e39f62764cce5ffd5284131e109f07cf8955aef9ab8ed4e3aa5e30539/scipy-1.16.3-cp314-cp314t-win_amd64.whl", hash = "sha256:d9f48cafc7ce94cf9b15c6bffdc443a81a27bf7075cf2dcd5c8b40f85d10c4e7", size = 39471128, upload-time = "2025-10-28T17:38:05.259Z" },
     { url = "https://files.pythonhosted.org/packages/64/47/a494741db7280eae6dc033510c319e34d42dd41b7ac0c7ead39354d1a2b5/scipy-1.16.3-cp314-cp314t-win_arm64.whl", hash = "sha256:21d9d6b197227a12dcbf9633320a4e34c6b0e51c57268df255a0942983bac562", size = 26464127, upload-time = "2025-10-28T17:38:11.34Z" },
+]
+
+[[package]]
+name = "sella"
+version = "2.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ase" },
+    { name = "jax", version = "0.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
+    { name = "jax", version = "0.7.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
+    { name = "jaxlib", version = "0.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
+    { name = "jaxlib", version = "0.7.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4d/e2/c82dd6920575b09072313b842a48fe992c2682edf375a2b6fe3934ed23e0/sella-2.4.2.tar.gz", hash = "sha256:ac930b2b8e670d161c3d3202ea43ce5427c94591b17191058f18892c70a7a0a4", size = 73052, upload-time = "2026-03-28T17:27:54.128Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e1/d6/24efe73fcbdf2a41f1bcc7775bf28a4da5cf5827f99ae5c69a1553576127/sella-2.4.2-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:537489aa91b843e51e6e7d36b4633d52423b02bad425a6fbb7c038732cc25483", size = 290021, upload-time = "2026-03-28T17:27:39.545Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/90/fc8381928ce52d2e1e5870ee13a6a37e22de76f026d48bea6bba50ed2499/sella-2.4.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ace0c67dd55e9318d10ccd0ee00d54257cdd91b29bd0c19be5e4f68fc52156df", size = 1688054, upload-time = "2026-03-28T17:27:40.819Z" },
+    { url = "https://files.pythonhosted.org/packages/f2/ec/8983d708abef6af8efa0b26f2a2b2752346feb92f28336af70312f3773de/sella-2.4.2-cp311-cp311-win_amd64.whl", hash = "sha256:a94c77655354aabbbee46eb64d5d0085fcec4e75f731f856cdd5e1a106375dcf", size = 283980, upload-time = "2026-03-28T17:27:41.843Z" },
+    { url = "https://files.pythonhosted.org/packages/81/dc/1c1dfc5db7d9aff9722ecf54839a69c676632fbf95517a273160dca15bd8/sella-2.4.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:fcea640a9511c3cfcb19b02d087bb000c755f02fd7d0ce89edb0ebb5df64d92d", size = 289170, upload-time = "2026-03-28T17:27:42.882Z" },
+    { url = "https://files.pythonhosted.org/packages/06/72/1bb0dba4926d197a4631e862dd531ff17ec38d36d3bb0e7a948bb005e468/sella-2.4.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3cd0198b3ed9a3b0770dd4597c1cb41f24c0a58f1b70cda04423c4238e524cf3", size = 1667304, upload-time = "2026-03-28T17:27:44.423Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/2d/41a5e1f7db301f37d699b263874982dc6669cb5bc167bc03f5e4316fd869/sella-2.4.2-cp312-cp312-win_amd64.whl", hash = "sha256:b87cb366c63f2a6319a01e52ce761249e3f45783f5e7848a654b86b37a415651", size = 283912, upload-time = "2026-03-28T17:27:45.496Z" },
 ]
 
 [[package]]

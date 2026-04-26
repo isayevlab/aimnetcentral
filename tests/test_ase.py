@@ -440,6 +440,192 @@ class TestAtomsInfoChargeSpin:
         assert atoms.calc.charge == 1.0
 
 
+class TestHessian:
+    """Hessian property — used by Sella analytic-Hessian callback."""
+
+    def test_hessian_shape_and_finite(self):
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase.io import read
+
+        from aimnet.calculators import AIMNet2ASE
+
+        atoms = read(CAFFEINE_FILE)
+        atoms.calc = AIMNet2ASE("aimnet2")
+
+        H = atoms.calc.get_hessian(atoms)
+        N = len(atoms)
+        assert H.shape == (3 * N, 3 * N)
+        assert np.isfinite(H).all()
+
+    def test_hessian_symmetric(self):
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase.io import read
+
+        from aimnet.calculators import AIMNet2ASE
+
+        atoms = read(CAFFEINE_FILE)
+        atoms.calc = AIMNet2ASE("aimnet2")
+
+        H = atoms.calc.get_hessian(atoms)
+        # Relative tolerance: small-magnitude entries can be noisier than
+        # large ones in row-wise fp32 autograd. Asymmetry that scales with
+        # |H|_max would still catch a real index transposition bug.
+        assert np.max(np.abs(H - H.T)) / np.max(np.abs(H)) < 1e-3
+
+    def test_hessian_callback_signature(self):
+        """Must be usable as Sella's hessian_function=callable callback."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase import Atoms
+
+        from aimnet.calculators import AIMNet2ASE
+
+        atoms = Atoms("OH2", positions=[[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+        atoms.calc = AIMNet2ASE("aimnet2")
+
+        callback = atoms.calc.get_hessian
+        assert callable(callback)
+        H = callback(atoms)
+        assert H.shape == (9, 9)
+        assert isinstance(H, np.ndarray)
+
+    def test_hessian_default_atoms(self):
+        """get_hessian() with no argument should use the attached atoms."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase import Atoms
+
+        from aimnet.calculators import AIMNet2ASE
+
+        atoms = Atoms("OH2", positions=[[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+        calc = AIMNet2ASE("aimnet2")
+        atoms.calc = calc
+        atoms.get_potential_energy()
+        H = calc.get_hessian()
+        assert H.shape == (9, 9)
+
+    def test_hessian_pbc_raises(self):
+        """PBC input must raise PropertyNotImplementedError (gas-phase only)."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase import Atoms
+        from ase.calculators.calculator import PropertyNotImplementedError
+
+        from aimnet.calculators import AIMNet2ASE
+
+        atoms = Atoms(
+            "OH2",
+            positions=[[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]],
+            cell=[10.0, 10.0, 10.0],
+            pbc=True,
+        )
+        atoms.calc = AIMNet2ASE("aimnet2")
+
+        with pytest.raises(PropertyNotImplementedError, match="periodic"):
+            atoms.calc.get_hessian(atoms)
+
+    def test_hessian_no_atoms_raises(self):
+        """get_hessian() with no attached Atoms and no argument must raise."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase.calculators.calculator import PropertyNotImplementedError
+
+        from aimnet.calculators import AIMNet2ASE
+
+        calc = AIMNet2ASE("aimnet2")
+        # Calc has never been attached to any Atoms — self.atoms is unset.
+        with pytest.raises(PropertyNotImplementedError, match="attached"):
+            calc.get_hessian()
+
+    def test_hessian_species_swap_invalidates_cache(self):
+        """get_hessian() must rebuild _t_numbers when called with different species at same N."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase import Atoms
+
+        from aimnet.calculators import AIMNet2ASE
+
+        # 3-atom water and 3-atom HCN: same length (3), different elements.
+        water = Atoms("OH2", positions=[[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+        hcn = Atoms("HCN", positions=[[0, 0, 0], [1.06, 0, 0], [2.22, 0, 0]])
+
+        calc = AIMNet2ASE("aimnet2")
+
+        water.calc = calc
+        H_water = calc.get_hessian(water)
+        assert H_water.shape == (9, 9)
+
+        # Pass a DIFFERENT atoms object with same N but different species,
+        # without going through set_atoms — the cache must invalidate.
+        H_hcn = calc.get_hessian(hcn)
+        assert H_hcn.shape == (9, 9)
+
+        # Hessians must differ — if cache was stale, both would be water's.
+        assert not np.allclose(H_water, H_hcn, atol=1e-3)
+
+        # Direct cache probe: _t_numbers must reflect the most recent atoms.
+        cached = calc._t_numbers.detach().cpu().tolist()
+        assert cached == hcn.numbers.tolist()
+
+    def test_hessian_nse_open_shell(self):
+        """NSE (open-shell) Hessian must run on a doublet without exception."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase import Atoms
+
+        from aimnet.calculators import AIMNet2ASE
+
+        # Methyl radical CH3 — doublet (mult=2).
+        atoms = Atoms(
+            "CH3",
+            positions=[
+                [0.000, 0.000, 0.000],
+                [1.080, 0.000, 0.000],
+                [-0.540, 0.935, 0.000],
+                [-0.540, -0.935, 0.000],
+            ],
+            info={"mult": 2},
+        )
+        atoms.calc = AIMNet2ASE(NSE_MODEL)
+
+        H = atoms.calc.get_hessian(atoms)
+        N = len(atoms)
+        assert H.shape == (3 * N, 3 * N)
+        assert np.isfinite(H).all()
+        # Sanity: doublet Hessian should be symmetric to fp32 noise.
+        assert np.max(np.abs(H - H.T)) / np.max(np.abs(H)) < 1e-3
+
+    def test_hessian_compile_model_raises(self):
+        """compile_model=True must reject the Hessian path with RuntimeError."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase import Atoms
+
+        from aimnet.calculators import AIMNet2ASE, AIMNet2Calculator
+
+        base = AIMNet2Calculator("aimnet2", compile_model=True)
+        atoms = Atoms("OH2", positions=[[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+        atoms.calc = AIMNet2ASE(base)
+
+        with pytest.raises(RuntimeError, match="compile_model"):
+            atoms.calc.get_hessian(atoms)
+
+    def test_hessian_cpu_device(self):
+        """CPU device must produce a correct-shape Hessian for small molecules.
+
+        Defends the GPU-vs-CPU branch in mol_flatten/calculate_hessian: an
+        earlier bug where (1, N, 3) coord on GPU + N < nb_threshold yielded
+        a degenerate (N, 3, 1, 3) tensor; the 2D-coord workaround in
+        get_hessian must work consistently on CPU as well.
+        """
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase import Atoms
+
+        from aimnet.calculators import AIMNet2ASE, AIMNet2Calculator
+
+        base = AIMNet2Calculator("aimnet2", device="cpu")
+        atoms = Atoms("OH2", positions=[[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+        atoms.calc = AIMNet2ASE(base)
+
+        H = atoms.calc.get_hessian(atoms)
+        assert H.shape == (9, 9)
+        assert np.isfinite(H).all()
+        assert np.max(np.abs(H - H.T)) / np.max(np.abs(H)) < 1e-3
+
+
 @pytest.mark.ase
 def test_aimnet2ase_propagates_validate_species(monkeypatch):
     """AIMNet2ASE.calculate(..., validate_species=False) must propagate the kwarg
