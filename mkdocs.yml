@@ -33,6 +33,16 @@ nav:
           - Non-Covalent Interactions: advanced/intermolecular_interactions.md
           - Pd Catalysis: advanced/transition_metal_catalysis.md
           - Charged Systems: advanced/charged_systems.md
+    - External Packages:
+          - Overview: external/index.md
+          - ASE: external/ase.md
+          - pysisyphus: external/pysis.md
+          - OpenMM (openmm-ml): external/openmm.md
+          - AMBER (torchani-amber): external/amber.md
+          - SCM AMS (MLPotential): external/ams.md
+          - ORCA (ExtOpt): external/orca.md
+          - GROMACS (NNPot): external/gromacs.md
+          - LAMMPS (mliap): external/lammps.md
     - Reference:
           - Calculator API: calculator.md
           - Long-Range Methods: long_range.md
