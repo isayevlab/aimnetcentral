@@ -32,15 +32,21 @@ aimnet train --config config.yaml --model model.yaml
 ### Options
 
 ```bash
-aimnet train [OPTIONS]
+aimnet train [OPTIONS] [ARGS]...
 ```
 
-| Option            | Type     | Description                      |
-| ----------------- | -------- | -------------------------------- |
-| `--config PATH`   | Required | Training configuration YAML file |
-| `--model PATH`    | Required | Model architecture YAML file     |
-| `--resume PATH`   | Optional | Resume from checkpoint           |
-| `--device DEVICE` | Optional | Device to use (cuda/cpu)         |
+| Option | Type | Description |
+| --- | --- | --- |
+| `--config PATH` | Optional | Extra training configuration YAML (may be passed multiple times; merged over the default) |
+| `--model PATH` | Optional | Model architecture YAML (defaults to bundled `aimnet/models/aimnet2.yaml`) |
+| `--load PATH` | Optional | Path to existing model weights to load before training |
+| `--save PATH` | Optional | Path to save model weights |
+| `--no-default-config` | Flag | Skip loading `aimnet/train/default_train.yaml` |
+| `ARGS` | Variadic | Dot-separated overrides applied last (e.g., `data.train=mydata.h5 run_name=firstrun`) |
+
+Trailing tokens after the named options (`ARGS`) are positional dot-form overrides into the merged training config — they are not flags.
+
+Device selection is controlled via `CUDA_VISIBLE_DEVICES`; training uses all visible GPUs in DDP mode.
 
 ### Example Configuration
 
@@ -83,17 +89,17 @@ kwargs:
 ### Complete Example
 
 ```bash
-# Train with W&B logging
+# Train with W&B logging (GPU controlled via CUDA_VISIBLE_DEVICES)
 aimnet train \
   --config experiments/train_config.yaml \
-  --model models/aimnet2.yaml \
-  --device cuda
+  --model models/aimnet2.yaml
 
-# Resume training
+# Continue from existing weights
 aimnet train \
   --config experiments/train_config.yaml \
   --model models/aimnet2.yaml \
-  --resume checkpoints/last.pt
+  --load checkpoints/last.pt \
+  --save checkpoints/continued.pt
 ```
 
 See [train.md](train.md) for detailed training documentation.
@@ -230,7 +236,7 @@ See [model_format.md](model_format.md#migration-guide) for detailed migration gu
 
 ## aimnet calc_sae
 
-Calculate self-atomic energies (SAE) from a dataset.
+Calculate self-atomic energies (SAE) from a dataset by fitting a per-element energy shift to the training data.
 
 ### Basic Usage
 
@@ -241,21 +247,21 @@ aimnet calc_sae dataset.h5 output_sae.yaml
 ### Options
 
 ```bash
-aimnet calc_sae INPUT OUTPUT [OPTIONS]
+aimnet calc_sae [OPTIONS] DS OUTPUT
 ```
 
 **Positional Arguments:**
 
-| Argument | Description                            |
-| -------- | -------------------------------------- |
-| `INPUT`  | HDF5 dataset with single-atom energies |
-| `OUTPUT` | Output YAML file for SAE values        |
+| Argument | Description |
+| --- | --- |
+| `DS` | HDF5 dataset (`SizeGroupedDataset` layout) containing `numbers` and `energy` |
+| `OUTPUT` | Output YAML file for fitted SAE values |
 
 **Options:**
 
-| Option            | Description                                      |
-| ----------------- | ------------------------------------------------ |
-| `--elements LIST` | Comma-separated atomic numbers (e.g., "1,6,7,8") |
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--samples` | int | 100000 | Maximum number of dataset samples used for the fit |
 
 ### SAE Format
 
@@ -272,41 +278,27 @@ Output YAML format:
 ### Example
 
 ```bash
-# Calculate SAE for H, C, N, O
+# Fit SAE from the training dataset (uses up to 100k samples by default)
 aimnet calc_sae \
-  data/single_atoms.h5 \
+  data/dataset.h5 \
+  configs/sae.yaml
+
+# Limit the number of samples used for the fit
+aimnet calc_sae \
+  data/dataset.h5 \
   configs/sae.yaml \
-  --elements "1,6,7,8"
+  --samples 50000
 
 # Use in training
 aimnet train \
   --config train_config.yaml \
-  --model model.yaml
-  # SAE loaded from train_config
+  --model model.yaml \
+  data.sae.energy.file=configs/sae.yaml
 ```
 
-### Creating Single-Atom Dataset
+### How SAE Is Computed
 
-SAE calculation requires single-atom reference calculations:
-
-```python
-import h5py
-import numpy as np
-
-# Single-atom energies from reference calculations (e.g., DFT)
-sae_data = {
-    1: -13.587,   # H atom energy
-    6: -1027.592, # C atom energy
-    # ... more elements
-}
-
-# Create HDF5 dataset
-with h5py.File("single_atoms.h5", "w") as f:
-    for z, energy in sae_data.items():
-        grp = f.create_group(f"atom_{z}")
-        grp["energy"] = energy
-        grp["numbers"] = [z]
-```
+`aimnet calc_sae` does not require a separate single-atom dataset. It operates on the same `SizeGroupedDataset` HDF5 file used for training, fits a per-element energy shift via a least-squares regression on `(numbers, energy)`, trims outliers (2nd/98th percentiles of the residual), and refits. The element list is inferred automatically from the dataset.
 
 ## Common Workflows
 

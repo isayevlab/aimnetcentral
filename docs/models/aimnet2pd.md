@@ -12,7 +12,9 @@ AIMNet2-Pd extends AIMNet2 to **palladium-catalyzed organometallic chemistry**. 
 
 **DFT reference:** B97-3c with CPCM implicit solvation (THF solvent)
 
-!!! warning "Element coverage difference" AIMNet2-Pd replaces **As** (arsenic) with **Pd** (palladium) compared to the standard AIMNet2 element set. Arsenic is **not supported** by this model.
+!!! warning "Element coverage difference"
+
+    AIMNet2-Pd replaces **As** (arsenic) with **Pd** (palladium) compared to the standard AIMNet2 element set. Arsenic is **not supported** by this model.
 
 ## Strengths and Limitations
 
@@ -27,15 +29,25 @@ AIMNet2-Pd extends AIMNet2 to **palladium-catalyzed organometallic chemistry**. 
 
 ### Limitations
 
-!!! warning "Palladium only" This model supports only palladium among transition metals. It cannot be used for other catalytic metals such as Ni, Cu, Fe, Ru, Rh, or Ir. For systems without transition metals, use the standard [AIMNet2](aimnet2.md) model instead.
+!!! warning "Palladium only"
 
-!!! warning "No arsenic" Arsenic (As) is excluded from the element set. If your Pd complex contains arsine ligands (AsR3), this model cannot be used.
+    This model supports only palladium among transition metals. It cannot be used for other catalytic metals such as Ni, Cu, Fe, Ru, Rh, or Ir. For systems without transition metals, use the standard [AIMNet2](aimnet2.md) model instead.
 
-!!! tip "Implicit solvation included" Unlike other AIMNet2 models, AIMNet2-Pd is trained on B97-3c/CPCM reference data with **THF as the implicit solvent**. This means solvent stabilization effects relevant to homogeneous catalysis in THF or similar non-polar aprotic solvents are captured directly. For reactions in very different solvent environments (e.g., water, DMSO), additional solvation corrections may still be needed.
+!!! warning "No arsenic"
 
-!!! warning "Closed-shell only" AIMNet2-Pd assumes closed-shell electronic structure. Open-shell Pd intermediates (e.g., Pd(I) species, radical mechanisms) require DFT treatment. For organic radical chemistry without Pd, use [AIMNet2-NSE](aimnet2nse.md).
+    Arsenic (As) is excluded from the element set. If your Pd complex contains arsine ligands (AsR3), this model cannot be used.
 
-!!! warning "Coordination environment" The model has been trained on common coordination environments. Unusual geometries (e.g., Pd clusters, Pd nanoparticles, bulk Pd metal) are outside the training domain and should not be trusted.
+!!! tip "Implicit solvation included"
+
+    Unlike other AIMNet2 models, AIMNet2-Pd is trained on B97-3c/CPCM reference data with **THF as the implicit solvent**. This means solvent stabilization effects relevant to homogeneous catalysis in THF or similar non-polar aprotic solvents are captured directly. For reactions in very different solvent environments (e.g., water, DMSO), additional solvation corrections may still be needed.
+
+!!! warning "Closed-shell only"
+
+    AIMNet2-Pd assumes closed-shell electronic structure. Open-shell Pd intermediates (e.g., Pd(I) species, radical mechanisms) require DFT treatment. For organic radical chemistry without Pd, use [AIMNet2-NSE](aimnet2nse.md).
+
+!!! warning "Coordination environment"
+
+    The model has been trained on common coordination environments. Unusual geometries (e.g., Pd clusters, Pd nanoparticles, bulk Pd metal) are outside the training domain and should not be trusted.
 
 ## Typical Use Cases
 
@@ -149,7 +161,9 @@ energies = torch.stack([r["energy"] for r in results])
 print(f"Energy: {energies.mean().item():.6f} +/- {energies.std().item():.6f} eV")
 ```
 
-!!! note "Ensemble member naming" The Pd model ensemble members use a hyphen: `aimnet2-pd_0` through `aimnet2-pd_3` (note the hyphen between "aimnet2" and "pd").
+!!! note "Ensemble member naming"
+
+    The Pd model ensemble members use a hyphen: `aimnet2-pd_0` through `aimnet2-pd_3` (note the hyphen between "aimnet2" and "pd").
 
 ### Performance
 

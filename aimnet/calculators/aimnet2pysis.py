@@ -24,7 +24,7 @@ class AIMNet2Pysis(Calculator):
             model = AIMNet2Calculator(model)
         self.model = model
 
-    def _prepere_input(self, atoms, coord):
+    def _prepare_input(self, atoms, coord):
         device = self.model.device
         numbers = torch.as_tensor([ATOMIC_NUMBERS[a.lower()] for a in atoms], device=device)
         coord = torch.as_tensor(coord, dtype=torch.float, device=device).view(-1, 3) * BOHR2ANG
@@ -50,20 +50,20 @@ class AIMNet2Pysis(Calculator):
         )
 
     def get_energy(self, atoms, coords):
-        _in = self._prepere_input(atoms, coords)
+        _in = self._prepare_input(atoms, coords)
         res = self.model(_in)
         energy = self._results_get_energy(res)
         return {"energy": energy}
 
     def get_forces(self, atoms, coords):
-        _in = self._prepere_input(atoms, coords)
+        _in = self._prepare_input(atoms, coords)
         res = self.model(_in, forces=True)
         energy = self._results_get_energy(res)
         forces = self._results_get_forces(res)
         return {"energy": energy, "forces": forces}
 
     def get_hessian(self, atoms, coords):
-        _in = self._prepere_input(atoms, coords)
+        _in = self._prepare_input(atoms, coords)
         res = self.model(_in, forces=True, hessian=True)
         energy = self._results_get_energy(res)
         forces = self._results_get_forces(res)

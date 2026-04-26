@@ -57,9 +57,13 @@ print(f"Energies: {result['energy']}")
 print(f"Forces shape: {result['forces'].shape}")
 ```
 
-!!! warning "mol_idx must be sorted in non-decreasing order" The `mol_idx` tensor **must** be sorted: all atoms for molecule 0 come first, then all atoms for molecule 1, and so on. Values like `[0, 1, 0, 1]` will produce incorrect results. Always use `[0, 0, 1, 1]`.
+!!! warning "mol_idx must be sorted in non-decreasing order"
 
-!!! warning "charge shape must match number of molecules" When using `mol_idx`, the `charge` tensor must have shape `(num_molecules,)` with one charge value per molecule. A scalar charge only works for single-molecule calculations.
+    The `mol_idx` tensor **must** be sorted: all atoms for molecule 0 come first, then all atoms for molecule 1, and so on. Values like `[0, 1, 0, 1]` will produce incorrect results. Always use `[0, 0, 1, 1]`.
+
+!!! warning "charge shape must match number of molecules"
+
+    When using `mol_idx`, the `charge` tensor must have shape `(num_molecules,)` with one charge value per molecule. A scalar charge only works for single-molecule calculations.
 
 ## Step 2: Processing a Multi-Frame XYZ File
 
@@ -104,7 +108,9 @@ relative = energies - energies.min()
 print(f"Relative energies (eV): {relative}")
 ```
 
-!!! tip For conformers of the same molecule, the 3D batched format `(B, N, 3)` is more convenient than flat coordinates with `mol_idx`. The calculator automatically decides between dense mode (small molecules on GPU) and sparse mode (large molecules or CPU).
+!!! tip
+
+    For conformers of the same molecule, the 3D batched format `(B, N, 3)` is more convenient than flat coordinates with `mol_idx`. The calculator automatically decides between dense mode (small molecules on GPU) and sparse mode (large molecules or CPU).
 
 ### Different-Size Molecules (Flat Format with mol_idx)
 
@@ -181,7 +187,9 @@ forces = torch.cat(all_forces)
 print(f"Processed {len(energies)} structures")
 ```
 
-!!! tip "Memory management" Calling `.cpu()` on result tensors moves them off the GPU immediately. Combined with `torch.cuda.empty_cache()`, this prevents GPU memory from growing unboundedly across batches. This is especially important when processing thousands of structures.
+!!! tip "Memory management"
+
+    Calling `.cpu()` on result tensors moves them off the GPU immediately. Combined with `torch.cuda.empty_cache()`, this prevents GPU memory from growing unboundedly across batches. This is especially important when processing thousands of structures.
 
 ## Step 4: Worked Example -- Conformer Ranking
 

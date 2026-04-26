@@ -51,7 +51,9 @@ opt.run(fmax=0.01)
 print(f"Optimized energy: {ethanol.get_potential_energy():.4f} eV")
 ```
 
-!!! note "What `compile_model=True` actually compiles" The `compile_model=True` flag wraps **only the neural network forward pass** with `torch.compile()`. The neighbor list construction, external Coulomb module, and external DFT-D3 module are **not** compiled. This means:
+!!! note "What `compile_model=True` actually compiles"
+
+    The `compile_model=True` flag wraps **only the neural network forward pass** with `torch.compile()`. The neighbor list construction, external Coulomb module, and external DFT-D3 module are **not** compiled. This means:
 
     - The NN evaluation (the most expensive part) gets compiled and optimized
     - Neighbor lists are rebuilt every step as normal
@@ -119,7 +121,9 @@ print(f"\nCompleted 1000 steps in {wall_time:.1f} s "
 traj.close()
 ```
 
-!!! warning "First-step warmup" The very first MD step is significantly slower than subsequent steps because of two one-time costs:
+!!! warning "First-step warmup"
+
+    The very first MD step is significantly slower than subsequent steps because of two one-time costs:
 
     1. **Warp kernel JIT compilation** (10--30 s): NVIDIA Warp compiles GPU
        kernels on first use. These are cached on disk for future sessions.
@@ -128,7 +132,9 @@ traj.close()
 
     After the first step, typical step times for a 9-atom molecule on a modern GPU are 1--5 ms. Do not include the first step in performance benchmarks.
 
-!!! tip "Timestep selection for ML potentials" ML potentials like AIMNet2 have smooth, continuous energy surfaces, so they tolerate slightly larger timesteps than ab initio MD. However, the safe range depends on the dynamics:
+!!! tip "Timestep selection for ML potentials"
+
+    ML potentials like AIMNet2 have smooth, continuous energy surfaces, so they tolerate slightly larger timesteps than ab initio MD. However, the safe range depends on the dynamics:
 
     - **0.5 fs**: Conservative. Good starting point for any system.
     - **1.0 fs**: Suitable for equilibrium sampling of organic molecules when
@@ -142,7 +148,9 @@ traj.close()
 
 NPT (constant pressure) is needed for condensed-phase simulations where the volume should fluctuate. ASE provides the `NPT` integrator for this purpose.
 
-!!! note "NPT requires periodic boundary conditions" The Berendsen barostat adjusts the unit cell dimensions, which only makes sense for periodic systems. For an isolated molecule in vacuum, use NVT instead.
+!!! note "NPT requires periodic boundary conditions"
+
+    The Berendsen barostat adjusts the unit cell dimensions, which only makes sense for periodic systems. For an isolated molecule in vacuum, use NVT instead.
 
 ```python
 from ase.md.npt import NPT as NPTIntegrator
@@ -181,7 +189,9 @@ from ase import units
 # traj.close()
 ```
 
-!!! tip "Equilibration strategy for condensed-phase systems" For reliable results, follow a two-phase protocol:
+!!! tip "Equilibration strategy for condensed-phase systems"
+
+    For reliable results, follow a two-phase protocol:
 
     1. **NVT equilibration** (1--5 ps): Let the temperature stabilize before
        coupling the barostat. This prevents large pressure spikes from an initial geometry that is far from the equilibrium density.
@@ -267,7 +277,9 @@ print(f"  Mean distance: {all_distances.mean():.2f} A")
 # rdf = ana.get_rdf(rmax=10.0, nbins=200, elements=("O", "H"))
 ```
 
-!!! tip "For periodic systems" The simplified distance histogram above works for isolated molecules. For proper RDF analysis of periodic (condensed-phase) systems, use the ASE `Analysis` class which correctly handles periodic images:
+!!! tip "For periodic systems"
+
+    The simplified distance histogram above works for isolated molecules. For proper RDF analysis of periodic (condensed-phase) systems, use the ASE `Analysis` class which correctly handles periodic images:
 
     ```python
     from ase.geometry.analysis import Analysis
@@ -321,7 +333,9 @@ calc = AIMNet2ASE(base_calc)
 | `True` (default) | 5--30 s | ~0.7x baseline | Most MD simulations |
 | `reduce-overhead` | 10--60 s | ~0.5x baseline | Long production runs |
 
-!!! warning "Compilation and system size changes" `torch.compile` traces the computation graph for a specific tensor shape. If the system size changes (e.g., atoms are added or removed), the model will be recompiled. For MD of a fixed system this is not an issue, but avoid using `compile_model=True` for workflows that process molecules of varying sizes.
+!!! warning "Compilation and system size changes"
+
+    `torch.compile` traces the computation graph for a specific tensor shape. If the system size changes (e.g., atoms are added or removed), the model will be recompiled. For MD of a fixed system this is not an issue, but avoid using `compile_model=True` for workflows that process molecules of varying sizes.
 
 ## Practical Recommendations
 
