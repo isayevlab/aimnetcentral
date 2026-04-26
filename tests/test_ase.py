@@ -499,6 +499,63 @@ class TestHessian:
         H = calc.get_hessian()
         assert H.shape == (9, 9)
 
+    def test_hessian_pbc_raises(self):
+        """PBC input must raise PropertyNotImplementedError (gas-phase only)."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase import Atoms
+        from ase.calculators.calculator import PropertyNotImplementedError
+
+        from aimnet.calculators import AIMNet2ASE
+
+        atoms = Atoms(
+            "OH2",
+            positions=[[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]],
+            cell=[10.0, 10.0, 10.0],
+            pbc=True,
+        )
+        atoms.calc = AIMNet2ASE("aimnet2")
+
+        with pytest.raises(PropertyNotImplementedError, match="periodic"):
+            atoms.calc.get_hessian(atoms)
+
+    def test_hessian_no_atoms_raises(self):
+        """get_hessian() with no attached Atoms and no argument must raise."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase.calculators.calculator import PropertyNotImplementedError
+
+        from aimnet.calculators import AIMNet2ASE
+
+        calc = AIMNet2ASE("aimnet2")
+        # Calc has never been attached to any Atoms — self.atoms is unset.
+        with pytest.raises(PropertyNotImplementedError, match="attached"):
+            calc.get_hessian()
+
+    def test_hessian_species_swap_invalidates_cache(self):
+        """get_hessian() must rebuild _t_numbers when called with different species at same N."""
+        pytest.importorskip("ase", reason="ASE not installed")
+        from ase import Atoms
+
+        from aimnet.calculators import AIMNet2ASE
+
+        # 3-atom water and 3-atom HCN: same length (3), different elements.
+        water = Atoms("OH2", positions=[[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
+        hcn = Atoms("HCN", positions=[[0, 0, 0], [1.06, 0, 0], [2.22, 0, 0]])
+
+        calc = AIMNet2ASE("aimnet2")
+
+        water.calc = calc
+        H_water = calc.get_hessian(water)
+        assert H_water.shape == (9, 9)
+
+        # Pass a DIFFERENT atoms object with same N but different species,
+        # without going through set_atoms — the cache must invalidate.
+        H_hcn = calc.get_hessian(hcn)
+        assert H_hcn.shape == (9, 9)
+
+        # Hessians must differ — if cache was stale, both would be water's.
+        import numpy as np
+        assert not np.allclose(H_water, H_hcn, atol=1e-3)
+
 
 @pytest.mark.ase
 def test_aimnet2ase_propagates_validate_species(monkeypatch):
