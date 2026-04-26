@@ -1124,8 +1124,8 @@ def test_hessian_with_compile_raises():
 def test_set_lrcoulomb_method_warns_on_rxn_cutoff_change():
     """For family='rxn', changing the coulomb cutoff away from coulomb_sr_rc
     (4.6 A) must emit a UserWarning about SR/LR matching."""
+
     import pytest
-    import warnings
 
     from aimnet.calculators import AIMNet2Calculator
 
@@ -1156,8 +1156,8 @@ def test_set_lrcoulomb_method_no_warn_on_matching_cutoff():
 def test_constructing_two_families_warns_once(monkeypatch):
     """Constructing calculators from two different families in one process must
     emit a UserWarning about energy-scale incompatibility."""
+
     import pytest
-    import warnings
 
     from aimnet.calculators import AIMNet2Calculator
 

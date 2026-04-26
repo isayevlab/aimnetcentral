@@ -780,8 +780,9 @@ class AIMNet2Calculator:
             self.external_dftd3.set_smoothing(cutoff, smoothing_fraction)
         self._update_lr_nblists()
 
-    def eval(self, data: dict[str, Any], forces=False, stress=False, hessian=False,
-             *, validate_species: bool = True) -> dict[str, Tensor]:
+    def eval(
+        self, data: dict[str, Any], forces=False, stress=False, hessian=False, *, validate_species: bool = True
+    ) -> dict[str, Tensor]:
         # Species validation — opt-out via validate_species=False.
         # Silent no-op for models that did not declare implemented_species (older .pt,
         # raw nn.Module).

@@ -44,7 +44,7 @@ class ModelMetadata(TypedDict):
 
     implemented_species: list[int]  # Supported atomic numbers
 
-    family: NotRequired[str | None]                    # e.g. "rxn"; None for legacy/families that don't declare
+    family: NotRequired[str | None]  # e.g. "rxn"; None for legacy/families that don't declare
     supports_charged_systems: NotRequired[bool | None]  # False for rxn; None for legacy
 
 

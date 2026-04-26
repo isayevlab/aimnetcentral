@@ -510,18 +510,18 @@ class TestNewFormat:
 def test_model_metadata_typeddict_includes_family_and_charge_fields():
     """ModelMetadata must declare family and supports_charged_systems as optional fields."""
     from typing import get_type_hints
+
     from aimnet.models.base import ModelMetadata
 
     hints = get_type_hints(ModelMetadata, include_extras=False)
     assert "family" in hints, "ModelMetadata missing 'family' field"
-    assert "supports_charged_systems" in hints, (
-        "ModelMetadata missing 'supports_charged_systems' field"
-    )
+    assert "supports_charged_systems" in hints, "ModelMetadata missing 'supports_charged_systems' field"
 
 
 def test_load_model_propagates_family_and_charge_fields(tmp_path):
     """load_model must include family/supports_charged_systems in metadata when present in .pt."""
     import torch
+
     from aimnet.calculators.model_registry import get_model_path
     from aimnet.models.base import load_model
 
@@ -607,6 +607,7 @@ def test_load_v1_model_without_overrides_is_backward_compatible():
 def test_aimnet2_rxn_yaml_builds():
     """The architecture YAML for aimnet2-rxn must be loadable and produce a real AIMNet2 module."""
     import importlib.resources
+
     import yaml
 
     from aimnet.config import build_module

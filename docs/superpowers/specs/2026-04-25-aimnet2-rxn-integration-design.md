@@ -1,8 +1,6 @@
 # aimnet2-rxn Integration — Design Spec
 
-**Date:** 2026-04-25
-**Status:** Revised after multi-review (2 critical, 10 major, 5 minor findings addressed)
-**Scope:** One bundled PR registering the `aimnet2-rxn` model family in `aimnetcentral`, with the orthogonal cleanups required to make it correct end-to-end. Engineering speculation cut; chemistry safeguards added in their lightest form.
+**Date:** 2026-04-25 **Status:** Revised after multi-review (2 critical, 10 major, 5 minor findings addressed) **Scope:** One bundled PR registering the `aimnet2-rxn` model family in `aimnetcentral`, with the orthogonal cleanups required to make it correct end-to-end. Engineering speculation cut; chemistry safeguards added in their lightest form.
 
 ## Goal
 
@@ -43,12 +41,12 @@ Probed `_tmp/model_1.jpt` directly:
 
 ```yaml
 aimnet2_rxn_0:
-    file: aimnet2_rxn_0.pt
-    url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_0.pt
+  file: aimnet2_rxn_0.pt
+  url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_0.pt
 # _1, _2, _3 mirror with member index.
 
 aliases:
-    aimnet2rxn: aimnet2_rxn_0
+  aimnet2rxn: aimnet2_rxn_0
 ```
 
 No new YAML fields. No `hf_fallback` block (deferred — see Non-goals).

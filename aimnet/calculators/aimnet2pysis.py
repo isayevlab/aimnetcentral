@@ -18,8 +18,9 @@ EV2AU = 1 / AU2EV
 class AIMNet2Pysis(Calculator):
     implemented_properties: ClassVar = ["energy", "forces", "free_energy", "charges", "stress"]
 
-    def __init__(self, model: AIMNet2Calculator | str = "aimnet2", charge=0, mult=1,
-                 validate_species: bool = True, **kwargs):
+    def __init__(
+        self, model: AIMNet2Calculator | str = "aimnet2", charge=0, mult=1, validate_species: bool = True, **kwargs
+    ):
         super().__init__(charge=charge, mult=mult, **kwargs)
         if isinstance(model, str):
             model = AIMNet2Calculator(model)

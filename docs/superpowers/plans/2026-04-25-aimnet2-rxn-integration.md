@@ -38,27 +38,28 @@
 
 - [ ] **Step 1: Confirm clean working tree on `main`**
 
-Run: `git -C /home/olexandr/aimnetcentral status`
-Expected: `nothing to commit, working tree clean` (the spec commits should already be on main).
+Run: `git -C /home/olexandr/aimnetcentral status` Expected: `nothing to commit, working tree clean` (the spec commits should already be on main).
 
 - [ ] **Step 2: Create and switch to a feature branch**
 
 Run:
+
 ```bash
 git -C /home/olexandr/aimnetcentral switch -c feat/aimnet2-rxn-integration
 ```
+
 Expected: `Switched to a new branch 'feat/aimnet2-rxn-integration'`.
 
 - [ ] **Step 3: Verify the branch**
 
-Run: `git -C /home/olexandr/aimnetcentral branch --show-current`
-Expected: `feat/aimnet2-rxn-integration`.
+Run: `git -C /home/olexandr/aimnetcentral branch --show-current` Expected: `feat/aimnet2-rxn-integration`.
 
 ---
 
 ## Task 1: Extend `ModelMetadata` TypedDict
 
 **Files:**
+
 - Modify: `aimnet/models/base.py:20-45` (TypedDict)
 - Test: `tests/test_model.py` (append a new test function)
 
@@ -81,8 +82,7 @@ def test_model_metadata_typeddict_includes_family_and_charge_fields():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/test_model.py::test_model_metadata_typeddict_includes_family_and_charge_fields -v`
-Expected: FAIL with `AssertionError: ModelMetadata missing 'family' field`.
+Run: `pytest tests/test_model.py::test_model_metadata_typeddict_includes_family_and_charge_fields -v` Expected: FAIL with `AssertionError: ModelMetadata missing 'family' field`.
 
 - [ ] **Step 3: Add the new fields to `ModelMetadata`**
 
@@ -97,8 +97,7 @@ Verify `NotRequired` is already imported at the top of `base.py` (it is — used
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest tests/test_model.py::test_model_metadata_typeddict_includes_family_and_charge_fields -v`
-Expected: PASS.
+Run: `pytest tests/test_model.py::test_model_metadata_typeddict_includes_family_and_charge_fields -v` Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -112,6 +111,7 @@ git -C /home/olexandr/aimnetcentral commit -m "feat(models): add family and supp
 ## Task 2: Propagate new metadata fields in `load_model`
 
 **Files:**
+
 - Modify: `aimnet/models/base.py:111-122` (the v2-format metadata construction inside `load_model`)
 - Test: `tests/test_model.py` (append)
 
@@ -142,8 +142,7 @@ def test_load_model_propagates_family_and_charge_fields(tmp_path):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/test_model.py::test_load_model_propagates_family_and_charge_fields -v`
-Expected: FAIL — `metadata.get("family")` returns `None` because `load_model` does not yet propagate the field.
+Run: `pytest tests/test_model.py::test_load_model_propagates_family_and_charge_fields -v` Expected: FAIL — `metadata.get("family")` returns `None` because `load_model` does not yet propagate the field.
 
 - [ ] **Step 3: Update the `load_model` v2 branch**
 
@@ -175,8 +174,7 @@ The full block now looks like:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest tests/test_model.py::test_load_model_propagates_family_and_charge_fields -v`
-Expected: PASS.
+Run: `pytest tests/test_model.py::test_load_model_propagates_family_and_charge_fields -v` Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -190,6 +188,7 @@ git -C /home/olexandr/aimnetcentral commit -m "feat(models): propagate family/su
 ## Task 3: Propagate new metadata fields in `load_from_hf_repo`
 
 **Files:**
+
 - Modify: `aimnet/calculators/hf_hub.py:270-282` (metadata construction in `load_from_hf_repo`)
 - Test: `tests/test_hf_hub.py` (append)
 
@@ -242,8 +241,7 @@ def test_load_from_hf_repo_propagates_family_and_charge_fields(fake_hf_repo_with
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/test_hf_hub.py::test_load_from_hf_repo_propagates_family_and_charge_fields -v`
-Expected: FAIL — `metadata.get("family")` returns `None`.
+Run: `pytest tests/test_hf_hub.py::test_load_from_hf_repo_propagates_family_and_charge_fields -v` Expected: FAIL — `metadata.get("family")` returns `None`.
 
 - [ ] **Step 3: Update the metadata construction in `hf_hub.py`**
 
@@ -275,8 +273,7 @@ The full block now reads:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest tests/test_hf_hub.py::test_load_from_hf_repo_propagates_family_and_charge_fields -v`
-Expected: PASS.
+Run: `pytest tests/test_hf_hub.py::test_load_from_hf_repo_propagates_family_and_charge_fields -v` Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -290,6 +287,7 @@ git -C /home/olexandr/aimnetcentral commit -m "feat(hf_hub): propagate family/su
 ## Task 4: Extend `load_v1_model` with override kwargs + AFV sanitization
 
 **Files:**
+
 - Modify: `aimnet/models/utils.py:568-735` (`load_v1_model` function)
 - Test: `tests/test_model.py` (append)
 
@@ -366,14 +364,14 @@ def test_load_v1_model_without_overrides_is_backward_compatible():
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pytest tests/test_model.py::test_load_v1_model_species_override_nan_pads_other_rows tests/test_model.py::test_load_v1_model_without_overrides_is_backward_compatible -v`
-Expected: FAIL on the override test (`unexpected keyword argument 'implemented_species'`); the backward-compat test should pass already.
+Run: `pytest tests/test_model.py::test_load_v1_model_species_override_nan_pads_other_rows tests/test_model.py::test_load_v1_model_without_overrides_is_backward_compatible -v` Expected: FAIL on the override test (`unexpected keyword argument 'implemented_species'`); the backward-compat test should pass already.
 
 - [ ] **Step 3: Add the new kwargs and AFV sanitization**
 
 Edit `aimnet/models/utils.py`. Locate the `load_v1_model` signature at line ~568:
 
 Replace:
+
 ```python
 def load_v1_model(
     jpt_path: str,
@@ -384,6 +382,7 @@ def load_v1_model(
 ```
 
 With:
+
 ```python
 def load_v1_model(
     jpt_path: str,
@@ -400,12 +399,14 @@ def load_v1_model(
 Then locate the species extraction (around line 634):
 
 Replace:
+
 ```python
     cutoff = float(jit_model.cutoff)
     implemented_species = extract_species(jit_model)
 ```
 
 With:
+
 ```python
     cutoff = float(jit_model.cutoff)
     _species_kwarg = implemented_species  # rename to avoid shadowing the metadata field below
@@ -418,6 +419,7 @@ With:
 Then locate the metadata construction near the end of the function (around line 710):
 
 Replace:
+
 ```python
     metadata = {
         "format_version": 2,
@@ -435,6 +437,7 @@ Replace:
 ```
 
 With:
+
 ```python
     metadata = {
         "format_version": 2,
@@ -468,8 +471,7 @@ With:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `pytest tests/test_model.py::test_load_v1_model_species_override_nan_pads_other_rows tests/test_model.py::test_load_v1_model_without_overrides_is_backward_compatible -v`
-Expected: PASS for both (or `SKIPPED` if `_tmp/` is not present — that's acceptable).
+Run: `pytest tests/test_model.py::test_load_v1_model_species_override_nan_pads_other_rows tests/test_model.py::test_load_v1_model_without_overrides_is_backward_compatible -v` Expected: PASS for both (or `SKIPPED` if `_tmp/` is not present — that's acceptable).
 
 - [ ] **Step 5: Commit**
 
@@ -483,19 +485,20 @@ git -C /home/olexandr/aimnetcentral commit -m "feat(models): add implemented_spe
 ## Task 5: Reorder `.double()` in `load_v1_model`
 
 **Files:**
+
 - Modify: `aimnet/models/utils.py:697-704` (the atomic_shift block inside `load_v1_model`)
 - Test: covered by `test_load_v1_model_species_override_nan_pads_other_rows` (Task 4)
 
 - [ ] **Step 1: Verify the test from Task 4 still asserts float64**
 
-Run: `pytest tests/test_model.py::test_load_v1_model_species_override_nan_pads_other_rows -v`
-Expected: PASS (the existing pre-fix code happens to leave atomic_shift as float64 because it calls `.double()` after `load_state_dict`).
+Run: `pytest tests/test_model.py::test_load_v1_model_species_override_nan_pads_other_rows -v` Expected: PASS (the existing pre-fix code happens to leave atomic_shift as float64 because it calls `.double()` after `load_state_dict`).
 
 - [ ] **Step 2: Reorder `.double()` to run BEFORE `load_state_dict`**
 
 Edit `aimnet/models/utils.py`. Locate the section around line 686-704 inside `load_v1_model`:
 
 Replace:
+
 ```python
     # Load weights from JIT model
     jit_sd = jit_model.state_dict()
@@ -521,6 +524,7 @@ Replace:
 ```
 
 With:
+
 ```python
     # Cast atomic_shift to float64 BEFORE load_state_dict so the destination
     # buffer can hold full precision when load_state_dict's internal copy_ runs.
@@ -547,13 +551,11 @@ With:
 
 - [ ] **Step 3: Run the regression test**
 
-Run: `pytest tests/test_model.py::test_load_v1_model_species_override_nan_pads_other_rows -v`
-Expected: PASS — atomic_shift dtype is still float64; numerical behavior is byte-identical for current JIT models (atomic_shift in source is float32).
+Run: `pytest tests/test_model.py::test_load_v1_model_species_override_nan_pads_other_rows -v` Expected: PASS — atomic_shift dtype is still float64; numerical behavior is byte-identical for current JIT models (atomic_shift in source is float32).
 
 - [ ] **Step 4: Run the full test_model.py to catch any unrelated regressions**
 
-Run: `pytest tests/test_model.py -v`
-Expected: All tests PASS or `SKIPPED` (no FAIL).
+Run: `pytest tests/test_model.py -v` Expected: All tests PASS or `SKIPPED` (no FAIL).
 
 - [ ] **Step 5: Commit**
 
@@ -567,6 +569,7 @@ git -C /home/olexandr/aimnetcentral commit -m "fix(models): cast atomic_shift to
 ## Task 6: Add docstring example to `load_v1_model`
 
 **Files:**
+
 - Modify: `aimnet/models/utils.py` (the docstring of `load_v1_model`)
 
 - [ ] **Step 1: Locate the docstring**
@@ -603,8 +606,7 @@ Just before the existing `Warnings` section in the docstring, insert:
 
 - [ ] **Step 3: Verify the docstring renders without raising**
 
-Run: `python -c "from aimnet.models.utils import load_v1_model; help(load_v1_model)"`
-Expected: docstring prints with no exception; `Examples` section visible.
+Run: `python -c "from aimnet.models.utils import load_v1_model; help(load_v1_model)"` Expected: docstring prints with no exception; `Examples` section visible.
 
 - [ ] **Step 4: Commit**
 
@@ -618,6 +620,7 @@ git -C /home/olexandr/aimnetcentral commit -m "docs(models): add aimnet2-rxn con
 ## Task 7: Add architecture YAML for aimnet2-rxn
 
 **Files:**
+
 - Create: `aimnet/models/aimnet2_rxn.yaml`
 - Test: `tests/test_model.py` (append)
 
@@ -649,8 +652,7 @@ def test_aimnet2_rxn_yaml_builds():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/test_model.py::test_aimnet2_rxn_yaml_builds -v`
-Expected: FAIL — `aimnet2_rxn.yaml` does not exist yet.
+Run: `pytest tests/test_model.py::test_aimnet2_rxn_yaml_builds -v` Expected: FAIL — `aimnet2_rxn.yaml` does not exist yet.
 
 - [ ] **Step 3: Create the YAML**
 
@@ -659,62 +661,61 @@ Create `aimnet/models/aimnet2_rxn.yaml` with this exact content (this is the sam
 ```yaml
 class: aimnet.models.AIMNet2
 kwargs:
-    nfeature: 16
-    d2features: true
-    ncomb_v: 12
-    hidden:
-        - [512, 380]
-        - [512, 380]
-        - [512, 380, 380]
-    aim_size: 256
-    num_charge_channels: 1
-    aev:
-        rc_s: 5.0
-        nshifts_s: 16
-    outputs:
-        energy_mlp:
-            class: aimnet.modules.Output
-            kwargs:
-                n_in: 256
-                n_out: 1
-                key_in: aim
-                key_out: energy
-                mlp:
-                    activation_fn: torch.nn.GELU
-                    last_linear: true
-                    hidden: [128, 128]
-        atomic_shift:
-            class: aimnet.modules.AtomicShift
-            kwargs:
-                key_in: energy
-                key_out: energy
-        atomic_sum:
-            class: aimnet.modules.AtomicSum
-            kwargs:
-                key_in: energy
-                key_out: energy
-        dipole:
-            class: aimnet.modules.Dipole
-            kwargs:
-                key_in: charges
-                key_out: dipole
-        quadrupole:
-            class: aimnet.modules.Quadrupole
-            kwargs:
-                key_in: charges
-                key_out: quadrupole
-        lrcoulomb:
-            class: aimnet.modules.LRCoulomb
-            kwargs:
-                rc: 4.6
-                key_in: charges
-                key_out: energy
+  nfeature: 16
+  d2features: true
+  ncomb_v: 12
+  hidden:
+    - [512, 380]
+    - [512, 380]
+    - [512, 380, 380]
+  aim_size: 256
+  num_charge_channels: 1
+  aev:
+    rc_s: 5.0
+    nshifts_s: 16
+  outputs:
+    energy_mlp:
+      class: aimnet.modules.Output
+      kwargs:
+        n_in: 256
+        n_out: 1
+        key_in: aim
+        key_out: energy
+        mlp:
+          activation_fn: torch.nn.GELU
+          last_linear: true
+          hidden: [128, 128]
+    atomic_shift:
+      class: aimnet.modules.AtomicShift
+      kwargs:
+        key_in: energy
+        key_out: energy
+    atomic_sum:
+      class: aimnet.modules.AtomicSum
+      kwargs:
+        key_in: energy
+        key_out: energy
+    dipole:
+      class: aimnet.modules.Dipole
+      kwargs:
+        key_in: charges
+        key_out: dipole
+    quadrupole:
+      class: aimnet.modules.Quadrupole
+      kwargs:
+        key_in: charges
+        key_out: quadrupole
+    lrcoulomb:
+      class: aimnet.modules.LRCoulomb
+      kwargs:
+        rc: 4.6
+        key_in: charges
+        key_out: energy
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest tests/test_model.py::test_aimnet2_rxn_yaml_builds -v`
-Expected: PASS.
+Run: `pytest tests/test_model.py::test_aimnet2_rxn_yaml_builds -v` Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -728,6 +729,7 @@ git -C /home/olexandr/aimnetcentral commit -m "feat(models): add aimnet2_rxn.yam
 ## Task 8: Add registry entries for aimnet2-rxn
 
 **Files:**
+
 - Modify: `aimnet/calculators/model_registry.yaml` (append entries + alias)
 - Test: `tests/test_model_registry.py` (append)
 
@@ -758,38 +760,36 @@ def test_aimnet2rxn_registry_entries_and_alias():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/test_model_registry.py::test_aimnet2rxn_registry_entries_and_alias -v`
-Expected: FAIL — `KeyError` or `assertion` because the entries don't exist.
+Run: `pytest tests/test_model_registry.py::test_aimnet2rxn_registry_entries_and_alias -v` Expected: FAIL — `KeyError` or `assertion` because the entries don't exist.
 
 - [ ] **Step 3: Add the entries to `model_registry.yaml`**
 
 Edit `aimnet/calculators/model_registry.yaml`. Locate the last `aimnet2-pd_3:` entry (around line 60-62). Add immediately after it (before the `# map model alias` comment):
 
 ```yaml
-    aimnet2_rxn_0:
-        file: aimnet2_rxn_0.pt
-        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_0.pt
-    aimnet2_rxn_1:
-        file: aimnet2_rxn_1.pt
-        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_1.pt
-    aimnet2_rxn_2:
-        file: aimnet2_rxn_2.pt
-        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_2.pt
-    aimnet2_rxn_3:
-        file: aimnet2_rxn_3.pt
-        url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_3.pt
+aimnet2_rxn_0:
+  file: aimnet2_rxn_0.pt
+  url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_0.pt
+aimnet2_rxn_1:
+  file: aimnet2_rxn_1.pt
+  url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_1.pt
+aimnet2_rxn_2:
+  file: aimnet2_rxn_2.pt
+  url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_2.pt
+aimnet2_rxn_3:
+  file: aimnet2_rxn_3.pt
+  url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_3.pt
 ```
 
 In the `aliases:` section at the end, add the alias right after `aimnet2_2025: aimnet2_b973c_2025_d3_0`:
 
 ```yaml
-    aimnet2rxn: aimnet2_rxn_0
+aimnet2rxn: aimnet2_rxn_0
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest tests/test_model_registry.py::test_aimnet2rxn_registry_entries_and_alias -v`
-Expected: PASS.
+Run: `pytest tests/test_model_registry.py::test_aimnet2rxn_registry_entries_and_alias -v` Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -803,6 +803,7 @@ git -C /home/olexandr/aimnetcentral commit -m "feat(registry): register aimnet2-
 ## Task 9: Add `metadata` property and `_was_compiled` flag to `AIMNet2Calculator`
 
 **Files:**
+
 - Modify: `aimnet/calculators/calculator.py` (`__init__` + new property)
 - Test: `tests/test_calculator.py` (append)
 
@@ -831,14 +832,14 @@ def test_calculator_was_compiled_flag_default_false():
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pytest tests/test_calculator.py::test_calculator_metadata_property_returns_model_metadata tests/test_calculator.py::test_calculator_was_compiled_flag_default_false -v`
-Expected: FAIL — `metadata` does not exist as a property; `_was_compiled` not set.
+Run: `pytest tests/test_calculator.py::test_calculator_metadata_property_returns_model_metadata tests/test_calculator.py::test_calculator_was_compiled_flag_default_false -v` Expected: FAIL — `metadata` does not exist as a property; `_was_compiled` not set.
 
 - [ ] **Step 3: Add the `_was_compiled` flag in `__init__`**
 
 Edit `aimnet/calculators/calculator.py`. Locate the constructor block around line 286-291 where `compile_model` is handled:
 
 Replace:
+
 ```python
         # Compile model if requested
         if compile_model:
@@ -847,6 +848,7 @@ Replace:
 ```
 
 With:
+
 ```python
         # Compile model if requested
         self._was_compiled = bool(compile_model)
@@ -884,13 +886,11 @@ At around line 515, replace `meta = getattr(self.model, "_metadata", None)` with
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `pytest tests/test_calculator.py::test_calculator_metadata_property_returns_model_metadata tests/test_calculator.py::test_calculator_was_compiled_flag_default_false -v`
-Expected: PASS.
+Run: `pytest tests/test_calculator.py::test_calculator_metadata_property_returns_model_metadata tests/test_calculator.py::test_calculator_was_compiled_flag_default_false -v` Expected: PASS.
 
 - [ ] **Step 7: Run the full calculator test suite to catch regressions**
 
-Run: `pytest tests/test_calculator.py -v -m "not gpu and not hf"`
-Expected: All non-skipped tests PASS.
+Run: `pytest tests/test_calculator.py -v -m "not gpu and not hf"` Expected: All non-skipped tests PASS.
 
 - [ ] **Step 8: Commit**
 
@@ -904,6 +904,7 @@ git -C /home/olexandr/aimnetcentral commit -m "feat(calculator): add metadata pr
 ## Task 10: Add species-validation guard in `eval`
 
 **Files:**
+
 - Modify: `aimnet/calculators/calculator.py:724` (`eval` method signature + new validation block at top)
 - Test: `tests/test_calculator.py` (append)
 
@@ -950,14 +951,14 @@ def test_calculator_validate_species_false_bypasses():
 
 - [ ] **Step 2: Run tests to verify the first fails**
 
-Run: `pytest tests/test_calculator.py::test_calculator_rejects_unsupported_species tests/test_calculator.py::test_calculator_validate_species_false_bypasses -v`
-Expected: FIRST test FAILs (calculator silently produces output for U); the bypass test may FAIL with "got unexpected keyword argument 'validate_species'".
+Run: `pytest tests/test_calculator.py::test_calculator_rejects_unsupported_species tests/test_calculator.py::test_calculator_validate_species_false_bypasses -v` Expected: FIRST test FAILs (calculator silently produces output for U); the bypass test may FAIL with "got unexpected keyword argument 'validate_species'".
 
 - [ ] **Step 3: Add `validate_species` to the `eval` signature**
 
 Edit `aimnet/calculators/calculator.py`. Locate `def eval(self, data: dict[str, Any], forces=False, stress=False, hessian=False)` at line 724.
 
 Replace with:
+
 ```python
     def eval(self, data: dict[str, Any], forces=False, stress=False, hessian=False,
              *, validate_species: bool = True) -> dict[str, Tensor]:
@@ -989,8 +990,7 @@ Immediately after the new signature line and BEFORE the existing `data = self.pr
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `pytest tests/test_calculator.py::test_calculator_rejects_unsupported_species tests/test_calculator.py::test_calculator_validate_species_false_bypasses -v`
-Expected: PASS.
+Run: `pytest tests/test_calculator.py::test_calculator_rejects_unsupported_species tests/test_calculator.py::test_calculator_validate_species_false_bypasses -v` Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -1004,6 +1004,7 @@ git -C /home/olexandr/aimnetcentral commit -m "feat(calculator): add validate_sp
 ## Task 11: Add charge-guard for `supports_charged_systems: false` models
 
 **Files:**
+
 - Modify: `aimnet/calculators/calculator.py` (`eval` — append a second guard inside the `if validate_species` block)
 - Test: `tests/test_calculator.py` (append)
 
@@ -1038,8 +1039,7 @@ def test_calculator_rejects_charged_input_when_unsupported(monkeypatch):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/test_calculator.py::test_calculator_rejects_charged_input_when_unsupported -v`
-Expected: FAIL — no charge guard yet.
+Run: `pytest tests/test_calculator.py::test_calculator_rejects_charged_input_when_unsupported -v` Expected: FAIL — no charge guard yet.
 
 - [ ] **Step 3: Add the charge guard inside `eval`**
 
@@ -1062,8 +1062,7 @@ Edit `aimnet/calculators/calculator.py`. Locate the species-validation block add
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest tests/test_calculator.py::test_calculator_rejects_charged_input_when_unsupported -v`
-Expected: PASS.
+Run: `pytest tests/test_calculator.py::test_calculator_rejects_charged_input_when_unsupported -v` Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -1077,6 +1076,7 @@ git -C /home/olexandr/aimnetcentral commit -m "feat(calculator): add charge guar
 ## Task 12: Add `hessian + compile_model` guard
 
 **Files:**
+
 - Modify: `aimnet/calculators/calculator.py` (`eval` — guard added after the validate_species block)
 - Test: `tests/test_calculator.py` (append)
 
@@ -1107,8 +1107,7 @@ def test_hessian_with_compile_raises():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/test_calculator.py::test_hessian_with_compile_raises -v`
-Expected: FAIL — no guard yet (test hangs OR proceeds to the hessian path).
+Run: `pytest tests/test_calculator.py::test_hessian_with_compile_raises -v` Expected: FAIL — no guard yet (test hangs OR proceeds to the hessian path).
 
 - [ ] **Step 3: Add the guard in `eval`**
 
@@ -1127,8 +1126,7 @@ Edit `aimnet/calculators/calculator.py`. The Task-11 charge-guard block ends ins
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest tests/test_calculator.py::test_hessian_with_compile_raises -v`
-Expected: PASS.
+Run: `pytest tests/test_calculator.py::test_hessian_with_compile_raises -v` Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -1142,6 +1140,7 @@ git -C /home/olexandr/aimnetcentral commit -m "feat(calculator): raise RuntimeEr
 ## Task 13: Add `set_lrcoulomb_method` rxn-family cutoff guard
 
 **Files:**
+
 - Modify: `aimnet/calculators/calculator.py:601-670` (`set_lrcoulomb_method`)
 - Test: `tests/test_calculator.py` (append)
 
@@ -1184,8 +1183,7 @@ def test_set_lrcoulomb_method_no_warn_on_matching_cutoff():
 
 - [ ] **Step 2: Run tests to verify the first fails**
 
-Run: `pytest tests/test_calculator.py::test_set_lrcoulomb_method_warns_on_rxn_cutoff_change tests/test_calculator.py::test_set_lrcoulomb_method_no_warn_on_matching_cutoff -v`
-Expected: First test FAILs (no warning raised); second test PASSes already (no warning is the current behavior).
+Run: `pytest tests/test_calculator.py::test_set_lrcoulomb_method_warns_on_rxn_cutoff_change tests/test_calculator.py::test_set_lrcoulomb_method_no_warn_on_matching_cutoff -v` Expected: First test FAILs (no warning raised); second test PASSes already (no warning is the current behavior).
 
 - [ ] **Step 3: Add the rxn guard at the top of `set_lrcoulomb_method`**
 
@@ -1210,8 +1208,7 @@ Edit `aimnet/calculators/calculator.py`. Locate `def set_lrcoulomb_method(...)` 
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `pytest tests/test_calculator.py::test_set_lrcoulomb_method_warns_on_rxn_cutoff_change tests/test_calculator.py::test_set_lrcoulomb_method_no_warn_on_matching_cutoff -v`
-Expected: PASS.
+Run: `pytest tests/test_calculator.py::test_set_lrcoulomb_method_warns_on_rxn_cutoff_change tests/test_calculator.py::test_set_lrcoulomb_method_no_warn_on_matching_cutoff -v` Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -1225,6 +1222,7 @@ git -C /home/olexandr/aimnetcentral commit -m "feat(calculator): warn on set_lrc
 ## Task 14: Add cross-family mixing detection
 
 **Files:**
+
 - Modify: `aimnet/calculators/calculator.py` (add ClassVar + record-and-warn at end of `__init__`)
 - Test: `tests/test_calculator.py` (append)
 
@@ -1266,8 +1264,7 @@ def test_constructing_two_families_warns_once(monkeypatch):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/test_calculator.py::test_constructing_two_families_warns_once -v`
-Expected: FAIL — `_constructed_families` and `_maybe_warn_family_mix` do not exist.
+Run: `pytest tests/test_calculator.py::test_constructing_two_families_warns_once -v` Expected: FAIL — `_constructed_families` and `_maybe_warn_family_mix` do not exist.
 
 - [ ] **Step 3: Add the ClassVar and helper, and call from `__init__`**
 
@@ -1317,13 +1314,11 @@ The right place is at the very end of `__init__` — find the last line of the c
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest tests/test_calculator.py::test_constructing_two_families_warns_once -v`
-Expected: PASS.
+Run: `pytest tests/test_calculator.py::test_constructing_two_families_warns_once -v` Expected: PASS.
 
 - [ ] **Step 5: Run the full test_calculator.py to catch regressions**
 
-Run: `pytest tests/test_calculator.py -v -m "not gpu and not hf"`
-Expected: All non-skipped tests PASS.
+Run: `pytest tests/test_calculator.py -v -m "not gpu and not hf"` Expected: All non-skipped tests PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -1337,6 +1332,7 @@ git -C /home/olexandr/aimnetcentral commit -m "feat(calculator): warn once on cr
 ## Task 15: Propagate `validate_species` through `AIMNet2ASE`
 
 **Files:**
+
 - Modify: `aimnet/calculators/aimnet2ase.py:24-45` (`__init__`) and `aimnet2ase.py:121-145` (`calculate`)
 - Test: `tests/test_ase.py` (append)
 
@@ -1368,14 +1364,14 @@ def test_aimnet2ase_propagates_validate_species(monkeypatch):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/test_ase.py::test_aimnet2ase_propagates_validate_species -v`
-Expected: FAIL — `AIMNet2ASE.__init__` does not accept `validate_species`.
+Run: `pytest tests/test_ase.py::test_aimnet2ase_propagates_validate_species -v` Expected: FAIL — `AIMNet2ASE.__init__` does not accept `validate_species`.
 
 - [ ] **Step 3: Add `validate_species` to `AIMNet2ASE.__init__`**
 
 Edit `aimnet/calculators/aimnet2ase.py`. Locate `def __init__(self, base_calc: AIMNet2Calculator | str = "aimnet2", charge=0, mult=1):` at line 24.
 
 Replace with:
+
 ```python
     def __init__(
         self,
@@ -1387,6 +1383,7 @@ Replace with:
 ```
 
 After the existing assignment of `base_calc` to `self.base_calc` (around line 27-28), add:
+
 ```python
         self.validate_species = validate_species
 ```
@@ -1396,6 +1393,7 @@ After the existing assignment of `base_calc` to `self.base_calc` (around line 27
 Locate the `results = self.base_calc(_in, forces="forces" in properties, stress="stress" in properties)` line (around line 145).
 
 Replace with:
+
 ```python
         results = self.base_calc(
             _in,
@@ -1407,8 +1405,7 @@ Replace with:
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `pytest tests/test_ase.py::test_aimnet2ase_propagates_validate_species -v`
-Expected: PASS.
+Run: `pytest tests/test_ase.py::test_aimnet2ase_propagates_validate_species -v` Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -1422,6 +1419,7 @@ git -C /home/olexandr/aimnetcentral commit -m "feat(ase): propagate validate_spe
 ## Task 16: Propagate `validate_species` through `AIMNet2Pysis`
 
 **Files:**
+
 - Modify: `aimnet/calculators/aimnet2pysis.py:21-65` (`__init__` + the call site that invokes `self.base_calc`)
 - Test: NOT added — pysisyphus is heavy and behind a marker; manual smoke is sufficient. Skip a test for this wrapper.
 
@@ -1436,12 +1434,14 @@ Read the printed lines to identify the single point where the wrapper invokes th
 Edit `aimnet/calculators/aimnet2pysis.py`. Locate `def __init__(self, model: AIMNet2Calculator | str = "aimnet2", charge=0, mult=1, **kwargs):` at line 21.
 
 Replace with:
+
 ```python
     def __init__(self, model: AIMNet2Calculator | str = "aimnet2", charge=0, mult=1,
                  validate_species: bool = True, **kwargs):
 ```
 
 Right after the existing model assignment block (look for `self.base_calc = model` or equivalent — around line 24-25), add:
+
 ```python
         self.validate_species = validate_species
 ```
@@ -1454,8 +1454,7 @@ For example, if the call looks like `results = self.base_calc(in_data, forces=Tr
 
 - [ ] **Step 4: Smoke-import the module to catch syntax errors**
 
-Run: `python -c "from aimnet.calculators.aimnet2pysis import AIMNet2Pysis; print('OK')"`
-Expected: `OK` (no exception).
+Run: `python -c "from aimnet.calculators.aimnet2pysis import AIMNet2Pysis; print('OK')"` Expected: `OK` (no exception).
 
 - [ ] **Step 5: Commit**
 
@@ -1469,6 +1468,7 @@ git -C /home/olexandr/aimnetcentral commit -m "feat(pysis): propagate validate_s
 ## Task 17: Alias end-to-end test for `aimnet2rxn`
 
 **Files:**
+
 - Test: `tests/test_calculator.py` (append)
 
 This test exercises Tasks 7 + 8 + 9 together: the alias resolves, the .pt downloads (or hits cache), the calculator constructs cleanly, and the metadata carries the rxn-specific fields. Network-gated because it needs the GCS object — only meaningful AFTER the maintainer has uploaded the re-converted .pt files.
@@ -1501,8 +1501,7 @@ def test_aimnet2rxn_alias_calculator_e2e():
 
 - [ ] **Step 2: Add `network` marker to `pyproject.toml` if not present**
 
-Check: `grep -n "network" /home/olexandr/aimnetcentral/pyproject.toml`
-If `"network: ..."` is not in the markers list, add to the `markers = [...]` block in `[tool.pytest.ini_options]`:
+Check: `grep -n "network" /home/olexandr/aimnetcentral/pyproject.toml` If `"network: ..."` is not in the markers list, add to the `markers = [...]` block in `[tool.pytest.ini_options]`:
 
 ```toml
     "network: marks tests that hit external services (deselect with: -m 'not network')",
@@ -1510,8 +1509,7 @@ If `"network: ..."` is not in the markers list, add to the `markers = [...]` blo
 
 - [ ] **Step 3: Run the test (will skip if GCS not yet populated)**
 
-Run: `pytest tests/test_calculator.py::test_aimnet2rxn_alias_calculator_e2e -v`
-Expected: SKIPPED with "GCS .pt for aimnet2rxn not yet uploaded" (acceptable for CI before maintainer uploads), or PASS if GCS objects already exist.
+Run: `pytest tests/test_calculator.py::test_aimnet2rxn_alias_calculator_e2e -v` Expected: SKIPPED with "GCS .pt for aimnet2rxn not yet uploaded" (acceptable for CI before maintainer uploads), or PASS if GCS objects already exist.
 
 - [ ] **Step 4: Commit**
 
@@ -1525,6 +1523,7 @@ git -C /home/olexandr/aimnetcentral commit -m "test(calculator): add aimnet2rxn 
 ## Task 18: HF end-to-end test for aimnet2-rxn
 
 **Files:**
+
 - Test: `tests/test_hf_hub.py` (append)
 
 - [ ] **Step 1: Write the test**
@@ -1562,8 +1561,7 @@ def test_aimnet2_rxn_hf_load_matches_gcs_metadata():
 
 - [ ] **Step 2: Run the test (network-gated, requires HF deps)**
 
-Run: `pytest tests/test_hf_hub.py::test_aimnet2_rxn_hf_load_matches_gcs_metadata -v -m hf`
-Expected: PASS if HF repo's `config.json` has been updated; otherwise FAIL with the explicit "maintainer must update HF repo" message — that failure is informative, not a real bug.
+Run: `pytest tests/test_hf_hub.py::test_aimnet2_rxn_hf_load_matches_gcs_metadata -v -m hf` Expected: PASS if HF repo's `config.json` has been updated; otherwise FAIL with the explicit "maintainer must update HF repo" message — that failure is informative, not a real bug.
 
 - [ ] **Step 3: Commit**
 
@@ -1577,6 +1575,7 @@ git -C /home/olexandr/aimnetcentral commit -m "test(hf_hub): add aimnet2-rxn HF 
 ## Task 19: Add docs page for aimnet2-rxn
 
 **Files:**
+
 - Create: `docs/models/aimnet2_rxn.md`
 - Modify: `mkdocs.yml` (add nav entry)
 
@@ -1584,7 +1583,7 @@ git -C /home/olexandr/aimnetcentral commit -m "test(hf_hub): add aimnet2-rxn HF 
 
 Create `docs/models/aimnet2_rxn.md` with this content:
 
-```markdown
+````markdown
 # AIMNet2-rxn
 
 A neural network interatomic potential specialized for **closed-shell organic reactions** (H, C, N, O), trained on ~4.7M reaction-relevant geometries at ωB97M-V/def2-TZVPP. Use for transition-state searches, NEB / batched-NEB, IRC profiles, and reaction-coordinate energy work.
@@ -1600,6 +1599,7 @@ calc = AIMNet2Calculator("aimnet2rxn", ensemble_member=0)
 # From Hugging Face Hub:
 calc = AIMNet2Calculator("isayevlab/aimnet2-rxn", ensemble_member=0)
 ```
+````
 
 Both paths produce equivalent calculators. The HF path requires `pip install "aimnet[hf]"`.
 
@@ -1625,7 +1625,8 @@ Full content (energy convention, training data details, full limitations list, c
 [https://huggingface.co/isayevlab/aimnet2-rxn](https://huggingface.co/isayevlab/aimnet2-rxn)
 
 The HF README is the canonical source — this page summarizes only the integration mechanics.
-```
+
+````
 
 - [ ] **Step 2: Add the nav entry to `mkdocs.yml`**
 
@@ -1637,18 +1638,17 @@ Open `mkdocs.yml`. Locate the existing model entries (around lines 15-19):
           - AIMNet2-2025: models/aimnet2_2025.md
           - AIMNet2-NSE: models/aimnet2nse.md
           - AIMNet2-Pd: models/aimnet2pd.md
-```
+````
 
 Append immediately after the `AIMNet2-Pd` line, with the same indentation:
 
 ```yaml
-          - AIMNet2-rxn: models/aimnet2_rxn.md
+- AIMNet2-rxn: models/aimnet2_rxn.md
 ```
 
 - [ ] **Step 3: Verify mkdocs builds**
 
-Run: `mkdocs build --strict --site-dir /tmp/aimnet-mkdocs-test`
-Expected: build succeeds, no warnings, no broken links. The test directory `/tmp/aimnet-mkdocs-test` will contain the generated site; you can `rm -rf /tmp/aimnet-mkdocs-test` afterward.
+Run: `mkdocs build --strict --site-dir /tmp/aimnet-mkdocs-test` Expected: build succeeds, no warnings, no broken links. The test directory `/tmp/aimnet-mkdocs-test` will contain the generated site; you can `rm -rf /tmp/aimnet-mkdocs-test` afterward.
 
 - [ ] **Step 4: Commit**
 
@@ -1666,24 +1666,25 @@ git -C /home/olexandr/aimnetcentral commit -m "docs(models): add aimnet2-rxn pag
 - [ ] **Step 1: Run the entire affected test surface**
 
 Run:
+
 ```bash
 pytest tests/test_model.py tests/test_calculator.py tests/test_model_registry.py tests/test_hf_hub.py tests/test_ase.py -v -m "not gpu"
 ```
+
 Expected: All non-skipped tests PASS. Skipped tests are acceptable (`hf`, `network`, `pysis`, missing `_tmp/` data, missing GCS upload).
 
 - [ ] **Step 2: Run the full suite once to catch unrelated regressions**
 
-Run: `pytest -v -m "not gpu and not hf and not network and not pysis"`
-Expected: green or pre-existing-yellow only.
+Run: `pytest -v -m "not gpu and not hf and not network and not pysis"` Expected: green or pre-existing-yellow only.
 
 - [ ] **Step 3: Show the branch's commit graph**
 
-Run: `git -C /home/olexandr/aimnetcentral log main..HEAD --oneline`
-Expected: ~17-18 commits, each labeled with `feat(...)`, `fix(...)`, `test(...)`, or `docs(...)`. Verify no commit message contains "Claude", "Anthropic", or "Co-Authored-By".
+Run: `git -C /home/olexandr/aimnetcentral log main..HEAD --oneline` Expected: ~17-18 commits, each labeled with `feat(...)`, `fix(...)`, `test(...)`, or `docs(...)`. Verify no commit message contains "Claude", "Anthropic", or "Co-Authored-By".
 
 - [ ] **Step 4: Stop and surface the out-of-band tasks before any push/PR**
 
 The following must be done by the maintainer before the PR can be considered ready:
+
 1. Upload `_tmp/aimnet2_rxn_v2_gcs.zip`'s four `.pt` files to `gs://aimnetcentral/aimnet2v2/AIMNet2rxn/` (sha256s: see `_tmp/aimnet2_rxn_v2_gcs.zip`).
 2. Update the HF repo `isayevlab/aimnet2-rxn`'s `config.json` to add `"family": "rxn"` and `"supports_charged_systems": false`.
 
