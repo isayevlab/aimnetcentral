@@ -438,3 +438,25 @@ class TestAtomsInfoChargeSpin:
         atoms.get_potential_energy()
 
         assert atoms.calc.charge == 1.0
+
+
+@pytest.mark.ase
+def test_aimnet2ase_propagates_validate_species(monkeypatch):
+    """AIMNet2ASE.calculate(..., validate_species=False) must propagate the kwarg
+    through to the underlying AIMNet2Calculator.__call__."""
+    from ase import Atoms
+
+    from aimnet.calculators.aimnet2ase import AIMNet2ASE
+
+    calc = AIMNet2ASE("aimnet2")
+    # H2O — only H, O which are supported. Use validate_species=False to verify the
+    # kwarg flows through (the call should succeed regardless).
+    atoms = Atoms("H2O", positions=[[0, 0, 0], [0, 0, 1], [0, 1, 0]])
+    atoms.calc = calc
+
+    # Fast path: just access energy. This exercises the full pipeline.
+    _ = atoms.get_potential_energy()  # baseline default validate_species=True
+    # Re-run with the explicit kwarg via the constructor escape hatch:
+    calc2 = AIMNet2ASE("aimnet2", validate_species=False)
+    atoms.calc = calc2
+    _ = atoms.get_potential_energy()

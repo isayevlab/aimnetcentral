@@ -17,6 +17,7 @@ nav:
           - AIMNet2-2025: models/aimnet2_2025.md
           - AIMNet2-NSE: models/aimnet2nse.md
           - AIMNet2-Pd: models/aimnet2pd.md
+          - AIMNet2-rxn: models/aimnet2_rxn.md
     - Tutorials:
           - First Calculation: tutorials/single_point.md
           - Geometry Optimization: tutorials/geometry_optimization.md

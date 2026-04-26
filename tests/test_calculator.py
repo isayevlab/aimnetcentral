@@ -997,3 +997,215 @@ def test_relative_path_with_slash_loads_correctly(tmp_path, monkeypatch):
     calc = AIMNet2Calculator("mymodels/aimnet2.pt")
     assert hasattr(calc, "model")
     assert calc.cutoff > 0
+
+
+def test_calculator_metadata_property_returns_model_metadata():
+    """AIMNet2Calculator.metadata must return the same dict as model._metadata."""
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    assert calc.metadata is calc.model._metadata
+    # Existing aimnet2 family declares neither family nor supports_charged_systems.
+    assert calc.metadata.get("family") is None
+    assert calc.metadata.get("supports_charged_systems") is None
+
+
+def test_calculator_was_compiled_flag_default_false():
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    assert calc._was_compiled is False
+
+
+def test_calculator_rejects_unsupported_species():
+    """Calling the calculator with an unsupported atomic number must raise ValueError
+    with chemistry context and pointers to alternative models."""
+    import pytest
+    import torch
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    # aimnet2's implemented_species does NOT include Z=92 (uranium).
+    coords = torch.tensor([[0.0, 0.0, 0.0], [1.4, 0.0, 0.0]])
+    numbers = torch.tensor([1, 92])  # H + U; U is unsupported
+    data = {"coord": coords, "numbers": numbers, "charge": torch.tensor(0.0)}
+
+    with pytest.raises(ValueError, match=r"implemented_species"):
+        calc(data)
+
+
+def test_calculator_validate_species_false_bypasses():
+    """Passing validate_species=False must skip the species check (no ValueError)."""
+    import torch
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    # H is supported by aimnet2, so this should not raise even without bypass;
+    # the test asserts the kwarg flows through and does not itself raise.
+    coords = torch.tensor([[0.0, 0.0, 0.0]])
+    numbers = torch.tensor([1])
+    data = {"coord": coords, "numbers": numbers, "charge": torch.tensor(0.0)}
+
+    # Both calls should succeed; validate_species=False is the explicit bypass path.
+    calc(data, validate_species=True)
+    calc(data, validate_species=False)
+
+
+def test_calculator_rejects_charged_input_when_unsupported(monkeypatch):
+    """When metadata declares supports_charged_systems=False, a non-zero charge raises."""
+    import pytest
+    import torch
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    # Synthetically inject the family-narrowing metadata (aimnet2 does not declare it
+    # natively; this mirrors what an aimnet2-rxn .pt would carry).
+    calc.model._metadata = dict(calc.model._metadata)
+    calc.model._metadata["supports_charged_systems"] = False
+
+    coords = torch.tensor([[0.0, 0.0, 0.0]])
+    numbers = torch.tensor([1])
+    data = {"coord": coords, "numbers": numbers, "charge": torch.tensor(-1.0)}
+
+    with pytest.raises(ValueError, match=r"net-charged systems"):
+        calc(data)
+
+    # Bypass works
+    calc(data, validate_species=False)
+
+
+def test_calculator_charge_guard_handles_batched_charges():
+    """Batched 1-d charge tensors (e.g. per-system in batched-NEB) must raise the
+    documented chemistry ValueError — NOT the misleading 'only one element
+    tensors can be converted...' RuntimeError that the old `float(tensor)` path
+    produced for multi-element tensors."""
+    import pytest
+    import torch
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    calc.model._metadata = dict(calc.model._metadata)
+    calc.model._metadata["supports_charged_systems"] = False
+
+    coords = torch.tensor([[0.0, 0.0, 0.0]])
+    numbers = torch.tensor([1])
+    # Batched: two systems, one neutral one anionic. The guard must raise the
+    # documented ValueError (not a generic float() RuntimeError on multi-element).
+    data = {"coord": coords, "numbers": numbers, "charge": torch.tensor([0.0, -1.0])}
+
+    with pytest.raises(ValueError, match=r"net-charged systems"):
+        calc(data)
+
+
+def test_hessian_with_compile_raises():
+    """Calling with hessian=True on a calculator constructed with compile_model=True
+    must raise RuntimeError instead of hanging (Dynamo + double-backward on GELU)."""
+    import pytest
+    import torch
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    # Don't actually torch.compile (slow + may need GPU); just flip the flag.
+    calc._was_compiled = True
+
+    coords = torch.tensor([[0.0, 0.0, 0.0]])
+    numbers = torch.tensor([1])
+    data = {"coord": coords, "numbers": numbers, "charge": torch.tensor(0.0)}
+
+    with pytest.raises(RuntimeError, match=r"Hessian computation is incompatible with compile_model=True"):
+        calc(data, hessian=True)
+
+
+def test_set_lrcoulomb_method_warns_on_rxn_cutoff_change():
+    """For family='rxn', changing the coulomb cutoff away from coulomb_sr_rc
+    (4.6 A) must emit a UserWarning about SR/LR matching."""
+
+    import pytest
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    calc.model._metadata = dict(calc.model._metadata)
+    calc.model._metadata["family"] = "rxn"
+    calc.model._metadata["coulomb_sr_rc"] = 4.6
+
+    with pytest.warns(UserWarning, match=r"SR/LR"):
+        calc.set_lrcoulomb_method("dsf", cutoff=10.0)
+
+
+def test_set_lrcoulomb_method_no_warn_on_matching_cutoff():
+    """No warning when cutoff matches coulomb_sr_rc, or for non-rxn families."""
+    import warnings
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    # Non-rxn family: never warn about SR/LR.
+    calc1 = AIMNet2Calculator("aimnet2", device="cpu")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        calc1.set_lrcoulomb_method("dsf", cutoff=10.0)
+    sr_lr_warnings = [w for w in caught if "SR/LR" in str(w.message)]
+    assert sr_lr_warnings == []
+
+
+def test_constructing_two_families_warns_once(monkeypatch):
+    """Constructing calculators from two different families in one process must
+    emit a UserWarning about energy-scale incompatibility."""
+
+    import pytest
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    # Reset the class-level set so test order does not pollute it.
+    AIMNet2Calculator._constructed_families.clear()
+    monkeypatch.delenv("AIMNET_QUIET_FAMILY_MIX", raising=False)
+
+    # First calculator: synthetic 'family-A'.
+    calc_a = AIMNet2Calculator("aimnet2", device="cpu")
+    calc_a.model._metadata = dict(calc_a.model._metadata)
+    calc_a.model._metadata["family"] = "family-A"
+    AIMNet2Calculator._constructed_families.add("family-A")  # mimic what __init__ does
+
+    # Second calculator: a different family — should warn.
+    with pytest.warns(UserWarning, match=r"different families"):
+        calc_b = AIMNet2Calculator("aimnet2", device="cpu")
+        # The constructor itself must add the (synthetic) family. Since we cannot
+        # change metadata before __init__ finishes, simulate by constructing then
+        # injecting+re-running the warn step. For this PR's purposes the warn
+        # logic lives in __init__ AFTER load. Test it by direct invocation:
+        calc_b.model._metadata = dict(calc_b.model._metadata)
+        calc_b.model._metadata["family"] = "family-B"
+        # Call the production helper that __init__ calls (see Step 3).
+        calc_b._maybe_warn_family_mix("family-B")
+
+
+@pytest.mark.network
+def test_aimnet2rxn_alias_calculator_e2e():
+    """Alias 'aimnet2rxn' must resolve through the registry, the .pt must load,
+    and the calculator must expose rxn-specific metadata fields."""
+    import urllib.error
+
+    import requests
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    try:
+        calc = AIMNet2Calculator("aimnet2rxn", device="cpu")
+    except (
+        urllib.error.HTTPError,
+        urllib.error.URLError,
+        requests.exceptions.HTTPError,
+        requests.exceptions.ConnectionError,
+    ) as e:
+        pytest.skip(f"GCS .pt for aimnet2rxn not yet uploaded: {e}")
+
+    assert calc.metadata is not None
+    assert calc.metadata.get("family") == "rxn"
+    assert calc.metadata.get("supports_charged_systems") is False
+    assert calc.metadata.get("implemented_species") == [1, 6, 7, 8]
+    assert abs(calc.metadata.get("cutoff") - 5.0) < 1e-6

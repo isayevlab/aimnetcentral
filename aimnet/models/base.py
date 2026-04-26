@@ -44,6 +44,9 @@ class ModelMetadata(TypedDict):
 
     implemented_species: list[int]  # Supported atomic numbers
 
+    family: NotRequired[str | None]  # e.g. "rxn"; None for legacy/families that don't declare
+    supports_charged_systems: NotRequired[bool | None]  # False for rxn; None for legacy
+
 
 def load_model(path: str, device: str = "cpu") -> tuple[nn.Module, ModelMetadata]:
     """Load model from file, supporting both new and legacy formats.
@@ -119,6 +122,8 @@ def load_model(path: str, device: str = "cpu") -> tuple[nn.Module, ModelMetadata
             "d3_params": data.get("d3_params"),
             "has_embedded_lr": data.get("has_embedded_lr", False),
             "implemented_species": data.get("implemented_species", []),
+            "family": data.get("family"),
+            "supports_charged_systems": data.get("supports_charged_systems"),
         }
 
         # Attach metadata to model for easy access

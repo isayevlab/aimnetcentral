@@ -106,3 +106,73 @@ def test_calculator_with_hf_repo(fake_hf_repo):
     assert "forces" in results
     assert "charges" in results
     assert results["forces"].shape == (5, 3)
+
+
+@pytest.fixture
+def fake_hf_repo_with_family(tmp_path):
+    """A fake HF repo whose config.json declares family + supports_charged_systems."""
+    from aimnet.calculators.model_registry import get_model_path
+
+    pt_path = get_model_path("aimnet2")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", ".*weights_only.*")
+        raw = torch.load(pt_path, map_location="cpu", weights_only=False)
+
+    state_dict = raw["state_dict"]
+    save_file(state_dict, str(tmp_path / "ensemble_0.safetensors"))
+
+    config = {
+        "config_schema_version": 1,
+        "family_name": "fake-family",
+        "ensemble_size": 1,
+        "member_names": ["fake_0"],
+        "cutoff": float(raw["cutoff"]),
+        "needs_coulomb": raw.get("needs_coulomb", False),
+        "needs_dispersion": raw.get("needs_dispersion", False),
+        "coulomb_mode": raw.get("coulomb_mode", "none"),
+        "implemented_species": raw.get("implemented_species", []),
+        "model_yaml": raw["model_yaml"],
+        "format_version": 2,
+        "coulomb_sr_rc": raw.get("coulomb_sr_rc"),
+        "coulomb_sr_envelope": raw.get("coulomb_sr_envelope"),
+        "has_embedded_lr": raw.get("has_embedded_lr", False),
+        # NEW fields under test:
+        "family": "test-family",
+        "supports_charged_systems": False,
+    }
+    (tmp_path / "config.json").write_text(json.dumps(config))
+    return tmp_path
+
+
+def test_load_from_hf_repo_propagates_family_and_charge_fields(fake_hf_repo_with_family):
+    _, metadata = load_from_hf_repo(str(fake_hf_repo_with_family), ensemble_member=0, device="cpu")
+    assert metadata.get("family") == "test-family"
+    assert metadata.get("supports_charged_systems") is False
+
+
+@pytest.mark.hf
+def test_aimnet2_rxn_hf_load_matches_gcs_metadata():
+    """Loading aimnet2-rxn from the HF repo must produce metadata equivalent
+    to what the GCS .pt path would produce: same implemented_species, cutoff,
+    family, and supports_charged_systems.
+
+    This test EXPECTS the HF repo's config.json to have been updated with
+    `family: rxn` and `supports_charged_systems: false` (out-of-band task)."""
+    from aimnet.calculators import AIMNet2Calculator
+
+    calc = AIMNet2Calculator("isayevlab/aimnet2-rxn", ensemble_member=0, device="cpu")
+
+    assert calc.metadata.get("implemented_species") == [1, 6, 7, 8]
+    assert abs(calc.metadata.get("cutoff") - 5.0) < 1e-6
+    assert calc.metadata.get("coulomb_mode") == "sr_embedded"
+    assert calc.metadata.get("needs_coulomb") is True
+    assert calc.metadata.get("needs_dispersion") is False
+
+    # The next two assertions REQUIRE the HF config.json to have the new fields.
+    # If they fail with None, the maintainer needs to update the HF config.json.
+    assert calc.metadata.get("family") == "rxn", (
+        "HF config.json missing `family: rxn` — maintainer must update HF repo."
+    )
+    assert calc.metadata.get("supports_charged_systems") is False, (
+        "HF config.json missing `supports_charged_systems: false` — maintainer must update HF repo."
+    )

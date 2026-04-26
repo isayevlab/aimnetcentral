@@ -214,6 +214,7 @@ class AIMNet2Calculator:
     }
     keys_out: ClassVar[list[str]] = ["energy", "charges", "spin_charges", "forces", "hessian", "stress"]
     atom_feature_keys: ClassVar[list[str]] = ["coord", "numbers", "charges", "spin_charges", "forces"]
+    _constructed_families: ClassVar[set[str]] = set()
 
     def __init__(
         self,
@@ -286,6 +287,7 @@ class AIMNet2Calculator:
             raise TypeError("Invalid model type/name.")
 
         # Compile model if requested
+        self._was_compiled = bool(compile_model)
         if compile_model:
             kwargs = compile_kwargs or {}
             self.model = torch.compile(self.model, **kwargs)
@@ -411,8 +413,50 @@ class AIMNet2Calculator:
                 for param in self.external_dftd3.parameters():
                     param.requires_grad_(False)
 
+        self._maybe_warn_family_mix((metadata or {}).get("family") if metadata else None)
+
     def __call__(self, *args, **kwargs):
         return self.eval(*args, **kwargs)
+
+    @property
+    def metadata(self) -> dict | None:
+        """Read-only view of the model's metadata dict.
+
+        Returns the same object as ``model._metadata`` for v2 .pt models,
+        or ``None`` for raw ``nn.Module`` inputs that don't carry metadata.
+        Downstream consumers should prefer this accessor over reaching into
+        the private ``model._metadata`` attribute.
+        """
+        return getattr(self.model, "_metadata", None)
+
+    def _maybe_warn_family_mix(self, family: str | None) -> None:
+        """If multiple distinct families have been constructed in this process,
+        emit a one-time UserWarning about energy-scale incompatibility.
+
+        ``family=None`` is the no-op contract — calculators built from raw
+        ``nn.Module`` inputs or from .pt files that don't declare ``family``
+        in metadata pass ``None`` here and skip both tracking and warning.
+
+        Bypass: set the AIMNET_QUIET_FAMILY_MIX environment variable to '1'.
+        """
+        if family is None:
+            return
+        if os.environ.get("AIMNET_QUIET_FAMILY_MIX") == "1":
+            self._constructed_families.add(family)
+            return
+        already_warned = family in self._constructed_families
+        self._constructed_families.add(family)
+        if not already_warned and len(self._constructed_families) > 1:
+            warnings.warn(
+                f"AIMNet2Calculator instances from different families have been "
+                f"constructed in this process: {sorted(self._constructed_families)}. "
+                f"Energy scales differ across families (e.g. rxn uses a learned "
+                f"shifted-electronic scale; aimnet2-wb97m-d3 uses absolute "
+                f"electronic energies on the ~-1100 eV scale). Do not mix or compare "
+                f"energies across families. Set AIMNET_QUIET_FAMILY_MIX=1 to silence.",
+                UserWarning,
+                stacklevel=2,
+            )
 
     @property
     def has_external_coulomb(self) -> bool:
@@ -487,7 +531,7 @@ class AIMNet2Calculator:
         bool
             True if model has embedded dispersion module (D3TS or legacy DFTD3).
         """
-        meta = getattr(self.model, "_metadata", None)
+        meta = self.metadata
         if meta is None:
             return False  # Unknown, assume no embedded dispersion
 
@@ -512,7 +556,7 @@ class AIMNet2Calculator:
         bool
             True if model has embedded Coulomb module.
         """
-        meta = getattr(self.model, "_metadata", None)
+        meta = self.metadata
         if meta is None:
             return False  # Unknown, assume no embedded Coulomb
         # If needs_coulomb=False and coulomb_mode is not "none", Coulomb is embedded
@@ -635,6 +679,21 @@ class AIMNet2Calculator:
         if method not in ("simple", "dsf", "ewald"):
             raise ValueError(f"Invalid method: {method}")
 
+        # rxn-family guard: the 4.6 A SR/LR cancellation point is physically
+        # frozen for this family. Changing the cutoff silently breaks matching.
+        meta = self.metadata or {}
+        if meta.get("family") == "rxn":
+            sr_rc = meta.get("coulomb_sr_rc")
+            if sr_rc is not None and method in ("dsf", "ewald") and abs(cutoff - float(sr_rc)) > 1e-6:
+                warnings.warn(
+                    f"Setting Coulomb {method} cutoff to {cutoff} A on aimnet2-rxn breaks "
+                    f"the SR/LR cancellation matching (this family was trained with a "
+                    f"physically frozen crossover at coulomb_sr_rc={sr_rc} A). Use the "
+                    f"matching cutoff or revert to the default external Coulomb.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
         # Warn if model has embedded Coulomb (legacy models)
         if self._has_embedded_coulomb() and self.external_coulomb is None:
             warnings.warn(
@@ -721,7 +780,52 @@ class AIMNet2Calculator:
             self.external_dftd3.set_smoothing(cutoff, smoothing_fraction)
         self._update_lr_nblists()
 
-    def eval(self, data: dict[str, Any], forces=False, stress=False, hessian=False) -> dict[str, Tensor]:
+    def eval(
+        self, data: dict[str, Any], forces=False, stress=False, hessian=False, *, validate_species: bool = True
+    ) -> dict[str, Tensor]:
+        # Species validation — opt-out via validate_species=False.
+        # Silent no-op for models that did not declare implemented_species (older .pt,
+        # raw nn.Module).
+        if validate_species and "numbers" in data:
+            # Guarded by "numbers" in data so prepare_input still owns the missing-key
+            # error path with its descriptive "Missing key numbers" message.
+            impl = (self.metadata or {}).get("implemented_species") or []
+            if impl:
+                # data["numbers"] may be a raw list, ndarray, or tensor — normalize first.
+                seen = {int(z) for z in torch.as_tensor(data["numbers"]).flatten().tolist() if int(z) > 0}
+                unsupported = sorted(seen - set(impl))
+                if unsupported:
+                    raise ValueError(
+                        f"Atomic numbers {unsupported} are not in this model's "
+                        f"implemented_species {sorted(impl)}. This model was trained on "
+                        f"a restricted element set; passing other elements yields undefined "
+                        f"output. For broader element coverage on equilibrium structures use "
+                        f"`isayevlab/aimnet2-wb97m-d3`; for radicals/open-shell systems use "
+                        f"`isayevlab/aimnet2-nse`. Pass validate_species=False to bypass."
+                    )
+            meta = self.metadata or {}
+            if meta.get("supports_charged_systems") is False:
+                # torch.as_tensor handles scalars, lists, ndarrays, 0-d and N-d tensors
+                # uniformly so per-system charges in batched inputs (e.g. batched-NEB)
+                # don't raise the misleading "only one element tensors..." from float().
+                charge_t = torch.as_tensor(data.get("charge", 0.0))
+                if charge_t.numel() > 0 and float(charge_t.abs().max().item()) > 1e-6:
+                    bad = charge_t[charge_t.abs() > 1e-6].flatten().tolist()
+                    raise ValueError(
+                        f"This model does not support net-charged systems "
+                        f"(got non-zero charge(s) {bad}). Net-neutral zwitterions are supported. "
+                        f"For ions use `isayevlab/aimnet2-wb97m-d3`. "
+                        f"Pass validate_species=False to bypass."
+                    )
+        # Hessian + torch.compile is known to hang on the double-backward
+        # path through GELU activations. Fail fast instead.
+        if hessian and getattr(self, "_was_compiled", False):
+            raise RuntimeError(
+                "Hessian computation is incompatible with compile_model=True "
+                "(Dynamo + double-backward through GELU hangs). Reconstruct calculator "
+                "with compile_model=False."
+            )
+
         data = self.prepare_input(data)
 
         if hessian and "mol_idx" in data and data["mol_idx"][-1] > 0:
