@@ -458,14 +458,27 @@ torch.library.register_autograd(
 # =============================================================================
 
 
+def _vmap_slice(t: Tensor, d: int | None, k: int) -> Tensor:
+    """Pick the k-th slice along vmap batch dim d, or pass through if not batched.
+
+    Returns a contiguous tensor when slicing — the underlying Warp kernels read
+    via wp.from_torch which assumes C-contiguous layout, so a non-contiguous view
+    from movedim(d, 0) would silently misread strided memory.
+    """
+    if d is None:
+        return t
+    return t.movedim(d, 0)[k].contiguous()
+
+
 @torch.library.register_vmap("aimnet::conv_sv_2d_sp_bwd")
 def _vmap_conv_sv_2d_sp_bwd(info, in_dims, grad_output, a, idx, g):
     """vmap rule for the first-backward primitive.
 
     Hit when torch.func.vmap traverses a vjp closure that reaches the first-order
-    backward (e.g. vmap over autograd.grad with create_graph=True).  The realistic
-    in_dims is (0, None, None, None) — only the cotangent flowing from the upstream
-    batch carries a vmap dim.  The rule still handles arbitrary in_dims for robustness.
+    backward (e.g. vmap over autograd.grad with create_graph=True).  Only
+    in_dims = (0, None, None, None) — vmap on the upstream cotangent only — is
+    supported.  Batching idx along its leading B dim is unsafe (it scatters the
+    kernel's padding-row sentinel at index B-1) and is not detected at runtime.
 
     Note: register_vmap is consulted ONLY by the functorch dispatch (torch.func.vmap,
     aka torch.vmap).  The legacy batching dispatch used by is_grads_batched=True and
@@ -475,19 +488,14 @@ def _vmap_conv_sv_2d_sp_bwd(info, in_dims, grad_output, a, idx, g):
     """
     K = info.batch_size
 
-    def _slice(t: Tensor, d: int | None, k: int) -> Tensor:
-        if d is None:
-            return t
-        return t.movedim(d, 0)[k]
-
     out0: list[Tensor] = []
     out1: list[Tensor] = []
     for k in range(K):
         outs = torch.ops.aimnet.conv_sv_2d_sp_bwd(
-            _slice(grad_output, in_dims[0], k),
-            _slice(a, in_dims[1], k),
-            _slice(idx, in_dims[2], k),
-            _slice(g, in_dims[3], k),
+            _vmap_slice(grad_output, in_dims[0], k),
+            _vmap_slice(a, in_dims[1], k),
+            _vmap_slice(idx, in_dims[2], k),
+            _vmap_slice(g, in_dims[3], k),
         )
         out0.append(outs[0])
         out1.append(outs[1])
@@ -503,10 +511,11 @@ def _vmap_conv_sv_2d_sp_bwd_bwd(info, in_dims, grad_output, grad2_a, grad2_g, a,
     """vmap rule for the double-backward primitive.
 
     Hit when torch.func.vmap traverses a vjp closure that reaches the second-order
-    backward (the Hessian-via-vmap path).  The realistic in_dims is
-    (None, 0, 0, None, None, None) — only the cotangents flowing into the second
-    backward carry the vmap batch dim. The rule still handles arbitrary in_dims for
-    robustness.
+    backward (the Hessian-via-vmap path).  Only
+    in_dims = (None, 0, 0, None, None, None) — vmap on the two upstream cotangents
+    only — is supported.  Batching idx, a, or g along their leading B dim is unsafe
+    (it scatters the kernel's padding-row sentinel at index B-1) and is not detected
+    at runtime.
 
     Note: register_vmap is consulted ONLY by the functorch dispatch (torch.func.vmap,
     aka torch.vmap).  The legacy batching dispatch used by is_grads_batched=True and
@@ -519,22 +528,17 @@ def _vmap_conv_sv_2d_sp_bwd_bwd(info, in_dims, grad_output, grad2_a, grad2_g, a,
     """
     K = info.batch_size
 
-    def _slice(t: Tensor, d: int | None, k: int) -> Tensor:
-        if d is None:
-            return t
-        return t.movedim(d, 0)[k]
-
     out0: list[Tensor] = []
     out1: list[Tensor] = []
     out2: list[Tensor] = []
     for k in range(K):
         outs = torch.ops.aimnet.conv_sv_2d_sp_bwd_bwd(
-            _slice(grad_output, in_dims[0], k),
-            _slice(grad2_a, in_dims[1], k),
-            _slice(grad2_g, in_dims[2], k),
-            _slice(a, in_dims[3], k),
-            _slice(idx, in_dims[4], k),
-            _slice(g, in_dims[5], k),
+            _vmap_slice(grad_output, in_dims[0], k),
+            _vmap_slice(grad2_a, in_dims[1], k),
+            _vmap_slice(grad2_g, in_dims[2], k),
+            _vmap_slice(a, in_dims[3], k),
+            _vmap_slice(idx, in_dims[4], k),
+            _vmap_slice(g, in_dims[5], k),
         )
         out0.append(outs[0])
         out1.append(outs[1])
