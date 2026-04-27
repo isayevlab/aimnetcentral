@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 from .calculator import AIMNet2Calculator
@@ -26,7 +27,10 @@ class AIMNet2Pysis(Calculator):
     def _prepare_input(self, atoms, coord):
         device = self.model.device
         numbers = torch.as_tensor([ATOMIC_NUMBERS[a.lower()] for a in atoms], device=device)
-        coord = torch.as_tensor(coord, dtype=torch.float, device=device).view(-1, 3) * BOHR2ANG
+        # CPU-side cast + Bohr→Å scalar before H2D; halves PCIe bandwidth (float64→float32)
+        # and folds the unit conversion into the upload, eliminating a small GPU kernel launch.
+        coord_np = (np.asarray(coord, dtype=np.float32) * BOHR2ANG).reshape(-1, 3)
+        coord = torch.from_numpy(coord_np).to(device, non_blocking=True)
         charge = torch.as_tensor([self.charge], dtype=torch.float, device=device)
         mult = torch.as_tensor([self.mult], dtype=torch.float, device=device)
         return {"coord": coord, "numbers": numbers, "charge": charge, "mult": mult}
