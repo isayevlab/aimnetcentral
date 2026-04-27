@@ -23,6 +23,21 @@ class AIMNet2Pysis(Calculator):
             model = AIMNet2Calculator(model)
         self.model = model
         self.validate_species = validate_species
+        # Cache the most recent results dict so that the get_energy → get_forces
+        # double-call pattern (AFIR, some IRC paths) doesn't run the model twice.
+        self._cache_key: tuple[tuple[str, ...], bytes] | None = None
+        self._cache_results: dict | None = None
+
+    def _cache_get(self, atoms, coord) -> dict | None:
+        if self._cache_results is None:
+            return None
+        if self._cache_key == (tuple(atoms), np.asarray(coord).tobytes()):
+            return self._cache_results
+        return None
+
+    def _cache_put(self, atoms, coord, results: dict) -> None:
+        self._cache_key = (tuple(atoms), np.asarray(coord).tobytes())
+        self._cache_results = results
 
     def _prepare_input(self, atoms, coord):
         device = self.model.device
@@ -53,25 +68,32 @@ class AIMNet2Pysis(Calculator):
         )
 
     def get_energy(self, atoms, coords):
+        cached = self._cache_get(atoms, coords)
+        if cached is not None and "energy" in cached:
+            return {"energy": self._results_get_energy(cached)}
         _in = self._prepare_input(atoms, coords)
         res = self.model(_in, validate_species=self.validate_species)
-        energy = self._results_get_energy(res)
-        return {"energy": energy}
+        self._cache_put(atoms, coords, res)
+        return {"energy": self._results_get_energy(res)}
 
     def get_forces(self, atoms, coords):
+        cached = self._cache_get(atoms, coords)
+        if cached is not None and "forces" in cached:
+            return {"energy": self._results_get_energy(cached), "forces": self._results_get_forces(cached)}
         _in = self._prepare_input(atoms, coords)
         res = self.model(_in, forces=True, validate_species=self.validate_species)
-        energy = self._results_get_energy(res)
-        forces = self._results_get_forces(res)
-        return {"energy": energy, "forces": forces}
+        self._cache_put(atoms, coords, res)
+        return {"energy": self._results_get_energy(res), "forces": self._results_get_forces(res)}
 
     def get_hessian(self, atoms, coords):
         _in = self._prepare_input(atoms, coords)
         res = self.model(_in, forces=True, hessian=True, validate_species=self.validate_species)
-        energy = self._results_get_energy(res)
-        forces = self._results_get_forces(res)
-        hessian = self._results_get_hessian(res)
-        return {"energy": energy, "forces": forces, "hessian": hessian}
+        self._cache_put(atoms, coords, res)
+        return {
+            "energy": self._results_get_energy(res),
+            "forces": self._results_get_forces(res),
+            "hessian": self._results_get_hessian(res),
+        }
 
 
 def run_pysis():
