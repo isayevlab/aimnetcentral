@@ -1268,6 +1268,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#recommended-configurations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recommended configurations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Recommended configurations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#geometry-optimisation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Geometry optimisation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#transition-state-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transition state search
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#validating-against-a-finite-difference-hessian" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validating against a finite-difference Hessian
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#units" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1960,6 +2010,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#recommended-configurations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recommended configurations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Recommended configurations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#geometry-optimisation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Geometry optimisation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#transition-state-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transition state search
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#validating-against-a-finite-difference-hessian" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validating against a finite-difference Hessian
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#units" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2035,6 +2135,52 @@
 <span class="w">  </span><span class="nt">charge</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
 <span class="w">  </span><span class="nt">mult</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 </code></pre></div>
+<h2 id="recommended-configurations">Recommended configurations<a class="headerlink" href="#recommended-configurations" title="Permanent link">&para;</a></h2>
+<p>AIMNet2 returns analytic Hessians via <code>torch.func.vmap</code>, so configure pysisyphus to use them. The default <code>hessian_init: fischer</code> (a model Hessian) is conservative and well-suited to expensive ab-initio methods, but for cheap analytic-Hessian MLIPs it leaves performance on the table.</p>
+<h3 id="geometry-optimisation">Geometry optimisation<a class="headerlink" href="#geometry-optimisation" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">geom</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cart</span>
+<span class="w">  </span><span class="nt">fn</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">input.xyz</span>
+
+<span class="nt">calc</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet</span>
+<span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet2</span>
+<span class="w">  </span><span class="nt">charge</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">  </span><span class="nt">mult</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+
+<span class="nt">opt</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rfo</span>
+<span class="w">  </span><span class="nt">hessian_init</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">calc</span>
+<span class="w">  </span><span class="nt">hessian_recalc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
+<span class="w">  </span><span class="nt">thresh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gau_tight</span>
+</code></pre></div>
+<p><code>hessian_recalc: 5</code> recomputes the analytic Hessian every 5 steps; for AIMNet2 this is cheap and improves robustness on shallow potential surfaces.</p>
+<h3 id="transition-state-search">Transition state search<a class="headerlink" href="#transition-state-search" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">geom</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cart</span>
+<span class="w">  </span><span class="nt">fn</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ts_guess.xyz</span>
+
+<span class="nt">calc</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet</span>
+<span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet2</span>
+<span class="w">  </span><span class="nt">charge</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">  </span><span class="nt">mult</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+
+<span class="nt">tsopt</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rsprfo</span>
+<span class="w">  </span><span class="nt">hessian_init</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">calc</span>
+<span class="w">  </span><span class="nt">hessian_recalc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<span class="w">  </span><span class="nt">thresh</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gau_tight</span>
+</code></pre></div>
+<p>For TS work, prefer AIMNet2-rxn (<code>model: aimnet2-rxn</code>) — it is trained on transition-state data and behaves better near saddle points than the default model.</p>
+<h3 id="validating-against-a-finite-difference-hessian">Validating against a finite-difference Hessian<a class="headerlink" href="#validating-against-a-finite-difference-hessian" title="Permanent link">&para;</a></h3>
+<p>Pysisyphus can override the calculator's analytic Hessian and use central differences instead, which is useful when you suspect the analytic path is wrong (e.g., when reporting numerical Hessians for a paper):</p>
+<div class="highlight"><pre><span></span><code><span class="nt">calc</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet</span>
+<span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet2</span>
+<span class="w">  </span><span class="nt">force_num_hess</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+<p>This switches <code>get_hessian</code> to a finite-difference loop driven by <code>get_forces</code>. Slower (<code>O(6N)</code> extra force calls), but verifies the analytic path numerically.</p>
 <h2 id="units">Units<a class="headerlink" href="#units" title="Permanent link">&para;</a></h2>
 <p>Pysisyphus uses Hartree / Bohr internally; the wrapper converts AIMNet2's native eV / Angstrom output transparently.</p>
 <h2 id="model-coverage">Model coverage<a class="headerlink" href="#model-coverage" title="Permanent link">&para;</a></h2>
@@ -2043,6 +2189,7 @@
 <ul>
 <li><a href="../../advanced/reaction_paths/">Reaction paths and transition states</a></li>
 <li><a href="../../calculator/">Calculator API reference</a></li>
+<li><a href="../sella/">Sella TS optimizer</a> — alternative analytic-Hessian-aware TS optimizer</li>
 </ul>
 
 
