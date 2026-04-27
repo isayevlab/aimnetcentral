@@ -82,7 +82,7 @@ requires-dist = [
     { name = "numpy" },
     { name = "nvalchemi-toolkit-ops", specifier = ">=0.3" },
     { name = "omegaconf", marker = "extra == 'train'", specifier = ">=2.3.0" },
-    { name = "pysisyphus", marker = "extra == 'pysis'" },
+    { name = "pysisyphus", marker = "extra == 'pysis'", specifier = ">=1.0.0" },
     { name = "pytorch-ignite", marker = "extra == 'train'", specifier = ">=0.5.1" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "requests", specifier = ">=2.32.3" },
