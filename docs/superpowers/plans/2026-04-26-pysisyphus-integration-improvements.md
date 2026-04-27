@@ -21,7 +21,7 @@ Bring `AIMNet2Pysis` to the same quality bar as the Sella integration (#71) and 
 Six commits, ~1 day total. None depend on each other.
 
 | # | Change | File | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | A1 | Delete dead `implemented_properties` ClassVar (and `from typing import ClassVar`). Pre-flight: `grep -r implemented_properties` to confirm no reflective consumers; if any, leave an empty list instead. | `aimnet/calculators/aimnet2pysis.py:19` | Hygiene; pysisyphus's `Calculator` ignores it. |
 | A2 | **Result-level cache** keyed on `coord.tobytes()` so the `get_energy → get_forces` double-call pattern (AFIR / some IRC paths) doesn't run the model twice. Cache entry holds the full `results` dict from a `forces=True` call; `get_energy` serves from it; invalidate on coord change. | `aimnet/calculators/aimnet2pysis.py:55-74` | Saves one forward (~6.9 ms = 32% per pair). The "input-tensor cache" idea from earlier drafts is YAGNI — measured 0.48% win at N=24, not worth the state. |
 | A3 | CPU-side coord cast + `BOHR2ANG` premultiply, then `.to(device, non_blocking=True)`. Pattern: `torch.from_numpy(np.asarray(coord, dtype=np.float32) * BOHR2ANG).view(-1, 3).to(device, non_blocking=True)`. | `aimnet/calculators/aimnet2pysis.py:33` | Halves H2D bandwidth, eliminates one GPU kernel launch (~20 µs/call). Zero correctness risk: `as_tensor` already copies on dtype mismatch. |
@@ -30,6 +30,7 @@ Six commits, ~1 day total. None depend on each other.
 | A6 | One smoke per recommended config: water → geom-opt convergence; HCN → CNH TS via rsprfo. Module-level `pytestmark = pytest.mark.pysis` + `pytest.importorskip("pysisyphus")` matching `tests/test_sella.py`. | `tests/test_pysis.py` (new) | Regression guard for the YAML configs A5 ships. The IRC smoke is skipped — `hessian_recalc` for IRC requires upstream pysisyphus support that this plan deliberately does not pursue. |
 
 **Explicitly NOT changing:**
+
 - The `aimnet2pysis` console script (`pyproject.toml:79`) and `run_pysis()` shim (`aimnet/calculators/aimnet2pysis.py:77-79`). Documented public interface; users follow `docs/advanced/reaction_paths.md`. Removal would be a breaking change with no upstream replacement (we're explicitly not pursuing the entry-points PR).
 - `_prepare_input` argument signature. Any internal refactor stays behind the existing call surface so pysisyphus's optimizer code paths see the same wrapper.
 
@@ -42,7 +43,7 @@ Six commits, ~1 day total. None depend on each other.
 **Three components, four files, ~195 LoC total, three independent commits inside one PR:**
 
 | Component | File | LoC | Measured / estimated win | Why bundled |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | **B-1: batched COS** | `pysisyphus/calculators/Calculator.py` (base method) + `pysisyphus/cos/ChainOfStates.py` (dispatch site) | ~120 | **14.6× per NEB cycle** at N=30 / 12 images | Headline win; no AIMNet2-side workaround |
 | **B-2: IRC `hessian_recalc=N`** | `pysisyphus/irc/IRC.py` | ~50 | Path fidelity (prevents bifurcation on bond-breaking surfaces); ~2 s wall cost per 200-step IRC at `recalc=5` after Step 1 | Mirrors existing `HessianOptimizer.hessian_recalc` exactly |
 | **B-3: Dimer `N_hessian="calc"`** | `pysisyphus/calculators/Dimer.py` | ~25 | ~150-450 ms saved per saddle search (after Step 1's vmap-Hessian lands) | Tiny additive change; same MLIP-friendly theme |
@@ -50,7 +51,7 @@ Six commits, ~1 day total. None depend on each other.
 **Components dropped from earlier drafts:**
 
 | Dropped | Why |
-|---|---|
+| --- | --- |
 | Entry-points calculator registry (closes #180) | Different theme (UX, not perf); our `run_pysis()` shim already works; bundling it dilutes the perf narrative |
 
 ### Why bundle (instead of one-PR-per-feature)
