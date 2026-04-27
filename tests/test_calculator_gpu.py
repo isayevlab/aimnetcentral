@@ -359,3 +359,68 @@ class TestCPUGPUConsistency:
             nb_cpu = set(nbmat_cpu[i][nbmat_cpu[i] < N].tolist())
             nb_gpu = set(nbmat_gpu_cpu[i][nbmat_gpu_cpu[i] < N].tolist())
             assert nb_cpu == nb_gpu, f"PBC neighbors differ for atom {i}"
+
+
+class TestVectorizedHessian:
+    """End-to-end Hessian via vmap-based paths through the kernel.
+
+    These tests exercise the vmap rules on aimnet::conv_sv_2d_sp_bwd and
+    aimnet::conv_sv_2d_sp_bwd_bwd by calling torch.func.vmap directly on a vjp
+    closure built from the calculator's energy graph. AIMNet2Calculator's own
+    Hessian path is not invoked.
+    """
+
+    def _water_inputs(self, device):
+        coords = torch.tensor(
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            dtype=torch.float32,
+            device=device,
+        )
+        nums = torch.tensor([[8, 1, 1]], device=device)
+        charge = torch.tensor([0.0], device=device)
+        return coords, nums, charge
+
+    def test_func_vmap_hessian_matches_internal(self):
+        """torch.func.vmap-based Hessian matches the calculator's loop hessian.
+
+        torch.func.hessian is not used directly here because it pushes vmap through
+        the entire forward pass, which is blocked by an upstream non-vmap-compatible
+        op.  Instead we use the equivalent explicit form: compute dE/dr with
+        create_graph=True, then vmap over autograd.grad for the second derivative.
+        This exercises exactly the same vmap rules on aimnet::conv_sv_2d_sp_bwd and
+        aimnet::conv_sv_2d_sp_bwd_bwd as torch.func.hessian would, but confines the
+        vmap to the backward graph.
+        """
+        device = torch.device("cuda")
+        calc = AIMNet2Calculator("aimnet2", device=device, nb_threshold=0)
+        coords, nums, charge = self._water_inputs(device)
+
+        H_internal = calc(
+            {"coord": coords.unsqueeze(0).clone(), "numbers": nums, "charge": charge},
+            hessian=True,
+        )["hessian"]
+        assert H_internal.shape == (3, 3, 3, 3)
+
+        def energy_fn(x):
+            out = calc({"coord": x.unsqueeze(0), "numbers": nums, "charge": charge}, forces=False)
+            return out["energy"][0]
+
+        coord_req = coords.clone().requires_grad_(True)
+        dEdx_flat = torch.autograd.grad(energy_fn(coord_req), coord_req, create_graph=True)[0].flatten()
+
+        n = dEdx_flat.numel()
+        eye = torch.eye(n, device=device, dtype=dEdx_flat.dtype)
+
+        def vjp(go):
+            return torch.autograd.grad(
+                dEdx_flat,
+                coord_req,
+                grad_outputs=go,
+                retain_graph=True,
+                allow_unused=True,
+            )[0]
+
+        H_func = torch.func.vmap(vjp, 0)(eye).reshape(3, 3, 3, 3)
+        assert H_func.shape == (3, 3, 3, 3)
+        assert torch.isfinite(H_func).all()
+        assert (H_internal - H_func).abs().max().item() < 5e-3

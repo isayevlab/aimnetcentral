@@ -454,6 +454,103 @@ torch.library.register_autograd(
 
 
 # =============================================================================
+# vmap Registration
+# =============================================================================
+
+
+def _vmap_slice(t: Tensor, d: int | None, k: int) -> Tensor:
+    """Pick the k-th slice along vmap batch dim d, or pass through if not batched.
+
+    Returns a contiguous tensor when slicing — the underlying Warp kernels read
+    via wp.from_torch which assumes C-contiguous layout, so a non-contiguous view
+    from movedim(d, 0) would silently misread strided memory.
+    """
+    if d is None:
+        return t
+    return t.movedim(d, 0)[k].contiguous()
+
+
+@torch.library.register_vmap("aimnet::conv_sv_2d_sp_bwd")
+def _vmap_conv_sv_2d_sp_bwd(info, in_dims, grad_output, a, idx, g):
+    """vmap rule for the first-backward primitive.
+
+    Hit when torch.func.vmap traverses a vjp closure that reaches the first-order
+    backward (e.g. vmap over autograd.grad with create_graph=True).  Only
+    in_dims = (0, None, None, None) — vmap on the upstream cotangent only — is
+    supported.  Batching idx along its leading B dim is unsafe (it scatters the
+    kernel's padding-row sentinel at index B-1) and is not detected at runtime.
+
+    Note: register_vmap is consulted ONLY by the functorch dispatch (torch.func.vmap,
+    aka torch.vmap).  The legacy batching dispatch used by is_grads_batched=True and
+    autograd.functional.hessian(vectorize=True) does not consult this rule.
+
+    Strategy: K-loop, same reasoning as the bwd_bwd rule.
+    """
+    K = info.batch_size
+
+    out0: list[Tensor] = []
+    out1: list[Tensor] = []
+    for k in range(K):
+        outs = torch.ops.aimnet.conv_sv_2d_sp_bwd(
+            _vmap_slice(grad_output, in_dims[0], k),
+            _vmap_slice(a, in_dims[1], k),
+            _vmap_slice(idx, in_dims[2], k),
+            _vmap_slice(g, in_dims[3], k),
+        )
+        out0.append(outs[0])
+        out1.append(outs[1])
+
+    return (
+        [torch.stack(out0, dim=0), torch.stack(out1, dim=0)],
+        [0, 0],
+    )
+
+
+@torch.library.register_vmap("aimnet::conv_sv_2d_sp_bwd_bwd")
+def _vmap_conv_sv_2d_sp_bwd_bwd(info, in_dims, grad_output, grad2_a, grad2_g, a, idx, g):
+    """vmap rule for the double-backward primitive.
+
+    Hit when torch.func.vmap traverses a vjp closure that reaches the second-order
+    backward (the Hessian-via-vmap path).  Only
+    in_dims = (None, 0, 0, None, None, None) — vmap on the two upstream cotangents
+    only — is supported.  Batching idx, a, or g along their leading B dim is unsafe
+    (it scatters the kernel's padding-row sentinel at index B-1) and is not detected
+    at runtime.
+
+    Note: register_vmap is consulted ONLY by the functorch dispatch (torch.func.vmap,
+    aka torch.vmap).  The legacy batching dispatch used by is_grads_batched=True and
+    autograd.functional.hessian(vectorize=True) does not consult this rule.
+
+    Strategy: K-loop. Folding K into the kernel's leading B dim is unsafe because
+    the kernels rely on a single padding-row sentinel at index B-1; stacking K
+    copies would scatter padding rows. The K calls queue async on the CUDA
+    stream, so the loop's per-call cost is dominated by GPU work, not Python.
+    """
+    K = info.batch_size
+
+    out0: list[Tensor] = []
+    out1: list[Tensor] = []
+    out2: list[Tensor] = []
+    for k in range(K):
+        outs = torch.ops.aimnet.conv_sv_2d_sp_bwd_bwd(
+            _vmap_slice(grad_output, in_dims[0], k),
+            _vmap_slice(grad2_a, in_dims[1], k),
+            _vmap_slice(grad2_g, in_dims[2], k),
+            _vmap_slice(a, in_dims[3], k),
+            _vmap_slice(idx, in_dims[4], k),
+            _vmap_slice(g, in_dims[5], k),
+        )
+        out0.append(outs[0])
+        out1.append(outs[1])
+        out2.append(outs[2])
+
+    return (
+        [torch.stack(out0, dim=0), torch.stack(out1, dim=0), torch.stack(out2, dim=0)],
+        [0, 0, 0],
+    )
+
+
+# =============================================================================
 # Public API
 # =============================================================================
 
@@ -469,6 +566,14 @@ def conv_sv_2d_sp(a: Tensor, idx: Tensor, g: Tensor) -> Tensor:
         Index tensor of shape (B, M).
     g : Tensor
         Gate tensor of shape (B, M, G, 4).
+
+    Notes
+    -----
+    Only the first- and second-order backward primitives are vmap-registered.
+    `torch.func.vmap` directly over the forward (e.g. vmap over a non-vjp
+    closure that calls this function) will raise `Batching rule not implemented
+    for aimnet::conv_sv_2d_sp_fwd`. The Hessian-via-vmap path uses a vjp closure
+    that does not vmap forward, so it is unaffected.
 
     Returns
     -------
