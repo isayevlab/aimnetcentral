@@ -1134,12 +1134,28 @@ class AIMNet2Calculator:
 
     @staticmethod
     def calculate_hessian(forces: Tensor, coord: Tensor) -> Tensor:
-        # Coord includes padding atom (shape N+1), forces only for real atoms (shape N)
-        # Hessian computed only for actual atoms: (N, 3, N, 3)
-        hessian = -torch.stack([
-            torch.autograd.grad(_f, coord, retain_graph=True)[0] for _f in forces.flatten().unbind()
-        ]).view(-1, 3, coord.shape[0], 3)[:-1, :, :-1, :]
-        return hessian
+        # Coord includes padding atom (shape N+1), forces only for real atoms (shape N).
+        # Hessian computed only for actual atoms: (N, 3, N, 3).
+        #
+        # vmap-over-vjp form (not is_grads_batched=True or autograd.functional.hessian):
+        # torch.library.register_vmap on aimnet::conv_sv_2d_sp_{bwd,bwd_bwd} is consulted
+        # ONLY by the functorch dispatch (torch.func.vmap). The legacy batching dispatch
+        # would still raise "Batching rule not implemented." See
+        # docs/superpowers/plans/2026-04-26-vectorize-calculate-hessian-pr-a-vmap-rule.md.
+        n = forces.numel()
+        eye = torch.eye(n, device=forces.device, dtype=forces.dtype)
+
+        def vjp(go: Tensor) -> Tensor:
+            return torch.autograd.grad(
+                forces.flatten(),
+                coord,
+                grad_outputs=go,
+                retain_graph=True,
+                allow_unused=True,
+            )[0]
+
+        hessian = -torch.func.vmap(vjp, 0)(eye)
+        return hessian.view(-1, 3, coord.shape[0], 3)[:-1, :, :-1, :]
 
 
 def _add_padding_row(
