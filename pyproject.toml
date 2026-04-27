@@ -52,7 +52,7 @@ ase = [
 
 # PySisyphus calculator integration
 pysis = [
-    "pysisyphus",
+    "pysisyphus>=1.0.0",
 ]
 
 # Sella saddle-point optimizer integration (requires ASE)
