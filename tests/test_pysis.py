@@ -19,13 +19,14 @@ def _water_geom():
     from pysisyphus.Geometry import Geometry
 
     atoms = ("o", "h", "h")
-    coords = np.array(
-        [
+    coords = (
+        np.array([
             [0.0, 0.0, 0.0],
             [0.96, 0.0, 0.0],
             [-0.24, 0.93, 0.0],
-        ]
-    ).flatten() * ANG2BOHR
+        ]).flatten()
+        * ANG2BOHR
+    )
     return Geometry(atoms, coords)
 
 
@@ -35,13 +36,14 @@ def _hcn_ts_guess():
     from pysisyphus.Geometry import Geometry
 
     atoms = ("h", "c", "n")
-    coords = np.array(
-        [
+    coords = (
+        np.array([
             [-1.18, 0.55, 0.0],
             [0.00, 0.00, 0.0],
             [1.17, 0.00, 0.0],
-        ]
-    ).flatten() * ANG2BOHR
+        ]).flatten()
+        * ANG2BOHR
+    )
     return Geometry(atoms, coords)
 
 
@@ -64,9 +66,7 @@ class TestPysisSmoke:
 
         geom = _hcn_ts_guess()
         geom.set_calculator(AIMNet2Pysis("aimnet2"))
-        ts_opt = RSPRFOptimizer(
-            geom, max_cycles=40, hessian_init="calc", hessian_recalc=3, thresh="gau", dump=False
-        )
+        ts_opt = RSPRFOptimizer(geom, max_cycles=40, hessian_init="calc", hessian_recalc=3, thresh="gau", dump=False)
         ts_opt.run()
         assert ts_opt.is_converged
         eigvals = np.linalg.eigvalsh(geom.cart_hessian.reshape(9, 9))
