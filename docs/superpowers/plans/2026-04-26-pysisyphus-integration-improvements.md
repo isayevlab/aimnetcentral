@@ -12,7 +12,7 @@ Bring `AIMNet2Pysis` to the same quality bar as the Sella integration (#71) and 
 
 **Step 2.** Ship **all of Track A below** in `aimnetcentral`. Six small, independent commits.
 
-**Step 3.** Open **one** upstream PR to `eljost/pysisyphus`: a batched-evaluation hook for ChainOfStates / NEB. Measured 14.6× per-cycle speedup at N=30 / 12 images — the largest single win available, and the only one that needs upstream code (everything else has either a wrapper-side workaround, deferred value, or marginal benefit).
+**Step 3.** Open **one** upstream PR to `eljost/pysisyphus` bundling **three perf-themed MLIP hooks** under a single coherent narrative ("MLIP-friendly performance hooks for analytic-Hessian and batched calculators"). All three pieces are additive, default-unchanged, and small individually; bundling maximizes the value extracted from one round of maintainer attention. Drop the entry-points proposal (B1 in earlier drafts) — it's the only candidate that's not perf-themed AND has a wrapper-side workaround already shipping (`run_pysis`).
 
 ---
 
@@ -35,26 +35,43 @@ Six commits, ~1 day total. None depend on each other.
 
 ---
 
-## Track B — single upstream PR to `eljost/pysisyphus`
+## Track B — single bundled upstream PR to `eljost/pysisyphus`
 
-### B1 — `Calculator.get_forces_batch` for ChainOfStates / NEB
+**Title:** "MLIP-friendly hooks: batched ChainOfStates, IRC `hessian_recalc`, Dimer analytic-Hessian seed"
 
-**Files:**
-- `pysisyphus/cos/ChainOfStates.py` (per-image dispatch site)
-- `pysisyphus/calculators/Calculator.py` (optional method on the base; default = sequential fallback)
+**Three components, four files, ~195 LoC total, three independent commits inside one PR:**
 
-**Why this PR, and only this PR:**
-
-| Candidate | Measured / estimated | LoC | AIMNet2-side workaround? | Decision |
+| Component | File | LoC | Measured / estimated win | Why bundled |
 |---|---|---|---|---|
-| Batched NEB hook | **14.6× per cycle** at N=30 / 12 images | ~120 | None — COS dispatches per-image at the framework level | **Submit** |
-| Entry-points calculator registry (closes #180) | Quality-of-life only | ~20 | Yes — our `run_pysis()` shim ships and works | Drop |
-| `IRC.hessian_recalc=N` | Path fidelity, not wall time | ~50 | None, but recommend in a wrapper-side YAML config block once accepted | Drop |
-| `Dimer.N_hessian="calc"` | ~5-15 dimer rotation cycles saved (~150-450 ms) | ~25 | None, but limited audience | Drop |
+| **B-1: batched COS** | `pysisyphus/calculators/Calculator.py` (base method) + `pysisyphus/cos/ChainOfStates.py` (dispatch site) | ~120 | **14.6× per NEB cycle** at N=30 / 12 images | Headline win; no AIMNet2-side workaround |
+| **B-2: IRC `hessian_recalc=N`** | `pysisyphus/irc/IRC.py` | ~50 | Path fidelity (prevents bifurcation on bond-breaking surfaces); ~2 s wall cost per 200-step IRC at `recalc=5` after Step 1 | Mirrors existing `HessianOptimizer.hessian_recalc` exactly |
+| **B-3: Dimer `N_hessian="calc"`** | `pysisyphus/calculators/Dimer.py` | ~25 | ~150-450 ms saved per saddle search (after Step 1's vmap-Hessian lands) | Tiny additive change; same MLIP-friendly theme |
 
-The maintainer's external-PR cadence is ~4-5/year. Splitting attention across multiple asks risks none landing. The 14.6× NEB win is the only one with no AIMNet2-side workaround AND a defensible-by-the-numbers performance case.
+**Components dropped from earlier drafts:**
 
-**Sketch:**
+| Dropped | Why |
+|---|---|
+| Entry-points calculator registry (closes #180) | Different theme (UX, not perf); our `run_pysis()` shim already works; bundling it dilutes the perf narrative |
+
+### Why bundle (instead of one-PR-per-feature)
+
+- Maintainer external-PR cadence is ~4-5/year. Splitting into three PRs raises the chance that two of them sit indefinitely. One bundled PR with a coherent theme either lands all three or bounces all three with single feedback round.
+- All three components are additive, default-unchanged, and individually small. The largest single risk is B-1's COS dispatch change.
+- Single CI run, single review pass, single PR description. Lower maintainer cognitive load per item.
+
+### Commit structure inside the PR
+
+Three commits, reviewable independently:
+
+1. `feat(calculator): optional get_forces_batch hook for batched evaluation` — B-1, base class only (no COS change yet). Default `get_forces_batch` falls back to sequential `get_forces`.
+2. `feat(cos): use batched calculator hook when available` — B-1, the dispatch-site change. Behind capability detection; existing calculators unaffected.
+3. `feat(tsoptimizers): IRC hessian_recalc + Dimer N_hessian="calc"` — B-2 + B-3 combined. Both mirror existing patterns (`HessianOptimizer.hessian_recalc` and `Dimer.N_raw` precomputed-from-file path) and total ~75 LoC.
+
+If the maintainer pushes back on commit 2 (COS dispatch), commits 1, 3 can be cherry-picked alone.
+
+### Sketches
+
+**B-1 — `Calculator.get_forces_batch`:**
 
 ```python
 # pysisyphus/calculators/Calculator.py — optional method on the base
@@ -71,20 +88,64 @@ def calculate_forces_chain(self, ...):
         ...
 ```
 
-**Test (one):** Use a synthetic calculator that records call count. Run a 4-image COS with the synthetic; assert `get_forces_batch` invoked once per cycle (not 4 sequential `get_forces`).
+**B-2 — `IRC.hessian_recalc`:**
 
-**PR description:** Lead with the **14.6× measured number**. Cite AIMNet2 as the use case. Note that defaults are unchanged — every existing calculator still uses the per-image dispatch path. Keep the body short — this maintainer prefers concrete + minimal.
+```python
+# pysisyphus/irc/IRC.py
+def __init__(self, ..., hessian_recalc: int | None = None, ...):
+    self.hessian_recalc = hessian_recalc
+    ...
 
-**`aimnet2pysis.py` change once the PR merges and ships:** override `get_forces_batch` to use `AIMNet2Calculator`'s existing batched `(B, N, 3)` coord path via `mol_idx`. ~15 LoC follow-up commit. Not part of this plan; opens after the upstream PR is in a tagged release.
+# inside the IRC step loop:
+if self.hessian_recalc and self.cur_cycle and (self.cur_cycle % self.hessian_recalc == 0):
+    self.mw_hessian = self.geometry.mw_hessian  # triggers calc.get_hessian
+```
 
-**Risk:** B1 is the largest of the candidates and touches the recently-refactored COS path. Maintainer may push back on the COS dispatch change. Fallback if rejected: drop the COS-side change, keep only the base-class `get_forces_batch` method as documentation; ship our wrapper-side override anyway and route AIMNet2 NEB through a private utility that calls the batched path directly. That's worse for the rest of the ecosystem but preserves our 14.6× win locally.
+**B-3 — `Dimer.N_hessian="calc"`:**
+
+```python
+# pysisyphus/calculators/Dimer.py — in __init__, after parsing N_raw source
+if N_hessian == "calc":
+    H = geometry.cart_hessian
+    eigvals, eigvecs = np.linalg.eigh(H)
+    N_raw = eigvecs[:, 0]  # lowest mode
+```
+
+### Tests (one per component)
+
+- **B-1:** synthetic calculator records call count; 4-image COS asserts one batched call per cycle (not 4 sequential).
+- **B-2:** IRC on bundled HCN test fixture with `hessian_recalc=5` runs to completion; energy profile within tolerance of the no-recalc baseline (path-fidelity assertion is qualitative — the test confirms the hook doesn't break correctness).
+- **B-3:** synthetic analytic-Hessian fake calc; dimer with `N_hessian="calc"` converges in fewer rotation cycles than `N_hessian=None` (random) on the same surface. Quantitative.
+
+### PR description structure
+
+- **Lead with the 14.6× NEB measurement** — concrete number first.
+- One paragraph per component, framed as "MLIP-friendly hooks." Cite AIMNet2 as the use case for all three.
+- All defaults unchanged statement.
+- Note that B-2 mirrors `HessianOptimizer.hessian_recalc` and B-3 mirrors the existing `Dimer.N_raw` file-load path (precedent in their own codebase).
+- Total LoC: ~195 across 4 files; smaller than several recent merged PRs (e.g., #265 DMA was ~600).
+- Keep the body tight — this maintainer prefers concrete + minimal.
+
+### Follow-up `aimnet2pysis.py` changes once the PR ships in a release
+
+- Override `get_forces_batch` in `AIMNet2Pysis` to use `AIMNet2Calculator`'s existing batched `(B, N, 3)` coord path via `mol_idx`. ~15 LoC.
+- Add `irc: { hessian_recalc: 5 }` and `dimer: { N_hessian: calc }` to the YAML examples in `docs/external/pysis.md` (extends Track A item A5).
+
+Not part of this plan; opens after the upstream PR is in a tagged pysisyphus release.
+
+### Risk and fallback
+
+- **Highest risk: B-1's COS dispatch change.** Touches the recently-refactored (2024-06-26) chain-of-states code. Maintainer may push back.
+- **Fallback if maintainer rejects B-1's COS change but accepts the base-class method:** keep commit 1 and commits 3 (B-2 + B-3); drop commit 2. Ship our wrapper-side override and route AIMNet2 NEB through a private dispatch utility that calls the batched path directly. Worse for the wider ecosystem but preserves our 14.6× win locally.
+- **Fallback if maintainer rejects everything:** the work is still useful as a public design proposal documenting what MLIP-friendly hooks should look like; cite from our docs as "what we'd ship if upstream were responsive." Don't fork pysisyphus — that's a maintenance trap.
 
 ---
 
 ## Out of scope (and why)
 
 - **`hessian_init=calc` default override in `AIMNet2Pysis.__init__`.** Tempting alternative to A5 documentation — but pysisyphus reads `hessian_init` from the YAML, not our class. Setting it programmatically requires either monkey-patching pysisyphus internals or a `**kwargs`-passthrough that doesn't currently exist. Documentation is the simplest correct surface.
-- **Entry-points calculator registry / `IRC.hessian_recalc` / `Dimer.N_hessian="calc"`.** Each is a real upstream improvement, but the user constraint is "one upstream PR" given the project's maintenance pace. See the comparison table above. If the batched-NEB PR lands cleanly and the maintainer is responsive, revisit *one* of these as a follow-up.
+- **Entry-points calculator registry (closes upstream issue #180).** Different theme (UX/plugins, not perf); our `run_pysis()` shim already works. Including it in the bundled PR would dilute the perf narrative. Revisit only if the bundled PR lands cleanly AND the maintainer engages on follow-ups.
+- **A `has_analytic_hessian` flag + auto-`hessian_init=calc` default override in `HessianOptimizer`.** A higher-merge-risk "sticky default" change that touches a heavily-used optimizer base. Excluded from the bundle to keep review surface bounded.
 - **i-PI bridge.** v2 protocol does not transport Hessians, defeating the analytic-Hessian advantage that motivates this work. Considered, rejected.
 - **`FakeASE`-style two-way bridge.** Wrapper-of-wrapper. Sella's win taught us direct `Calculator` subclasses are simpler.
 - **Console-script removal / `run_pysis()` deprecation.** Documented public interface; no upstream replacement is being pursued, so the shim stays.
@@ -93,7 +154,7 @@ def calculate_forces_chain(self, ...):
 
 - **Step 1 (precondition):** `AIMNet2Calculator.calculate_hessian` swapped to `torch.func.vmap`-over-vjp; `pytest tests/test_calculator.py -v` green; benchmark on caffeine N=24 GPU shows ≥10× speedup vs. the loop (target: 20-25×).
 - **Step 2 (Track A):** Six commits land in `aimnetcentral` `main`; `pytest tests/test_pysis.py -m pysis` green with `pysisyphus` installed; `pytest tests/test_model_registry.py tests/test_hf_hub.py` green (CLAUDE.md gate); `mkdocs serve` clean.
-- **Step 3 (upstream B1):** PR open at `eljost/pysisyphus` with the 14.6× measurement in the description; one round of maintainer feedback received.
+- **Step 3 (upstream bundled PR):** Single PR open at `eljost/pysisyphus` with three commits (B-1 batched COS, B-2 IRC `hessian_recalc`, B-3 Dimer `N_hessian="calc"`); 14.6× measurement headlined in the description; one round of maintainer feedback received. Acceptable outcomes: full merge / partial merge with the COS dispatch change rejected (commits 1 + 3 land) / outright rejection (cite the design as documentation, do not fork).
 
 ## Related
 
