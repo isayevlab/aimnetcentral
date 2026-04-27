@@ -6,10 +6,9 @@ cache that prevents redundant model forwards on the get_forces -> get_energy
 double-call pattern. All tests skip cleanly when pysisyphus is not installed.
 """
 
-from unittest.mock import patch
-
 import numpy as np
 import pytest
+import torch
 
 pytestmark = pytest.mark.pysis
 
@@ -21,6 +20,26 @@ from pysisyphus.optimizers.RFOptimizer import RFOptimizer  # noqa: E402
 from pysisyphus.tsoptimizers.RSPRFOptimizer import RSPRFOptimizer  # noqa: E402
 
 from aimnet.calculators import AIMNet2Pysis  # noqa: E402
+
+
+class _CountingModelStub:
+    """Records call_count; returns shape-correct zero results so the cache logic
+    can be exercised without loading a real AIMNet2 model.
+    """
+
+    def __init__(self):
+        self.device = torch.device("cpu")
+        self.call_count = 0
+
+    def __call__(self, data, forces=False, hessian=False, validate_species=True):
+        self.call_count += 1
+        n = data["coord"].shape[0]
+        out = {"energy": torch.zeros(1)}
+        if forces:
+            out["forces"] = torch.zeros(n, 3)
+        if hessian:
+            out["hessian"] = torch.zeros(n, 3, n, 3)
+        return out
 
 
 def _water_geom():
@@ -71,20 +90,20 @@ class TestPysisSmoke:
 
     def test_cache_serves_get_energy_after_get_forces(self):
         """get_forces then get_energy at the same coord must run the model once."""
-        calc = AIMNet2Pysis("aimnet2")
+        stub = _CountingModelStub()
+        calc = AIMNet2Pysis(model=stub)
         geom = _water_geom()
-        with patch.object(calc, "model", wraps=calc.model) as model_spy:
-            calc.get_forces(geom.atoms, geom.coords)
-            calc.get_energy(geom.atoms, geom.coords)
-            assert model_spy.call_count == 1
+        calc.get_forces(geom.atoms, geom.coords)
+        calc.get_energy(geom.atoms, geom.coords)
+        assert stub.call_count == 1
 
     def test_cache_invalidates_on_coord_change(self):
         """Different coords must trigger a new model forward."""
-        calc = AIMNet2Pysis("aimnet2")
+        stub = _CountingModelStub()
+        calc = AIMNet2Pysis(model=stub)
         geom = _water_geom()
-        with patch.object(calc, "model", wraps=calc.model) as model_spy:
-            calc.get_forces(geom.atoms, geom.coords)
-            perturbed = geom.coords.copy()
-            perturbed[0] += 0.01
-            calc.get_forces(geom.atoms, perturbed)
-            assert model_spy.call_count == 2
+        calc.get_forces(geom.atoms, geom.coords)
+        perturbed = geom.coords.copy()
+        perturbed[0] += 0.01
+        calc.get_forces(geom.atoms, perturbed)
+        assert stub.call_count == 2
