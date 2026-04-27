@@ -338,9 +338,7 @@ class TestConvSV2dSP:
         g_in = g.detach()
 
         def call_kernel(g2a, g2g):
-            return torch.ops.aimnet.conv_sv_2d_sp_bwd_bwd(
-                grad_output, g2a, g2g, a_in, idx, g_in
-            )
+            return torch.ops.aimnet.conv_sv_2d_sp_bwd_bwd(grad_output, g2a, g2g, a_in, idx, g_in)
 
         batched = torch.vmap(
             call_kernel,

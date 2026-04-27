@@ -20,7 +20,7 @@
 
 **What this PR does NOT do:** It does not change `AIMNet2Calculator.calculate_hessian`. The calculator continues to use the row-wise Python loop. That swap is PR B and depends on this PR landing first.
 
-**Correctness anchor:** The existing regression `tests/test_calculator.py::test_external_hessian_matches_internal` (line 300) compares the calculator's internal Hessian against `torch.autograd.functional.hessian` (the non-vectorized form, `vectorize=False`) within `5e-3`. PR A must not regress that test. PR A also adds new tests that exercise the *vectorized* path (which today fails), proving the new rule works end-to-end.
+**Correctness anchor:** The existing regression `tests/test_calculator.py::test_external_hessian_matches_internal` (line 300) compares the calculator's internal Hessian against `torch.autograd.functional.hessian` (the non-vectorized form, `vectorize=False`) within `5e-3`. PR A must not regress that test. PR A also adds new tests that exercise the _vectorized_ path (which today fails), proving the new rule works end-to-end.
 
 **Ops being decorated:**
 
@@ -51,7 +51,7 @@ Under `torch.func.vmap` over a vjp closure (the only Hessian path that actually 
 ## File Structure
 
 | Action | File | Responsibility |
-|---|---|---|
+| --- | --- | --- |
 | Modify | `aimnet/kernels/conv_sv_2d_sp_wp.py` | Add `@torch.library.register_vmap` rules for both `aimnet::conv_sv_2d_sp_bwd` and `aimnet::conv_sv_2d_sp_bwd_bwd` below the existing `register_autograd` block, before the public-API section header. |
 | Modify | `tests/test_conv_sv_2d_sp.py` | Add a kernel-level direct vmap test (failure pin + correctness check) inside `class TestConvSV2dSP`. Existing pattern in this file uses GPU-only fixtures via `pytestmark = pytest.mark.gpu`; reuse them. |
 | Modify | `tests/test_calculator_gpu.py` | Add an end-to-end class `TestVectorizedHessian` covering the `torch.func.vmap`-over-vjp-closure Hessian path through `AIMNet2Calculator` on a small molecule. Module is already `pytestmark = pytest.mark.gpu`. |
@@ -65,6 +65,7 @@ No new files. No changes to `aimnet/calculators/calculator.py`, `aimnet/modules/
 ### Task 1: Pin the failure mode with a kernel-level vmap test (will fail before the rule is registered)
 
 **Files:**
+
 - Modify: `tests/test_conv_sv_2d_sp.py` — append a method to `class TestConvSV2dSP` after `test_padding_behavior` (currently ends around line 316).
 
 - [ ] **Step 1: Add the failing test**
@@ -138,6 +139,7 @@ The failing test is the pin. Do NOT mark it `xfail` — the next task makes it p
 ### Task 2: Implement the `register_vmap` rule (K-loop)
 
 **Files:**
+
 - Modify: `aimnet/kernels/conv_sv_2d_sp_wp.py` — insert a new block between the existing `register_autograd` calls (currently ending at line 453) and the `# ============================================================================= \n # Public API` separator (currently line 456).
 
 - [ ] **Step 1: Add the rule**
@@ -194,6 +196,7 @@ def _vmap_conv_sv_2d_sp_bwd_bwd(info, in_dims, grad_output, grad2_a, grad2_g, a,
 ```
 
 Notes for the implementer:
+
 - Do NOT add a vmap rule for `aimnet::conv_sv_2d_sp_fwd` or `aimnet::conv_sv_2d_sp_bwd` here. Only `bwd_bwd` is hit by the Hessian path. If a later test fails with a similar `Batching rule not implemented` error naming a different op, add the analogous rule then — not preemptively.
 - The output structure `[T, T, T]` matches the op's `register_fake` return list (line 386-394). Returning a tuple instead of a list will fail tree-flattening — keep it a list.
 - Type-checking: the file already has `# type: ignore` at line 22, so no extra annotations are required.
@@ -222,6 +225,7 @@ git commit -m "feat(kernels): register vmap rule for conv_sv_2d_sp_bwd_bwd"
 ### Task 3: End-to-end `torch.func.vmap` Hessian test on water
 
 **Files:**
+
 - Modify: `tests/test_calculator_gpu.py` — append a new class `TestVectorizedHessian` at the bottom of the file.
 
 **Why not `torch.func.hessian` directly:** `torch.func.hessian(energy_fn)(coords)` propagates `vmap` through the entire forward pass of the model, which fails at an upstream non-vmap-compatible op (`RuntimeError: Cannot access data pointer of Tensor that doesn't have storage`) before reaching our kernel. Confining `vmap` to the second-derivative direction by manually composing forward → first `grad(create_graph=True)` → `torch.func.vmap` over the second `grad` avoids that, and exercises exactly the `register_vmap` rules added by this PR. This decomposition is mathematically identical to `torch.func.hessian` and is the form PR B will use as well.
