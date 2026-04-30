@@ -19,13 +19,18 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 """
-DFT-D3 Custom Op for PyTorch.
+Custom PyTorch ops for AIMNet long-range interactions.
 
-This module provides a custom op for DFT-D3 dispersion energy computation
-using nvalchemiops GPU-accelerated kernels.
+This module provides custom ops for DFT-D3 dispersion and periodic Coulomb
+(Ewald/PME) energy computation using nvalchemiops GPU-accelerated kernels.
 
-The implementation wraps nvalchemiops calls in torch.autograd.Function classes
-with torch.library custom op registration for torch.compile compatibility.
+Both custom-op families intentionally use a dual autograd-registration pattern:
+the custom-op body calls a ``torch.autograd.Function.apply`` implementation for
+eager Python execution, and the ``torch.library`` op also registers a separate
+``register_autograd(..., setup_context=...)`` formula for traced/custom-op
+execution such as ``torch.compile``. These two paths must remain behaviorally
+aligned. Removing either one can leave eager mode working while compiled mode
+breaks, or the reverse.
 
 Note: Creating new TorchScript modules via torch.jit.script() is no longer
 supported. Loading legacy .jpt files remains functional.
