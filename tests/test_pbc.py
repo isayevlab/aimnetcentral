@@ -216,7 +216,7 @@ class TestDSFPeriodic:
 
                 stress_fd[i, j] = (e_plus - e_minus) / (2 * delta * volume)
 
-        torch.testing.assert_close(stress_from_virial, stress_fd, atol=2e-3, rtol=2e-2)
+        torch.testing.assert_close(stress_from_virial, stress_fd, atol=5e-4, rtol=5e-3)
 
 
 class TestEwaldPeriodic:
