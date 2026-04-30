@@ -669,6 +669,58 @@ class TestLRCoulombDSFPBC:
         assert torch.allclose(terms_mode0.forces[0, -1], torch.zeros(3, device=device), atol=1e-5)
         torch.testing.assert_close(terms_mode0.forces, f_ref, atol=1e-5, rtol=1e-5)
 
+    def test_dsf_mode0_large_coordinates_keep_padding_out_of_neighbor_list(self, device):
+        """Padded atoms stay out of the DSF NL even for large unwrapped coordinates."""
+        dsf_rc = 15.0
+        module = LRCoulomb(method="dsf", dsf_rc=dsf_rc, subtract_sr=False).to(device)
+        coord = torch.tensor(
+            [[[1505.0, 0.0, 0.0], [1510.0, 0.0, 0.0], [0.0, 0.0, 0.0]]],
+            dtype=torch.float32,
+            device=device,
+        )
+        charges = torch.tensor([[1.0, -1.0, 0.0]], dtype=torch.float32, device=device)
+        mask_i = torch.tensor([[False, False, True]], dtype=torch.bool, device=device)
+        data_padded = {
+            "_nb_mode": torch.tensor(0),
+            "_input_padded": torch.tensor(True),
+            "coord": coord,
+            "charges": charges,
+            "numbers": torch.tensor([[11, 17, 0]], dtype=torch.long, device=device),
+            "mask_i": mask_i,
+            "mol_idx": torch.zeros(coord.numel() // 3, device=device, dtype=torch.long),
+            "mol_sizes": torch.tensor([2], device=device, dtype=torch.long),
+        }
+
+        _positions, _charges, _batch_idx, nbmat, _cell, _shifts, fill_value, _num_systems = module._dsf_inputs_mode0(
+            data_padded
+        )
+
+        padded_idx = 2
+        real_rows = nbmat[:padded_idx]
+        assert not (real_rows == padded_idx).any()
+        assert torch.all(nbmat[padded_idx] == fill_value)
+        assert torch.all(nbmat[-1] == fill_value)
+
+        result_padded, terms_padded = module.forward_with_derivatives(data_padded, compute_forces=True)
+        assert terms_padded is not None and terms_padded.forces is not None
+
+        data_ref = {
+            "_nb_mode": torch.tensor(0),
+            "_input_padded": torch.tensor(False),
+            "coord": coord[:, :2],
+            "charges": charges[:, :2],
+            "numbers": torch.tensor([[11, 17]], dtype=torch.long, device=device),
+            "mask_i": torch.zeros((1, 2), dtype=torch.bool, device=device),
+            "mol_idx": torch.zeros(2, device=device, dtype=torch.long),
+            "mol_sizes": torch.tensor([2], device=device, dtype=torch.long),
+        }
+        result_ref, terms_ref = module.forward_with_derivatives(data_ref, compute_forces=True)
+        assert terms_ref is not None and terms_ref.forces is not None
+
+        torch.testing.assert_close(result_padded["e_h"], result_ref["e_h"], atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(terms_padded.forces[:, :2], terms_ref.forces, atol=1e-5, rtol=1e-5)
+        assert torch.allclose(terms_padded.forces[0, padded_idx], torch.zeros(3, device=device), atol=1e-5)
+
 
 class TestLRCoulombEwaldPBC:
     """Tests for Ewald Coulomb with periodic boundary conditions."""

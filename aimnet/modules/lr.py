@@ -201,16 +201,20 @@ class LRCoulomb(nn.Module):
         total_atoms = B * N
         fill_value = total_atoms
 
-        # Flatten real atoms; shift padded atoms outside the cutoff so the NL
-        # cannot pick them up as neighbors of real atoms (avoids spurious
-        # near-zero distances and keeps the kernel inputs clean).
+        # Flatten atoms and place padded entries at deterministic sentinel
+        # coordinates outside the real coordinate extent. This keeps padding out
+        # of the cutoff-bounded neighbor list even for unwrapped large systems.
         coord_real = coord.reshape(total_atoms, 3)
         mask_i_flat = mask_i.reshape(total_atoms)
         if mask_i_flat.any():
-            far = float(self.dsf_rc) * 100.0 + 1.0
-            shift = coord_real.new_zeros(3)
-            shift[0] = far
-            coord_real = torch.where(mask_i_flat.unsqueeze(-1), coord_real + shift, coord_real)
+            real_coord = coord_real[~mask_i_flat]
+            extent = real_coord.abs().amax() if real_coord.numel() else coord_real.new_tensor(0.0)
+            margin = coord_real.new_tensor(float(self.dsf_rc) + 1.0)
+            pad_rank = torch.cumsum(mask_i_flat.to(coord_real.dtype), dim=0)[mask_i_flat]
+            pad_coord = coord_real.new_zeros((pad_rank.shape[0], 3))
+            pad_coord[:, 0] = extent + margin * pad_rank
+            coord_real = coord_real.clone()
+            coord_real[mask_i_flat] = pad_coord
 
         charges_real = charges.reshape(total_atoms)
         batch_idx_real = torch.arange(B, device=coord.device, dtype=torch.int32).repeat_interleave(N)
