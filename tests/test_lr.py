@@ -818,6 +818,25 @@ class TestLRCoulombPMEPBC:
         assert torch.isfinite(data["coord"].grad).all()
 
 
+class TestLRCoulombBackendInterface:
+    """Tests for the common external Coulomb derivative interface."""
+
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_ewald_pme_forward_with_derivatives_returns_no_terms(self, pbc_crystal_small, device, method):
+        """Ewald/PME use autograd derivatives and return no explicit derivative terms."""
+        module = LRCoulomb(method=method).to(device)
+        data = setup_pbc_data(pbc_crystal_small, device)
+
+        n_atoms = data["coord"].shape[0]
+        data["charges"] = _neutral_padded_charges(n_atoms, device)
+
+        result, terms = module.forward_with_derivatives(data, compute_forces=True, compute_virial=True)
+
+        assert "e_h" in result
+        assert torch.isfinite(result["e_h"]).all()
+        assert terms is None
+
+
 class TestLRCoulombSRSubtraction:
     """Tests covering subtract_sr behaviour for nvalchemiops Coulomb backends."""
 

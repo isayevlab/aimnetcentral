@@ -397,7 +397,11 @@ class LRCoulomb(nn.Module):
         energy, _terms = self._coul_dsf_nvalchemi(data)
         return energy
 
-    def _coul_nvalchemi(self, data: dict[str, Tensor], backend: str) -> Tensor:
+    def _coul_nvalchemi(
+        self,
+        data: dict[str, Tensor],
+        backend: str,
+    ) -> tuple[Tensor, LRCoulombDerivativeTerms | None]:
         """Compute periodic Coulomb energy via the ``aimnet::lr_coulomb_fwd`` custom op.
 
         The custom op wraps ``nvalchemiops`` Ewald/PME in an
@@ -459,15 +463,17 @@ class LRCoulomb(nn.Module):
         if self.subtract_sr:
             data = ops.lazy_calc_dij(data, "")
             e_periodic = e_periodic - self.coul_simple_sr(data)
-        return e_periodic
+        return e_periodic, None
 
     def coul_ewald(self, data: dict[str, Tensor]) -> Tensor:
         """Per-system Ewald energy in eV. Requires ``cell`` and ``nbmat_lr``/``shifts_lr``."""
-        return self._coul_nvalchemi(data, backend="ewald")
+        energy, _terms = self._coul_nvalchemi(data, backend="ewald")
+        return energy
 
     def coul_pme(self, data: dict[str, Tensor]) -> Tensor:
         """Per-system PME energy in eV. Requires ``cell`` and ``nbmat_lr``/``shifts_lr``."""
-        return self._coul_nvalchemi(data, backend="pme")
+        energy, _terms = self._coul_nvalchemi(data, backend="pme")
+        return energy
 
     def forward_with_derivatives(
         self,
@@ -476,14 +482,22 @@ class LRCoulomb(nn.Module):
         compute_forces: bool = False,
         compute_virial: bool = False,
     ) -> tuple[dict[str, Tensor], LRCoulombDerivativeTerms | None]:
-        if self.method != "dsf":
-            return self.forward(data), None
+        if self.method == "simple":
+            e = self.coul_simple(data)
+            terms = None
+        elif self.method == "dsf":
+            e, terms = self._coul_dsf_nvalchemi(
+                data,
+                compute_forces=compute_forces,
+                compute_virial=compute_virial,
+            )
+        elif self.method == "ewald":
+            e, terms = self._coul_nvalchemi(data, backend="ewald")
+        elif self.method == "pme":
+            e, terms = self._coul_nvalchemi(data, backend="pme")
+        else:
+            raise ValueError(f"Unknown method {self.method}")
 
-        e, terms = self._coul_dsf_nvalchemi(
-            data,
-            compute_forces=compute_forces,
-            compute_virial=compute_virial,
-        )
         if self.key_out in data:
             data[self.key_out] = data[self.key_out].double() + e
         else:
@@ -496,9 +510,9 @@ class LRCoulomb(nn.Module):
         elif self.method == "dsf":
             e = self.coul_dsf(data)
         elif self.method == "ewald":
-            e = self._coul_nvalchemi(data, backend="ewald")
+            e = self.coul_ewald(data)
         elif self.method == "pme":
-            e = self._coul_nvalchemi(data, backend="pme")
+            e = self.coul_pme(data)
         else:
             raise ValueError(f"Unknown method {self.method}")
         if self.key_out in data:

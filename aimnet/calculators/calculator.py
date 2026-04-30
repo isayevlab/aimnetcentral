@@ -872,21 +872,19 @@ class AIMNet2Calculator:
     ) -> tuple[dict[str, Tensor], LRCoulombDerivativeTerms | None]:
         """Run external Coulomb and DFTD3 modules if attached.
 
-        Ewald/PME and DFTD3 publish derivatives through custom autograd ops.
-        DSF is different: nvalchemiops exposes explicit forces/virial but its
-        energy is not position/cell differentiable, so the calculator carries
-        those DSF terms internally and combines them in :meth:`get_derivatives`.
+        External Coulomb modules expose a shared ``forward_with_derivatives``
+        interface. Ewald/PME publish derivatives through custom autograd ops
+        and return no explicit terms; DSF returns nvalchemiops forces/virial
+        for :meth:`get_derivatives` because its energy is not position/cell
+        differentiable.
         """
         coulomb_terms = None
         if self.external_coulomb is not None:
-            if self.external_coulomb.method == "dsf" and (forces or stress):
-                data, coulomb_terms = self.external_coulomb.forward_with_derivatives(
-                    data,
-                    compute_forces=forces,
-                    compute_virial=stress,
-                )
-            else:
-                data = self.external_coulomb(data)
+            data, coulomb_terms = self.external_coulomb.forward_with_derivatives(
+                data,
+                compute_forces=forces,
+                compute_virial=stress,
+            )
         if self.external_dftd3 is not None:
             self.external_dftd3.compute_virial = stress
             data = self.external_dftd3(data)

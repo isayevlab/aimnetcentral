@@ -94,6 +94,22 @@ class DummyEmbeddedCoulombModel(torch.nn.Module):
         return data
 
 
+class RecordingExternalCoulomb:
+    """Minimal external Coulomb stub that records derivative-interface calls."""
+
+    def __init__(self, method):
+        self.method = method
+        self.calls = []
+
+    def __call__(self, data):
+        raise AssertionError("calculator should use forward_with_derivatives")
+
+    def forward_with_derivatives(self, data, *, compute_forces=False, compute_virial=False):
+        self.calls.append((compute_forces, compute_virial))
+        data["energy"] = data.get("energy", torch.zeros(1)).double() + torch.ones(1, dtype=torch.float64)
+        return data, None
+
+
 class TestCoulombMethods:
     """Tests for Coulomb method switching."""
 
@@ -206,6 +222,19 @@ class TestCoulombMethods:
 
         assert calc.external_coulomb is None
         assert (calc._coulomb_method, calc._coulomb_cutoff, calc.cutoff_lr) == before
+
+    @pytest.mark.parametrize("method", COULOMB_METHODS)
+    def test_external_coulomb_uses_derivative_interface(self, method):
+        """All external Coulomb methods are run through the common derivative interface."""
+        calc = AIMNet2Calculator.__new__(AIMNet2Calculator)
+        calc.external_coulomb = RecordingExternalCoulomb(method)
+        calc.external_dftd3 = None
+
+        data, terms = calc._run_external_modules({"energy": torch.zeros(1)}, forces=True, stress=True)
+
+        assert terms is None
+        assert calc.external_coulomb.calls == [(True, True)]
+        torch.testing.assert_close(data["energy"], torch.ones(1, dtype=torch.float64))
 
     @pytest.mark.parametrize("method", ["simple", "dsf"])
     def test_coulomb_method_produces_valid_energy(self, method):
