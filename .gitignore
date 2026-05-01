@@ -168,6 +168,15 @@ copilot-instructions.md
 .github/copilot-instructions.md
 .copilot/
 
+# Internal-only planning, specs, and roadmap docs (never publish)
+docs/superpowers/
+docs/plans/
+docs/specs/
+ROADMAP.md
+TODO.md
+PLAN.md
+PLANS.md
+
 # Git worktrees
 .worktrees/
 
