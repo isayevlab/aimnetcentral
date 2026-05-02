@@ -1,6 +1,10 @@
 import yaml
 
-from aimnet.calculators.model_registry import load_model_registry
+from aimnet.calculators.model_registry import (
+    get_registry_model_family,
+    load_model_registry,
+    resolve_registry_model_name,
+)
 
 
 def test_load_model_registry_respects_registry_file_param(tmp_path):
@@ -25,6 +29,8 @@ def test_default_aimnet2_alias_resolves_to_wb97m_d3():
     registry = load_model_registry()
     assert registry["aliases"]["aimnet2"] == "aimnet2-wb97m-d3_0"
     assert "aimnet2-wb97m-d3_0" in registry["models"]
+    assert resolve_registry_model_name("aimnet2") == "aimnet2-wb97m-d3_0"
+    assert get_registry_model_family("aimnet2") == "wb97m-d3"
 
 
 def test_short_alias_forms_match():
@@ -47,6 +53,22 @@ def test_short_alias_forms_match():
         assert aliases.get(canonical_alias) == expected_target, f"{canonical_alias} should resolve to {expected_target}"
         for legacy in legacy_aliases:
             assert aliases.get(legacy) == expected_target, f"legacy alias {legacy} should resolve to {expected_target}"
+
+
+def test_registered_model_family_inference_for_short_aliases():
+    """Family tags used for energy-scale warnings must follow the canonical registry key."""
+    expectations = {
+        "aimnet2": "wb97m-d3",
+        "aimnet2-wb97m": "wb97m-d3",
+        "aimnet2-b973c": "b973c-d3",
+        "aimnet2-2025": "b973c-2025-d3",
+        "aimnet2-nse": "nse",
+        "aimnet2-pd": "pd",
+        "aimnet2-rxn": "rxn",
+        "aimnet2rxn": "rxn",
+    }
+    for alias, family in expectations.items():
+        assert get_registry_model_family(alias) == family
 
 
 def test_canonical_keys_for_all_families():

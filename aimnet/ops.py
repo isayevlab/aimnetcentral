@@ -164,6 +164,12 @@ def get_shifts_within_cutoff(cell: Tensor, cutoff: Tensor) -> Tensor:
 
     Note: Batched cells are not supported - this function is only used by Ewald summation
     which is a single-molecule calculation.
+
+    Deprecated
+    ----------
+    This helper is no longer used inside ``aimnet`` after switching the Ewald
+    backend to ``nvalchemiops``. It is kept for backwards compatibility with
+    external consumers that may still rely on it.
     """
     assert cell.ndim == 2 and cell.shape == (3, 3), "Batched cells not supported for Ewald summation"
     cell_inv = torch.linalg.inv(cell).mT
@@ -179,7 +185,7 @@ def get_shifts_within_cutoff(cell: Tensor, cutoff: Tensor) -> Tensor:
 
 
 def coulomb_matrix_ewald(coord: Tensor, cell: Tensor, accuracy: float = 1e-8) -> Tensor:
-    """Compute Coulomb matrix using Ewald summation.
+    """Compute Coulomb matrix using a pure-PyTorch Ewald summation.
 
     Parameters
     ----------
@@ -201,6 +207,13 @@ def coulomb_matrix_ewald(coord: Tensor, cell: Tensor, accuracy: float = 1e-8) ->
     -------
     Tensor
         Coulomb matrix J, shape (N, N).
+
+    Deprecated
+    ----------
+    The calculator now uses ``nvalchemiops.torch.interactions.electrostatics.ewald_summation``
+    via :class:`aimnet.modules.lr.LRCoulomb`. This pure-PyTorch helper is kept
+    for backwards compatibility / regression cross-checks but is no longer used
+    by ``LRCoulomb``.
     """
     # single molecule implementation. nb_mode == 1
     assert coord.ndim == 2 and cell.ndim == 2, "Only single molecule is supported"
@@ -235,8 +248,6 @@ def coulomb_matrix_ewald(coord: Tensor, cell: Tensor, accuracy: float = 1e-8) ->
     within_cutoff = (length_all > 0.1) & (length_all < cutoff_recip)
     ks = ks_all[within_cutoff]
     length = length_all[within_cutoff]
-    # disps_ij[i, j, :] is displacement vector r_{ij}, (num_atoms, num_atoms, 3)
-    # disps_ij = coord[None, :, :] - coord[:, None, :] # computed above
     phases = torch.sum(ks[:, None, None, :] * disps_ij[None, :, :, :], dim=-1)
     e_recip_matrix_aug = (
         torch.cos(phases)

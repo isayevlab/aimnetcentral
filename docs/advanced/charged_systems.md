@@ -11,7 +11,7 @@
 ## Prerequisites
 
 - Familiarity with [AIMNet2Calculator](../calculator.md) and the [ASE interface](../tutorials/geometry_optimization.md)
-- Understanding of [long-range methods](../long_range.md) (DSF, Ewald)
+- Understanding of [long-range methods](../long_range.md) (DSF, Ewald, PME)
 
 ## Relevant Models
 
@@ -247,24 +247,19 @@ print(f"Water dipole: {np.linalg.norm(dipole):.3f} e*A")
 
     For applications requiring smooth charge evolution (e.g., computing current from charge fluxes), consider post-processing to smooth the charge trajectory.
 
-## Ewald for Periodic Charged Systems
+## Ewald and PME for Periodic Charged Systems
 
 ### Single Molecule in a Periodic Box
 
-For a single charged molecule in a periodic box, Ewald summation handles the long-range electrostatics exactly. However, note that the current Ewald implementation uses a full N x N interaction matrix, not a neighbor-list approach:
-
-!!! warning "Ewald Scaling"
-
-    The Ewald implementation builds a full N x N Coulomb matrix, making it suitable for **single molecules** in periodic boxes but expensive for large systems. For large periodic systems, prefer DSF.
+For charged molecules in a periodic box, Ewald summation (or PME for larger cells) handles the long-range electrostatics with controllable accuracy. Both methods share the `ewald_accuracy` parameter (default `1e-6`, matching the nvalchemiops default) and use a per-call neighbor list sized to the estimated real-space cutoff:
 
 ```python
 import torch
 from aimnet.calculators import AIMNet2Calculator
 
 calc = AIMNet2Calculator("aimnet2")
-calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-8)
+calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-6)
 
-# Charged molecule in periodic box
 cell = torch.tensor([
     [15.0, 0.0, 0.0],
     [0.0, 15.0, 0.0],
@@ -276,8 +271,20 @@ result = calc({
     "numbers": numbers_ion,
     "charge": torch.tensor(-1.0),
     "cell": cell,
-}, forces=True)
+}, forces=True, stress=True)
+
+calc.set_lrcoulomb_method("pme", ewald_accuracy=1e-6)
+result_pme = calc({
+    "coord": coords_ion,
+    "numbers": numbers_ion,
+    "charge": torch.tensor(-1.0),
+    "cell": cell,
+}, forces=True, stress=True)
 ```
+
+Ewald and PME support force/stress losses (`train=True`) and calculator Hessian requests; DSF only supports inference forces/stress. See [Long-Range Methods → Derivative Support](../long_range.md#derivative-support).
+
+For non-neutral cells, Ewald and PME use the standard uniform-background convention. DSF is cutoff-based and remains finite for non-neutral inputs, but it does not apply the same Ewald/PME background correction.
 
 ### Automatic Method Switching for PBC
 
@@ -376,5 +383,5 @@ print(f"Deprotonation energy (gas phase): {-delta_e:.1f} kcal/mol")
 ## What's Next
 
 - [Non-Covalent Interactions](intermolecular_interactions.md) -- binding energies of charged and neutral complexes
-- [Long-Range Methods](../long_range.md) -- detailed DSF and Ewald configuration
+- [Long-Range Methods](../long_range.md) -- detailed DSF, Ewald, and PME configuration
 - [Model Selection Guide](../models/guide.md) -- choosing the right model for your chemistry

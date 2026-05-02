@@ -135,7 +135,7 @@ AIMNet2 includes external DFT-D3 dispersion and long-range Coulomb modules. For 
 calc.set_lrcoulomb_method("dsf", cutoff=15.0)
 ```
 
-See [Long-Range Methods](../long_range.md) for details on DSF vs Ewald.
+See [Long-Range Methods](../long_range.md) for details on DSF, Ewald, and PME.
 
 ### Ensemble Averaging
 

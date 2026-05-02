@@ -94,6 +94,12 @@ def load_model(path: str, device: str = "cpu") -> tuple[nn.Module, ModelMetadata
         model_config = yaml.safe_load(data["model_yaml"])
         model = build_module(model_config)
 
+        # Atomic shifts store SAE/reference-energy values and may be float64 in
+        # the file. Cast before load_state_dict so copy_ does not truncate them
+        # into the default float32 embedding.
+        if hasattr(model, "outputs") and hasattr(model.outputs, "atomic_shift"):
+            model.outputs.atomic_shift.double()
+
         # Use strict=False because modules may differ between formats
         load_result = model.load_state_dict(data["state_dict"], strict=False)
 
@@ -108,10 +114,6 @@ def load_model(path: str, device: str = "cpu") -> tuple[nn.Module, ModelMetadata
             warnings.warn(f"State dict mismatch during model loading. {'; '.join(msg_parts)}", stacklevel=2)
 
         model = model.to(device)
-
-        # Preserve float64 precision for atomic shifts (SAE values) after device transfer
-        if hasattr(model, "outputs") and hasattr(model.outputs, "atomic_shift"):
-            model.outputs.atomic_shift.shifts = model.outputs.atomic_shift.shifts.double()
 
         metadata: ModelMetadata = {
             "format_version": data.get("format_version", 2),  # Default 2 for early v2 files without version

@@ -11,8 +11,70 @@ from torch import Tensor, nn
 
 from aimnet.models.base import load_model
 from aimnet.modules import DFTD3, LRCoulomb
+from aimnet.modules.lr import ExternalDerivativeTerms
 
-from .model_registry import get_model_path
+from .model_registry import get_model_path, get_registry_model_family
+
+_WB97M_D3_PARAMS = {"s6": 1.0, "s8": 0.3908, "a1": 0.566, "a2": 3.128}
+
+
+def _sum_optional_tensor(x: Tensor | None, y: Tensor | None) -> Tensor | None:
+    """Elementwise sum of two ``Optional[Tensor]`` operands."""
+    if x is None:
+        return y
+    if y is None:
+        return x
+    return x + y.to(dtype=x.dtype, device=x.device)
+
+
+def _combine_external_terms(
+    a: ExternalDerivativeTerms | None,
+    b: ExternalDerivativeTerms | None,
+) -> ExternalDerivativeTerms | None:
+    """Sum forces and virials of two external derivative terms.
+
+    Both inputs follow the calculator-side contract used by
+    :meth:`AIMNet2Calculator.get_derivatives`: ``forces`` add to the
+    autograd-derived forces and ``virial`` enters as ``dedc -= virial.mT``.
+    DSF Coulomb and DFTD3 both publish detached terms in this convention, so
+    combining them is a per-system elementwise sum.
+    """
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return ExternalDerivativeTerms(
+        forces=_sum_optional_tensor(a.forces, b.forces),
+        virial=_sum_optional_tensor(a.virial, b.virial),
+    )
+
+
+def _apply_family_defaults(metadata: dict, registry_family: str | None) -> dict:
+    """Apply calculator-side compatibility defaults for released model families."""
+    metadata = dict(metadata)
+    if registry_family is not None:
+        metadata_family = metadata.get("family")
+        if metadata_family is None:
+            metadata["family"] = registry_family
+        elif metadata_family != registry_family:
+            raise ValueError(
+                f"Registry family '{registry_family}' does not match model metadata family "
+                f"'{metadata_family}'. Refusing to load ambiguous energy scale."
+            )
+
+    if metadata.get("family") == "rxn":
+        supports_charged = metadata.get("supports_charged_systems")
+        if supports_charged is None:
+            metadata["supports_charged_systems"] = False
+        elif supports_charged is not False:
+            raise ValueError("aimnet2-rxn models must declare supports_charged_systems=False.")
+
+        if not metadata.get("has_embedded_d3ts", False):
+            metadata["needs_dispersion"] = True
+            if metadata.get("d3_params") is None:
+                metadata["d3_params"] = dict(_WB97M_D3_PARAMS)
+
+    return metadata
 
 
 class AdaptiveNeighborList:
@@ -244,6 +306,7 @@ class AIMNet2Calculator:
 
         # Load model and get metadata
         metadata: dict | None = None
+        registry_family: str | None = None
         # Inline org/name pattern — exactly one slash, both segments alphanumeric+._-
         # This avoids importing optional HF deps for ordinary file paths containing slashes.
         _HF_ID_RE = re.compile(r"^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$")
@@ -272,10 +335,14 @@ class AIMNet2Calculator:
                     self.cutoff = metadata["cutoff"]
                 else:
                     # _looks_like_hf matched but it's a local file path — fall through
+                    if not os.path.isfile(model):
+                        registry_family = get_registry_model_family(model)
                     p = get_model_path(model)
                     self.model, metadata = load_model(p, device=self.device)
                     self.cutoff = metadata["cutoff"]
             else:
+                if not os.path.isfile(model):
+                    registry_family = get_registry_model_family(model)
                 p = get_model_path(model)
                 self.model, metadata = load_model(p, device=self.device)
                 self.cutoff = metadata["cutoff"]
@@ -285,6 +352,10 @@ class AIMNet2Calculator:
             metadata = getattr(self.model, "_metadata", None)
         else:
             raise TypeError("Invalid model type/name.")
+
+        if metadata is not None:
+            metadata = _apply_family_defaults(metadata, registry_family)
+            self.model._metadata = metadata
 
         # Compile model if requested
         self._was_compiled = bool(compile_model)
@@ -373,8 +444,8 @@ class AIMNet2Calculator:
         if self.external_coulomb is not None:
             if self.external_coulomb.method == "simple":
                 self._coulomb_cutoff = float("inf")
-            elif self.external_coulomb.method == "ewald":
-                self._coulomb_cutoff = None  # Ewald manages its own cutoff
+            elif self.external_coulomb.method in ("ewald", "pme"):
+                self._coulomb_cutoff = None  # Ewald/PME manage their own cutoff
             else:
                 self._coulomb_cutoff = self.external_coulomb.dsf_rc
         if self.external_dftd3 is not None:
@@ -437,12 +508,9 @@ class AIMNet2Calculator:
         ``nn.Module`` inputs or from .pt files that don't declare ``family``
         in metadata pass ``None`` here and skip both tracking and warning.
 
-        Bypass: set the AIMNET_QUIET_FAMILY_MIX environment variable to '1'.
+        Use Python's standard warnings filters if this warning needs to be silenced.
         """
         if family is None:
-            return
-        if os.environ.get("AIMNET_QUIET_FAMILY_MIX") == "1":
-            self._constructed_families.add(family)
             return
         already_warned = family in self._constructed_families
         self._constructed_families.add(family)
@@ -450,10 +518,10 @@ class AIMNet2Calculator:
             warnings.warn(
                 f"AIMNet2Calculator instances from different families have been "
                 f"constructed in this process: {sorted(self._constructed_families)}. "
-                f"Energy scales differ across families (e.g. rxn uses a learned "
-                f"shifted-electronic scale; aimnet2-wb97m-d3 uses absolute "
-                f"electronic energies on the ~-1100 eV scale). Do not mix or compare "
-                f"energies across families. Set AIMNET_QUIET_FAMILY_MIX=1 to silence.",
+                f"Energy targets and reference conventions differ across families "
+                f"(e.g. rxn uses a learned shifted-electronic scale, while wb97m-d3 "
+                f"and b973c-d3 use different DFT targets). Do not mix or compare "
+                f"energies across families.",
                 UserWarning,
                 stacklevel=2,
             )
@@ -490,8 +558,8 @@ class AIMNet2Calculator:
         Returns
         -------
         str | None
-            One of "simple", "dsf", "ewald", or None if no external Coulomb.
-            For legacy models with embedded Coulomb, returns None.
+            One of "simple", "dsf", "ewald", "pme", or None if no external
+            Coulomb. For legacy models with embedded Coulomb, returns None.
         """
         if self.external_coulomb is not None:
             return self.external_coulomb.method
@@ -504,9 +572,10 @@ class AIMNet2Calculator:
         Returns
         -------
         float | None
-            The cutoff distance for Coulomb calculations, or None if not applicable.
-            For "simple" method, this is inf. For "ewald", this is None.
-            Use set_lrcoulomb_method() to change.
+            The cutoff distance for Coulomb calculations, or None if not
+            applicable. For ``"simple"`` this is ``inf``; for ``"ewald"`` and
+            ``"pme"`` this is ``None`` (cutoff is estimated per call from
+            ``ewald_accuracy``). Use ``set_lrcoulomb_method()`` to change.
         """
         return self._coulomb_cutoff
 
@@ -651,28 +720,30 @@ class AIMNet2Calculator:
 
     def set_lrcoulomb_method(
         self,
-        method: Literal["simple", "dsf", "ewald"],
+        method: Literal["simple", "dsf", "ewald", "pme"],
         cutoff: float = 15.0,
         dsf_alpha: float = 0.2,
-        ewald_accuracy: float = 1e-8,
+        ewald_accuracy: float = 1e-6,
     ):
         """Set the long-range Coulomb method.
 
         Parameters
         ----------
         method : str
-            One of "simple", "dsf", or "ewald".
+            One of "simple", "dsf", "ewald", or "pme".
         cutoff : float
             Cutoff distance for DSF neighbor list. Default is 15.0.
-            Not used for Ewald (which computes cutoffs from accuracy).
+            Silently ignored for "ewald" and "pme" (which estimate their own
+            real-space cutoffs from ``ewald_accuracy``).
         dsf_alpha : float
             Alpha parameter for DSF method. Default is 0.2.
         ewald_accuracy : float
-            Target accuracy for Ewald summation. Controls the real-space
-            and reciprocal-space cutoffs. Lower values give higher accuracy
-            but require more computation. Default is 1e-8.
+            Target accuracy for Ewald and PME summation. Controls the
+            real-space and reciprocal-space cutoffs (and PME mesh dimensions).
+            Smaller values give higher accuracy at the cost of more
+            computation. Default is 1e-6, matching the nvalchemiops default.
 
-            The Ewald cutoffs are computed as:
+            The Ewald cutoffs follow the Kolafa-Perram formula:
             - eta = (V^2 / N)^(1/6) / sqrt(2*pi)
             - cutoff_real = sqrt(-2 * ln(accuracy)) * eta
             - cutoff_recip = sqrt(-2 * ln(accuracy)) / eta
@@ -682,24 +753,13 @@ class AIMNet2Calculator:
         For new-format models with external Coulomb, this updates the external module.
         For legacy models with embedded Coulomb, a warning is issued as those modules
         cannot be modified at runtime.
-        """
-        if method not in ("simple", "dsf", "ewald"):
-            raise ValueError(f"Invalid method: {method}")
 
-        # rxn-family guard: the 4.6 A SR/LR cancellation point is physically
-        # frozen for this family. Changing the cutoff silently breaks matching.
-        meta = self.metadata or {}
-        if meta.get("family") == "rxn":
-            sr_rc = meta.get("coulomb_sr_rc")
-            if sr_rc is not None and method in ("dsf", "ewald") and abs(cutoff - float(sr_rc)) > 1e-6:
-                warnings.warn(
-                    f"Setting Coulomb {method} cutoff to {cutoff} A on aimnet2-rxn breaks "
-                    f"the SR/LR cancellation matching (this family was trained with a "
-                    f"physically frozen crossover at coulomb_sr_rc={sr_rc} A). Use the "
-                    f"matching cutoff or revert to the default external Coulomb.",
-                    UserWarning,
-                    stacklevel=2,
-                )
+        ``"ewald"`` and ``"pme"`` both require periodic systems (``cell`` set);
+        invoking the calculator without a cell raises ``ValueError`` at
+        ``prepare_input``.
+        """
+        if method not in ("simple", "dsf", "ewald", "pme"):
+            raise ValueError(f"Invalid method: {method}")
 
         # Warn if model has embedded Coulomb (legacy models)
         if self._has_embedded_coulomb() and self.external_coulomb is None:
@@ -709,6 +769,7 @@ class AIMNet2Calculator:
                 "For legacy models, the Coulomb method cannot be changed at runtime.",
                 stacklevel=2,
             )
+            return
 
         # Update external LRCoulomb module if present
         if self.external_coulomb is not None:
@@ -716,7 +777,7 @@ class AIMNet2Calculator:
             if method == "dsf":
                 self.external_coulomb.dsf_alpha = dsf_alpha
                 self.external_coulomb.dsf_rc = cutoff
-            elif method == "ewald":
+            elif method in ("ewald", "pme"):
                 self.external_coulomb.ewald_accuracy = ewald_accuracy
 
         # Update _coulomb_cutoff based on method
@@ -724,14 +785,15 @@ class AIMNet2Calculator:
             self._coulomb_cutoff = float("inf")
         elif method == "dsf":
             self._coulomb_cutoff = cutoff
-        elif method == "ewald":
-            self._coulomb_cutoff = None  # Ewald manages its own real-space cutoff
+        elif method in ("ewald", "pme"):
+            # Ewald/PME estimate their own real-space cutoff per call.
+            self._coulomb_cutoff = None
 
         # Update cutoff_lr for backward compatibility
         if self._coulomb_cutoff is not None:
             self.cutoff_lr = self._coulomb_cutoff
         else:
-            # Ewald - use DFTD3 cutoff if available, else None
+            # Ewald/PME - use DFTD3 cutoff if available, else None
             self.cutoff_lr = self._dftd3_cutoff if self.external_dftd3 is not None else None
 
         self._coulomb_method = method
@@ -748,10 +810,10 @@ class AIMNet2Calculator:
         Notes
         -----
         This updates both _coulomb_cutoff and _dftd3_cutoff.
-        Ewald uses its own internal neighbor list and ignores this cutoff.
+        Ewald/PME use their own per-call neighbor lists and ignore this cutoff.
         """
-        # Update both cutoffs (but not for ewald which manages its own)
-        if self._coulomb_method != "ewald":
+        # Update both cutoffs (but not for ewald/pme which manage their own)
+        if self._coulomb_method not in ("ewald", "pme"):
             self._coulomb_cutoff = cutoff
         self._dftd3_cutoff = cutoff
         self.cutoff_lr = cutoff
@@ -837,6 +899,11 @@ class AIMNet2Calculator:
 
         if hessian and "mol_idx" in data and data["mol_idx"][-1] > 0:
             raise NotImplementedError("Hessian calculation is not supported for multiple molecules")
+        if self._coulomb_method == "dsf" and (hessian or (self._train and (forces or stress))):
+            raise NotImplementedError(
+                "DSF Coulomb uses nvalchemiops explicit coordinate/cell derivatives and does not support "
+                "force/stress training or Hessian calculations. Use 'ewald' or 'pme' for these derivative modes."
+            )
         data = self.set_grad_tensors(data, forces=forces, stress=stress, hessian=hessian)
         if isinstance(self.model, torch.jit.ScriptModule):
             with torch.jit.optimized_execution(False):  # type: ignore
@@ -844,19 +911,67 @@ class AIMNet2Calculator:
         else:
             data = self.model(data)
         # Run external modules if present
-        data = self._run_external_modules(data, compute_stress=stress)
-        data = self.get_derivatives(data, forces=forces, stress=stress, hessian=hessian)
+        data, coulomb_terms = self._run_external_modules(data, forces=forces or hessian, stress=stress, hessian=hessian)
+        data = self.get_derivatives(data, forces=forces, stress=stress, hessian=hessian, coulomb_terms=coulomb_terms)
         data = self.process_output(data)
         return data
 
-    def _run_external_modules(self, data: dict[str, Tensor], compute_stress: bool = False) -> dict[str, Tensor]:
-        """Run external Coulomb and DFTD3 modules if attached."""
+    def _run_external_modules(
+        self,
+        data: dict[str, Tensor],
+        *,
+        forces: bool = False,
+        stress: bool = False,
+        hessian: bool = False,
+    ) -> tuple[dict[str, Tensor], ExternalDerivativeTerms | None]:
+        """Run external Coulomb and DFTD3 modules if attached.
+
+        External backends return ``(data, terms)`` when explicit force/virial
+        derivatives are requested. Ewald/PME switch to their local training
+        wrapper when force/stress training or Hessians need second derivatives.
+        """
+        coulomb_terms = None
         if self.external_coulomb is not None:
-            data = self.external_coulomb(data)
+            training_derivatives = hessian or (
+                self.external_coulomb.method in ("ewald", "pme")
+                and getattr(self, "_train", False)
+                and (forces or stress)
+            )
+            kwargs: dict[str, Any] = {
+                "compute_forces": forces,
+                "compute_virial": stress,
+                "training_derivatives": training_derivatives,
+            }
+            if training_derivatives and stress and self.external_coulomb.method in ("ewald", "pme"):
+                strain_inputs = getattr(self, "_external_strain_inputs", None)
+                if strain_inputs is not None:
+                    kwargs.update(strain_inputs)
+            result = self.external_coulomb(data, **kwargs)
+            if forces or stress:
+                data, coulomb_terms = result
+            else:
+                data = result
+
+        dftd3_terms = None
         if self.external_dftd3 is not None:
-            self.external_dftd3.compute_virial = compute_stress
-            data = self.external_dftd3(data)
-        return data
+            coord = data.get("coord")
+            dftd3_energy_graph = hessian or (
+                not forces and not stress and isinstance(coord, Tensor) and coord.requires_grad
+            )
+            if dftd3_energy_graph:
+                data = self.external_dftd3(data, hessian=True)
+            else:
+                result = self.external_dftd3(
+                    data,
+                    compute_forces=forces,
+                    compute_virial=stress,
+                )
+                if forces or stress:
+                    data, dftd3_terms = result
+                else:
+                    data = result
+
+        return data, _combine_external_terms(coulomb_terms, dftd3_terms)
 
     def prepare_input(self, data: dict[str, Any]) -> dict[str, Tensor]:
         data = self.to_input_tensors(data)
@@ -864,6 +979,12 @@ class AIMNet2Calculator:
         if data.get("cell") is not None and self._coulomb_method == "simple":
             warnings.warn("Switching to DSF Coulomb for PBC", stacklevel=1)
             self.set_lrcoulomb_method("dsf")
+        if self._coulomb_method in ("ewald", "pme") and data.get("cell") is None:
+            raise ValueError(
+                f"Coulomb method '{self._coulomb_method}' requires a periodic 'cell' "
+                "in the input data. Provide a (3,3) or (B,3,3) cell tensor, or switch "
+                "to a non-periodic method via set_lrcoulomb_method('simple' | 'dsf')."
+            )
         if data["coord"].ndim == 2:
             # Skip neighbor list calculation if already provided
             if "nbmat" not in data:
@@ -983,6 +1104,79 @@ class AIMNet2Calculator:
             assert shifts1 is not None
             data["shifts"] = shifts1
 
+        # Per-call dense Coulomb neighbor list for Ewald / PME: estimate the
+        # batch-max real-space cutoff from accuracy + system geometry, build a
+        # one-shot AdaptiveNeighborList for that cutoff, and alias it into
+        # both `nbmat_coulomb` and `nbmat_lr` so embedded modules that fall
+        # back to the shared LR list continue to work.
+        if self.external_coulomb is not None and self._coulomb_method in ("ewald", "pme") and cell is not None:
+            from nvalchemiops.torch.interactions.electrostatics import (
+                estimate_ewald_parameters,
+                estimate_pme_parameters,
+            )
+
+            accuracy = float(self.external_coulomb.ewald_accuracy)
+            with torch.no_grad():
+                if self._coulomb_method == "ewald":
+                    params = estimate_ewald_parameters(
+                        positions=data["coord"],
+                        cell=cell_batched,
+                        batch_idx=batch_idx,
+                        accuracy=accuracy,
+                    )
+                else:
+                    params = estimate_pme_parameters(
+                        positions=data["coord"],
+                        cell=cell_batched,
+                        batch_idx=batch_idx,
+                        accuracy=accuracy,
+                    )
+                rs_cut = float(params.real_space_cutoff.max().item())
+
+            # Per-call neighbor list, sized once per eval (do not cache).
+            nblist_coulomb = AdaptiveNeighborList(cutoff=rs_cut)
+            nbmat_coulomb, _, shifts_coulomb = nblist_coulomb(
+                positions=data["coord"],
+                cell=cell_batched,
+                pbc=pbc,
+                batch_idx=batch_idx,
+                fill_value=N,
+            )
+            nbmat_coulomb, shifts_coulomb = _add_padding_row(nbmat_coulomb, shifts_coulomb, N)
+            data["nbmat_coulomb"] = nbmat_coulomb
+            data["nbmat_lr"] = nbmat_coulomb
+            assert shifts_coulomb is not None
+            data["shifts_coulomb"] = shifts_coulomb
+            data["shifts_lr"] = shifts_coulomb
+
+            # DFTD3 keeps its own neighbor list flow when present.
+            if self._nblist_dftd3 is not None:
+                nbmat_dftd3, _, shifts_dftd3 = self._nblist_dftd3(
+                    positions=data["coord"],
+                    cell=cell_batched,
+                    pbc=pbc,
+                    batch_idx=batch_idx,
+                    fill_value=N,
+                )
+                nbmat_dftd3, shifts_dftd3 = _add_padding_row(nbmat_dftd3, shifts_dftd3, N)
+                data["nbmat_dftd3"] = nbmat_dftd3
+                if shifts_dftd3 is not None:
+                    data["shifts_dftd3"] = shifts_dftd3
+            elif self._nblist_lr is not None:
+                # Shared LR path active for DFTD3 only (since coulomb_cutoff is None).
+                nbmat_dftd3, _, shifts_dftd3 = self._nblist_lr(
+                    positions=data["coord"],
+                    cell=cell_batched,
+                    pbc=pbc,
+                    batch_idx=batch_idx,
+                    fill_value=N,
+                )
+                nbmat_dftd3, shifts_dftd3 = _add_padding_row(nbmat_dftd3, shifts_dftd3, N)
+                data["nbmat_dftd3"] = nbmat_dftd3
+                if shifts_dftd3 is not None:
+                    data["shifts_dftd3"] = shifts_dftd3
+            return data
+
         # Unified neighbor list when LR module cutoffs are similar
         if self._nblist_lr is not None:
             if self._coulomb_cutoff == float("inf"):
@@ -1071,12 +1265,15 @@ class AIMNet2Calculator:
 
     def set_grad_tensors(self, data: dict[str, Tensor], forces=False, stress=False, hessian=False) -> dict[str, Tensor]:
         self._saved_for_grad = {}
+        self._external_strain_inputs = None
         if forces or hessian:
             data["coord"].requires_grad_(True)
             self._saved_for_grad["coord"] = data["coord"]
         if stress:
             assert "cell" in data and data["cell"] is not None, "Stress calculation requires cell"
+            coord_unstrained = data["coord"]
             cell = data["cell"]
+            cell_unstrained = cell
             if cell.ndim == 2:
                 # Single system: (3, 3) scaling
                 scaling = torch.eye(3, requires_grad=True, dtype=cell.dtype, device=cell.device)
@@ -1093,6 +1290,11 @@ class AIMNet2Calculator:
                 data["coord"] = (data["coord"].unsqueeze(1) @ atom_scaling).squeeze(1)
                 data["cell"] = cell @ scaling
             self._saved_for_grad["scaling"] = scaling
+            self._external_strain_inputs = {
+                "coord_unstrained": coord_unstrained,
+                "cell_unstrained": cell_unstrained,
+                "scaling": scaling,
+            }
         return data
 
     def keep_only(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
@@ -1102,7 +1304,14 @@ class AIMNet2Calculator:
                 ret[k] = v
         return ret
 
-    def get_derivatives(self, data: dict[str, Tensor], forces=False, stress=False, hessian=False) -> dict[str, Tensor]:
+    def get_derivatives(
+        self,
+        data: dict[str, Tensor],
+        forces: bool = False,
+        stress: bool = False,
+        hessian: bool = False,
+        coulomb_terms: ExternalDerivativeTerms | None = None,
+    ) -> dict[str, Tensor]:
         # Use stored train mode for create_graph decision
         _create_graph = hessian or self._train
         x = []
@@ -1117,15 +1326,24 @@ class AIMNet2Calculator:
             tot_energy = data["energy"].sum()
             deriv = torch.autograd.grad(tot_energy, x, create_graph=_create_graph)
             if forces:
-                data["forces"] = -deriv[0]
+                force = -deriv[0]
+                if coulomb_terms is not None and coulomb_terms.forces is not None:
+                    force = force + coulomb_terms.forces.to(dtype=force.dtype, device=force.device)
+                data["forces"] = force
             if stress:
                 dedc = deriv[0] if not forces else deriv[1]
+                if coulomb_terms is not None and coulomb_terms.virial is not None:
+                    virial = coulomb_terms.virial.to(dtype=dedc.dtype, device=dedc.device)
+                    if dedc.ndim == 2 and virial.ndim == 3:
+                        virial = virial.sum(dim=0)
+                    # nvalchemiops virial convention is W = -dE/dstrain.
+                    # AIMNet applies row-vector strain as coord @ scaling,
+                    # so the stress numerator contribution is -W.T.
+                    dedc = dedc - virial.mT
                 cell = data["cell"].detach()
                 if cell.ndim == 2:
-                    # Single cell (3, 3)
                     volume = cell.det().abs()
                 else:
-                    # Batched cells (B, 3, 3) - compute volume for each cell
                     volume = torch.linalg.det(cell).abs().unsqueeze(-1).unsqueeze(-1)  # (B, 1, 1)
                 data["stress"] = dedc / volume
         if hessian:
@@ -1140,8 +1358,7 @@ class AIMNet2Calculator:
         # vmap-over-vjp form (not is_grads_batched=True or autograd.functional.hessian):
         # torch.library.register_vmap on aimnet::conv_sv_2d_sp_{bwd,bwd_bwd} is consulted
         # ONLY by the functorch dispatch (torch.func.vmap). The legacy batching dispatch
-        # would still raise "Batching rule not implemented." See
-        # docs/superpowers/plans/2026-04-26-vectorize-calculate-hessian-pr-a-vmap-rule.md.
+        # would still raise "Batching rule not implemented."
         n = forces.numel()
         eye = torch.eye(n, device=forces.device, dtype=forces.dtype)
 

@@ -3,8 +3,7 @@
 Status: parked. ``build_gromacs_nnpot_model`` raises ``NotImplementedError``
 because the upstream pipeline is not yet ``torch.jit.script``-able. The class
 definition below is preserved as a starting point for the eventual wrapper.
-See ``docs/external/gromacs.md`` for blocker details and the plan at
-``docs/superpowers/plans/2026-04-26-torchscript-export.md``.
+See ``docs/external/gromacs.md`` for blocker details.
 """
 
 import torch
@@ -116,13 +115,10 @@ def build_gromacs_nnpot_model(
 
     The wrapper is parked because the upstream AIMNet2 pipeline is not
     currently ``torch.jit.script``-able end-to-end. See
-    ``docs/external/gromacs.md`` for blocker details and
-    ``docs/superpowers/plans/2026-04-26-torchscript-export.md`` for the
-    remediation plan.
+    ``docs/external/gromacs.md`` for blocker details.
     """
     del model_name, charge, output_path
     raise NotImplementedError(
         "GROMACS NNPot wrapper is parked: AIMNet2 is not currently "
-        "torch.jit.script-able end-to-end. See docs/external/gromacs.md "
-        "and docs/superpowers/plans/2026-04-26-torchscript-export.md."
+        "torch.jit.script-able end-to-end. See docs/external/gromacs.md."
     )

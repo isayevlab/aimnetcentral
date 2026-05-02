@@ -13,7 +13,7 @@ AIMNet2 is a neural network potential for fast and accurate atomistic simulation
 - Accurate predictions for neutral, charged, organic, and elemental-organic systems
 - Fast inference on both CPU and GPU
 - Integration with popular simulation packages (ASE, PySisyphus)
-- Configurable long-range electrostatics (DSF, Ewald) for periodic systems
+- Configurable long-range electrostatics (DSF, Ewald, PME) for periodic systems
 
 AIMNet2 combines a graph neural network architecture with flexible long-range interactions, making it suitable for molecular dynamics, geometry optimization, and property prediction across diverse chemical systems.
 

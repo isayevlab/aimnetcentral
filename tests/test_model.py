@@ -22,6 +22,23 @@ def build_model(model_def):
     return model
 
 
+def test_validate_state_dict_keys_ignores_legacy_dipole_mass_buffers():
+    """Old artifacts can contain dipole/quadrupole mass buffers without those heads."""
+    from aimnet.models.utils import validate_state_dict_keys
+
+    real_missing, real_unexpected = validate_state_dict_keys(
+        [],
+        [
+            "outputs.dipole.mass",
+            "outputs.quadrupole.mass",
+            "outputs.energy_mlp.mlp.0.weight",
+        ],
+    )
+
+    assert real_missing == []
+    assert real_unexpected == ["outputs.energy_mlp.mlp.0.weight"]
+
+
 @pytest.mark.parametrize("model_def", model_defs)
 def test_model_from_yaml(model_def):
     build_model(model_def)
@@ -84,6 +101,57 @@ class TestFromFile:
 
         # Should return an nn.Module
         assert isinstance(model, nn.Module)
+
+    def test_from_file_preserves_rxn_atomic_shift_precision(self, tmp_path):
+        """load_model must preserve float64 rxn SAE values from the state dict."""
+        from pathlib import Path
+
+        model_def = Path(__file__).resolve().parents[1] / "aimnet" / "models" / "aimnet2_rxn.yaml"
+        source_model = build_module(str(model_def))
+        state_dict = source_model.state_dict()
+
+        # Reference self-atomic energies for H/C/N/O in eV.
+        species = torch.tensor([1, 6, 7, 8])
+        expected = torch.tensor(
+            [
+                -16.242692136220285,
+                -1037.4940717993925,
+                -1490.3881161953932,
+                -2047.9442679022422,
+            ],
+            dtype=torch.float64,
+        )
+        shifts = state_dict["outputs.atomic_shift.shifts.weight"].detach().clone().double()
+        shifts[species, 0] = expected
+        state_dict["outputs.atomic_shift.shifts.weight"] = shifts
+
+        model_path = tmp_path / "rxn_sae_precision.pt"
+        torch.save(
+            {
+                "format_version": 2,
+                "model_yaml": model_def.read_text(),
+                "state_dict": state_dict,
+                "cutoff": 5.0,
+                "needs_coulomb": True,
+                "needs_dispersion": False,
+                "coulomb_mode": "sr_embedded",
+                "coulomb_sr_rc": 4.6,
+                "coulomb_sr_envelope": "exp",
+                "d3_params": None,
+                "has_embedded_lr": True,
+                "implemented_species": species.tolist(),
+                "family": "rxn",
+                "supports_charged_systems": False,
+            },
+            model_path,
+        )
+
+        model, metadata = load_model(str(model_path), device="cpu")
+
+        actual = model.outputs.atomic_shift.shifts.weight.detach().cpu()
+        assert actual.dtype == torch.float64
+        torch.testing.assert_close(actual[species, 0], expected, rtol=0.0, atol=0.0)
+        assert metadata["family"] == "rxn"
 
     def test_from_file_metadata(self):
         """Test that model returns correct metadata."""

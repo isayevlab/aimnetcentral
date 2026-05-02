@@ -1,6 +1,6 @@
 # AIMNet2-rxn
 
-A neural network interatomic potential specialized for **closed-shell organic reactions** (H, C, N, O), trained on ~4.7M reaction-relevant geometries at ωB97M-V/def2-TZVPP. Use for transition-state searches, NEB / batched-NEB, IRC profiles, and reaction-coordinate energy work.
+A neural network interatomic potential specialized for **closed-shell organic reactions** (H, C, N, O), trained on ~4.7M reaction-relevant geometries at wB97M-D3/def2-TZVPP. Use for transition-state searches, NEB / batched-NEB, IRC profiles, and reaction-coordinate energy work.
 
 ## Loading
 
@@ -28,12 +28,12 @@ The calculator applies the following checks automatically when `validate_species
 - **Net charge**: only net-neutral systems (zwitterions OK). Non-zero `charge` raises `ValueError` pointing at `aimnet2-wb97m-d3` for ions.
 - **AFV row sanitization**: at conversion time, atomic-feature-vector rows for elements outside `[1, 6, 7, 8]` are NaN-padded so `validate_species=False` produces NaN-propagation rather than plausible-looking nonsense.
 
-Two further safeguards fire regardless of `validate_species`:
+Runtime corrections and safeguards fire regardless of `validate_species`:
 
+- **Posthoc D3 dispersion**: `AIMNet2Calculator` adds external DFT-D3(BJ) with the same wB97M-D3 parameters used by the default `aimnet2` model (`s6=1.0`, `s8=0.3908`, `a1=0.566`, `a2=3.128`). This also applies to older rxn artifacts that do not carry `needs_dispersion` / `d3_params` metadata.
 - **Hessian + `torch.compile`**: setting both raises `RuntimeError` (Dynamo + double-backward through GELU is known to hang). Reconstruct with `compile_model=False` for TS / IRC / vibrational work.
-- **Coulomb cutoff lock**: calling `set_lrcoulomb_method(method, cutoff=…)` with a cutoff different from the model's `coulomb_sr_rc` (4.6 Å) emits a `UserWarning` because the SR/LR cancellation point was physically frozen during training.
 
-A separate one-time `UserWarning` fires if the same Python process constructs calculators from two different AIMNet2 families (rxn vs. wb97m-d3 etc.), because the energy scales are not comparable.
+A separate one-time `UserWarning` fires if the same Python process constructs calculators from two different AIMNet2 families (rxn vs. wb97m-d3 etc.), because their absolute energy scales are not comparable.
 
 ## Canonical model card
 

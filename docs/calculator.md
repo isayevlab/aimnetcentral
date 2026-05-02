@@ -52,13 +52,12 @@ result = calc({
 ### Changing Coulomb Methods
 
 ```python
-# DSF (recommended for PBC)
 calc.set_lrcoulomb_method("dsf", cutoff=15.0, dsf_alpha=0.2)
 
-# Ewald (high accuracy, currently limited to non-batched case)
-calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-8)
+calc.set_lrcoulomb_method("ewald")
 
-# Simple (all pairs)
+calc.set_lrcoulomb_method("pme")
+
 calc.set_lrcoulomb_method("simple")
 ```
 
@@ -231,11 +230,12 @@ Primary long-range cutoff reference. Used for backward compatibility with legacy
 
 Coulomb-specific cutoff distance. Tracked separately from the DFTD3 cutoff.
 
-| Method     | Value                                                       |
-| ---------- | ----------------------------------------------------------- |
-| `"simple"` | `inf` (all pairs)                                           |
-| `"dsf"`    | Configured cutoff (default 15.0 Å)                          |
-| `"ewald"`  | `None` (Ewald manages its own real-space cutoff internally) |
+| Method | Value |
+| --- | --- |
+| `"simple"` | `inf` (all pairs) |
+| `"dsf"` | Configured cutoff (default 15.0 Å) |
+| `"ewald"` | `None` (real-space cutoff estimated per call from `ewald_accuracy`) |
+| `"pme"` | `None` (real-space cutoff estimated per call from `ewald_accuracy`) |
 
 ### `dftd3_cutoff`
 
@@ -248,7 +248,7 @@ The calculator keeps Coulomb and DFTD3 cutoffs independent. Long-range neighbor 
 - **Shared** when both cutoffs are finite and within 20% of each other
 - **Separate** when both cutoffs are finite and differ by more than 20%
 - **All pairs** for `"simple"` Coulomb (effectively no cutoff)
-- **Ignored by Ewald**, which builds its own real-space/reciprocal sums
+- **Per-call dense list (`nbmat_coulomb`/`shifts_coulomb`, also aliased to `nbmat_lr`/`shifts_lr`)** for Ewald and PME, sized to the real-space cutoff derived from `ewald_accuracy` and the cell
 
 **Data dictionary keys:**
 
@@ -261,8 +261,8 @@ When neighbor lists are shared, all keys point to the same array.
 
 **Modifying cutoffs:**
 
-- `set_lr_cutoff(cutoff)`: Updates both Coulomb and DFTD3 cutoffs
-- `set_lrcoulomb_method(method, cutoff)`: Updates Coulomb cutoff only
+- `set_lr_cutoff(cutoff)`: Updates both Coulomb and DFTD3 cutoffs (skips Ewald/PME, which manage their own real-space cutoff)
+- `set_lrcoulomb_method(method, cutoff, ewald_accuracy)`: Updates Coulomb method/cutoff (and Ewald/PME accuracy)
 - `set_dftd3_cutoff(cutoff)`: Updates DFTD3 cutoff only
 
 ### `has_external_coulomb`
@@ -275,16 +275,16 @@ When neighbor lists are shared, all keys point to the same array.
 
 ### `coulomb_method`
 
-Current Coulomb method: `"simple"`, `"dsf"`, `"ewald"`, or `None`.
+Current Coulomb method: `"simple"`, `"dsf"`, `"ewald"`, `"pme"`, or `None`.
 
 Returns `None` for:
 
 - Legacy models with embedded Coulomb
 - Models without Coulomb
 
-**Note on Ewald:**
+**Note on Ewald and PME:**
 
-Ewald summation uses its own internal real-space cutoff based on accuracy requirements. When Ewald is selected, `coulomb_cutoff` is `None` and does not contribute to neighbor list computation.
+Both Ewald and PME use a per-call real-space cutoff derived from `ewald_accuracy` and the cell geometry. When either is selected, `coulomb_cutoff` is `None`; the calculator builds a dedicated dense neighbor list (`nbmat_coulomb`/`shifts_coulomb`) sized to that cutoff and aliases it to `nbmat_lr`/`shifts_lr`.
 
 ## Methods
 
@@ -318,7 +318,7 @@ forces = result["forces"]
 charges = result["charges"]
 ```
 
-### `set_lrcoulomb_method(method, cutoff=15.0, dsf_alpha=0.2, ewald_accuracy=1e-8)`
+### `set_lrcoulomb_method(method, cutoff=15.0, dsf_alpha=0.2, ewald_accuracy=1e-6)`
 
 Set the long-range Coulomb method.
 
@@ -326,30 +326,30 @@ Set the long-range Coulomb method.
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `method` | `str` | required | `"simple"`, `"dsf"`, or `"ewald"` |
-| `cutoff` | `float` | `15.0` | Cutoff for DSF method (Å). Not used for Ewald. |
+| `method` | `str` | required | `"simple"`, `"dsf"`, `"ewald"`, or `"pme"` |
+| `cutoff` | `float` | `15.0` | Cutoff for DSF method (Å). Not used for Ewald/PME. |
 | `dsf_alpha` | `float` | `0.2` | Alpha parameter for DSF method |
-| `ewald_accuracy` | `float` | `1e-8` | Target accuracy for Ewald summation |
+| `ewald_accuracy` | `float` | `1e-6` | Target accuracy for Ewald and PME |
 
 **Behavior:**
 
-| Method     | Description                    | Coulomb cutoff         |
-| ---------- | ------------------------------ | ---------------------- |
-| `"simple"` | Direct Coulomb sum (all pairs) | `inf`                  |
-| `"dsf"`    | Damped shifted force           | Configured cutoff      |
-| `"ewald"`  | Ewald summation                | Computed from accuracy |
+| Method     | Description                    | Coulomb cutoff          |
+| ---------- | ------------------------------ | ----------------------- |
+| `"simple"` | Direct Coulomb sum (all pairs) | `inf`                   |
+| `"dsf"`    | Damped shifted force           | Configured cutoff       |
+| `"ewald"`  | Ewald summation                | Estimated from accuracy |
+| `"pme"`    | Particle Mesh Ewald            | Estimated from accuracy |
 
-**Ewald Accuracy Parameter:**
+**Ewald / PME Accuracy:**
 
-For Ewald summation, the `ewald_accuracy` parameter controls the real-space and reciprocal-space cutoffs. The cutoffs are computed automatically based on system geometry:
+For both Ewald and PME, `ewald_accuracy` (default `1e-6`, matching the nvalchemiops default) controls the splitting parameter, real-space cutoff, and reciprocal-space resolution. The calculator estimates these per call from the cell geometry; smaller values give tighter convergence at higher cost.
 
-\[ \eta = \frac{(V^2 / N)^{1/6}}{\sqrt{2\pi}} \]
+**Derivative Support:**
 
-\[ r\_{\text{cutoff}} = \sqrt{-2 \ln \varepsilon} \cdot \eta \]
+- `simple` and `dsf`: inference forces/stress are supported. DSF force/stress losses (`train=True` with `forces` or `stress`) and Hessian calculations raise `NotImplementedError`.
+- `ewald` and `pme`: forces, stress, force/stress losses in `train=True`, and Hessian requests are supported. Higher-order derivatives use the documented long-range approximation.
 
-\[ k\_{\text{cutoff}} = \frac{\sqrt{-2 \ln \varepsilon}}{\eta} \]
-
-Where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and \(N\) is the number of atoms. Lower accuracy values (e.g., `1e-10`) give higher precision but require more computation.
+See [Long-Range Methods → Derivative Support](long_range.md#derivative-support) for the rationale.
 
 **Notes:**
 
@@ -357,6 +357,7 @@ Where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and \
 - Automatically updates neighbor lists
 - Issues warning for legacy models (no effect)
 - Auto-switches to `"dsf"` when PBC is detected with `"simple"` method (see PBC notes below)
+- Ewald/PME require `cell` to be present in input; otherwise raises `ValueError`
 
 **Example:**
 
@@ -364,6 +365,7 @@ Where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and \
 calc = AIMNet2Calculator("aimnet2")
 calc.set_lrcoulomb_method("dsf", cutoff=12.0, dsf_alpha=0.20)
 calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-6)
+calc.set_lrcoulomb_method("pme", ewald_accuracy=1e-6)
 ```
 
 ### `set_lr_cutoff(cutoff)`
@@ -379,7 +381,7 @@ Set the unified long-range cutoff for all LR modules.
 **Notes:**
 
 - Updates both Coulomb and DFTD3 cutoffs
-- Ewald method ignores this cutoff (uses its own internal cutoff)
+- Ewald and PME ignore this cutoff (they manage their own real-space cutoff)
 - Automatically rebuilds neighbor lists
 
 **Example:**
@@ -577,10 +579,10 @@ data = {
 
 ### Coulomb Method for PBC
 
-| Initial Method      | Action                              |
-| ------------------- | ----------------------------------- |
-| `"simple"`          | Auto-switch to `"dsf"` with warning |
-| `"dsf"` / `"ewald"` | No change                           |
+| Initial Method                | Action                              |
+| ----------------------------- | ----------------------------------- |
+| `"simple"`                    | Auto-switch to `"dsf"` with warning |
+| `"dsf"` / `"ewald"` / `"pme"` | No change                           |
 
 ## Neighbor List Management
 
@@ -599,16 +601,17 @@ The calculator uses `AdaptiveNeighborList` for automatic buffer management in **
 - Neighbor lists are stored as integer matrices `nbmat` with shape `(N_total, max_neighbors)`.
 - Each row contains neighbor indices for a single atom.
 - Rows are padded with a dummy index (typically `N_total`) when an atom has fewer neighbors than `max_neighbors`.
+- Direct flat `nb_mode=1` module inputs must include a final padding atom. That atom should have `numbers[-1] == 0`, `charges[-1] == 0`, and invalid neighbor entries should point to its index.
 - The buffer grows on overflow (×1.5) and shrinks when utilization drops well below target, which helps performance remain stable as density changes.
 
 ### Module Suffix Fallback
 
 LR modules prefer their specific neighbor list key, with fallback to `_lr`:
 
-- **LRCoulomb (simple/dsf)**: Tries `nbmat_coulomb`, falls back to `nbmat_lr`
+- **LRCoulomb (simple/dsf/ewald/pme)**: Tries `nbmat_coulomb`, falls back to `nbmat_lr`
 - **DFTD3/D3TS**: Tries `nbmat_dftd3`, falls back to `nbmat_lr`
 
-**Note:** Ewald uses its own internal neighbor list and ignores calculator cutoffs.
+**Note:** For Ewald and PME, the calculator builds a per-call dense neighbor list sized to the real-space cutoff derived from `ewald_accuracy`. The list is written under `nbmat_coulomb`/`shifts_coulomb` and aliased to `nbmat_lr`/`shifts_lr`.
 
 ## Device Handling
 
@@ -669,10 +672,10 @@ Explicit `needs_coulomb` / `needs_dispersion` flags override metadata.
 
 ### Cutoff Handling for LR Modules
 
-- **Coulomb**: `set_lrcoulomb_method()` selects the method and updates the Coulomb cutoff (`inf` for `"simple"`, finite for `"dsf"`, `None` for `"ewald"`).
+- **Coulomb**: `set_lrcoulomb_method()` selects the method and updates the Coulomb cutoff (`inf` for `"simple"`, finite for `"dsf"`, `None` for `"ewald"`/`"pme"`).
 - **DFTD3**: `set_dftd3_cutoff()` updates the DFTD3 cutoff and smoothing window.
 - **Unified control**: `set_lr_cutoff()` sets both Coulomb and DFTD3 cutoffs to the same value.
-- **Ewald**: Uses its own internal neighbor list; calculator cutoffs do not apply.
+- **Ewald/PME**: Use per-call real-space neighbor lists estimated from `ewald_accuracy`; calculator cutoffs do not apply.
 
 ## Default Values
 
@@ -681,7 +684,7 @@ Explicit `needs_coulomb` / `needs_dispersion` flags override metadata.
 | Parameter | Default | Description |
 | --- | --- | --- |
 | `set_lrcoulomb_method(..., cutoff=15.0)` | `15.0` | Default LR cutoff for DSF (Å) |
-| `set_lrcoulomb_method(..., ewald_accuracy=1e-8)` | `1e-8` | Default accuracy for Ewald summation |
+| `set_lrcoulomb_method(..., ewald_accuracy=1e-6)` | `1e-6` | Default accuracy for Ewald and PME |
 | `set_dftd3_cutoff(..., smoothing_fraction=0.2)` | `0.2` | DFTD3 smoothing width as fraction of cutoff |
 
 ### Coulomb Defaults
@@ -874,22 +877,22 @@ for _ in range(1000):
 
 **Choose method for your system:**
 
-| System Type       | Method     | Parameter      | Notes            |
-| ----------------- | ---------- | -------------- | ---------------- |
-| Small non-PBC     | `"simple"` | N/A            | All pairs, exact |
-| Large non-PBC     | `"dsf"`    | cutoff=12-15 Å | O(N) scaling     |
-| PBC systems       | `"dsf"`    | cutoff=12-15 Å | Recommended      |
-| High-accuracy PBC | `"ewald"`  | accuracy=1e-8  | Research-grade   |
+| System Type | Method | Parameter | Notes |
+| --- | --- | --- | --- |
+| Small non-PBC | `"simple"` | N/A | All pairs, exact |
+| Large non-PBC | `"dsf"` | cutoff=12-15 Å | O(N) scaling |
+| PBC systems | `"dsf"` | cutoff=12-15 Å | Fast and robust default |
+| High-accuracy PBC | `"ewald"` | `ewald_accuracy=1e-6` | Reciprocal sum on k-grid |
+| Large PBC cells | `"pme"` | `ewald_accuracy=1e-6` | Better asymptotic scaling than Ewald |
 
 ```python
-# Fast for non-PBC
 calc.set_lrcoulomb_method("simple")
 
-# Efficient for PBC
 calc.set_lrcoulomb_method("dsf", cutoff=15.0)
 
-# High-accuracy for research
-calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-8)
+calc.set_lrcoulomb_method("ewald")
+
+calc.set_lrcoulomb_method("pme")
 ```
 
 ### Multi-threading (CPU)
