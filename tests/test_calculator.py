@@ -130,11 +130,13 @@ class RecordingExternalDFTD3:
         self._forces = forces
         self._virial = virial
 
-    def __call__(self, data, *, compute_forces=False, compute_virial=False, return_terms=False):
+    def __call__(self, data, *, compute_forces=False, compute_virial=False, return_terms=False, hessian=False):
         from aimnet.modules.lr import ExternalDerivativeTerms
 
         self.calls.append((compute_forces, compute_virial))
         data["energy"] = data.get("energy", torch.zeros(1)).double() + torch.ones(1, dtype=torch.float64)
+        if hessian:
+            return data
         terms = None
         if (compute_forces and self._forces is not None) or (compute_virial and self._virial is not None):
             terms = ExternalDerivativeTerms(
@@ -241,16 +243,19 @@ class TestCoulombMethods:
         with pytest.raises(NotImplementedError, match="DSF Coulomb"):
             calc(data, hessian=True)
 
-    def test_dftd3_hessian_raises(self):
-        """DFT-D3 is an explicit external backend and does not support Hessians."""
+    def test_dftd3_hessian_is_finite(self):
+        """External DFT-D3 uses its differentiable fallback for Hessian calls."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
         data = {
             "coord": [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]],
             "numbers": [8, 1, 1],
             "charge": 0.0,
         }
-        with pytest.raises(NotImplementedError, match="DFT-D3"):
-            calc(data, hessian=True)
+        res = calc(data, hessian=True)
+
+        assert "hessian" in res
+        assert torch.isfinite(res["hessian"]).all()
+        assert res["hessian"].abs().sum() > 0
 
     def test_invalid_coulomb_method(self):
         """Test that invalid Coulomb method raises ValueError."""

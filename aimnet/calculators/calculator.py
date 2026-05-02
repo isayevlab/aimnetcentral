@@ -883,8 +883,6 @@ class AIMNet2Calculator:
                 "DSF Coulomb uses nvalchemiops explicit coordinate/cell derivatives and does not support "
                 "force/stress training or Hessian calculations. Use 'ewald' or 'pme' for these derivative modes."
             )
-        if hessian and self.external_dftd3 is not None:
-            raise NotImplementedError("DFT-D3 does not support Hessian calculations.")
         data = self.set_grad_tensors(data, forces=forces, stress=stress, hessian=hessian)
         if isinstance(self.model, torch.jit.ScriptModule):
             with torch.jit.optimized_execution(False):  # type: ignore
@@ -933,12 +931,19 @@ class AIMNet2Calculator:
 
         dftd3_terms = None
         if self.external_dftd3 is not None:
-            data, dftd3_terms = self.external_dftd3(
-                data,
-                compute_forces=forces,
-                compute_virial=stress,
-                return_terms=True,
+            coord = data.get("coord")
+            dftd3_energy_graph = hessian or (
+                not forces and not stress and isinstance(coord, Tensor) and coord.requires_grad
             )
+            if dftd3_energy_graph:
+                data = self.external_dftd3(data, hessian=True)
+            else:
+                data, dftd3_terms = self.external_dftd3(
+                    data,
+                    compute_forces=forces,
+                    compute_virial=stress,
+                    return_terms=True,
+                )
 
         return data, _combine_external_terms(coulomb_terms, dftd3_terms)
 
@@ -1259,6 +1264,9 @@ class AIMNet2Calculator:
                 data["coord"] = (data["coord"].unsqueeze(1) @ atom_scaling).squeeze(1)
                 data["cell"] = cell @ scaling
             self._saved_for_grad["scaling"] = scaling
+            data["_dftd3_coord_unstrained"] = coord_unstrained
+            data["_dftd3_cell_unstrained"] = cell_unstrained
+            data["_dftd3_scaling"] = scaling
             if self.external_coulomb is not None and self._coulomb_method in ("ewald", "pme"):
                 self._coulomb_strain_inputs = {
                     "coord_unstrained": coord_unstrained,

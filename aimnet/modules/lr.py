@@ -604,12 +604,12 @@ class LRCoulomb(nn.Module):
     ) -> tuple[Tensor, ExternalDerivativeTerms | None]:
         """Compute periodic Coulomb energy via nvalchemiops Ewald/PME.
 
-        ``training_derivatives=True`` uses a local autograd wrapper around
-        the direct nvalchemiops hybrid call so force/stress losses can take
-        second derivatives without invoking nvalchemiops' missing coordinate
-        backward-of-backward. ``False`` returns detached fixed-charge geometry
-        derivatives as explicit terms while energy stays differentiable
-        through charges.
+        ``training_derivatives=True`` uses a local autograd wrapper only when
+        coordinate, charge, or strain inputs require gradients. This keeps
+        force/stress training on the explicit nvalchemiops forces/virial while
+        avoiding an autograd wrapper for plain energy calls. ``False`` returns
+        detached fixed-charge geometry derivatives as explicit terms while
+        energy stays differentiable through charges.
 
         Requires ``cell`` in ``data`` and a PBC neighbor list under
         ``nbmat_coulomb``/``shifts_coulomb`` (preferred) or the shared
@@ -644,7 +644,9 @@ class LRCoulomb(nn.Module):
 
         if training_derivatives:
             is_pme = backend == "pme"
-            if scaling is not None:
+            needs_strain_grad = scaling is not None and scaling.requires_grad
+            needs_coord_or_charge_grad = coord_real.requires_grad or charges_real.requires_grad
+            if needs_strain_grad:
                 if coord_unstrained is None or cell_unstrained is None:
                     raise ValueError("scaling-aware Coulomb requires coord_unstrained and cell_unstrained")
                 e_periodic, _forces, _charge_grad, _virial = _StrainedPeriodicCoulombFunction.apply(
@@ -660,7 +662,7 @@ class LRCoulomb(nn.Module):
                     float(self.ewald_accuracy),
                     is_pme,
                 )
-            else:
+            elif needs_coord_or_charge_grad:
                 e_periodic, _forces, _charge_grad, _virial = _PeriodicCoulombFunction.apply(
                     coord_real,
                     cell,
@@ -673,11 +675,14 @@ class LRCoulomb(nn.Module):
                     float(self.ewald_accuracy),
                     is_pme,
                 )
+            else:
+                e_periodic = None
 
-            if self.subtract_sr:
-                data = ops.lazy_calc_dij(data, "")
-                e_periodic = e_periodic - self.coul_simple_sr(data)
-            return e_periodic, None
+            if e_periodic is not None:
+                if self.subtract_sr:
+                    data = ops.lazy_calc_dij(data, "")
+                    e_periodic = e_periodic - self.coul_simple_sr(data)
+                return e_periodic, None
 
         result = fn(
             positions=coord_real.detach(),
@@ -992,14 +997,220 @@ class _DFTD3KernelInputs(NamedTuple):
     cell_for_kernel: Tensor | None
 
 
+def _call_dftd3_kernel(
+    *,
+    coord: Tensor,
+    numbers: Tensor,
+    batch_idx: Tensor,
+    neighbor_matrix: Tensor,
+    neighbor_matrix_shifts: Tensor | None,
+    fill_value: int,
+    num_systems: int,
+    cell: Tensor | None,
+    rcov: Tensor,
+    r4r2: Tensor,
+    c6_reference: Tensor,
+    coord_num_ref: Tensor,
+    a1: float,
+    a2: float,
+    s8: float,
+    s6: float,
+    smoothing_on: float,
+    smoothing_off: float,
+    compute_virial: bool,
+) -> tuple[Tensor, Tensor, Tensor]:
+    """Call nvalchemiops DFT-D3 and convert energy, forces, and virial to eV units."""
+    cell_bohr = None
+    if cell is not None:
+        cell_bohr = cell * constants.Bohr_inv
+        if cell_bohr.ndim == 2:
+            cell_bohr = cell_bohr.unsqueeze(0)
+
+    dftd3_kwargs: dict[str, Any] = {
+        "positions": coord * constants.Bohr_inv,
+        "numbers": numbers,
+        "a1": float(a1),
+        "a2": float(a2),
+        "s8": float(s8),
+        "s6": float(s6),
+        "covalent_radii": rcov,
+        "r4r2": r4r2,
+        "c6_reference": c6_reference,
+        "coord_num_ref": coord_num_ref,
+        "batch_idx": batch_idx,
+        "cell": cell_bohr,
+        "neighbor_matrix": neighbor_matrix,
+        "neighbor_matrix_shifts": neighbor_matrix_shifts,
+        "fill_value": int(fill_value),
+        "num_systems": int(num_systems),
+        "compute_virial": compute_virial,
+        "device": str(coord.device),
+    }
+    if smoothing_on < smoothing_off:
+        dftd3_kwargs["s5_smoothing_on"] = float(smoothing_on) * constants.Bohr_inv
+        dftd3_kwargs["s5_smoothing_off"] = float(smoothing_off) * constants.Bohr_inv
+
+    result = dftd3(**dftd3_kwargs)
+    if compute_virial:
+        energy_h, forces_h_bohr, _coord_num, virial_h = result
+    else:
+        energy_h, forces_h_bohr, _coord_num = result
+        virial_h = coord.new_empty(0)
+
+    energy_ev = energy_h * constants.Hartree
+    forces_ev = forces_h_bohr * constants.Hartree * constants.Bohr_inv
+    virial_ev = virial_h * constants.Hartree if compute_virial else virial_h
+    return energy_ev.double(), forces_ev, virial_ev
+
+
+class _DFTD3EnergyFunction(Function):
+    """Embedded DFT-D3 energy wrapper that injects explicit forces into autograd."""
+
+    @staticmethod
+    def forward(
+        ctx: Any,
+        coord: Tensor,
+        numbers: Tensor,
+        batch_idx: Tensor,
+        neighbor_matrix: Tensor,
+        neighbor_matrix_shifts: Tensor | None,
+        fill_value: int,
+        num_systems: int,
+        cell: Tensor | None,
+        rcov: Tensor,
+        r4r2: Tensor,
+        c6_reference: Tensor,
+        coord_num_ref: Tensor,
+        a1: float,
+        a2: float,
+        s8: float,
+        s6: float,
+        smoothing_on: float,
+        smoothing_off: float,
+    ) -> Tensor:
+        energy, forces, _virial = _call_dftd3_kernel(
+            coord=coord,
+            numbers=numbers,
+            batch_idx=batch_idx,
+            neighbor_matrix=neighbor_matrix,
+            neighbor_matrix_shifts=neighbor_matrix_shifts,
+            fill_value=fill_value,
+            num_systems=num_systems,
+            cell=cell,
+            rcov=rcov,
+            r4r2=r4r2,
+            c6_reference=c6_reference,
+            coord_num_ref=coord_num_ref,
+            a1=a1,
+            a2=a2,
+            s8=s8,
+            s6=s6,
+            smoothing_on=smoothing_on,
+            smoothing_off=smoothing_off,
+            compute_virial=False,
+        )
+        ctx.save_for_backward(forces, batch_idx.to(torch.int64))
+        return energy
+
+    @staticmethod
+    def backward(ctx: Any, grad_energies: Tensor) -> tuple[Tensor | None, ...]:
+        forces, batch_idx = ctx.saved_tensors
+        g = grad_energies.to(forces.dtype).index_select(0, batch_idx)
+        grad_coord = -forces * g.unsqueeze(-1)
+        return (grad_coord,) + (None,) * 17
+
+
+class _StrainedDFTD3EnergyFunction(Function):
+    """Embedded DFT-D3 stress wrapper using the kernel strain virial directly."""
+
+    @staticmethod
+    def forward(
+        ctx: Any,
+        coord: Tensor,
+        cell: Tensor,
+        scaling: Tensor,
+        numbers: Tensor,
+        batch_idx: Tensor,
+        neighbor_matrix: Tensor,
+        neighbor_matrix_shifts: Tensor | None,
+        fill_value: int,
+        num_systems: int,
+        rcov: Tensor,
+        r4r2: Tensor,
+        c6_reference: Tensor,
+        coord_num_ref: Tensor,
+        a1: float,
+        a2: float,
+        s8: float,
+        s6: float,
+        smoothing_on: float,
+        smoothing_off: float,
+    ) -> Tensor:
+        batch_idx_long = batch_idx.to(torch.int64)
+        if scaling.ndim == 2:
+            coord_eval = coord @ scaling
+            cell_eval = cell @ scaling
+        elif scaling.ndim == 3:
+            atom_scaling = scaling.index_select(0, batch_idx_long)
+            coord_eval = (coord.unsqueeze(1) @ atom_scaling).squeeze(1)
+            cell_eval = cell @ scaling
+        else:
+            raise ValueError("scaling must have shape (3, 3) or (B, 3, 3)")
+
+        energy, forces, virial = _call_dftd3_kernel(
+            coord=coord_eval,
+            numbers=numbers,
+            batch_idx=batch_idx,
+            neighbor_matrix=neighbor_matrix,
+            neighbor_matrix_shifts=neighbor_matrix_shifts,
+            fill_value=fill_value,
+            num_systems=num_systems,
+            cell=cell_eval,
+            rcov=rcov,
+            r4r2=r4r2,
+            c6_reference=c6_reference,
+            coord_num_ref=coord_num_ref,
+            a1=a1,
+            a2=a2,
+            s8=s8,
+            s6=s6,
+            smoothing_on=smoothing_on,
+            smoothing_off=smoothing_off,
+            compute_virial=True,
+        )
+        ctx.save_for_backward(forces, virial, batch_idx_long, scaling)
+        return energy
+
+    @staticmethod
+    def backward(ctx: Any, grad_energies: Tensor) -> tuple[Tensor | None, ...]:
+        forces, virial, batch_idx, scaling = ctx.saved_tensors
+        g = grad_energies.to(forces.dtype).index_select(0, batch_idx)
+        grad_coord_eval = -forces * g.unsqueeze(-1)
+
+        if scaling.ndim == 2:
+            grad_coord = grad_coord_eval @ scaling.mT
+            grad_scaling = (-virial.mT * grad_energies.to(virial.dtype).view(-1, 1, 1)).sum(dim=0)
+        elif scaling.ndim == 3:
+            atom_scaling = scaling.index_select(0, batch_idx)
+            grad_coord = (grad_coord_eval.unsqueeze(1) @ atom_scaling.mT).squeeze(1)
+            grad_scaling = -virial.mT * grad_energies.to(virial.dtype).view(-1, 1, 1)
+        else:
+            grad_coord = None
+            grad_scaling = None
+
+        return (grad_coord, None, grad_scaling) + (None,) * 16
+
+
 class DFTD3(nn.Module):
     """DFT-D3 implementation using nvalchemiops GPU-accelerated kernels.
 
     BJ damping, C6 and C8 terms, without 3-body term.
 
     This implementation uses nvalchemiops.torch.interactions.dispersion.dftd3 for
-    GPU-accelerated computation of dispersion energies, forces, and virial. It
-    is an explicit external module and does not expose an autograd backward.
+    GPU-accelerated computation of dispersion energies, forces, and virial. The
+    embedded model path injects explicit forces/virial into autograd only when
+    coordinate or strain gradients are requested; the external calculator path
+    returns detached derivative terms.
 
     Parameters
     ----------
@@ -1216,6 +1427,85 @@ class DFTD3(nn.Module):
             return forces_flat.view(B, N, 3)
         return forces_flat
 
+    def _s5_switch_torch(self, d_ij_bohr: Tensor) -> Tensor:
+        """nvalchemiops S5 cutoff switch for the differentiable Hessian path."""
+        r_on = float(self.smoothing_on) * constants.Bohr_inv
+        r_off = float(self.smoothing_off) * constants.Bohr_inv
+        if r_off <= r_on:
+            return torch.ones_like(d_ij_bohr)
+
+        t = ((d_ij_bohr - r_on) / (r_off - r_on)).clamp(0.0, 1.0)
+        t2 = t * t
+        t3 = t2 * t
+        t4 = t3 * t
+        t5 = t4 * t
+        switch = 1.0 - (10.0 * t3 - 15.0 * t4 + 6.0 * t5)
+        return torch.where(d_ij_bohr <= r_on, torch.ones_like(switch), switch)
+
+    def _calc_torch_coord_num(self, data: dict[str, Tensor], suffix: str, d_ij_bohr: Tensor) -> Tensor:
+        """Coordination numbers matching nvalchemiops DFT-D3."""
+        numbers = data["numbers"].to(torch.long)
+        numbers_i, numbers_j = nbops.get_ij(numbers, data, suffix=suffix)
+        rcov_i = self.rcov[numbers_i]
+        rcov_j = self.rcov[numbers_j]
+        cn_ij = torch.sigmoid(16.0 * ((rcov_i + rcov_j) / d_ij_bohr.clamp_min(1.0e-12) - 1.0))
+        cn_ij = nbops.mask_ij_(cn_ij, data, 0.0, inplace=False, suffix=suffix)
+        return cn_ij.sum(-1)
+
+    def _calc_torch_c6ij(self, data: dict[str, Tensor], suffix: str, cn: Tensor) -> Tensor:
+        """C6 interpolation matching nvalchemiops' single ``cn_ref`` tensor contract."""
+        numbers = data["numbers"].to(torch.long)
+        numbers_i, numbers_j = nbops.get_ij(numbers, data, suffix=suffix)
+        cn_i, cn_j = nbops.get_ij(cn.unsqueeze(-1).unsqueeze(-1), data, suffix=suffix)
+
+        c6ref = self.c6ab[numbers_i, numbers_j]
+        cnref_i = self.cn_ref[numbers_i, numbers_j]
+        cnref_j = self.cn_ref[numbers_j, numbers_i].transpose(-1, -2)
+
+        valid = c6ref != 0
+        exp_arg = -4.0 * ((cn_i - cnref_i).pow(2) + (cn_j - cnref_j).pow(2))
+        max_exp = exp_arg.masked_fill(~valid, -torch.inf).amax(dim=(-1, -2), keepdim=True)
+        finite_max = torch.isfinite(max_exp)
+        shifted = torch.where(finite_max, exp_arg - max_exp, torch.zeros_like(exp_arg))
+        weights = torch.where(valid & finite_max & (shifted >= -12.0), shifted.exp(), torch.zeros_like(shifted))
+
+        weight_sum = weights.sum(dim=(-1, -2))
+        c6_sum = (c6ref * weights).sum(dim=(-1, -2))
+        return torch.where(weight_sum > 1.0e-12, c6_sum / weight_sum.clamp_min(1.0e-12), torch.zeros_like(weight_sum))
+
+    def _compute_energy_torch(self, data: dict[str, Tensor]) -> Tensor:
+        """Differentiable DFT-D3 energy used only when true Hessians are requested."""
+        suffix = nbops.resolve_suffix(data, ["_dftd3", "_lr"])
+        distance_data = data
+        shifts_key = f"shifts{suffix}"
+        if shifts_key in data and not data[shifts_key].is_floating_point():
+            distance_data = {**data, shifts_key: data[shifts_key].to(dtype=data["coord"].dtype)}
+        d_ij_bohr = ops.calc_distances(distance_data, suffix=suffix)[0].clamp_min(1.0e-12) * constants.Bohr_inv
+        cn = self._calc_torch_coord_num(distance_data, suffix, d_ij_bohr)
+        c6ij = self._calc_torch_c6ij(distance_data, suffix, cn)
+
+        numbers = distance_data["numbers"].to(torch.long)
+        numbers_i, numbers_j = nbops.get_ij(numbers, distance_data, suffix=suffix)
+        r4r2_i = self.r4r2[numbers_i]
+        r4r2_j = self.r4r2[numbers_j]
+        r4r2_ij = 3.0 * r4r2_i * r4r2_j
+        r0ij = self.a1 * r4r2_ij.sqrt() + self.a2
+
+        d2 = d_ij_bohr.pow(2)
+        d4 = d2.pow(2)
+        d6 = d4 * d2
+        d8 = d4.pow(2)
+        r0_2 = r0ij.pow(2)
+        r0_4 = r0_2.pow(2)
+        r0_6 = r0_4 * r0_2
+        r0_8 = r0_4.pow(2)
+
+        damping = self.s6 / (d6 + r0_6) + self.s8 * r4r2_ij / (d8 + r0_8)
+        switch = self._s5_switch_torch(d_ij_bohr)
+        e_ij = -c6ij * damping * switch
+        e_ij = nbops.mask_ij_(e_ij, distance_data, 0.0, inplace=False, suffix=suffix)
+        return constants.half_Hartree * nbops.mol_sum(e_ij.sum(-1), distance_data)
+
     def forward(
         self,
         data: dict[str, Tensor],
@@ -1223,12 +1513,13 @@ class DFTD3(nn.Module):
         compute_forces: bool = False,
         compute_virial: bool = False,
         return_terms: bool = False,
+        hessian: bool = False,
     ) -> dict[str, Tensor] | tuple[dict[str, Tensor], ExternalDerivativeTerms | None]:
-        """Compute DFT-D3 energy with explicit detached forces and virial.
+        """Compute DFT-D3 energy and optional explicit derivative terms.
 
-        Energy is added to ``data[self.key_out]`` as detached float64
-        per-system values. Forces and virial are only returned through
-        ``ExternalDerivativeTerms`` when ``return_terms=True``.
+        The embedded path returns an autograd-capable energy only when the
+        coordinate or calculator strain inputs require it. The external
+        ``return_terms=True`` path always returns detached energy/terms.
 
         The returned virial follows the calculator-side external-derivative
         convention: ``get_derivatives`` subtracts ``terms.virial.mT`` from the
@@ -1237,54 +1528,130 @@ class DFTD3(nn.Module):
         """
         if (compute_forces or compute_virial) and not return_terms:
             raise ValueError("compute_forces/compute_virial require return_terms=True")
-
-        kernel_inputs = self._prepare_dftd3_inputs(data)
-
-        coord_detached = kernel_inputs.coord_flat.detach()
-        cell_detached = kernel_inputs.cell_for_kernel.detach() if kernel_inputs.cell_for_kernel is not None else None
-
-        with torch.no_grad():
-            cell_bohr = None
-            if cell_detached is not None:
-                cell_bohr = cell_detached * constants.Bohr_inv
-                if cell_bohr.ndim == 2:
-                    cell_bohr = cell_bohr.unsqueeze(0)
-
-            dftd3_kwargs: dict[str, Any] = {
-                "positions": coord_detached * constants.Bohr_inv,
-                "numbers": kernel_inputs.numbers_flat,
-                "a1": float(self.a1),
-                "a2": float(self.a2),
-                "s8": float(self.s8),
-                "s6": float(self.s6),
-                "covalent_radii": self.rcov,
-                "r4r2": self.r4r2,
-                "c6_reference": self.c6ab,
-                "coord_num_ref": self.cn_ref,
-                "batch_idx": kernel_inputs.batch_idx,
-                "cell": cell_bohr,
-                "neighbor_matrix": kernel_inputs.neighbor_matrix,
-                "neighbor_matrix_shifts": kernel_inputs.neighbor_matrix_shifts,
-                "fill_value": int(kernel_inputs.fill_value),
-                "num_systems": int(kernel_inputs.num_systems),
-                "compute_virial": compute_virial,
-                "device": str(coord_detached.device),
-            }
-            if self.smoothing_on < self.smoothing_off:
-                dftd3_kwargs["s5_smoothing_on"] = float(self.smoothing_on) * constants.Bohr_inv
-                dftd3_kwargs["s5_smoothing_off"] = float(self.smoothing_off) * constants.Bohr_inv
-
-            result = dftd3(**dftd3_kwargs)
-            if compute_virial:
-                energy_h, forces_h_bohr, _coord_num, virial_kernel = result
+        if hessian:
+            if return_terms or compute_forces or compute_virial:
+                raise ValueError("hessian=True uses differentiable DFTD3 energy; do not request explicit terms")
+            energy_ev = self._compute_energy_torch(data).double()
+            if self.key_out in data:
+                data[self.key_out] = data[self.key_out].double() + energy_ev
             else:
-                energy_h, forces_h_bohr, _coord_num = result
-                virial_kernel = coord_detached.new_empty(0)
+                data[self.key_out] = energy_ev
+            return data
 
-            energy_ev = energy_h * constants.Hartree
-            forces_ev_flat = forces_h_bohr * constants.Hartree * constants.Bohr_inv
+        scaling = data.get("_dftd3_scaling")
+        coord_unstrained = data.get("_dftd3_coord_unstrained")
+        cell_unstrained = data.get("_dftd3_cell_unstrained")
+        use_strain_wrapper = False
+        if not return_terms and isinstance(scaling, Tensor) and scaling.requires_grad:
+            if not isinstance(coord_unstrained, Tensor) or not isinstance(cell_unstrained, Tensor):
+                raise ValueError("strain-aware DFTD3 requires coord_unstrained and cell_unstrained")
+            use_strain_wrapper = True
 
-        energy_ev = energy_ev.detach().double()
+        kernel_data = data
+        if use_strain_wrapper:
+            kernel_data = {**data, "coord": coord_unstrained, "cell": cell_unstrained}
+        kernel_inputs = self._prepare_dftd3_inputs(kernel_data)
+
+        common_args = (
+            kernel_inputs.numbers_flat,
+            kernel_inputs.batch_idx,
+            kernel_inputs.neighbor_matrix,
+            kernel_inputs.neighbor_matrix_shifts,
+            int(kernel_inputs.fill_value),
+            int(kernel_inputs.num_systems),
+            self.rcov,
+            self.r4r2,
+            self.c6ab,
+            self.cn_ref,
+            float(self.a1),
+            float(self.a2),
+            float(self.s8),
+            float(self.s6),
+            float(self.smoothing_on),
+            float(self.smoothing_off),
+        )
+
+        if return_terms:
+            with torch.no_grad():
+                energy_ev, forces_ev_flat, virial_kernel = _call_dftd3_kernel(
+                    coord=kernel_inputs.coord_flat.detach(),
+                    numbers=kernel_inputs.numbers_flat,
+                    batch_idx=kernel_inputs.batch_idx,
+                    neighbor_matrix=kernel_inputs.neighbor_matrix,
+                    neighbor_matrix_shifts=kernel_inputs.neighbor_matrix_shifts,
+                    fill_value=int(kernel_inputs.fill_value),
+                    num_systems=int(kernel_inputs.num_systems),
+                    cell=kernel_inputs.cell_for_kernel.detach() if kernel_inputs.cell_for_kernel is not None else None,
+                    rcov=self.rcov,
+                    r4r2=self.r4r2,
+                    c6_reference=self.c6ab,
+                    coord_num_ref=self.cn_ref,
+                    a1=float(self.a1),
+                    a2=float(self.a2),
+                    s8=float(self.s8),
+                    s6=float(self.s6),
+                    smoothing_on=float(self.smoothing_on),
+                    smoothing_off=float(self.smoothing_off),
+                    compute_virial=compute_virial,
+                )
+            energy_ev = energy_ev.detach().double()
+        elif use_strain_wrapper:
+            energy_ev = _StrainedDFTD3EnergyFunction.apply(
+                kernel_inputs.coord_flat,
+                kernel_inputs.cell_for_kernel,
+                scaling,
+                *common_args,
+            )
+            forces_ev_flat = kernel_inputs.coord_flat.new_empty(0)
+            virial_kernel = kernel_inputs.coord_flat.new_empty(0)
+        elif kernel_inputs.coord_flat.requires_grad:
+            energy_ev = _DFTD3EnergyFunction.apply(
+                kernel_inputs.coord_flat,
+                kernel_inputs.numbers_flat,
+                kernel_inputs.batch_idx,
+                kernel_inputs.neighbor_matrix,
+                kernel_inputs.neighbor_matrix_shifts,
+                int(kernel_inputs.fill_value),
+                int(kernel_inputs.num_systems),
+                kernel_inputs.cell_for_kernel,
+                self.rcov,
+                self.r4r2,
+                self.c6ab,
+                self.cn_ref,
+                float(self.a1),
+                float(self.a2),
+                float(self.s8),
+                float(self.s6),
+                float(self.smoothing_on),
+                float(self.smoothing_off),
+            )
+            forces_ev_flat = kernel_inputs.coord_flat.new_empty(0)
+            virial_kernel = kernel_inputs.coord_flat.new_empty(0)
+        else:
+            with torch.no_grad():
+                energy_ev, forces_ev_flat, virial_kernel = _call_dftd3_kernel(
+                    coord=kernel_inputs.coord_flat.detach(),
+                    numbers=kernel_inputs.numbers_flat,
+                    batch_idx=kernel_inputs.batch_idx,
+                    neighbor_matrix=kernel_inputs.neighbor_matrix,
+                    neighbor_matrix_shifts=kernel_inputs.neighbor_matrix_shifts,
+                    fill_value=int(kernel_inputs.fill_value),
+                    num_systems=int(kernel_inputs.num_systems),
+                    cell=kernel_inputs.cell_for_kernel.detach() if kernel_inputs.cell_for_kernel is not None else None,
+                    rcov=self.rcov,
+                    r4r2=self.r4r2,
+                    c6_reference=self.c6ab,
+                    coord_num_ref=self.cn_ref,
+                    a1=float(self.a1),
+                    a2=float(self.a2),
+                    s8=float(self.s8),
+                    s6=float(self.s6),
+                    smoothing_on=float(self.smoothing_on),
+                    smoothing_off=float(self.smoothing_off),
+                    compute_virial=False,
+                )
+            energy_ev = energy_ev.detach().double()
+
         if self.key_out in data:
             data[self.key_out] = data[self.key_out].double() + energy_ev
         else:
@@ -1300,12 +1667,12 @@ class DFTD3(nn.Module):
 
         # The nvalchemi DFTD3 kernel already returns the strain virial in the
         # external-derivative-term convention used by the calculator
-        # (``dedc -= terms.virial.mT``); only an energy-unit conversion is
-        # needed. Verified by FD against ``dE/dscaling`` under row-vector
-        # strain - see ``tests/test_dftd3.py::TestDFTD3ForwardTerms``.
+        # (``dedc -= terms.virial.mT``). Verified by FD against
+        # ``dE/dscaling`` under row-vector strain - see
+        # ``tests/test_dftd3.py::TestDFTD3ForwardTerms``.
         external_virial: Tensor | None = None
         if compute_virial and virial_kernel.numel() > 0:
-            external_virial = (virial_kernel.detach() * constants.Hartree).contiguous()
+            external_virial = virial_kernel.detach().contiguous()
 
         terms = None
         if compute_forces or compute_virial:

@@ -1111,6 +1111,21 @@ class TestLRCoulombTraining:
         return _TinyChargeModel().to(device)
 
     @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_training_derivatives_without_grad_inputs_is_energy_only(self, pbc_crystal_small, device, method):
+        """Training flag alone does not build a Coulomb autograd graph."""
+        data = pbc_crystal_small.copy()
+        data = setup_pbc_data(data, device)
+        n_atoms = data["coord"].shape[0]
+        data["charges"] = _neutral_padded_charges(n_atoms, device)
+
+        coulomb = LRCoulomb(method=method, subtract_sr=False).to(device)
+        result = coulomb(data, training_derivatives=True)
+
+        assert "e_h" in result
+        assert not result["e_h"].requires_grad
+        assert torch.isfinite(result["e_h"]).all()
+
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
     def test_force_loss_backward_does_not_raise(self, pbc_crystal_small, device, method):
         """Force-loss backward through Ewald/PME uses native second derivatives."""
         torch.manual_seed(0)

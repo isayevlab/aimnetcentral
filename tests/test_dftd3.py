@@ -399,15 +399,38 @@ class TestDFTD3Batching:
 
 @pytest.mark.gpu
 class TestDFTD3ExplicitDerivatives:
-    """Tests for DFTD3's explicit external-derivative contract."""
+    """Tests for DFTD3's embedded and external derivative contracts."""
 
-    def test_energy_is_detached_from_coord(self, device):
-        """DFTD3 energy does not expose coordinate autograd."""
+    def test_embedded_energy_backward_matches_explicit_forces(self, device):
+        """Embedded DFTD3 injects explicit nvalchemiops forces into coord autograd."""
         module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
 
         coord = torch.tensor(
             [[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]], device=device, requires_grad=True
         )
+        numbers = torch.tensor([[8, 1, 1]], device=device)
+
+        data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
+        data = nbops.set_nb_mode(data)
+        data = nbops.calc_masks(data)
+
+        result = module(data)
+        assert result["energy"].requires_grad
+
+        result["energy"].sum().backward()
+        assert coord.grad is not None
+
+        terms_data = {**data, "coord": coord.detach()}
+        _, terms = module(terms_data, compute_forces=True, return_terms=True)
+        assert terms is not None and terms.forces is not None
+        torch.testing.assert_close(-coord.grad, terms.forces, rtol=1e-4, atol=1e-5)
+
+    def test_energy_only_without_grad_inputs_is_detached(self, device):
+        """Plain inference avoids an autograd wrapper when no input needs gradients."""
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
+
+        coord = torch.tensor([[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]], device=device)
         numbers = torch.tensor([[8, 1, 1]], device=device)
 
         data = {"coord": coord, "numbers": numbers}
@@ -438,6 +461,34 @@ class TestDFTD3ExplicitDerivatives:
         assert not result["energy"].requires_grad
         assert not terms.forces.requires_grad
         assert torch.isfinite(terms.forces).all()
+
+    def test_hessian_path_matches_explicit_forces_and_double_backward(self, device):
+        """Hessian fallback is differentiable and keeps first derivatives aligned with nvalchemiops."""
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
+
+        coord = torch.tensor(
+            [[[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]]],
+            device=device,
+            requires_grad=True,
+        )
+        numbers = torch.tensor([[6, 1, 1]], device=device)
+
+        data = {"coord": coord, "numbers": numbers}
+        data = add_dftd3_keys(data, device)
+        data = nbops.set_nb_mode(data)
+        data = nbops.calc_masks(data)
+
+        out = module(data, hessian=True)
+        grad_coord = torch.autograd.grad(out["energy"].sum(), coord, create_graph=True)[0]
+
+        terms_data = {**data, "coord": coord.detach()}
+        _, terms = module(terms_data, compute_forces=True, return_terms=True)
+        assert terms is not None and terms.forces is not None
+        torch.testing.assert_close(-grad_coord, terms.forces, rtol=2e-3, atol=2e-4)
+
+        second = torch.autograd.grad(grad_coord.pow(2).sum(), coord)[0]
+        assert torch.isfinite(second).all()
+        assert second.abs().sum() > 0
 
 
 # =============================================================================
@@ -502,6 +553,94 @@ def _data_with_strain(template: dict, scaling: torch.Tensor, coord_real: torch.T
 @pytest.mark.gpu
 class TestDFTD3ForwardTerms:
     """Tests for the calculator stress path: DFTD3 forward terms."""
+
+    def test_embedded_strain_grad_matches_explicit_virial(self, pbc_crystal_small, device):
+        """Embedded strain autograd uses the same direct virial convention as external terms."""
+        coord_real = pbc_crystal_small["coord"].to(device)
+        cell0 = pbc_crystal_small["cell"].to(device)
+        numbers_real = pbc_crystal_small["numbers"].to(device)
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, cutoff=8.0).to(device)
+
+        template = _setup_pbc_dftd3_data(coord_real, cell0, numbers_real, device)
+        coord_unstrained = template["coord"].detach().clone().requires_grad_(True)
+        scaling = torch.eye(3, device=device, requires_grad=True)
+        data = {
+            **template,
+            "coord": coord_unstrained @ scaling,
+            "cell": cell0 @ scaling,
+            "_dftd3_coord_unstrained": coord_unstrained,
+            "_dftd3_cell_unstrained": cell0,
+            "_dftd3_scaling": scaling,
+        }
+
+        out = module(data)
+        grad_coord, grad_scaling = torch.autograd.grad(out["energy"].sum(), (coord_unstrained, scaling))
+
+        terms_data = _data_with_strain(template, torch.eye(3, device=device), coord_real, cell0)
+        _, terms = module(terms_data, compute_forces=True, compute_virial=True, return_terms=True)
+        assert terms is not None and terms.forces is not None and terms.virial is not None
+        external_virial = terms.virial
+        if external_virial.ndim == 3:
+            external_virial = external_virial.sum(dim=0)
+
+        torch.testing.assert_close(grad_coord, -terms.forces, rtol=1e-4, atol=1e-5)
+        torch.testing.assert_close(grad_scaling, -external_virial.mT, rtol=1e-4, atol=1e-5)
+
+    def test_hessian_path_pbc_matches_finite_difference_and_double_backward(self, pbc_crystal_small, device):
+        """PBC Hessian fallback has finite-difference first derivatives and double backward."""
+        coord_real = pbc_crystal_small["coord"].to(device)
+        cell0 = pbc_crystal_small["cell"].to(device)
+        numbers_real = pbc_crystal_small["numbers"].to(device)
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, cutoff=8.0).to(device)
+
+        template = _setup_pbc_dftd3_data(coord_real, cell0, numbers_real, device)
+        coord_unstrained = template["coord"].detach().clone().requires_grad_(True)
+        scaling = torch.eye(3, device=device, requires_grad=True)
+        data = {
+            **template,
+            "coord": coord_unstrained @ scaling,
+            "cell": cell0 @ scaling,
+        }
+
+        out = module(data, hessian=True)
+        grad_coord, grad_scaling = torch.autograd.grad(
+            out["energy"].sum(), (coord_unstrained, scaling), create_graph=True
+        )
+
+        def energy_at(coord_base: torch.Tensor, scaling_value: torch.Tensor) -> torch.Tensor:
+            data_fd = {
+                **template,
+                "coord": coord_base @ scaling_value,
+                "cell": cell0 @ scaling_value,
+            }
+            with torch.no_grad():
+                return module(data_fd, hessian=True)["energy"].sum()
+
+        delta = 1e-3
+        atom_idx, comp_idx = 3, 1
+        coord_p = coord_unstrained.detach().clone()
+        coord_m = coord_unstrained.detach().clone()
+        coord_p[atom_idx, comp_idx] += delta
+        coord_m[atom_idx, comp_idx] -= delta
+        fd_coord_grad = (energy_at(coord_p, scaling.detach()) - energy_at(coord_m, scaling.detach())) / (2 * delta)
+        fd_coord_grad = fd_coord_grad.to(grad_coord.dtype)
+        torch.testing.assert_close(grad_coord[atom_idx, comp_idx], fd_coord_grad, rtol=5e-3, atol=5e-4)
+
+        fd_scaling_grad = torch.zeros_like(grad_scaling)
+        coord_detached = coord_unstrained.detach()
+        identity = scaling.detach()
+        for i in range(3):
+            for j in range(3):
+                s_p = identity.clone()
+                s_m = identity.clone()
+                s_p[i, j] += delta
+                s_m[i, j] -= delta
+                fd_scaling_grad[i, j] = (energy_at(coord_detached, s_p) - energy_at(coord_detached, s_m)) / (2 * delta)
+        torch.testing.assert_close(grad_scaling, fd_scaling_grad, rtol=5e-3, atol=5e-3)
+
+        second = torch.autograd.grad(grad_coord[:-1].pow(2).sum(), coord_unstrained)[0]
+        assert torch.isfinite(second).all()
+        assert second.abs().sum() > 0
 
     def test_explicit_virial_matches_finite_difference(self, pbc_crystal_small, device):
         """Explicit virial from ``forward(..., return_terms=True)`` matches row-vector strain FD.
