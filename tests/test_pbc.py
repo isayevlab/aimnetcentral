@@ -174,12 +174,13 @@ class TestDSFPeriodic:
         n_atoms = data["coord"].shape[0]
         data["charges"] = _random_padded_charges(n_atoms, device)
 
-        result, terms = module.forward_with_derivatives(data, compute_forces=True)
+        result, terms = module(data, compute_forces=True, return_terms=True)
 
         assert "e_h" in result
         assert terms is not None
         assert terms.forces is not None
         assert terms.forces.shape == data["coord"].shape
+        assert not terms.forces.requires_grad
         assert torch.isfinite(terms.forces).all(), "Explicit DSF forces should be finite"
         assert torch.allclose(terms.forces[-1], torch.zeros(3, device=device))
 
@@ -190,8 +191,9 @@ class TestDSFPeriodic:
         n_atoms = data["coord"].shape[0]
         data["charges"] = _random_padded_charges(n_atoms, device)
 
-        _result, terms = module.forward_with_derivatives(data.copy(), compute_virial=True)
+        _result, terms = module(data.copy(), compute_virial=True, return_terms=True)
         assert terms is not None and terms.virial is not None
+        assert not terms.virial.requires_grad
         volume = data["cell"].det().abs()
         stress_from_virial = -terms.virial.squeeze(0).mT / volume
 
@@ -921,9 +923,9 @@ def _data_calc_from_fixture(data: dict) -> dict:
 class TestNvAlchemiCoulombBackend:
     """Calculator-level integration tests for the nvalchemiops Coulomb backends.
 
-    Covers ``ewald``/``pme`` (custom autograd op) end to end and
-    parametrizes the FD-stress regression over all three nvalchemiops
-    methods (``dsf`` included) to lock in the row-vector strain convention.
+    Covers ``ewald``/``pme`` direct nvalchemiops dispatch end to end and
+    parametrizes the FD-stress regression over all three nvalchemiops methods
+    (``dsf`` included) to lock in the row-vector strain convention.
     """
 
     @pytest.mark.parametrize("method", ["ewald", "pme"])
@@ -1061,7 +1063,7 @@ class TestNvAlchemiCoulombBackend:
         numbers = data["numbers"]
         cell = data["cell"]
 
-        # Reference forces (analytic, via the custom-op path)
+        # Reference forces (analytic, via the nvalchemiops path)
         res = calc(
             {
                 "coord": coord.cpu().numpy(),
@@ -1131,6 +1133,7 @@ class TestNvAlchemiCoulombBackend:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
             calc.set_lrcoulomb_method(method)
+        calc.external_dftd3 = None
 
         data_calc = _data_calc_from_fixture(pbc_crystal_small)
         res = calc(data_calc, hessian=True)

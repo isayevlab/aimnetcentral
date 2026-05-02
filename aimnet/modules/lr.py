@@ -1,15 +1,21 @@
 import math
 import os
 from dataclasses import dataclass
+from typing import Any, NamedTuple
 
 import torch
 from nvalchemiops.neighbors import NeighborOverflowError
-from nvalchemiops.torch.interactions.electrostatics import dsf_coulomb
+from nvalchemiops.torch.interactions.dispersion import dftd3
+from nvalchemiops.torch.interactions.electrostatics import (
+    dsf_coulomb,
+    ewald_summation,
+    particle_mesh_ewald,
+)
 from nvalchemiops.torch.neighbors import neighbor_list
 from torch import Tensor, nn
+from torch.autograd import Function
 
 from aimnet import constants, nbops, ops
-from aimnet.modules.ops import dftd3_energy, lr_coulomb_energy
 
 
 def _calc_coulomb_sr(
@@ -57,11 +63,198 @@ def _calc_coulomb_sr(
 
 
 @dataclass(slots=True)
-class LRCoulombDerivativeTerms:
-    """Explicit derivative terms returned by non-autograd Coulomb backends."""
+class ExternalDerivativeTerms:
+    """Explicit derivative terms returned by external nvalchemiops backends."""
 
     forces: Tensor | None = None
     virial: Tensor | None = None
+
+
+def _periodic_coulomb_hybrid(
+    *,
+    coord: Tensor,
+    cell: Tensor,
+    charges: Tensor,
+    batch_idx: Tensor,
+    neighbor_matrix: Tensor,
+    shifts: Tensor,
+    mask_value: int,
+    num_systems: int,
+    accuracy: float,
+    compute_virial: bool,
+    is_pme: bool,
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    """Call nvalchemiops Ewald/PME in hybrid mode and convert outputs to eV."""
+    fn = particle_mesh_ewald if is_pme else ewald_summation
+    result = fn(
+        positions=coord,
+        charges=charges,
+        cell=cell,
+        batch_idx=batch_idx,
+        neighbor_matrix=neighbor_matrix,
+        neighbor_matrix_shifts=shifts,
+        mask_value=mask_value,
+        accuracy=accuracy,
+        compute_forces=True,
+        compute_charge_gradients=True,
+        compute_virial=compute_virial,
+        hybrid_forces=True,
+    )
+
+    ke = constants.Hartree * constants.Bohr
+    energies_per_atom = result[0] * ke
+    forces = result[1] * ke
+    charge_grad = result[2] * ke
+    virial = result[3] * ke if compute_virial else coord.new_empty(0)
+
+    batch_idx_long = batch_idx.to(torch.int64)
+    energies = torch.zeros(num_systems, dtype=torch.float64, device=coord.device)
+    energies = energies.scatter_add(0, batch_idx_long, energies_per_atom.double())
+    return energies, forces, charge_grad, virial
+
+
+class _PeriodicCoulombFunction(Function):
+    """Local training wrapper for Ewald/PME force losses."""
+
+    @staticmethod
+    def forward(
+        ctx: Any,
+        coord: Tensor,
+        cell: Tensor,
+        charges: Tensor,
+        batch_idx: Tensor,
+        neighbor_matrix: Tensor,
+        shifts: Tensor,
+        mask_value: int,
+        num_systems: int,
+        accuracy: float,
+        is_pme: bool,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        energies, forces, charge_grad, _virial = _periodic_coulomb_hybrid(
+            coord=coord,
+            cell=cell,
+            charges=charges,
+            batch_idx=batch_idx,
+            neighbor_matrix=neighbor_matrix,
+            shifts=shifts,
+            mask_value=mask_value,
+            num_systems=num_systems,
+            accuracy=accuracy,
+            compute_virial=False,
+            is_pme=is_pme,
+        )
+        virial = coord.new_empty(0)
+        ctx.save_for_backward(forces, charge_grad, batch_idx.to(torch.int64))
+        return energies, forces, charge_grad, virial
+
+    @staticmethod
+    def backward(
+        ctx: Any,
+        grad_energies: Tensor,
+        _grad_forces: Tensor,
+        _grad_charge_grad: Tensor,
+        _grad_virial: Tensor,
+    ) -> tuple[Tensor | None, ...]:
+        forces, charge_grad, batch_idx = ctx.saved_tensors
+        g = grad_energies.to(forces.dtype).index_select(0, batch_idx)
+        grad_coord = -forces * g.unsqueeze(-1)
+        grad_charges = charge_grad * g
+        return (
+            grad_coord,
+            None,
+            grad_charges,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+
+
+class _StrainedPeriodicCoulombFunction(Function):
+    """Training wrapper for row-vector strain stress with Ewald/PME."""
+
+    @staticmethod
+    def forward(
+        ctx: Any,
+        coord: Tensor,
+        cell: Tensor,
+        scaling: Tensor,
+        charges: Tensor,
+        batch_idx: Tensor,
+        neighbor_matrix: Tensor,
+        shifts: Tensor,
+        mask_value: int,
+        num_systems: int,
+        accuracy: float,
+        is_pme: bool,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        batch_idx_long = batch_idx.to(torch.int64)
+        if scaling.ndim == 2:
+            coord_eval = coord @ scaling
+            cell_eval = cell @ scaling
+        elif scaling.ndim == 3:
+            atom_scaling = scaling.index_select(0, batch_idx_long)
+            coord_eval = (coord.unsqueeze(1) @ atom_scaling).squeeze(1)
+            cell_eval = cell @ scaling
+        else:
+            raise ValueError("scaling must have shape (3, 3) or (B, 3, 3)")
+
+        energies, forces, charge_grad, virial = _periodic_coulomb_hybrid(
+            coord=coord_eval,
+            cell=cell_eval,
+            charges=charges,
+            batch_idx=batch_idx,
+            neighbor_matrix=neighbor_matrix,
+            shifts=shifts,
+            mask_value=mask_value,
+            num_systems=num_systems,
+            accuracy=accuracy,
+            compute_virial=True,
+            is_pme=is_pme,
+        )
+        ctx.save_for_backward(forces, charge_grad, virial, batch_idx_long, scaling)
+        return energies, forces, charge_grad, virial
+
+    @staticmethod
+    def backward(
+        ctx: Any,
+        grad_energies: Tensor,
+        _grad_forces: Tensor,
+        _grad_charge_grad: Tensor,
+        _grad_virial: Tensor,
+    ) -> tuple[Tensor | None, ...]:
+        forces, charge_grad, virial, batch_idx, scaling = ctx.saved_tensors
+        g = grad_energies.to(forces.dtype).index_select(0, batch_idx)
+        grad_coord_eval = -forces * g.unsqueeze(-1)
+        grad_charges = charge_grad * g
+
+        if scaling.ndim == 2:
+            grad_coord = grad_coord_eval @ scaling.mT
+            grad_scaling = (-virial.mT * grad_energies.to(virial.dtype).view(-1, 1, 1)).sum(dim=0)
+        elif scaling.ndim == 3:
+            atom_scaling = scaling.index_select(0, batch_idx)
+            grad_coord = (grad_coord_eval.unsqueeze(1) @ atom_scaling.mT).squeeze(1)
+            grad_scaling = -virial.mT * grad_energies.to(virial.dtype).view(-1, 1, 1)
+        else:
+            grad_coord = None
+            grad_scaling = None
+
+        return (
+            grad_coord,
+            None,
+            grad_scaling,
+            grad_charges,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
 
 
 class LRCoulomb(nn.Module):
@@ -110,13 +303,12 @@ class LRCoulomb(nn.Module):
     or cell; the calculator consumes explicit DSF forces/virial for inference
     and rejects DSF force/stress training and Hessian requests.
 
-    Ewald/PME are routed through ``aimnet::lr_coulomb_fwd`` (an
-    ``autograd.Function`` wrapping ``nvalchemiops``). The Function's backward
-    publishes analytic forces, charge gradients, and virial from the same
-    nvalchemiops call, which makes ``create_graph=True`` / force-loss
-    training (``loss.backward()`` after ``autograd.grad(E, coord,
-    create_graph=True)``) safe despite the underlying Warp kernels lacking a
-    registered 2nd-order autograd formula.
+    Ewald/PME call ``nvalchemiops`` directly. Inference uses
+    ``hybrid_forces=True`` so energy remains differentiable through charges
+    and fixed-charge geometry derivatives are returned as explicit terms.
+    Training derivative paths use a small local ``autograd.Function`` wrapper
+    because the installed nvalchemiops coordinate backward kernels do not
+    currently provide a registered backward-of-backward.
     """
 
     def __init__(
@@ -135,8 +327,7 @@ class LRCoulomb(nn.Module):
         self.key_in = key_in
         self.key_out = key_out
         # Pairwise convention factor used by simple/dsf (sums over ordered pairs).
-        # Ewald/PME go through aimnet::lr_coulomb_fwd, which converts to eV
-        # internally using the Coulomb constant k_e = Hartree * Bohr.
+        # Ewald/PME nvalchemiops outputs are converted with k_e = Hartree * Bohr.
         self._factor = constants.half_Hartree * constants.Bohr
         self.register_buffer("rc", torch.tensor(rc))
         self.dsf_alpha = dsf_alpha
@@ -355,21 +546,23 @@ class LRCoulomb(nn.Module):
         *,
         compute_forces: bool = False,
         compute_virial: bool = False,
-    ) -> tuple[Tensor, LRCoulombDerivativeTerms | None]:
+    ) -> tuple[Tensor, ExternalDerivativeTerms | None]:
         """Compute DSF through nvalchemiops.
 
-        The nvalchemiops DSF energy is connected to autograd through charges
-        only. When requested by the calculator, explicit forces and virial are
-        returned separately for inference-time assembly.
+        DSF is a split-derivative external backend: geometry derivatives come
+        from explicit fixed-charge forces/virial, while ``charges`` stays
+        graph-attached so autograd can supply the charge-response term.
         """
         suffix = nbops.resolve_suffix(data, ["_coulomb", "_lr"])
         coord, charges, batch_idx, nbmat, cell, shifts, fill_value, num_systems = self._dsf_inputs(data, suffix)
+        coord_for_kernel = coord.detach()
+        cell_for_kernel = cell.detach() if cell is not None else None
         result = dsf_coulomb(
-            positions=coord,
+            positions=coord_for_kernel,
             charges=charges,
             cutoff=float(self.dsf_rc),
             alpha=float(self.dsf_alpha),
-            cell=cell,
+            cell=cell_for_kernel,
             batch_idx=batch_idx,
             neighbor_matrix=nbmat,
             neighbor_matrix_shifts=shifts,
@@ -384,9 +577,9 @@ class LRCoulomb(nn.Module):
         energy = result[0] * ke
         terms = None
         if compute_forces or compute_virial:
-            forces = self._restore_dsf_forces_shape(data, result[1] * ke) if compute_forces else None
-            virial = result[2] * ke if compute_virial else None
-            terms = LRCoulombDerivativeTerms(forces=forces, virial=virial)
+            forces = self._restore_dsf_forces_shape(data, result[1].detach() * ke) if compute_forces else None
+            virial = result[2].detach() * ke if compute_virial else None
+            terms = ExternalDerivativeTerms(forces=forces, virial=virial)
 
         if self.subtract_sr:
             data = ops.lazy_calc_dij(data, "")
@@ -401,31 +594,37 @@ class LRCoulomb(nn.Module):
         self,
         data: dict[str, Tensor],
         backend: str,
-    ) -> tuple[Tensor, LRCoulombDerivativeTerms | None]:
-        """Compute periodic Coulomb energy via the ``aimnet::lr_coulomb_fwd`` custom op.
+        *,
+        compute_forces: bool = False,
+        compute_virial: bool = False,
+        training_derivatives: bool = False,
+        scaling: Tensor | None = None,
+        coord_unstrained: Tensor | None = None,
+        cell_unstrained: Tensor | None = None,
+    ) -> tuple[Tensor, ExternalDerivativeTerms | None]:
+        """Compute periodic Coulomb energy via nvalchemiops Ewald/PME.
 
-        The custom op wraps ``nvalchemiops`` Ewald/PME in an
-        ``autograd.Function`` whose backward publishes analytic forces,
-        charge gradients and (optionally) virial, so 1st-order forces via
-        ``autograd.grad`` and 2nd-order force-loss training both work
-        without touching the non-differentiable Warp kernels a second time.
+        ``training_derivatives=True`` uses a local autograd wrapper around
+        the direct nvalchemiops hybrid call so force/stress losses can take
+        second derivatives without invoking nvalchemiops' missing coordinate
+        backward-of-backward. ``False`` returns detached fixed-charge geometry
+        derivatives as explicit terms while energy stays differentiable
+        through charges.
 
         Requires ``cell`` in ``data`` and a PBC neighbor list under
         ``nbmat_coulomb``/``shifts_coulomb`` (preferred) or the shared
         ``nbmat_lr``/``shifts_lr``. Drops the trailing padding row before
         invoking the backend and re-adds a zero pad row so downstream
         ``unpad_output`` contracts are preserved.
-
-        Whether the virial is computed is decided by ``cell.requires_grad``:
-        cell gradients are needed only when the caller (stress path) built a
-        strained cell with autograd.
         """
         suffix = nbops.resolve_suffix(data, ["_coulomb", "_lr"])
 
         coord = data["coord"]
+        cell = data["cell"]
+        assert cell is not None
+
         charges = data[self.key_in]
         mol_idx = data["mol_idx"]
-        cell = data["cell"]
         nbmat = data[f"nbmat{suffix}"]
         shifts = data[f"shifts{suffix}"]
 
@@ -438,32 +637,104 @@ class LRCoulomb(nn.Module):
         nbmat_real = nbmat[:-1].to(torch.int32)
         shifts_real = shifts[:-1].to(torch.int32)
 
+        if backend not in ("ewald", "pme"):
+            raise ValueError(f"backend must be 'ewald' or 'pme', got {backend!r}")
         num_systems = int(mol_idx_real.max().item()) + 1
-        # Only pay for virial when the caller is going to take a cell gradient.
-        compute_virial = cell.requires_grad
+        fn = particle_mesh_ewald if backend == "pme" else ewald_summation
 
-        energies_per_system, _forces, _charge_grad, _virial = lr_coulomb_energy(
-            coord=coord_real,
-            cell=cell,
+        if training_derivatives:
+            is_pme = backend == "pme"
+            if scaling is not None:
+                if coord_unstrained is None or cell_unstrained is None:
+                    raise ValueError("scaling-aware Coulomb requires coord_unstrained and cell_unstrained")
+                e_periodic, _forces, _charge_grad, _virial = _StrainedPeriodicCoulombFunction.apply(
+                    coord_unstrained[:-1],
+                    cell_unstrained,
+                    scaling,
+                    charges_real,
+                    mol_idx_real,
+                    nbmat_real,
+                    shifts_real,
+                    N,
+                    num_systems,
+                    float(self.ewald_accuracy),
+                    is_pme,
+                )
+            else:
+                e_periodic, _forces, _charge_grad, _virial = _PeriodicCoulombFunction.apply(
+                    coord_real,
+                    cell,
+                    charges_real,
+                    mol_idx_real,
+                    nbmat_real,
+                    shifts_real,
+                    N,
+                    num_systems,
+                    float(self.ewald_accuracy),
+                    is_pme,
+                )
+
+            if self.subtract_sr:
+                data = ops.lazy_calc_dij(data, "")
+                e_periodic = e_periodic - self.coul_simple_sr(data)
+            return e_periodic, None
+
+        result = fn(
+            positions=coord_real.detach(),
             charges=charges_real,
+            cell=cell.detach(),
             batch_idx=mol_idx_real,
             neighbor_matrix=nbmat_real,
-            shifts=shifts_real,
+            neighbor_matrix_shifts=shifts_real,
             mask_value=N,
-            num_systems=num_systems,
             accuracy=float(self.ewald_accuracy),
-            backend=backend,
+            compute_forces=compute_forces,
+            compute_charge_gradients=True,
             compute_virial=compute_virial,
+            hybrid_forces=True,
         )
-        # Custom op already converted e²/Å → eV (k_e = Hartree * Bohr) and
-        # summed per-atom → per-system. energies_per_system has shape
-        # (num_systems,) and is float64.
+
+        result_tuple = result if isinstance(result, tuple) else (result,)
+        idx = 0
+        energies_per_atom = result_tuple[idx]
+        idx += 1
+
+        forces_real: Tensor | None = None
+        if compute_forces:
+            forces_real = result_tuple[idx]
+            idx += 1
+
+        # Charge gradients are injected into ``energies_per_atom`` by
+        # nvalchemiops when charges require grad; the explicit tensor is not
+        # needed by AIMNet.
+        idx += 1
+
+        virial: Tensor | None = None
+        if compute_virial:
+            virial = result_tuple[idx]
+
+        ke = constants.Hartree * constants.Bohr
+        energies_per_atom = energies_per_atom * ke
+        energies_per_system = torch.zeros(num_systems, dtype=torch.float64, device=coord.device)
+        energies_per_system = energies_per_system.scatter_add(
+            0,
+            mol_idx_real.to(torch.int64),
+            energies_per_atom.double(),
+        )
+
+        terms = None
+        if compute_forces or compute_virial:
+            forces = None
+            if forces_real is not None:
+                forces = torch.cat([forces_real.detach() * ke, forces_real.new_zeros((1, 3))], dim=0)
+            virial_ev = virial.detach() * ke if virial is not None else None
+            terms = ExternalDerivativeTerms(forces=forces, virial=virial_ev)
         e_periodic = energies_per_system
 
         if self.subtract_sr:
             data = ops.lazy_calc_dij(data, "")
             e_periodic = e_periodic - self.coul_simple_sr(data)
-        return e_periodic, None
+        return e_periodic, terms
 
     def coul_ewald(self, data: dict[str, Tensor]) -> Tensor:
         """Per-system Ewald energy in eV. Requires ``cell`` and ``nbmat_lr``/``shifts_lr``."""
@@ -475,26 +746,54 @@ class LRCoulomb(nn.Module):
         energy, _terms = self._coul_nvalchemi(data, backend="pme")
         return energy
 
-    def forward_with_derivatives(
+    def forward(
         self,
         data: dict[str, Tensor],
         *,
         compute_forces: bool = False,
         compute_virial: bool = False,
-    ) -> tuple[dict[str, Tensor], LRCoulombDerivativeTerms | None]:
+        return_terms: bool = False,
+        training_derivatives: bool = False,
+        scaling: Tensor | None = None,
+        coord_unstrained: Tensor | None = None,
+        cell_unstrained: Tensor | None = None,
+    ) -> dict[str, Tensor] | tuple[dict[str, Tensor], ExternalDerivativeTerms | None]:
+        if (compute_forces or compute_virial) and not return_terms:
+            raise ValueError("compute_forces/compute_virial require return_terms=True")
+
         if self.method == "simple":
             e = self.coul_simple(data)
             terms = None
         elif self.method == "dsf":
+            if training_derivatives:
+                raise ValueError("DSF Coulomb does not support training derivatives")
             e, terms = self._coul_dsf_nvalchemi(
                 data,
                 compute_forces=compute_forces,
                 compute_virial=compute_virial,
             )
         elif self.method == "ewald":
-            e, terms = self._coul_nvalchemi(data, backend="ewald")
+            e, terms = self._coul_nvalchemi(
+                data,
+                backend="ewald",
+                compute_forces=compute_forces,
+                compute_virial=compute_virial,
+                training_derivatives=training_derivatives,
+                scaling=scaling,
+                coord_unstrained=coord_unstrained,
+                cell_unstrained=cell_unstrained,
+            )
         elif self.method == "pme":
-            e, terms = self._coul_nvalchemi(data, backend="pme")
+            e, terms = self._coul_nvalchemi(
+                data,
+                backend="pme",
+                compute_forces=compute_forces,
+                compute_virial=compute_virial,
+                training_derivatives=training_derivatives,
+                scaling=scaling,
+                coord_unstrained=coord_unstrained,
+                cell_unstrained=cell_unstrained,
+            )
         else:
             raise ValueError(f"Unknown method {self.method}")
 
@@ -502,23 +801,8 @@ class LRCoulomb(nn.Module):
             data[self.key_out] = data[self.key_out].double() + e
         else:
             data[self.key_out] = e
-        return data, terms
-
-    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
-        if self.method == "simple":
-            e = self.coul_simple(data)
-        elif self.method == "dsf":
-            e = self.coul_dsf(data)
-        elif self.method == "ewald":
-            e = self.coul_ewald(data)
-        elif self.method == "pme":
-            e = self.coul_pme(data)
-        else:
-            raise ValueError(f"Unknown method {self.method}")
-        if self.key_out in data:
-            data[self.key_out] = data[self.key_out].double() + e
-        else:
-            data[self.key_out] = e
+        if return_terms:
+            return data, terms
         return data
 
 
@@ -693,14 +977,29 @@ class D3TS(nn.Module):
         return data
 
 
+class _DFTD3KernelInputs(NamedTuple):
+    """Flat-atom inputs for the nvalchemi DFTD3 kernel call."""
+
+    nb_mode: int
+    coord: Tensor
+    coord_flat: Tensor
+    numbers_flat: Tensor
+    batch_idx: Tensor
+    neighbor_matrix: Tensor
+    neighbor_matrix_shifts: Tensor | None
+    num_systems: int
+    fill_value: int
+    cell_for_kernel: Tensor | None
+
+
 class DFTD3(nn.Module):
     """DFT-D3 implementation using nvalchemiops GPU-accelerated kernels.
 
     BJ damping, C6 and C8 terms, without 3-body term.
 
     This implementation uses nvalchemiops.torch.interactions.dispersion.dftd3 for
-    GPU-accelerated computation of dispersion energies and forces. It is
-    differentiable through a custom autograd function.
+    GPU-accelerated computation of dispersion energies, forces, and virial. It
+    is an explicit external module and does not expose an autograd backward.
 
     Parameters
     ----------
@@ -723,11 +1022,6 @@ class DFTD3(nn.Module):
         Default is 0.2 (20% of cutoff as smoothing window).
     key_out : str, optional
         Key for output energy in data dict. Default is "energy".
-    compute_forces : bool, optional
-        Whether to add forces to data dict. Default is False.
-    compute_virial : bool, optional
-        Whether to compute virial for cell gradients. Default is False.
-
     Attributes
     ----------
     smoothing_on : float
@@ -753,13 +1047,9 @@ class DFTD3(nn.Module):
         cutoff: float = 15.0,
         smoothing_fraction: float = 0.2,
         key_out: str = "energy",
-        compute_forces: bool = False,
-        compute_virial: bool = False,
     ):
         super().__init__()
         self.key_out = key_out
-        self.compute_forces = compute_forces
-        self.compute_virial = compute_virial
         # BJ damping parameters
         self.s6 = s6
         self.s8 = s8
@@ -833,26 +1123,27 @@ class DFTD3(nn.Module):
             state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
         )
 
-    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+    def _prepare_dftd3_inputs(self, data: dict[str, Tensor]) -> "_DFTD3KernelInputs":
+        """Build the flat-atom kernel arguments for the active ``nb_mode``.
+
+        ``cell_for_kernel`` is ``None`` for mode 0 (no cell available); the
+        original ``coord`` tensor is returned alongside the flat one so
+        callers can recover the per-batch shape.
+        """
         nb_mode = nbops.get_nb_mode(data)
         coord = data["coord"]
         numbers = data["numbers"].to(torch.int32)
         cell = data.get("cell")
 
-        # Prepare inputs based on nb_mode
         if nb_mode == 0:
-            # Batched mode without neighbor matrix - construct full neighbor matrix
-            # This only applies when no nbmat is provided in data
             B, N = coord.shape[:2]
-            coord_flat = coord.flatten(0, 1)  # (B*N, 3)
-            numbers_flat = numbers.flatten()  # (B*N,)
+            coord_flat = coord.flatten(0, 1)
+            numbers_flat = numbers.flatten()
             batch_idx = torch.arange(B, device=coord.device, dtype=torch.int32).repeat_interleave(N)
             num_systems = B
             total_atoms = B * N
             max_neighbors = N - 1
 
-            # Build dense all-to-all neighbor matrix for mode 0 (no pre-computed neighbor list)
-            # Creates (N, N-1) template where each atom connects to all others except itself
             arange_n = torch.arange(N, device=coord.device, dtype=torch.int32)
             all_indices = arange_n.unsqueeze(0).expand(N, -1)
             mask = all_indices != arange_n.unsqueeze(1)
@@ -862,10 +1153,9 @@ class DFTD3(nn.Module):
 
             fill_value = total_atoms
             neighbor_matrix_shifts: Tensor | None = None
-            cell_for_autograd: Tensor | None = None
+            cell_for_kernel: Tensor | None = None
 
         elif nb_mode == 1:
-            # Flat mode with neighbor matrix
             suffix = nbops.resolve_suffix(data, ["_dftd3", "_lr"])
             N = coord.shape[0]
             coord_flat = coord
@@ -882,12 +1172,10 @@ class DFTD3(nn.Module):
 
             shifts = data.get(f"shifts{suffix}")
             neighbor_matrix_shifts = shifts.to(torch.int32) if shifts is not None else None
-
             fill_value = N
-            cell_for_autograd = cell
+            cell_for_kernel = cell
 
         elif nb_mode == 2:
-            # Batched mode with neighbor matrix
             suffix = nbops.resolve_suffix(data, ["_dftd3", "_lr"])
             B, N = coord.shape[:2]
             coord_flat = coord.flatten(0, 1)
@@ -900,89 +1188,128 @@ class DFTD3(nn.Module):
             neighbor_matrix = (nbmat + offsets.unsqueeze(-1)).flatten(0, 1).to(torch.int32)
 
             shifts = data.get(f"shifts{suffix}")
-            if shifts is not None:
-                neighbor_matrix_shifts = shifts.flatten(0, 1).to(torch.int32)
-            else:
-                neighbor_matrix_shifts = None
-
+            neighbor_matrix_shifts = shifts.flatten(0, 1).to(torch.int32) if shifts is not None else None
             fill_value = B * N
-            cell_for_autograd = cell
+            cell_for_kernel = cell
 
         else:
             raise ValueError(f"Unsupported neighbor mode: {nb_mode}")
 
-        # Compute energy using autograd function
-        energy_ev = self._compute_energy_autograd(
-            coord_flat,
-            cell_for_autograd,
-            numbers_flat,
-            batch_idx,
-            neighbor_matrix,
-            neighbor_matrix_shifts,
-            num_systems,
-            fill_value,
+        return _DFTD3KernelInputs(
+            nb_mode=nb_mode,
+            coord=coord,
+            coord_flat=coord_flat,
+            numbers_flat=numbers_flat,
+            batch_idx=batch_idx,
+            neighbor_matrix=neighbor_matrix,
+            neighbor_matrix_shifts=neighbor_matrix_shifts,
+            num_systems=num_systems,
+            fill_value=fill_value,
+            cell_for_kernel=cell_for_kernel,
         )
 
-        # Add dispersion energy to output
+    @staticmethod
+    def _restore_dftd3_forces_shape(forces_flat: Tensor, nb_mode: int, coord_shape: torch.Size) -> Tensor:
+        """Reshape flat per-atom forces back to the input layout for the active nb_mode."""
+        if nb_mode == 0 or nb_mode == 2:
+            B, N = coord_shape[:2]
+            return forces_flat.view(B, N, 3)
+        return forces_flat
+
+    def forward(
+        self,
+        data: dict[str, Tensor],
+        *,
+        compute_forces: bool = False,
+        compute_virial: bool = False,
+        return_terms: bool = False,
+    ) -> dict[str, Tensor] | tuple[dict[str, Tensor], ExternalDerivativeTerms | None]:
+        """Compute DFT-D3 energy with explicit detached forces and virial.
+
+        Energy is added to ``data[self.key_out]`` as detached float64
+        per-system values. Forces and virial are only returned through
+        ``ExternalDerivativeTerms`` when ``return_terms=True``.
+
+        The returned virial follows the calculator-side external-derivative
+        convention: ``get_derivatives`` subtracts ``terms.virial.mT`` from the
+        strain gradient (the same path DSF uses). FD-validated against
+        ``dE/dscaling`` in :class:`tests.test_dftd3.TestDFTD3ForwardTerms`.
+        """
+        if (compute_forces or compute_virial) and not return_terms:
+            raise ValueError("compute_forces/compute_virial require return_terms=True")
+
+        kernel_inputs = self._prepare_dftd3_inputs(data)
+
+        coord_detached = kernel_inputs.coord_flat.detach()
+        cell_detached = kernel_inputs.cell_for_kernel.detach() if kernel_inputs.cell_for_kernel is not None else None
+
+        with torch.no_grad():
+            cell_bohr = None
+            if cell_detached is not None:
+                cell_bohr = cell_detached * constants.Bohr_inv
+                if cell_bohr.ndim == 2:
+                    cell_bohr = cell_bohr.unsqueeze(0)
+
+            dftd3_kwargs: dict[str, Any] = {
+                "positions": coord_detached * constants.Bohr_inv,
+                "numbers": kernel_inputs.numbers_flat,
+                "a1": float(self.a1),
+                "a2": float(self.a2),
+                "s8": float(self.s8),
+                "s6": float(self.s6),
+                "covalent_radii": self.rcov,
+                "r4r2": self.r4r2,
+                "c6_reference": self.c6ab,
+                "coord_num_ref": self.cn_ref,
+                "batch_idx": kernel_inputs.batch_idx,
+                "cell": cell_bohr,
+                "neighbor_matrix": kernel_inputs.neighbor_matrix,
+                "neighbor_matrix_shifts": kernel_inputs.neighbor_matrix_shifts,
+                "fill_value": int(kernel_inputs.fill_value),
+                "num_systems": int(kernel_inputs.num_systems),
+                "compute_virial": compute_virial,
+                "device": str(coord_detached.device),
+            }
+            if self.smoothing_on < self.smoothing_off:
+                dftd3_kwargs["s5_smoothing_on"] = float(self.smoothing_on) * constants.Bohr_inv
+                dftd3_kwargs["s5_smoothing_off"] = float(self.smoothing_off) * constants.Bohr_inv
+
+            result = dftd3(**dftd3_kwargs)
+            if compute_virial:
+                energy_h, forces_h_bohr, _coord_num, virial_kernel = result
+            else:
+                energy_h, forces_h_bohr, _coord_num = result
+                virial_kernel = coord_detached.new_empty(0)
+
+            energy_ev = energy_h * constants.Hartree
+            forces_ev_flat = forces_h_bohr * constants.Hartree * constants.Bohr_inv
+
+        energy_ev = energy_ev.detach().double()
         if self.key_out in data:
-            data[self.key_out] = data[self.key_out] + energy_ev.to(data[self.key_out].dtype)
+            data[self.key_out] = data[self.key_out].double() + energy_ev
         else:
             data[self.key_out] = energy_ev
 
-        # Optionally compute and add forces to data dict
-        # Compute forces via autograd (will use saved forces from DFTD3Function)
-        if self.compute_forces and coord_flat.requires_grad:
-            # Forces are -grad of energy
-            forces_flat = torch.autograd.grad(
-                energy_ev.sum(),
-                coord_flat,
-                create_graph=self.training,
-                retain_graph=True,
-            )[0]
-            forces = -forces_flat
+        forces_ev: Tensor | None = None
+        if compute_forces:
+            forces_ev = self._restore_dftd3_forces_shape(
+                forces_ev_flat.detach(),
+                kernel_inputs.nb_mode,
+                kernel_inputs.coord.shape,
+            )
 
-            # Reshape if needed
-            if nb_mode == 0 or nb_mode == 2:
-                B, N = coord.shape[:2]
-                forces = forces.view(B, N, 3)
+        # The nvalchemi DFTD3 kernel already returns the strain virial in the
+        # external-derivative-term convention used by the calculator
+        # (``dedc -= terms.virial.mT``); only an energy-unit conversion is
+        # needed. Verified by FD against ``dE/dscaling`` under row-vector
+        # strain - see ``tests/test_dftd3.py::TestDFTD3ForwardTerms``.
+        external_virial: Tensor | None = None
+        if compute_virial and virial_kernel.numel() > 0:
+            external_virial = (virial_kernel.detach() * constants.Hartree).contiguous()
 
-            if "forces" in data:
-                data["forces"] = data["forces"] + forces
-            else:
-                data["forces"] = forces
-
+        terms = None
+        if compute_forces or compute_virial:
+            terms = ExternalDerivativeTerms(forces=forces_ev, virial=external_virial)
+        if return_terms:
+            return data, terms
         return data
-
-    def _compute_energy_autograd(
-        self,
-        coord: Tensor,
-        cell: Tensor | None,
-        numbers: Tensor,
-        batch_idx: Tensor,
-        neighbor_matrix: Tensor,
-        neighbor_matrix_shifts: Tensor | None,
-        num_systems: int,
-        fill_value: int,
-    ) -> Tensor:
-        """Compute DFT-D3 energy using custom op for automatic differentiation."""
-        return dftd3_energy(
-            coord=coord,
-            cell=cell,
-            numbers=numbers,
-            batch_idx=batch_idx,
-            neighbor_matrix=neighbor_matrix,
-            shifts=neighbor_matrix_shifts,
-            rcov=self.rcov,
-            r4r2=self.r4r2,
-            c6ab=self.c6ab,
-            cn_ref=self.cn_ref,
-            a1=self.a1,
-            a2=self.a2,
-            s6=self.s6,
-            s8=self.s8,
-            num_systems=num_systems,
-            fill_value=fill_value,
-            smoothing_on=self.smoothing_on,
-            smoothing_off=self.smoothing_off,
-            compute_virial=self.compute_virial,
-        )

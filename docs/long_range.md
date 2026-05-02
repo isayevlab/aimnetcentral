@@ -298,7 +298,7 @@ Total energy is summed per molecule and multiplied by `-half_Hartree`.
 
 ## DFTD3
 
-`DFTD3` computes DFT-D3 dispersion correction using the BJ damping function with C6/C8 terms. Uses the `dftd3_energy` custom autograd op from `aimnet.modules.ops`. No 3-body term (Axilrod-Teller-Muto) is included.
+`DFTD3` computes DFT-D3 dispersion correction using the BJ damping function with C6/C8 terms. It calls the nvalchemiops DFT-D3 kernel directly and returns explicit detached forces/virial when requested; it does not expose coordinate/cell autograd. No 3-body term (Axilrod-Teller-Muto) is included.
 
 ### Smoothing Window
 
@@ -349,7 +349,7 @@ calc.set_dftd3_cutoff(cutoff=20.0, smoothing_fraction=0.15)
 
 ### Forces
 
-If `compute_forces=True` and coordinates require grad, forces are automatically computed as `-grad(energy)` and added to `data["forces"]`.
+DFT-D3 is an explicit external backend. In calculator calls, forces and stress are requested from nvalchemiops and combined with the model derivatives by the calculator. The module API returns these detached terms with `forward(data, compute_forces=True, return_terms=True)` or `forward(data, compute_virial=True, return_terms=True)`; DFT-D3 energy itself is not used for coordinate/cell autograd or Hessians.
 
 ### D3 Parameters
 

@@ -8,7 +8,7 @@ AIMNet2 cannot currently produce a `.pt` that the NNPot interface accepts. The r
 
 1. The shipped v2 `.pt` assets in `aimnet/calculators/assets/` are `torch.save` state-dict archives, **not** TorchScript archives. They are loaded into a Python `nn.Module` by `aimnet.models.base.load_model`.
 2. `torch.jit.script` on the in-memory `AIMNet2` model fails in `aimnet/nbops.py` -- the code uses `tensor.data_ptr()` as a neighbor-cache key, which TorchScript rejects.
-3. `torch.jit.script` on the external `DFTD3` module fails because its custom autograd uses an `aten::grad` signature TorchScript cannot resolve.
+3. The external DFTD3/Coulomb modules call nvalchemiops Python APIs that are not TorchScript export targets.
 4. The published `aimnet2` (wb97m-d3) model needs both external Coulomb and external D3 added on top of the core, so even if the core scripted, the wrapper would have to bundle all three pieces to match `AIMNet2Calculator` energies.
 
 ## Tracking

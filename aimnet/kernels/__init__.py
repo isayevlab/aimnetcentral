@@ -40,10 +40,7 @@ def load_ops():
     """
     available_ops = []
 
-    # Import warp kernels to trigger registration
-    # Import custom ops module to trigger registration
-    from aimnet.modules import ops as _ops  # noqa: F401
-
+    # Import warp kernels to trigger registration.
     from . import conv_sv_2d_sp_wp  # noqa: F401
 
     # Verify ops are available
@@ -54,8 +51,6 @@ def load_ops():
             available_ops.append("aimnet::conv_sv_2d_sp_bwd")
         if hasattr(torch.ops.aimnet, "conv_sv_2d_sp_bwd_bwd"):
             available_ops.append("aimnet::conv_sv_2d_sp_bwd_bwd")
-        if hasattr(torch.ops.aimnet, "dftd3_fwd"):
-            available_ops.append("aimnet::dftd3_fwd")
 
     return available_ops
 

@@ -11,9 +11,40 @@ from torch import Tensor, nn
 
 from aimnet.models.base import load_model
 from aimnet.modules import DFTD3, LRCoulomb
-from aimnet.modules.lr import LRCoulombDerivativeTerms
+from aimnet.modules.lr import ExternalDerivativeTerms
 
 from .model_registry import get_model_path
+
+
+def _sum_optional_tensor(x: Tensor | None, y: Tensor | None) -> Tensor | None:
+    """Elementwise sum of two ``Optional[Tensor]`` operands."""
+    if x is None:
+        return y
+    if y is None:
+        return x
+    return x + y.to(dtype=x.dtype, device=x.device)
+
+
+def _combine_external_terms(
+    a: ExternalDerivativeTerms | None,
+    b: ExternalDerivativeTerms | None,
+) -> ExternalDerivativeTerms | None:
+    """Sum forces and virials of two external derivative terms.
+
+    Both inputs follow the calculator-side contract used by
+    :meth:`AIMNet2Calculator.get_derivatives`: ``forces`` add to the
+    autograd-derived forces and ``virial`` enters as ``dedc -= virial.mT``.
+    DSF Coulomb and DFTD3 both publish detached terms in this convention, so
+    combining them is a per-system elementwise sum.
+    """
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return ExternalDerivativeTerms(
+        forces=_sum_optional_tensor(a.forces, b.forces),
+        virial=_sum_optional_tensor(a.virial, b.virial),
+    )
 
 
 class AdaptiveNeighborList:
@@ -717,6 +748,7 @@ class AIMNet2Calculator:
                 "For legacy models, the Coulomb method cannot be changed at runtime.",
                 stacklevel=2,
             )
+            return
 
         # Update external LRCoulomb module if present
         if self.external_coulomb is not None:
@@ -851,6 +883,8 @@ class AIMNet2Calculator:
                 "DSF Coulomb uses nvalchemiops explicit coordinate/cell derivatives and does not support "
                 "force/stress training or Hessian calculations. Use 'ewald' or 'pme' for these derivative modes."
             )
+        if hessian and self.external_dftd3 is not None:
+            raise NotImplementedError("DFT-D3 does not support Hessian calculations.")
         data = self.set_grad_tensors(data, forces=forces, stress=stress, hessian=hessian)
         if isinstance(self.model, torch.jit.ScriptModule):
             with torch.jit.optimized_execution(False):  # type: ignore
@@ -858,7 +892,7 @@ class AIMNet2Calculator:
         else:
             data = self.model(data)
         # Run external modules if present
-        data, coulomb_terms = self._run_external_modules(data, forces=forces or hessian, stress=stress)
+        data, coulomb_terms = self._run_external_modules(data, forces=forces or hessian, stress=stress, hessian=hessian)
         data = self.get_derivatives(data, forces=forces, stress=stress, hessian=hessian, coulomb_terms=coulomb_terms)
         data = self.process_output(data)
         return data
@@ -869,26 +903,42 @@ class AIMNet2Calculator:
         *,
         forces: bool = False,
         stress: bool = False,
-    ) -> tuple[dict[str, Tensor], LRCoulombDerivativeTerms | None]:
+        hessian: bool = False,
+    ) -> tuple[dict[str, Tensor], ExternalDerivativeTerms | None]:
         """Run external Coulomb and DFTD3 modules if attached.
 
-        External Coulomb modules expose a shared ``forward_with_derivatives``
-        interface. Ewald/PME publish derivatives through custom autograd ops
-        and return no explicit terms; DSF returns nvalchemiops forces/virial
-        for :meth:`get_derivatives` because its energy is not position/cell
-        differentiable.
+        External backends expose a shared ``forward(..., return_terms=True)``
+        interface. Inference-style backends publish detached forces/virial
+        that :meth:`get_derivatives` adds back into autograd-derived
+        derivatives. Ewald/PME switch to their local training wrapper when
+        force/stress training or Hessians need second derivatives.
         """
         coulomb_terms = None
         if self.external_coulomb is not None:
-            data, coulomb_terms = self.external_coulomb.forward_with_derivatives(
+            training_derivatives = hessian or (
+                self.external_coulomb.method in ("ewald", "pme") and getattr(self, "_train", False) and (forces or stress)
+            )
+            kwargs: dict[str, Any] = {
+                "compute_forces": forces,
+                "compute_virial": stress,
+                "training_derivatives": training_derivatives,
+            }
+            if training_derivatives and stress and self.external_coulomb.method in ("ewald", "pme"):
+                strain_inputs = getattr(self, "_coulomb_strain_inputs", None)
+                if strain_inputs is not None:
+                    kwargs.update(strain_inputs)
+            data, coulomb_terms = self.external_coulomb(data, return_terms=True, **kwargs)
+
+        dftd3_terms = None
+        if self.external_dftd3 is not None:
+            data, dftd3_terms = self.external_dftd3(
                 data,
                 compute_forces=forces,
                 compute_virial=stress,
+                return_terms=True,
             )
-        if self.external_dftd3 is not None:
-            self.external_dftd3.compute_virial = stress
-            data = self.external_dftd3(data)
-        return data, coulomb_terms
+
+        return data, _combine_external_terms(coulomb_terms, dftd3_terms)
 
     def prepare_input(self, data: dict[str, Any]) -> dict[str, Tensor]:
         data = self.to_input_tensors(data)
@@ -1182,12 +1232,15 @@ class AIMNet2Calculator:
 
     def set_grad_tensors(self, data: dict[str, Tensor], forces=False, stress=False, hessian=False) -> dict[str, Tensor]:
         self._saved_for_grad = {}
+        self._coulomb_strain_inputs = None
         if forces or hessian:
             data["coord"].requires_grad_(True)
             self._saved_for_grad["coord"] = data["coord"]
         if stress:
             assert "cell" in data and data["cell"] is not None, "Stress calculation requires cell"
+            coord_unstrained = data["coord"]
             cell = data["cell"]
+            cell_unstrained = cell
             if cell.ndim == 2:
                 # Single system: (3, 3) scaling
                 scaling = torch.eye(3, requires_grad=True, dtype=cell.dtype, device=cell.device)
@@ -1204,6 +1257,12 @@ class AIMNet2Calculator:
                 data["coord"] = (data["coord"].unsqueeze(1) @ atom_scaling).squeeze(1)
                 data["cell"] = cell @ scaling
             self._saved_for_grad["scaling"] = scaling
+            if self.external_coulomb is not None and self._coulomb_method in ("ewald", "pme"):
+                self._coulomb_strain_inputs = {
+                    "coord_unstrained": coord_unstrained,
+                    "cell_unstrained": cell_unstrained,
+                    "scaling": scaling,
+                }
         return data
 
     def keep_only(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
@@ -1219,7 +1278,7 @@ class AIMNet2Calculator:
         forces: bool = False,
         stress: bool = False,
         hessian: bool = False,
-        coulomb_terms: LRCoulombDerivativeTerms | None = None,
+        coulomb_terms: ExternalDerivativeTerms | None = None,
     ) -> dict[str, Tensor]:
         # Use stored train mode for create_graph decision
         _create_graph = hessian or self._train

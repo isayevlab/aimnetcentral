@@ -22,10 +22,8 @@
 Comprehensive tests for DFT-D3 dispersion implementation.
 
 Tests cover:
-- Custom op registration
 - Forward computation
-- Backward computation (autograd)
-- TorchScript compatibility
+- Explicit force and virial terms
 - Physical correctness
 """
 
@@ -108,31 +106,6 @@ def setup_dftd3_data_mode_1(device, n_atoms=5):
 
 
 # =============================================================================
-# Op Registration Tests
-# =============================================================================
-
-
-@pytest.mark.gpu
-class TestDFTD3OpRegistration:
-    """Tests for custom op registration."""
-
-    def test_op_registered(self, device):
-        """Test that dftd3_fwd op is registered."""
-        from aimnet.modules import ops  # noqa: F401
-
-        assert hasattr(torch.ops, "aimnet"), "aimnet namespace not found in torch.ops"
-        assert hasattr(torch.ops.aimnet, "dftd3_fwd"), "dftd3_fwd op not registered"
-
-    def test_load_ops_includes_dftd3(self, device):
-        """Test that load_ops() returns dftd3_fwd."""
-        from aimnet.kernels import load_ops
-        from aimnet.modules import ops  # noqa: F401
-
-        available_ops = load_ops()
-        assert "aimnet::dftd3_fwd" in available_ops
-
-
-# =============================================================================
 # Initialization Tests
 # =============================================================================
 
@@ -168,15 +141,15 @@ class TestDFTD3Init:
         assert module.c6ab.shape == (95, 95, 5, 5)
         assert module.cn_ref.shape == (95, 95, 5, 5)
 
-    def test_compute_forces_flag(self, device):
-        """Test compute_forces flag initialization."""
-        module = DFTD3(s8=0.5, a1=0.4, a2=4.0, compute_forces=True).to(device)
-        assert module.compute_forces is True
+    def test_derivative_flags_require_terms(self, device):
+        """Explicit derivative requests require the tuple-return path."""
+        module = DFTD3(s8=0.5, a1=0.4, a2=4.0).to(device)
+        data = setup_dftd3_data_mode_0(device, n_atoms=3)
 
-    def test_compute_virial_flag(self, device):
-        """Test compute_virial flag initialization."""
-        module = DFTD3(s8=0.5, a1=0.4, a2=4.0, compute_virial=True).to(device)
-        assert module.compute_virial is True
+        with pytest.raises(ValueError, match="return_terms=True"):
+            module(data, compute_forces=True)
+        with pytest.raises(ValueError, match="return_terms=True"):
+            module(data, compute_virial=True)
 
 
 # =============================================================================
@@ -190,29 +163,29 @@ class TestDFTD3Forward:
 
     def test_output_shape_mode_0(self, device):
         """Test that DFTD3 produces correct output shape in mode 0."""
-        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, compute_forces=True).to(device)
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
         data = setup_dftd3_data_mode_0(device, n_atoms=5)
         data["coord"] = data["coord"].requires_grad_(True)
 
-        result = module(data)
+        result, terms = module(data, compute_forces=True, return_terms=True)
 
         assert "energy" in result
         assert result["energy"].shape == (1,)  # Per-molecule energy
-        assert "forces" in result
-        assert result["forces"].shape == (1, 5, 3)
+        assert terms is not None and terms.forces is not None
+        assert terms.forces.shape == (1, 5, 3)
 
     def test_output_shape_mode_1(self, device):
         """Test that DFTD3 produces correct output shape in mode 1."""
-        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, compute_forces=True).to(device)
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
         data = setup_dftd3_data_mode_1(device, n_atoms=5)
         data["coord"] = data["coord"].requires_grad_(True)
 
-        result = module(data)
+        result, terms = module(data, compute_forces=True, return_terms=True)
 
         assert "energy" in result
         assert result["energy"].shape == (1,)
-        assert "forces" in result
-        assert result["forces"].shape == (6, 3)  # n_atoms + 1 for padding
+        assert terms is not None and terms.forces is not None
+        assert terms.forces.shape == (6, 3)  # n_atoms + 1 for padding
 
     def test_energy_is_negative(self, device):
         """Test that dispersion energy is negative (attractive)."""
@@ -234,14 +207,15 @@ class TestDFTD3Forward:
 
     def test_energy_finite(self, device):
         """Test that energy is finite for typical molecules."""
-        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, compute_forces=True).to(device)
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
         data = setup_dftd3_data_mode_0(device, n_atoms=5)
         data["coord"] = data["coord"].requires_grad_(True)
 
-        result = module(data)
+        result, terms = module(data, compute_forces=True, return_terms=True)
 
         assert torch.isfinite(result["energy"]).all()
-        assert torch.isfinite(result["forces"]).all()
+        assert terms is not None and terms.forces is not None
+        assert torch.isfinite(terms.forces).all()
 
     def test_deterministic(self, device):
         """Test that forward pass is deterministic."""
@@ -294,9 +268,9 @@ class TestDFTD3Additive:
         # Energy should be added to existing value (dispersion is negative)
         assert result["energy"].item() < 10.0
 
-    def test_forces_addition(self, device):
-        """Test that forces are added to existing key if present."""
-        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, compute_forces=True).to(device)
+    def test_explicit_forces_do_not_modify_data_forces(self, device):
+        """DFT-D3 returns explicit forces through terms, not ``data["forces"]``."""
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
 
         coord = torch.tensor([[[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]]], device=device, requires_grad=True)
         numbers = torch.tensor([[6, 1, 1]], device=device)
@@ -310,10 +284,11 @@ class TestDFTD3Additive:
         initial_forces = torch.ones((1, 3, 3), device=device) * 0.5
         data["forces"] = initial_forces.clone()
 
-        result = module(data)
+        result, terms = module(data, compute_forces=True, return_terms=True)
 
-        # Forces should be different from initial (dispersion forces added)
-        assert not torch.allclose(result["forces"], initial_forces)
+        torch.testing.assert_close(result["forces"], initial_forces)
+        assert terms is not None and terms.forces is not None
+        assert not torch.allclose(terms.forces, initial_forces)
 
 
 # =============================================================================
@@ -390,7 +365,7 @@ class TestDFTD3Batching:
 
     def test_batched_input_mode_0(self, device):
         """Test DFTD3 with batched input in mode 0."""
-        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, compute_forces=True).to(device)
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
 
         # Batch of 2 molecules, 3 atoms each
         coord = torch.tensor(
@@ -408,25 +383,26 @@ class TestDFTD3Batching:
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
-        result = module(data)
+        result, terms = module(data, compute_forces=True, return_terms=True)
 
         assert result["energy"].shape == (2,)
-        assert result["forces"].shape == (2, 3, 3)
         assert torch.isfinite(result["energy"]).all()
-        assert torch.isfinite(result["forces"]).all()
+        assert terms is not None and terms.forces is not None
+        assert terms.forces.shape == (2, 3, 3)
+        assert torch.isfinite(terms.forces).all()
 
 
 # =============================================================================
-# Autograd Tests
+# Explicit Derivative Tests
 # =============================================================================
 
 
 @pytest.mark.gpu
-class TestDFTD3Autograd:
-    """Tests for DFTD3 autograd functionality."""
+class TestDFTD3ExplicitDerivatives:
+    """Tests for DFTD3's explicit external-derivative contract."""
 
-    def test_energy_requires_grad(self, device):
-        """Test that energy computation preserves gradient tracking."""
+    def test_energy_is_detached_from_coord(self, device):
+        """DFTD3 energy does not expose coordinate autograd."""
         module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
 
         coord = torch.tensor(
@@ -441,54 +417,11 @@ class TestDFTD3Autograd:
 
         result = module(data)
 
-        assert result["energy"].requires_grad
-        assert result["energy"].grad_fn is not None
+        assert not result["energy"].requires_grad
+        assert result["energy"].grad_fn is None
 
-    def test_coord_gradient_finite(self, device):
-        """Test that coord gradients are finite after backward."""
-        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
-
-        coord = torch.tensor(
-            [[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]], device=device, requires_grad=True
-        )
-        numbers = torch.tensor([[8, 1, 1]], device=device)
-
-        data = {"coord": coord, "numbers": numbers}
-        data = add_dftd3_keys(data, device)
-        data = nbops.set_nb_mode(data)
-        data = nbops.calc_masks(data)
-
-        result = module(data)
-        result["energy"].sum().backward()
-
-        assert coord.grad is not None
-        assert torch.isfinite(coord.grad).all()
-
-    def test_forces_match_negative_grad(self, device):
-        """Test that forces from compute_forces match -coord.grad."""
-        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, compute_forces=True).to(device)
-
-        coord = torch.tensor([[[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]]], device=device, requires_grad=True)
-        numbers = torch.tensor([[6, 1, 1]], device=device)
-
-        data = {"coord": coord, "numbers": numbers}
-        data = add_dftd3_keys(data, device)
-        data = nbops.set_nb_mode(data)
-        data = nbops.calc_masks(data)
-
-        result = module(data)
-
-        # Forces computed in forward should match -grad
-        forces_from_forward = result["forces"].clone()
-
-        # Compute grad via backward
-        result["energy"].sum().backward()
-        forces_from_grad = -coord.grad
-
-        torch.testing.assert_close(forces_from_forward, forces_from_grad, rtol=1e-4, atol=1e-6)
-
-    def test_gradient_accumulation(self, device):
-        """Test gradients accumulate correctly over multiple backwards."""
+    def test_explicit_forces_are_returned_as_terms(self, device):
+        """Forces are exposed as detached external derivative terms."""
         module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
 
         coord = torch.tensor([[[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]]], device=device, requires_grad=True)
@@ -499,155 +432,181 @@ class TestDFTD3Autograd:
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
-        result = module(data)
+        result, terms = module(data.copy(), compute_forces=True, return_terms=True)
 
-        # First backward
-        result["energy"].sum().backward(retain_graph=True)
-        grad1 = coord.grad.clone()
-
-        # Second backward (should accumulate)
-        result["energy"].sum().backward()
-        grad2 = coord.grad
-
-        # grad2 should be 2x grad1
-        torch.testing.assert_close(grad2, 2 * grad1, rtol=1e-5, atol=1e-7)
-
-    def test_batched_gradients(self, device):
-        """Test gradients work correctly with batched input."""
-        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
-
-        coord = torch.tensor(
-            [
-                [[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]],
-                [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
-            ],
-            device=device,
-            requires_grad=True,
-        )
-        numbers = torch.tensor([[6, 1, 1], [6, 1, 1]], device=device)
-
-        data = {"coord": coord, "numbers": numbers}
-        data = add_dftd3_keys(data, device)
-        data = nbops.set_nb_mode(data)
-        data = nbops.calc_masks(data)
-
-        result = module(data)
-        result["energy"].sum().backward()
-
-        assert coord.grad is not None
-        assert coord.grad.shape == coord.shape
-        assert torch.isfinite(coord.grad).all()
-
-    def test_single_energy_gradient(self, device):
-        """Test gradient when backward is called on single energy."""
-        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
-
-        coord = torch.tensor(
-            [
-                [[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]],
-                [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
-            ],
-            device=device,
-            requires_grad=True,
-        )
-        numbers = torch.tensor([[6, 1, 1], [6, 1, 1]], device=device)
-
-        data = {"coord": coord, "numbers": numbers}
-        data = add_dftd3_keys(data, device)
-        data = nbops.set_nb_mode(data)
-        data = nbops.calc_masks(data)
-
-        result = module(data)
-
-        # Backward on just first energy
-        result["energy"][0].backward()
-
-        assert coord.grad is not None
-        # Only first molecule should have non-zero gradients
-        assert not torch.allclose(coord.grad[0], torch.zeros_like(coord.grad[0]))
-        assert torch.allclose(coord.grad[1], torch.zeros_like(coord.grad[1]))
+        assert terms is not None and terms.forces is not None
+        assert not result["energy"].requires_grad
+        assert not terms.forces.requires_grad
+        assert torch.isfinite(terms.forces).all()
 
 
 # =============================================================================
-# torch.compile Tests
+# Forward return_terms=True (calculator stress path)
 # =============================================================================
+
+
+def _setup_pbc_dftd3_data(coord_real, cell_value, numbers_real, device, cutoff=8.0):
+    """Build flat nb_mode=1 PBC data for DFTD3 with a real periodic neighbor list."""
+    from nvalchemiops.torch.neighbors import neighbor_list
+
+    n_real = coord_real.shape[0]
+    pad_idx = n_real
+    pbc = torch.tensor([True, True, True], device=device)
+    batch_idx_real = torch.zeros(n_real, dtype=torch.int32, device=device)
+
+    nbmat_real, _, shifts_real = neighbor_list(
+        positions=coord_real,
+        cutoff=cutoff,
+        cell=cell_value.unsqueeze(0),
+        pbc=pbc,
+        batch_idx=batch_idx_real,
+        max_neighbors=64,
+        half_fill=False,
+        fill_value=pad_idx,
+    )
+    actual_max = int(nbmat_real.shape[1])
+
+    coord = torch.cat([coord_real, coord_real.new_zeros((1, 3))], dim=0)
+    numbers = torch.cat([numbers_real, numbers_real.new_zeros((1,))], dim=0)
+    mol_idx = torch.zeros(coord.shape[0], dtype=torch.long, device=device)
+
+    nbmat = torch.full((n_real + 1, actual_max), pad_idx, dtype=torch.long, device=device)
+    nbmat[:n_real] = nbmat_real
+    shifts = torch.zeros((n_real + 1, actual_max, 3), dtype=torch.int32, device=device)
+    shifts[:n_real] = shifts_real.to(torch.int32)
+
+    data = {
+        "coord": coord,
+        "numbers": numbers,
+        "cell": cell_value,
+        "mol_idx": mol_idx,
+        "nbmat": nbmat,
+        "shifts": shifts,
+        "nbmat_dftd3": nbmat,
+        "shifts_dftd3": shifts,
+        "cutoff_dftd3": torch.tensor(float(cutoff), device=device),
+    }
+    data = nbops.set_nb_mode(data)
+    data = nbops.calc_masks(data)
+    return data
+
+
+def _data_with_strain(template: dict, scaling: torch.Tensor, coord_real: torch.Tensor, cell0: torch.Tensor) -> dict:
+    """Reuse the neighbor list from ``template`` but apply ``scaling`` to coord/cell."""
+    coord_s = coord_real @ scaling
+    cell_s = cell0 @ scaling
+    coord_pad = torch.cat([coord_s, coord_s.new_zeros((1, 3))], dim=0)
+    return {**template, "coord": coord_pad, "cell": cell_s}
 
 
 @pytest.mark.gpu
-class TestDFTD3Compile:
-    """Tests for torch.compile compatibility."""
+class TestDFTD3ForwardTerms:
+    """Tests for the calculator stress path: DFTD3 forward terms."""
 
-    def test_compile_forward(self, device):
-        """Test that DFTD3 module can be compiled and produces correct results."""
-        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
-        compiled_module = torch.compile(module, fullgraph=False)
+    def test_explicit_virial_matches_finite_difference(self, pbc_crystal_small, device):
+        """Explicit virial from ``forward(..., return_terms=True)`` matches row-vector strain FD.
 
-        # Create test input
-        coord = torch.tensor([[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]], device=device)
-        numbers = torch.tensor([[8, 1, 1]], device=device)
+        The calculator consumes ``terms.virial`` via ``dedc -= terms.virial.mT``,
+        so the contract is ``-terms.virial.mT == dE/dscaling``. FD is computed
+        against the same ``compute_virial=True`` kernel branch the terms call uses,
+        with the neighbor list built once at the unstrained cell so the strain
+        perturbation only changes coord/cell.
+        """
+        coord_real = pbc_crystal_small["coord"].to(device)
+        cell0 = pbc_crystal_small["cell"].to(device)
+        numbers_real = pbc_crystal_small["numbers"].to(device)
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, cutoff=8.0).to(device)
 
-        data = {"coord": coord, "numbers": numbers}
-        data = add_dftd3_keys(data, device)
-        data = nbops.set_nb_mode(data)
-        data = nbops.calc_masks(data)
+        template = _setup_pbc_dftd3_data(coord_real, cell0, numbers_real, device)
 
-        # Compare eager vs compiled
-        with torch.no_grad():
-            eager_result = module(data.copy())
-            compiled_result = compiled_module(data.copy())
+        def energy_at(scaling: torch.Tensor) -> float:
+            data = _data_with_strain(template, scaling, coord_real, cell0)
+            with torch.no_grad():
+                # Use the same kernel branch (compute_virial=True, return_terms=True) as the terms
+                # call below to avoid mixing branches across forward and FD.
+                out, _ = module(data, compute_virial=True, return_terms=True)
+            return float(out["energy"].sum().item())
 
-        torch.testing.assert_close(eager_result["energy"], compiled_result["energy"], rtol=1e-5, atol=1e-6)
+        identity = torch.eye(3, device=device)
+        data0 = _data_with_strain(template, identity, coord_real, cell0)
+        _, terms = module(data0, compute_virial=True, return_terms=True)
+        assert terms is not None and terms.virial is not None
+        external_virial = terms.virial.detach().cpu()
+        if external_virial.ndim == 3:
+            external_virial = external_virial.sum(dim=0)
 
-    def test_compile_with_gradients(self, device):
-        """Test that compiled DFTD3 works with gradient computation."""
-        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
-        compiled_module = torch.compile(module, fullgraph=False)
+        delta = 1e-3
+        dE_dscaling = torch.zeros(3, 3)
+        for i in range(3):
+            for j in range(3):
+                s_p = identity.clone()
+                s_p[i, j] += delta
+                s_m = identity.clone()
+                s_m[i, j] -= delta
+                dE_dscaling[i, j] = (energy_at(s_p) - energy_at(s_m)) / (2 * delta)
 
-        # Create test input with gradients
-        coord = torch.tensor(
-            [[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]],
-            device=device,
-            requires_grad=True,
+        torch.testing.assert_close(-external_virial.mT, dE_dscaling, rtol=5e-3, atol=5e-3)
+
+    def test_explicit_forces_match_forward_forces(self, pbc_crystal_small, device):
+        """Repeated forward-term calls return the same explicit forces."""
+        coord_real = pbc_crystal_small["coord"].to(device)
+        cell0 = pbc_crystal_small["cell"].to(device)
+        numbers_real = pbc_crystal_small["numbers"].to(device)
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, cutoff=8.0).to(device)
+
+        # Share a single neighbor list across paths so kernel inputs are bit-identical.
+        template = _setup_pbc_dftd3_data(coord_real, cell0, numbers_real, device)
+
+        data_a = dict(template)
+        _, terms_a = module(data_a, compute_forces=True, return_terms=True)
+        assert terms_a is not None and terms_a.forces is not None
+        forces_first = terms_a.forces.detach()
+
+        data_b = dict(template)
+        _, terms = module(data_b, compute_forces=True, return_terms=True)
+        assert terms is not None and terms.forces is not None
+        forces_explicit = terms.forces.detach()
+
+        torch.testing.assert_close(forces_explicit, forces_first, rtol=1e-4, atol=1e-5)
+
+    def test_no_virial_no_forces_returns_none_terms(self, pbc_crystal_small, device):
+        """When neither flag is requested, the terms object is None to mirror DSF."""
+        coord_real = pbc_crystal_small["coord"].to(device)
+        cell0 = pbc_crystal_small["cell"].to(device)
+        numbers_real = pbc_crystal_small["numbers"].to(device)
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, cutoff=8.0).to(device)
+
+        data = _setup_pbc_dftd3_data(coord_real, cell0, numbers_real, device)
+        out, terms = module(data, return_terms=True)
+        assert terms is None
+        assert "energy" in out
+
+    def test_forces_and_virial_in_one_call(self, pbc_crystal_small, device):
+        """Both flags in a single call populate both fields and agree with single-flag calls."""
+        coord_real = pbc_crystal_small["coord"].to(device)
+        cell0 = pbc_crystal_small["cell"].to(device)
+        numbers_real = pbc_crystal_small["numbers"].to(device)
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, cutoff=8.0).to(device)
+        template = _setup_pbc_dftd3_data(coord_real, cell0, numbers_real, device)
+
+        # forces+virial in one call
+        _, terms_both = module(
+            dict(template), compute_forces=True, compute_virial=True, return_terms=True
         )
-        numbers = torch.tensor([[8, 1, 1]], device=device)
+        assert terms_both is not None
+        assert terms_both.forces is not None
+        assert terms_both.virial is not None
 
-        data = {"coord": coord, "numbers": numbers}
-        data = add_dftd3_keys(data, device)
-        data = nbops.set_nb_mode(data)
-        data = nbops.calc_masks(data)
+        # forces alone - virial omitted, forces populated
+        _, terms_f = module(dict(template), compute_forces=True, return_terms=True)
+        assert terms_f is not None
+        assert terms_f.forces is not None
+        assert terms_f.virial is None
+        torch.testing.assert_close(terms_both.forces, terms_f.forces, rtol=1e-4, atol=1e-5)
 
-        # Run compiled forward and backward
-        result = compiled_module(data)
-        result["energy"].sum().backward()
-
-        # Verify gradients are finite
-        assert coord.grad is not None
-        assert torch.isfinite(coord.grad).all()
-
-    def test_compile_batched(self, device):
-        """Test that compiled DFTD3 works with batched input."""
-        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
-        compiled_module = torch.compile(module, fullgraph=False)
-
-        # Batch of 2 molecules
-        coord = torch.tensor(
-            [
-                [[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]],
-                [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
-            ],
-            device=device,
-        )
-        numbers = torch.tensor([[6, 1, 1], [6, 1, 1]], device=device)
-
-        data = {"coord": coord, "numbers": numbers}
-        data = add_dftd3_keys(data, device)
-        data = nbops.set_nb_mode(data)
-        data = nbops.calc_masks(data)
-
-        # Compare eager vs compiled
-        with torch.no_grad():
-            eager_result = module(data.copy())
-            compiled_result = compiled_module(data.copy())
-
-        assert compiled_result["energy"].shape == (2,)
-        torch.testing.assert_close(eager_result["energy"], compiled_result["energy"], rtol=1e-5, atol=1e-6)
+        # virial alone - forces omitted, virial populated and agrees with combined.
+        _, terms_v = module(dict(template), compute_virial=True, return_terms=True)
+        assert terms_v is not None
+        assert terms_v.virial is not None
+        assert terms_v.forces is None
+        torch.testing.assert_close(terms_both.virial, terms_v.virial, rtol=1e-4, atol=1e-5)
