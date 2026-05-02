@@ -351,10 +351,10 @@ class LRCoulomb(nn.Module):
         if mask_i_flat.any():
             real_coord = coord_real[~mask_i_flat]
             extent = real_coord.abs().amax() if real_coord.numel() else coord_real.new_tensor(0.0)
-            margin = coord_real.new_tensor(float(self.dsf_rc) + 1.0)
+            pad_spacing = coord_real.new_tensor(float(self.dsf_rc) + 1.0)
             pad_rank = torch.cumsum(mask_i_flat.to(coord_real.dtype), dim=0)[mask_i_flat]
             pad_coord = coord_real.new_zeros((pad_rank.shape[0], 3))
-            pad_coord[:, 0] = extent + margin * pad_rank
+            pad_coord[:, 0] = extent + pad_spacing * pad_rank
             coord_real = coord_real.clone()
             coord_real[mask_i_flat] = pad_coord
 
@@ -572,12 +572,19 @@ class LRCoulomb(nn.Module):
 
         coord = data["coord"]
         cell = data["cell"]
-        assert cell is not None
+        if cell is None:
+            raise ValueError("nvalchemi Coulomb requires periodic cell data")
 
         charges = data[self.key_in]
         mol_idx = data["mol_idx"]
         nbmat = data[f"nbmat{suffix}"]
         shifts = data[f"shifts{suffix}"]
+        if coord.ndim != 2 or charges.ndim != 1 or mol_idx.ndim != 1 or nbmat.ndim != 2:
+            raise ValueError("nvalchemi Coulomb expects flat padded PBC inputs")
+        if not (coord.shape[0] == charges.shape[0] == mol_idx.shape[0] == nbmat.shape[0]):
+            raise ValueError("nvalchemi Coulomb flat inputs must include matching coord/charge/mol_idx/nbmat rows")
+        if coord.shape[0] < 2:
+            raise ValueError("nvalchemi Coulomb flat inputs must include at least one real atom and one padding row")
 
         # Drop the trailing padding atom (flat mode includes one at index N).
         N_padded = coord.shape[0]
@@ -1426,6 +1433,9 @@ class DFTD3(nn.Module):
         The embedded path returns an autograd-capable energy only when the
         coordinate or explicit calculator strain inputs require it. Explicit
         derivative requests return detached energy and derivative terms.
+        The strain-wrapper kwargs are for direct differentiable callers; the
+        calculator uses explicit derivative terms for stress because DFT-D3 has
+        no trainable parameters.
 
         The returned virial follows the calculator-side external-derivative
         convention: ``get_derivatives`` subtracts ``terms.virial.mT`` from the
