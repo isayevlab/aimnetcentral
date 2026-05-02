@@ -621,14 +621,14 @@ class TestDFTD3ForwardTerms:
 
     def test_hessian_path_pbc_matches_finite_difference_and_double_backward(self, pbc_crystal_small, device):
         """PBC Hessian fallback has finite-difference first derivatives and double backward."""
-        coord_real = pbc_crystal_small["coord"].to(device)
-        cell0 = pbc_crystal_small["cell"].to(device)
+        coord_real = pbc_crystal_small["coord"].to(device=device, dtype=torch.float64)
+        cell0 = pbc_crystal_small["cell"].to(device=device, dtype=torch.float64)
         numbers_real = pbc_crystal_small["numbers"].to(device)
-        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, cutoff=8.0).to(device)
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, cutoff=8.0).to(device=device, dtype=torch.float64)
 
         template = _setup_pbc_dftd3_data(coord_real, cell0, numbers_real, device)
         coord_unstrained = template["coord"].detach().clone().requires_grad_(True)
-        scaling = torch.eye(3, device=device, requires_grad=True)
+        scaling = torch.eye(3, device=device, dtype=torch.float64, requires_grad=True)
         data = {
             **template,
             "coord": coord_unstrained @ scaling,
