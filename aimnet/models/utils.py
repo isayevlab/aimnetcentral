@@ -339,12 +339,18 @@ def validate_state_dict_keys(
         "outputs.dftd3.",
         "outputs.d3bj.",
     )
+    EXPECTED_UNEXPECTED_KEYS = {
+        # Older artifacts may carry persistent mass buffers from dipole and
+        # quadrupole heads even when those heads are absent from model_yaml.
+        "outputs.dipole.mass",
+        "outputs.quadrupole.mass",
+    }
 
     def is_expected_missing(k: str) -> bool:
         return k.startswith(EXPECTED_MISSING_PREFIXES)
 
     def is_expected_unexpected(k: str) -> bool:
-        return k.startswith(EXPECTED_UNEXPECTED_PREFIXES)
+        return k in EXPECTED_UNEXPECTED_KEYS or k.startswith(EXPECTED_UNEXPECTED_PREFIXES)
 
     real_missing = [k for k in missing_keys if not is_expected_missing(k)]
     real_unexpected = [k for k in unexpected_keys if not is_expected_unexpected(k)]
@@ -597,8 +603,8 @@ def load_v1_model(
         populated-but-untrained rows.
     family : str | None, optional
         Family tag (e.g. `"rxn"`) written into the metadata. Used by the
-        calculator to route family-specific safeguards (charge guard, Coulomb
-        cutoff lock, cross-family mixing detection). Omit for legacy families
+        calculator to route family-specific safeguards such as the charge
+        guard and cross-family energy-scale warning. Omit for legacy families
         that don't declare a family.
     supports_charged_systems : bool | None, optional
         If `False`, the calculator's `validate_species=True` path will raise

@@ -14,4 +14,4 @@ AIMNet2 is consumed by several external simulation and analysis packages. This s
 | GROMACS NNPot | Blocked on TorchScript export | [GROMACS](gromacs.md) |
 | LAMMPS (`pair_style mliap`) | Blocked on TorchScript export | [LAMMPS](lammps.md) |
 
-The TorchScript-export blockers shared by GROMACS and LAMMPS are tracked in [`docs/superpowers/plans/2026-04-26-torchscript-export.md`](../superpowers/plans/2026-04-26-torchscript-export.md). AMBER also benefits from that work -- `torchani-amber` accepts a TorchScript `.pt` via the `model_type` keyword, so the same export pathway would let us ship a self-contained AIMNet2 jit asset.
+The TorchScript-export blockers shared by GROMACS and LAMMPS are tracked in the internal TorchScript export plan. AMBER also benefits from that work -- `torchani-amber` accepts a TorchScript `.pt` via the `model_type` keyword, so the same export pathway would let us ship a self-contained AIMNet2 jit asset.

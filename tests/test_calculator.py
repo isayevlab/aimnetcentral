@@ -23,6 +23,7 @@ def test_from_zoo():
     assert "energy" in res
     res = calc(data, forces=True)
     assert "forces" in res
+    calc.external_dftd3 = None
     res = calc(data, hessian=True)
     assert "hessian" in res
 
@@ -78,7 +79,75 @@ class TestInputValidation:
         assert "energy" in res
 
 
-COULOMB_METHODS = ["simple", "dsf", "ewald"]
+COULOMB_METHODS = ["simple", "dsf", "ewald", "pme"]
+
+
+class DummyEmbeddedCoulombModel(torch.nn.Module):
+    """Minimal legacy-style model with embedded Coulomb metadata."""
+
+    cutoff = 5.0
+
+    def __init__(self):
+        super().__init__()
+        self._metadata = {"needs_coulomb": False, "coulomb_mode": "simple"}
+
+    def forward(self, data):
+        return data
+
+
+class RecordingExternalCoulomb:
+    """Minimal external Coulomb stub that records external-module calls."""
+
+    def __init__(self, method, *, forces: torch.Tensor | None = None, virial: torch.Tensor | None = None):
+        self.method = method
+        self.calls = []
+        self.kwargs = []
+        self._forces = forces
+        self._virial = virial
+
+    def __call__(self, data, *, compute_forces=False, compute_virial=False, **kwargs):
+        from aimnet.modules.lr import ExternalDerivativeTerms
+
+        self.calls.append((compute_forces, compute_virial))
+        self.kwargs.append(kwargs)
+        data["energy"] = data.get("energy", torch.zeros(1)).double() + torch.ones(1, dtype=torch.float64)
+        terms = None
+        if (compute_forces and self._forces is not None) or (compute_virial and self._virial is not None):
+            terms = ExternalDerivativeTerms(
+                forces=self._forces if compute_forces else None,
+                virial=self._virial if compute_virial else None,
+            )
+        if compute_forces or compute_virial:
+            return data, terms
+        return data
+
+
+class RecordingExternalDFTD3:
+    """Minimal external DFTD3 stub that records external-module calls."""
+
+    def __init__(self, *, forces: torch.Tensor | None = None, virial: torch.Tensor | None = None):
+        self.calls = []
+        self.kwargs = []
+        self._forces = forces
+        self._virial = virial
+
+    def __call__(self, data, *, compute_forces=False, compute_virial=False, hessian=False, **kwargs):
+        from aimnet.modules.lr import ExternalDerivativeTerms
+
+        self.calls.append((compute_forces, compute_virial))
+        self.kwargs.append({"hessian": hessian, **kwargs})
+        data["energy"] = data.get("energy", torch.zeros(1)).double() + torch.ones(1, dtype=torch.float64)
+        if hessian:
+            return data
+        terms = None
+        if (compute_forces and self._forces is not None) or (compute_virial and self._virial is not None):
+            terms = ExternalDerivativeTerms(
+                forces=self._forces if compute_forces else None,
+                virial=self._virial if compute_virial else None,
+            )
+        if compute_forces or compute_virial:
+            return data, terms
+        return data
 
 
 class TestCoulombMethods:
@@ -87,31 +156,234 @@ class TestCoulombMethods:
     @pytest.mark.parametrize("method", COULOMB_METHODS)
     def test_set_coulomb_method(self, method):
         """Test setting each Coulomb method."""
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
             if method == "dsf":
                 calc.set_lrcoulomb_method(method, cutoff=12.0, dsf_alpha=0.25)
-            elif method == "ewald":
-                calc.set_lrcoulomb_method(method, cutoff=10.0)
+            elif method in ("ewald", "pme"):
+                calc.set_lrcoulomb_method(method)
             else:
                 calc.set_lrcoulomb_method(method)
         assert calc._coulomb_method == method
 
     def test_set_coulomb_dsf_with_params(self):
         """Test DSF Coulomb method sets cutoff correctly."""
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
             calc.set_lrcoulomb_method("dsf", cutoff=12.0, dsf_alpha=0.25)
         assert calc._coulomb_method == "dsf"
         assert calc.cutoff_lr == 12.0
 
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_set_coulomb_ewald_pme_default_accuracy(self, method):
+        """Default ``ewald_accuracy`` is 1e-6 and applies to both ewald and pme."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method(method)
+        assert calc._coulomb_method == method
+        assert calc.coulomb_cutoff is None
+        if calc.external_coulomb is not None:
+            assert calc.external_coulomb.ewald_accuracy == pytest.approx(1e-6)
+
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_set_coulomb_ewald_pme_custom_accuracy(self, method):
+        """Custom ``ewald_accuracy`` is forwarded to the external module."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method(method, ewald_accuracy=1e-4)
+        if calc.external_coulomb is not None:
+            assert calc.external_coulomb.ewald_accuracy == pytest.approx(1e-4)
+
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_ewald_pme_without_cell_raises(self, method):
+        """Calling Ewald/PME on a non-PBC molecule raises a clear ValueError."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method(method)
+        data = {
+            "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+            "numbers": np.array([8, 1, 1]),
+            "charge": 0.0,
+        }
+        with pytest.raises(ValueError, match="requires a periodic 'cell'"):
+            calc(data)
+
+    @pytest.mark.parametrize("kwargs", [{"forces": True}, {"stress": True}])
+    def test_dsf_train_derivative_modes_raise(self, kwargs):
+        """DSF uses explicit nvalchemiops derivatives and does not support force/stress training."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True, train=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        data = {
+            "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+            "numbers": np.array([8, 1, 1]),
+            "charge": 0.0,
+            "cell": np.eye(3) * 8.0,
+        }
+        with pytest.raises(NotImplementedError, match="DSF Coulomb"):
+            calc(data, **kwargs)
+
+    def test_dsf_hessian_raises(self):
+        """DSF Hessians are unsupported because nvalchemiops DSF has no coordinate autograd."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+
+        data = {
+            "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+            "numbers": np.array([8, 1, 1]),
+            "charge": 0.0,
+        }
+        with pytest.raises(NotImplementedError, match="DSF Coulomb"):
+            calc(data, hessian=True)
+
+    def test_dftd3_hessian_is_finite(self):
+        """External DFT-D3 uses its differentiable fallback for Hessian calls."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        data = {
+            "coord": [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]],
+            "numbers": [8, 1, 1],
+            "charge": 0.0,
+        }
+        res = calc(data, hessian=True)
+
+        assert "hessian" in res
+        assert torch.isfinite(res["hessian"]).all()
+        assert res["hessian"].abs().sum() > 0
+
+    def test_set_grad_tensors_preserves_external_strain_inputs(self):
+        """Stress setup stores shared explicit kwargs for external strain wrappers."""
+        calc = AIMNet2Calculator.__new__(AIMNet2Calculator)
+        data = {
+            "coord": torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0]]),
+            "cell": torch.eye(3),
+        }
+
+        out = calc.set_grad_tensors(data, stress=True)
+
+        strain_inputs = calc._external_strain_inputs
+        assert strain_inputs is not None
+        assert set(strain_inputs) == {"coord_unstrained", "cell_unstrained", "scaling"}
+        assert "_dftd3_coord_unstrained" not in out
+        assert "_dftd3_cell_unstrained" not in out
+        assert "_dftd3_scaling" not in out
+
     def test_invalid_coulomb_method(self):
         """Test that invalid Coulomb method raises ValueError."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
         with pytest.raises(ValueError, match="Invalid method"):
             calc.set_lrcoulomb_method("invalid_method")
+
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_set_coulomb_method_noops_for_embedded_coulomb(self, method):
+        """Legacy embedded Coulomb models warn and keep calculator state unchanged."""
+        calc = AIMNet2Calculator(DummyEmbeddedCoulombModel(), nb_threshold=0)
+        before = (calc._coulomb_method, calc._coulomb_cutoff, calc.cutoff_lr)
+
+        with pytest.warns(UserWarning, match="embedded Coulomb"):
+            calc.set_lrcoulomb_method(method)
+
+        assert calc.external_coulomb is None
+        assert (calc._coulomb_method, calc._coulomb_cutoff, calc.cutoff_lr) == before
+
+    @pytest.mark.parametrize("method", COULOMB_METHODS)
+    def test_external_coulomb_uses_derivative_flags(self, method):
+        """All external Coulomb methods are run through the common derivative flag interface."""
+        calc = AIMNet2Calculator.__new__(AIMNet2Calculator)
+        calc.external_coulomb = RecordingExternalCoulomb(method)
+        calc.external_dftd3 = None
+
+        data, terms = calc._run_external_modules({"energy": torch.zeros(1)}, forces=True, stress=True)
+
+        assert terms is None
+        assert calc.external_coulomb.calls == [(True, True)]
+        torch.testing.assert_close(data["energy"], torch.ones(1, dtype=torch.float64))
+
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_external_coulomb_training_derivatives_flag_for_train(self, method):
+        """Ewald/PME switch to training-derivative mode for force/stress training."""
+        calc = AIMNet2Calculator.__new__(AIMNet2Calculator)
+        calc.external_coulomb = RecordingExternalCoulomb(method)
+        calc.external_dftd3 = None
+        calc._train = True
+
+        calc._run_external_modules({"energy": torch.zeros(1)}, forces=True, stress=True)
+
+        kwargs = calc.external_coulomb.kwargs[0]
+        assert kwargs["training_derivatives"] is True
+
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_external_coulomb_training_derivatives_false_for_eval(self, method):
+        """Ewald/PME inference requests explicit terms rather than training derivatives."""
+        calc = AIMNet2Calculator.__new__(AIMNet2Calculator)
+        calc.external_coulomb = RecordingExternalCoulomb(method)
+        calc.external_dftd3 = None
+        calc._train = False
+
+        calc._run_external_modules({"energy": torch.zeros(1)}, forces=True, stress=True)
+
+        kwargs = calc.external_coulomb.kwargs[0]
+        assert kwargs["training_derivatives"] is False
+
+    def test_external_dftd3_uses_derivative_flags(self):
+        """Calculator dispatches DFTD3 through the shared derivative flag interface."""
+        calc = AIMNet2Calculator.__new__(AIMNet2Calculator)
+        calc.external_coulomb = None
+        calc.external_dftd3 = RecordingExternalDFTD3()
+
+        calc._run_external_modules({"energy": torch.zeros(1)}, forces=True, stress=True)
+        calc._run_external_modules({"energy": torch.zeros(1)}, forces=False, stress=False)
+
+        assert calc.external_dftd3.calls == [(True, True), (False, False)]
+
+    def test_run_external_modules_combines_coulomb_and_dftd3_terms(self):
+        """End-to-end: when both Coulomb and DFTD3 publish terms, they are summed."""
+
+        calc = AIMNet2Calculator.__new__(AIMNet2Calculator)
+
+        coulomb_forces = torch.tensor([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
+        coulomb_virial = torch.tensor([[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]])
+        dftd3_forces = torch.tensor([[1.0, 1.0, 1.0], [2.0, 2.0, 2.0]])
+        dftd3_virial = torch.tensor([[[3.0, 0.0, 0.0], [0.0, 3.0, 0.0], [0.0, 0.0, 3.0]]])
+
+        calc.external_coulomb = RecordingExternalCoulomb("dsf", forces=coulomb_forces, virial=coulomb_virial)
+        calc.external_dftd3 = RecordingExternalDFTD3(forces=dftd3_forces, virial=dftd3_virial)
+
+        _, merged = calc._run_external_modules({"energy": torch.zeros(1)}, forces=True, stress=True)
+
+        assert merged is not None
+        torch.testing.assert_close(merged.forces, coulomb_forces + dftd3_forces)
+        torch.testing.assert_close(merged.virial, coulomb_virial + dftd3_virial)
+
+    def test_combine_external_terms_sums_dftd3_and_coulomb(self):
+        """Coulomb (DSF) + DFTD3 explicit terms are summed for the calculator."""
+        from aimnet.calculators.calculator import _combine_external_terms
+        from aimnet.modules.lr import ExternalDerivativeTerms
+
+        coulomb_forces = torch.tensor([[0.1, 0.2, 0.3], [0.0, 0.0, 0.0]])
+        coulomb_virial = torch.tensor([[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]])
+        dftd3_forces = torch.tensor([[0.4, 0.5, 0.6], [0.0, 0.0, 0.0]])
+        dftd3_virial = torch.tensor([[[2.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 2.0]]])
+
+        a = ExternalDerivativeTerms(forces=coulomb_forces, virial=coulomb_virial)
+        b = ExternalDerivativeTerms(forces=dftd3_forces, virial=dftd3_virial)
+        merged = _combine_external_terms(a, b)
+
+        torch.testing.assert_close(merged.forces, coulomb_forces + dftd3_forces)
+        torch.testing.assert_close(merged.virial, coulomb_virial + dftd3_virial)
+
+        # When one side is None, the other passes through.
+        assert _combine_external_terms(a, None) is a
+        assert _combine_external_terms(None, b) is b
+        assert _combine_external_terms(None, None) is None
 
     @pytest.mark.parametrize("method", ["simple", "dsf"])
     def test_coulomb_method_produces_valid_energy(self, method):
@@ -145,6 +417,32 @@ class TestCoulombMethods:
                 calc.set_lrcoulomb_method(method)
 
         res = calc(data, forces=True)
+        assert torch.isfinite(res["forces"]).all()
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="dense batched calculator path is CUDA-only")
+    def test_dsf_forces_dense_batched_input(self):
+        """DSF inference forces work when small batched inputs stay in dense mode."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=1000, needs_coulomb=True, device="cuda")
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=12.0)
+
+        coord = torch.tensor(
+            [
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]],
+                [[0.1, 0.0, 0.0], [1.06, 0.0, 0.0], [-0.14, 0.93, 0.0]],
+            ],
+            dtype=torch.float32,
+        )
+        data = {
+            "coord": coord,
+            "numbers": torch.tensor([[8, 1, 1], [8, 1, 1]]),
+            "charge": torch.tensor([0.0, 0.0]),
+        }
+
+        res = calc(data, forces=True)
+
+        assert res["forces"].shape == coord.shape
         assert torch.isfinite(res["forces"]).all()
 
 
@@ -225,6 +523,7 @@ class TestDerivatives:
     def test_hessian_shape(self):
         """Test that Hessian has correct shape."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc.external_dftd3 = None
         # Use smaller molecule for Hessian (expensive)
         data = {
             "coord": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
@@ -241,6 +540,7 @@ class TestDerivatives:
     def test_hessian_symmetry(self):
         """Test that Hessian is approximately symmetric."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc.external_dftd3 = None
         data = {
             "coord": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
             "numbers": [8, 1, 1],
@@ -300,6 +600,7 @@ class TestDerivatives:
     def test_external_hessian_matches_internal(self, device):
         """External Hessian must agree with the calculator's own hessian=True output."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0, device=device)
+        calc.external_dftd3 = None
         coords_batch = torch.tensor(
             [[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]],
             dtype=torch.float32,
@@ -331,6 +632,7 @@ class TestDerivatives:
     def test_hessian_multiple_molecules_raises(self):
         """Test that Hessian with multiple molecules raises NotImplementedError."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc.external_dftd3 = None
         data = {
             "coord": torch.tensor(
                 [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [5.0, 0.0, 0.0], [6.0, 0.0, 0.0]],
@@ -1005,8 +1307,9 @@ def test_calculator_metadata_property_returns_model_metadata():
 
     calc = AIMNet2Calculator("aimnet2", device="cpu")
     assert calc.metadata is calc.model._metadata
-    # Existing aimnet2 family declares neither family nor supports_charged_systems.
-    assert calc.metadata.get("family") is None
+    # Older .pt artifacts do not declare family, so the calculator infers it
+    # from the canonical registry key for consistent energy-scale warnings.
+    assert calc.metadata.get("family") == "wb97m-d3"
     assert calc.metadata.get("supports_charged_systems") is None
 
 
@@ -1121,12 +1424,8 @@ def test_hessian_with_compile_raises():
         calc(data, hessian=True)
 
 
-def test_set_lrcoulomb_method_warns_on_rxn_cutoff_change():
-    """For family='rxn', changing the coulomb cutoff away from coulomb_sr_rc
-    (4.6 A) must emit a UserWarning about SR/LR matching."""
-
-    import pytest
-
+def test_set_lrcoulomb_method_does_not_warn_on_rxn_cutoff_change():
+    """aimnet2-rxn uses the same external Coulomb cutoff metadata as other v2 families."""
     from aimnet.calculators import AIMNet2Calculator
 
     calc = AIMNet2Calculator("aimnet2", device="cpu")
@@ -1134,8 +1433,11 @@ def test_set_lrcoulomb_method_warns_on_rxn_cutoff_change():
     calc.model._metadata["family"] = "rxn"
     calc.model._metadata["coulomb_sr_rc"] = 4.6
 
-    with pytest.warns(UserWarning, match=r"SR/LR"):
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
         calc.set_lrcoulomb_method("dsf", cutoff=10.0)
+    rxn_cutoff_warnings = [w for w in caught if "SR/LR" in str(w.message) or "coulomb_sr_rc" in str(w.message)]
+    assert rxn_cutoff_warnings == []
 
 
 def test_set_lrcoulomb_method_no_warn_on_matching_cutoff():
@@ -1153,7 +1455,7 @@ def test_set_lrcoulomb_method_no_warn_on_matching_cutoff():
     assert sr_lr_warnings == []
 
 
-def test_constructing_two_families_warns_once(monkeypatch):
+def test_constructing_two_registered_families_warns_once():
     """Constructing calculators from two different families in one process must
     emit a UserWarning about energy-scale incompatibility."""
 
@@ -1163,25 +1465,80 @@ def test_constructing_two_families_warns_once(monkeypatch):
 
     # Reset the class-level set so test order does not pollute it.
     AIMNet2Calculator._constructed_families.clear()
-    monkeypatch.delenv("AIMNET_QUIET_FAMILY_MIX", raising=False)
+    try:
+        calc_a = AIMNet2Calculator("aimnet2", device="cpu")
+        assert calc_a.metadata.get("family") == "wb97m-d3"
 
-    # First calculator: synthetic 'family-A'.
-    calc_a = AIMNet2Calculator("aimnet2", device="cpu")
-    calc_a.model._metadata = dict(calc_a.model._metadata)
-    calc_a.model._metadata["family"] = "family-A"
-    AIMNet2Calculator._constructed_families.add("family-A")  # mimic what __init__ does
+        with pytest.warns(UserWarning, match=r"different families"):
+            calc_b = AIMNet2Calculator("aimnet2-b973c", device="cpu")
+        assert calc_b.metadata.get("family") == "b973c-d3"
+    finally:
+        AIMNet2Calculator._constructed_families.clear()
 
-    # Second calculator: a different family — should warn.
-    with pytest.warns(UserWarning, match=r"different families"):
-        calc_b = AIMNet2Calculator("aimnet2", device="cpu")
-        # The constructor itself must add the (synthetic) family. Since we cannot
-        # change metadata before __init__ finishes, simulate by constructing then
-        # injecting+re-running the warn step. For this PR's purposes the warn
-        # logic lives in __init__ AFTER load. Test it by direct invocation:
-        calc_b.model._metadata = dict(calc_b.model._metadata)
-        calc_b.model._metadata["family"] = "family-B"
-        # Call the production helper that __init__ calls (see Step 3).
-        calc_b._maybe_warn_family_mix("family-B")
+
+def test_registry_family_metadata_mismatch_raises(monkeypatch):
+    """A registry model whose embedded metadata declares another family is ambiguous."""
+    from torch import nn
+
+    from aimnet.calculators import AIMNet2Calculator
+    from aimnet.calculators import calculator as calculator_mod
+
+    class DummyModel(nn.Module):
+        pass
+
+    def fake_load_model(_path, device="cpu"):
+        model = DummyModel()
+        metadata = {
+            "cutoff": 5.0,
+            "needs_coulomb": False,
+            "needs_dispersion": False,
+            "coulomb_mode": "none",
+            "implemented_species": [],
+            "family": "rxn",
+        }
+        model._metadata = metadata
+        return model, metadata
+
+    monkeypatch.setattr(calculator_mod, "get_model_path", lambda _model: "/fake/model.pt")
+    monkeypatch.setattr(calculator_mod, "load_model", fake_load_model)
+
+    with pytest.raises(ValueError, match=r"Registry family 'wb97m-d3'"):
+        AIMNet2Calculator("aimnet2", device="cpu")
+
+
+def test_rxn_family_gets_posthoc_wb97m_d3_from_metadata():
+    """rxn artifacts without D3 metadata get the AIMNet2 wB97M-D3 correction at calculator load time."""
+    from torch import nn
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    class DummyModel(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self._metadata = {
+                "cutoff": 5.0,
+                "needs_coulomb": False,
+                "needs_dispersion": False,
+                "coulomb_mode": "none",
+                "d3_params": None,
+                "implemented_species": [1, 6, 7, 8],
+                "family": "rxn",
+            }
+
+    AIMNet2Calculator._constructed_families.clear()
+    try:
+        calc = AIMNet2Calculator(DummyModel(), device="cpu")
+
+        assert calc.metadata["supports_charged_systems"] is False
+        assert calc.metadata["needs_dispersion"] is True
+        assert calc.metadata["d3_params"] == {"s6": 1.0, "s8": 0.3908, "a1": 0.566, "a2": 3.128}
+        assert calc.external_dftd3 is not None
+        assert calc.external_dftd3.s6 == 1.0
+        assert calc.external_dftd3.s8 == 0.3908
+        assert calc.external_dftd3.a1 == 0.566
+        assert calc.external_dftd3.a2 == 3.128
+    finally:
+        AIMNet2Calculator._constructed_families.clear()
 
 
 def test_has_embedded_dispersion_explicit_d3ts_flag():
@@ -1240,5 +1597,8 @@ def test_aimnet2rxn_alias_calculator_e2e():
     assert calc.metadata is not None
     assert calc.metadata.get("family") == "rxn"
     assert calc.metadata.get("supports_charged_systems") is False
+    assert calc.metadata.get("needs_dispersion") is True
+    assert calc.metadata.get("d3_params") == {"s6": 1.0, "s8": 0.3908, "a1": 0.566, "a2": 3.128}
+    assert calc.external_dftd3 is not None
     assert calc.metadata.get("implemented_species") == [1, 6, 7, 8]
     assert abs(calc.metadata.get("cutoff") - 5.0) < 1e-6

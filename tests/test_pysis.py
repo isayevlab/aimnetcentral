@@ -42,6 +42,16 @@ class _CountingModelStub:
         return out
 
 
+class _CountingPysis(AIMNet2Pysis):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.hessian_calls = 0
+
+    def get_hessian(self, atoms, coords):
+        self.hessian_calls += 1
+        return super().get_hessian(atoms, coords)
+
+
 def _water_geom():
     atoms = ("o", "h", "h")
     coords = (
@@ -83,10 +93,21 @@ class TestPysisSmoke:
         depends on the model — `aimnet2-rxn` is recommended for serious TS work.
         """
         geom = _hcn_ts_guess()
-        geom.set_calculator(AIMNet2Pysis("aimnet2"))
-        ts_opt = RSPRFOptimizer(geom, max_cycles=40, hessian_init="calc", hessian_recalc=3, thresh="gau", dump=False)
+        calc = _CountingPysis("aimnet2")
+        geom.set_calculator(calc)
+        ts_opt = RSPRFOptimizer(
+            geom,
+            max_cycles=40,
+            hessian_init="calc",
+            hessian_recalc=3,
+            trust_radius=0.1,
+            trust_max=0.2,
+            thresh="gau",
+            dump=False,
+        )
         ts_opt.run()
         assert ts_opt.is_converged
+        assert calc.hessian_calls >= 1
 
     def test_cache_serves_get_energy_after_get_forces(self):
         """get_forces then get_energy at the same coord must run the model once."""

@@ -119,7 +119,7 @@ The new model format separates the core neural network from long-range correctio
 - Long-range Coulomb (LRCoulomb) is applied externally by the calculator
 - DFTD3 dispersion is applied externally by the calculator
 
-This allows switching Coulomb methods (simple/DSF/Ewald) at inference time without re-exporting.
+This allows switching Coulomb methods (simple/DSF/Ewald/PME) at inference time without re-exporting.
 
 **Metadata Schema**
 

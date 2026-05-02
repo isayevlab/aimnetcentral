@@ -8,14 +8,14 @@ AIMNet2 cannot currently produce a `.pt` that the NNPot interface accepts. The r
 
 1. The shipped v2 `.pt` assets in `aimnet/calculators/assets/` are `torch.save` state-dict archives, **not** TorchScript archives. They are loaded into a Python `nn.Module` by `aimnet.models.base.load_model`.
 2. `torch.jit.script` on the in-memory `AIMNet2` model fails in `aimnet/nbops.py` -- the code uses `tensor.data_ptr()` as a neighbor-cache key, which TorchScript rejects.
-3. `torch.jit.script` on the external `DFTD3` module fails because its custom autograd uses an `aten::grad` signature TorchScript cannot resolve.
+3. The external DFTD3/Coulomb modules call nvalchemiops Python APIs that are not TorchScript export targets.
 4. The published `aimnet2` (wb97m-d3) model needs both external Coulomb and external D3 added on top of the core, so even if the core scripted, the wrapper would have to bundle all three pieces to match `AIMNet2Calculator` energies.
 
 ## Tracking
 
 A starter wrapper is parked at `aimnet/interfaces/gromacs.py` -- the forward signature, unit conversions (nm -> A on input; eV -> kJ/mol on output), and pure-PyTorch all-pairs neighbor list have been verified to `torch.jit.script` cleanly with a dummy inner model and to round-trip via `jit.save` / `jit.load`. It will become functional once the blockers above are resolved.
 
-The remediation plan lives at [`docs/superpowers/plans/2026-04-26-torchscript-export.md`](../superpowers/plans/2026-04-26-torchscript-export.md).
+The remediation plan is tracked internally with the TorchScript export work.
 
 ## What works today instead
 

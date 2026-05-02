@@ -11,7 +11,7 @@
 ## Prerequisites
 
 - Familiarity with [AIMNet2Calculator](../calculator.md) and basic single-point calculations
-- Understanding of [long-range methods](../long_range.md) (DSF, Ewald)
+- Understanding of [long-range methods](../long_range.md) (DSF, Ewald, PME)
 - ASE installation for geometry optimization examples
 
 ## Spotlight Model: AIMNet2-2025
@@ -246,12 +246,11 @@ from aimnet.calculators import AIMNet2Calculator
 
 calc = AIMNet2Calculator("aimnet2-2025")
 
-# For non-periodic clusters: simple method is fine (default)
-# For periodic systems: use DSF or Ewald
 calc.set_lrcoulomb_method("dsf", cutoff=15.0)
 
-# For highest accuracy on electrostatic-dominated interactions:
-calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-8)
+calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-6)
+
+calc.set_lrcoulomb_method("pme", ewald_accuracy=1e-6)
 ```
 
 !!! warning "Dispersion Cutoff for Large Systems"
@@ -284,4 +283,4 @@ AIMNet2 models handle several classes of non-covalent interactions:
 
 - [Charged Systems](charged_systems.md) -- handling ions and charged complexes in non-covalent assemblies
 - [Model Selection Guide](../models/guide.md) -- comparing all available models
-- [Long-Range Methods](../long_range.md) -- details on DSF and Ewald methods
+- [Long-Range Methods](../long_range.md) -- details on DSF, Ewald, and PME methods

@@ -73,7 +73,7 @@ calc_compiled = AIMNet2Calculator("aimnet2", compile_model=True)
 `torch.compile()` optimizes **only the neural network forward pass** (the model itself). It does **not** compile:
 
 - Neighbor list construction (adaptive neighbor lists)
-- External Coulomb calculations (LRCoulomb, DSF, Ewald)
+- External Coulomb calculations (LRCoulomb, DSF, Ewald, PME)
 - External DFTD3 dispersion corrections
 - Input preprocessing and output postprocessing
 

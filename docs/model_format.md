@@ -53,7 +53,7 @@ Model metadata is returned by `load_model()` as a `ModelMetadata` TypedDict. For
 | Scenario | Format | Model Type | Notes |
 | --- | --- | --- | --- |
 | Training new model | v2 (.pt) | Export after training | Flexible, modern |
-| Need runtime Coulomb control | v2 (.pt) | Convert from v1 if needed | Switch simple/DSF/Ewald |
+| Need runtime Coulomb control | v2 (.pt) | Convert from v1 if needed | Switch simple/DSF/Ewald/PME |
 | Production inference | v2 (.pt) | Preferred | Smaller, more flexible |
 | Legacy deployment | v1 (.jpt) | Keep as-is | If compatibility required |
 | Experimenting with methods | v2 (.pt) | Required | Runtime reconfiguration |
@@ -89,7 +89,7 @@ The `coulomb_mode` field describes what Coulomb treatment is embedded in the mod
 │ Calculator: + E_full (adds full Coulomb externally)             │
 │ Total:      E_NN + E_LR (SR cancels out)                        │
 │                                                                  │
-│ Runtime control: ✓ Can switch simple/DSF/Ewald                  │
+│ Runtime control: ✓ Can switch simple/DSF/Ewald/PME              │
 │ File size:       Smaller (no LR modules embedded)               │
 └─────────────────────────────────────────────────────────────────┘
 
@@ -122,7 +122,7 @@ The `coulomb_mode` field describes what Coulomb treatment is embedded in the mod
 - Model outputs: `E_NN - E_SR`
 - Calculator adds **full** Coulomb externally: `E_total = (E_NN - E_SR) + E_full = E_NN + E_LR`
 - Uses `coulomb_sr_rc` and `coulomb_sr_envelope` from metadata
-- User can switch Coulomb method (simple/DSF/Ewald) at runtime via `set_lrcoulomb_method()`
+- User can switch Coulomb method (simple/DSF/Ewald/PME) at runtime via `set_lrcoulomb_method()`
 
 #### SR Coulomb Cutoff (`coulomb_sr_rc`)
 
@@ -327,7 +327,7 @@ See [Metadata Structure](#metadata-structure) for field definitions.
 
 **Benefits of v2 (.pt) over v1 (.jpt):**
 
-- **Runtime flexibility**: Change Coulomb method (simple/DSF/Ewald) without retraining
+- **Runtime flexibility**: Change Coulomb method (simple/DSF/Ewald/PME) without retraining
 - **Smaller files**: Separate external modules reduce file size
 - **Better debugging**: Access model structure and weights directly
 - **Modern workflow**: Compatible with latest PyTorch features
@@ -417,8 +417,11 @@ assert force_diff < 1e-4, "Force mismatch!"
 calc_v2.set_lrcoulomb_method("dsf", cutoff=15.0)
 result_dsf = calc_v2(data)
 
-calc_v2.set_lrcoulomb_method("ewald", ewald_accuracy=1e-8)
+calc_v2.set_lrcoulomb_method("ewald", ewald_accuracy=1e-6)
 result_ewald = calc_v2(data)
+
+calc_v2.set_lrcoulomb_method("pme", ewald_accuracy=1e-6)
+result_pme = calc_v2(data)
 
 # v1 models show warning but don't change
 calc_v1.set_lrcoulomb_method("dsf", cutoff=15.0)

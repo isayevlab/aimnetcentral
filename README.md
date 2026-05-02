@@ -129,8 +129,8 @@ results = calc(data, forces=True, stress=True)
 
 # Configure Coulomb method for periodic systems
 calc.set_lrcoulomb_method("dsf", cutoff=15.0, dsf_alpha=0.2)
-# or Ewald summation for high accuracy
-calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-8)
+# or Ewald summation with the default nvalchemiops accuracy
+calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-6)
 ```
 
 ### Performance: torch.compile

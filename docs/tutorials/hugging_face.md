@@ -30,7 +30,7 @@ The first call downloads the model weights to the HF cache directory (`~/.cache/
 | `isayevlab/aimnet2-2025` | `aimnet2-2025` | B97-3c | Recommended for intermolecular interactions |
 | `isayevlab/aimnet2-nse` | `aimnet2-nse` | wB97M-D3 | Open-shell systems / radicals |
 | `isayevlab/aimnet2-pd` | `aimnet2-pd` | B97-3c/CPCM | Palladium chemistry |
-| `isayevlab/aimnet2-rxn` | `aimnet2-rxn` | wB97M-V | Reactive chemistry / TS / IRC |
+| `isayevlab/aimnet2-rxn` | `aimnet2-rxn` | wB97M-D3 | Reactive chemistry / TS / IRC |
 
 Each repo contains four ensemble members (`ensemble_0.safetensors` – `ensemble_3.safetensors`). Member 0 is loaded by default.
 

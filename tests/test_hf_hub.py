@@ -152,9 +152,8 @@ def test_load_from_hf_repo_propagates_family_and_charge_fields(fake_hf_repo_with
 
 @pytest.mark.hf
 def test_aimnet2_rxn_hf_load_matches_gcs_metadata():
-    """Loading aimnet2-rxn from the HF repo must produce metadata equivalent
-    to what the GCS .pt path would produce: same implemented_species, cutoff,
-    family, and supports_charged_systems.
+    """Loading aimnet2-rxn from the HF repo must produce the expected calculator metadata:
+    GCS/HF structural metadata plus posthoc wB97M-D3 dispersion defaults.
 
     This test EXPECTS the HF repo's config.json to have been updated with
     `family: rxn` and `supports_charged_systems: false` (out-of-band task)."""
@@ -166,7 +165,9 @@ def test_aimnet2_rxn_hf_load_matches_gcs_metadata():
     assert abs(calc.metadata.get("cutoff") - 5.0) < 1e-6
     assert calc.metadata.get("coulomb_mode") == "sr_embedded"
     assert calc.metadata.get("needs_coulomb") is True
-    assert calc.metadata.get("needs_dispersion") is False
+    assert calc.metadata.get("needs_dispersion") is True
+    assert calc.metadata.get("d3_params") == {"s6": 1.0, "s8": 0.3908, "a1": 0.566, "a2": 3.128}
+    assert calc.external_dftd3 is not None
 
     # The next two assertions REQUIRE the HF config.json to have the new fields.
     # If they fail with None, the maintainer needs to update the HF config.json.
