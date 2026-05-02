@@ -2134,7 +2134,7 @@
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Familiarity with <a href="../../calculator/">AIMNet2Calculator</a> and basic single-point calculations</li>
-<li>Understanding of <a href="../../long_range/">long-range methods</a> (DSF, Ewald)</li>
+<li>Understanding of <a href="../../long_range/">long-range methods</a> (DSF, Ewald, PME)</li>
 <li>ASE installation for geometry optimization examples</li>
 </ul>
 <h2 id="spotlight-model-aimnet2-2025">Spotlight Model: AIMNet2-2025<a class="headerlink" href="#spotlight-model-aimnet2-2025" title="Permanent link">&para;</a></h2>
@@ -2339,12 +2339,11 @@
 
 <span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-2025&quot;</span><span class="p">)</span>
 
-<span class="c1"># For non-periodic clusters: simple method is fine (default)</span>
-<span class="c1"># For periodic systems: use DSF or Ewald</span>
 <span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">)</span>
 
-<span class="c1"># For highest accuracy on electrostatic-dominated interactions:</span>
-<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">)</span>
+<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">)</span>
+
+<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;pme&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">)</span>
 </code></pre></div>
 <div class="admonition warning">
 <p class="admonition-title">Dispersion Cutoff for Large Systems</p>
@@ -2405,7 +2404,7 @@
 <ul>
 <li><a href="../charged_systems/">Charged Systems</a> -- handling ions and charged complexes in non-covalent assemblies</li>
 <li><a href="../../models/guide/">Model Selection Guide</a> -- comparing all available models</li>
-<li><a href="../../long_range/">Long-Range Methods</a> -- details on DSF and Ewald methods</li>
+<li><a href="../../long_range/">Long-Range Methods</a> -- details on DSF, Ewald, and PME methods</li>
 </ul>
 
 

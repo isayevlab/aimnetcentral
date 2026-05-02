@@ -2489,7 +2489,7 @@ Q_beta  = 0.5 * (Q - (M - 1))
 </code></pre></div>
 <h3 id="4-long-range-corrections">4. Long-Range Corrections<a class="headerlink" href="#4-long-range-corrections" title="Permanent link">&para;</a></h3>
 <p>Two external modules add long-range physics that the short-range NN cannot capture:</p>
-<p><strong>LRCoulomb</strong> -- Electrostatic energy from predicted charges. Three methods:</p>
+<p><strong>LRCoulomb</strong> -- Electrostatic energy from predicted charges. Four methods:</p>
 <table>
 <thead>
 <tr>
@@ -2512,7 +2512,12 @@ Q_beta  = 0.5 * (Q - (M - 1))
 <tr>
 <td><code>ewald</code></td>
 <td>Periodic, high accuracy</td>
-<td>Computed from accuracy target</td>
+<td>Estimated from <code>ewald_accuracy</code> (default <code>1e-6</code>)</td>
+</tr>
+<tr>
+<td><code>pme</code></td>
+<td>Periodic, large cells</td>
+<td>Estimated from <code>ewald_accuracy</code> (default <code>1e-6</code>)</td>
 </tr>
 </tbody>
 </table>
@@ -2584,7 +2589,7 @@ LRCoulomb(charges) + DFTD3(coord) --&gt; E_total
 <tr>
 <td><strong>SRCoulomb</strong></td>
 <td>Short-Range Coulomb</td>
-<td>The portion of Coulomb interaction within the NN cutoff radius (5.0 A). When using external Coulomb methods (DSF, Ewald), this component is subtracted to avoid double-counting with the NN.</td>
+<td>The portion of Coulomb interaction within the NN cutoff radius (5.0 A). When using external Coulomb methods (DSF, Ewald, PME), this component is subtracted to avoid double-counting with the NN.</td>
 </tr>
 <tr>
 <td><strong>nb_threshold</strong></td>

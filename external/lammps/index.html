@@ -1842,10 +1842,10 @@
 <ol>
 <li>The shipped v2 <code>.pt</code> files are state-dict archives, not TorchScript.</li>
 <li><code>torch.jit.script</code> on the core <code>AIMNet2</code> module fails on <code>tensor.data_ptr()</code> in <code>aimnet/nbops.py</code>.</li>
-<li><code>torch.jit.script</code> on the external <code>DFTD3</code> module fails on its custom autograd signature.</li>
+<li>The external DFTD3/Coulomb modules call nvalchemiops Python APIs that are not TorchScript export targets.</li>
 </ol>
 <p>In addition, LAMMPS expects the scripted model to <strong>accept a LAMMPS-supplied neighbor list</strong> (atom indices, and for some pair styles edge-index + cell-shift tensors) rather than build its own. The all-pairs neighbor list used in the parked GROMACS wrapper would not be performant for typical LAMMPS box sizes. A LAMMPS-targeted wrapper would need to consume the engine-supplied neighbor list inside the scripted module instead.</p>
-<p>The shared remediation plan lives at <a href="../../superpowers/plans/2026-04-26-torchscript-export/"><code>docs/superpowers/plans/2026-04-26-torchscript-export.md</code></a>.</p>
+<p>The shared remediation plan is tracked internally with the TorchScript export work.</p>
 <p>A future LAMMPS wrapper must include AIMNet2's D3 dispersion to match the published wb97m-d3 level of theory. A no-dispersion shortcut would silently shift conformer rankings, intermolecular binding, and torsion barriers by 1-10 kcal/mol vs the published numbers.</p>
 
 

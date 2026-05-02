@@ -2293,10 +2293,10 @@
 <p>AIMNet2-2025 builds on the B97-3c training set with additional emphasis on intermolecular interaction geometries and energies. The enhanced training improves the description of non-covalent contacts without sacrificing intramolecular accuracy.</p>
 <h3 id="long-range-corrections">Long-Range Corrections<a class="headerlink" href="#long-range-corrections" title="Permanent link">&para;</a></h3>
 <p>Non-covalent interactions at longer range are captured by the external DFT-D3 dispersion and long-range Coulomb modules. For molecular complexes in vacuum, these activate automatically. For periodic systems with significant intermolecular interactions (e.g., molecular crystals), proper long-range electrostatics configuration is important:</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># Ewald summation for high-accuracy periodic electrostatics</span>
-<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">)</span>
 
-<span class="c1"># Or DSF for faster periodic calculations</span>
+<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;pme&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">)</span>
+
 <span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="ensemble-averaging">Ensemble Averaging<a class="headerlink" href="#ensemble-averaging" title="Permanent link">&para;</a></h3>

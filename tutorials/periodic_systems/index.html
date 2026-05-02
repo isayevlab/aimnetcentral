@@ -869,6 +869,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#pme-large-cells" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PME (Large Cells)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#comparing-methods" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2088,6 +2099,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#pme-large-cells" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PME (Large Cells)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#comparing-methods" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2183,7 +2205,7 @@
 <ul>
 <li>How to set up periodic boundary conditions (PBC) with AIMNet2 and ASE</li>
 <li>How the calculator handles long-range electrostatics in periodic systems</li>
-<li>When to use DSF vs Ewald summation for Coulomb interactions</li>
+<li>When to use DSF, Ewald, or PME for Coulomb interactions</li>
 <li>How to optimize unit cell parameters using the stress tensor</li>
 </ul>
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
@@ -2245,47 +2267,52 @@
 <p>The auto-switch warning appears once per calculator when PBC is first detected. To avoid the warning entirely, set the Coulomb method explicitly before your first periodic calculation (see Step 3).</p>
 </div>
 <h2 id="step-3-choosing-a-coulomb-method-for-pbc">Step 3: Choosing a Coulomb Method for PBC<a class="headerlink" href="#step-3-choosing-a-coulomb-method-for-pbc" title="Permanent link">&para;</a></h2>
-<p>For periodic systems, you have two options for long-range electrostatics. Set the method on the underlying <code>AIMNet2Calculator</code> via the <code>base_calc</code> attribute:</p>
+<p>For periodic systems, you have three options for long-range electrostatics. Set the method on the underlying <code>AIMNet2Calculator</code> via the <code>base_calc</code> attribute:</p>
 <h3 id="dsf-recommended-for-most-uses">DSF (Recommended for Most Uses)<a class="headerlink" href="#dsf-recommended-for-most-uses" title="Permanent link">&para;</a></h3>
 <p>DSF (Damped Shifted Force) is the recommended method for routine periodic calculations. It uses a neighbor-list-based cutoff with smooth damping, giving O(N) scaling:</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># Set DSF before running any periodic calculation</span>
-<span class="n">calc</span><span class="o">.</span><span class="n">base_calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">dsf_alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="n">calc</span><span class="o">.</span><span class="n">base_calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">dsf_alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
 
 <span class="n">energy</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span>
 <span class="n">forces</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_forces</span><span class="p">()</span>
 </code></pre></div>
 <p>The default parameters (<code>cutoff=15.0</code>, <code>dsf_alpha=0.2</code>) work well for most molecular crystals. For dense systems, you can reduce the cutoff to 12 Angstrom. For surfaces or dilute systems, consider increasing to 18-20 Angstrom.</p>
 <h3 id="ewald-high-accuracy-benchmarks">Ewald (High-Accuracy Benchmarks)<a class="headerlink" href="#ewald-high-accuracy-benchmarks" title="Permanent link">&para;</a></h3>
-<p>Ewald summation splits the Coulomb sum into real-space and reciprocal-space components, giving the most accurate treatment of long-range electrostatics:</p>
-<div class="highlight"><pre><span></span><code><span class="n">calc</span><span class="o">.</span><span class="n">base_calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">)</span>
+<p>Ewald summation splits the Coulomb sum into real-space and reciprocal-space components. The splitting parameter and real/reciprocal cutoffs are estimated per call from <code>ewald_accuracy</code> (default <code>1e-6</code>, matching the nvalchemiops default):</p>
+<div class="highlight"><pre><span></span><code><span class="n">calc</span><span class="o">.</span><span class="n">base_calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">)</span>
 
 <span class="n">energy</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span>
+<span class="n">forces</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_forces</span><span class="p">()</span>
+<span class="n">stress</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_stress</span><span class="p">()</span>
 </code></pre></div>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>Ewald summation is currently limited to <strong>single-molecule (single-system) calculations</strong>. It uses a full interaction matrix rather than neighbor lists, so it does not support batched periodic systems. For routine PBC work, use DSF.</p>
-</div>
+<p>DSF supports inference forces and stress, but force/stress losses (<code>train=True</code> with <code>forces=True</code> or <code>stress=True</code>) and Hessians are not supported. Ewald and PME support all derivative modes, including training. See <a href="../../long_range/#derivative-support">Long-Range Methods → Derivative Support</a>.</p>
 <p><strong>When to use Ewald:</strong></p>
 <ul>
 <li>Validating DSF results for a new system type</li>
 <li>Computing precise lattice energies for benchmarking</li>
 <li>Systems where electrostatics dominate (ionic molecular crystals)</li>
-<li>When computational cost is acceptable (not long MD trajectories)</li>
 </ul>
+<h3 id="pme-large-cells">PME (Large Cells)<a class="headerlink" href="#pme-large-cells" title="Permanent link">&para;</a></h3>
+<p>Particle Mesh Ewald uses the same accuracy machinery as Ewald but evaluates the reciprocal sum on a B-spline mesh via FFT, which scales better on large cells:</p>
+<div class="highlight"><pre><span></span><code><span class="n">calc</span><span class="o">.</span><span class="n">base_calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;pme&quot;</span><span class="p">)</span>
+
+<span class="n">energy</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span>
+<span class="n">stress</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_stress</span><span class="p">()</span>
+</code></pre></div>
+<p>PME and Ewald share the same <code>ewald_accuracy</code>, neighbor-list construction, and calculator derivative behavior; PME tends to be cheaper as the cell grows.</p>
 <h3 id="comparing-methods">Comparing Methods<a class="headerlink" href="#comparing-methods" title="Permanent link">&para;</a></h3>
-<p>You can verify convergence by comparing DSF and Ewald on the same system:</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># DSF calculation</span>
-<span class="n">calc</span><span class="o">.</span><span class="n">base_calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">)</span>
+<p>You can verify convergence by comparing DSF, Ewald, and PME on the same system:</p>
+<div class="highlight"><pre><span></span><code><span class="n">calc</span><span class="o">.</span><span class="n">base_calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">)</span>
 <span class="n">energy_dsf</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span>
 
-<span class="c1"># Ewald calculation</span>
-<span class="n">calc</span><span class="o">.</span><span class="n">base_calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">)</span>
+<span class="n">calc</span><span class="o">.</span><span class="n">base_calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">)</span>
 <span class="n">energy_ewald</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span>
+
+<span class="n">calc</span><span class="o">.</span><span class="n">base_calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;pme&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">)</span>
+<span class="n">energy_pme</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;DSF energy:   </span><span class="si">{</span><span class="n">energy_dsf</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Ewald energy: </span><span class="si">{</span><span class="n">energy_ewald</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Difference:   </span><span class="si">{</span><span class="nb">abs</span><span class="p">(</span><span class="n">energy_dsf</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">energy_ewald</span><span class="p">)</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
-<span class="c1"># Typically &lt; 0.01 eV for well-converged cutoffs</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;PME energy:   </span><span class="si">{</span><span class="n">energy_pme</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="step-4-computing-the-stress-tensor">Step 4: Computing the Stress Tensor<a class="headerlink" href="#step-4-computing-the-stress-tensor" title="Permanent link">&para;</a></h2>
 <p>The stress tensor is essential for optimizing unit cell parameters. Request it via <code>stress=True</code> in the ASE calculator:</p>
@@ -2372,7 +2399,7 @@
 <th>Method</th>
 <th>Scaling</th>
 <th>PBC Support</th>
-<th>Accuracy</th>
+<th>Accuracy control</th>
 <th>Best For</th>
 </tr>
 </thead>
@@ -2388,15 +2415,22 @@
 <td><code>dsf</code></td>
 <td>O(N)</td>
 <td>Yes</td>
-<td>Good</td>
+<td><code>cutoff</code>, <code>dsf_alpha</code></td>
 <td>Routine PBC, MD, optimization</td>
 </tr>
 <tr>
 <td><code>ewald</code></td>
-<td>O(N^2)</td>
+<td>~O(N^{3/2})</td>
 <td>Yes</td>
-<td>Highest</td>
-<td>Benchmarks, single systems</td>
+<td><code>ewald_accuracy</code> (default <code>1e-6</code>)</td>
+<td>High-accuracy reference</td>
+</tr>
+<tr>
+<td><code>pme</code></td>
+<td>~O(N log N)</td>
+<td>Yes</td>
+<td><code>ewald_accuracy</code> (default <code>1e-6</code>)</td>
+<td>Large cells</td>
 </tr>
 </tbody>
 </table>

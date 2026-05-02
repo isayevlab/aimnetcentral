@@ -1879,10 +1879,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#set_lrcoulomb_methodmethod-cutoff150-dsf_alpha02-ewald_accuracy1e-8" class="md-nav__link">
+  <a href="#set_lrcoulomb_methodmethod-cutoff150-dsf_alpha02-ewald_accuracy1e-6" class="md-nav__link">
     <span class="md-ellipsis">
       
-        set_lrcoulomb_method(method, cutoff=15.0, dsf_alpha=0.2, ewald_accuracy=1e-8)
+        set_lrcoulomb_method(method, cutoff=15.0, dsf_alpha=0.2, ewald_accuracy=1e-6)
       
     </span>
   </a>
@@ -3175,10 +3175,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#set_lrcoulomb_methodmethod-cutoff150-dsf_alpha02-ewald_accuracy1e-8" class="md-nav__link">
+  <a href="#set_lrcoulomb_methodmethod-cutoff150-dsf_alpha02-ewald_accuracy1e-6" class="md-nav__link">
     <span class="md-ellipsis">
       
-        set_lrcoulomb_method(method, cutoff=15.0, dsf_alpha=0.2, ewald_accuracy=1e-8)
+        set_lrcoulomb_method(method, cutoff=15.0, dsf_alpha=0.2, ewald_accuracy=1e-6)
       
     </span>
   </a>
@@ -3814,13 +3814,12 @@
 <span class="p">},</span> <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">stress</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="changing-coulomb-methods">Changing Coulomb Methods<a class="headerlink" href="#changing-coulomb-methods" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><span class="c1"># DSF (recommended for PBC)</span>
-<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">dsf_alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">dsf_alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
 
-<span class="c1"># Ewald (high accuracy, currently limited to non-batched case)</span>
-<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">)</span>
+<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">)</span>
 
-<span class="c1"># Simple (all pairs)</span>
+<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;pme&quot;</span><span class="p">)</span>
+
 <span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;simple&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="constructor">Constructor<a class="headerlink" href="#constructor" title="Permanent link">&para;</a></h2>
@@ -4094,7 +4093,11 @@
 </tr>
 <tr>
 <td><code>"ewald"</code></td>
-<td><code>None</code> (Ewald manages its own real-space cutoff internally)</td>
+<td><code>None</code> (real-space cutoff estimated per call from <code>ewald_accuracy</code>)</td>
+</tr>
+<tr>
+<td><code>"pme"</code></td>
+<td><code>None</code> (real-space cutoff estimated per call from <code>ewald_accuracy</code>)</td>
 </tr>
 </tbody>
 </table>
@@ -4106,7 +4109,7 @@
 <li><strong>Shared</strong> when both cutoffs are finite and within 20% of each other</li>
 <li><strong>Separate</strong> when both cutoffs are finite and differ by more than 20%</li>
 <li><strong>All pairs</strong> for <code>"simple"</code> Coulomb (effectively no cutoff)</li>
-<li><strong>Ignored by Ewald</strong>, which builds its own real-space/reciprocal sums</li>
+<li><strong>Per-call dense list (<code>nbmat_coulomb</code>/<code>shifts_coulomb</code>, also aliased to <code>nbmat_lr</code>/<code>shifts_lr</code>)</strong> for Ewald and PME, sized to the real-space cutoff derived from <code>ewald_accuracy</code> and the cell</li>
 </ul>
 <p><strong>Data dictionary keys:</strong></p>
 <p>LR modules prefer their specific suffix, falling back to <code>_lr</code>:</p>
@@ -4117,8 +4120,8 @@
 <p>When neighbor lists are shared, all keys point to the same array.</p>
 <p><strong>Modifying cutoffs:</strong></p>
 <ul>
-<li><code>set_lr_cutoff(cutoff)</code>: Updates both Coulomb and DFTD3 cutoffs</li>
-<li><code>set_lrcoulomb_method(method, cutoff)</code>: Updates Coulomb cutoff only</li>
+<li><code>set_lr_cutoff(cutoff)</code>: Updates both Coulomb and DFTD3 cutoffs (skips Ewald/PME, which manage their own real-space cutoff)</li>
+<li><code>set_lrcoulomb_method(method, cutoff, ewald_accuracy)</code>: Updates Coulomb method/cutoff (and Ewald/PME accuracy)</li>
 <li><code>set_dftd3_cutoff(cutoff)</code>: Updates DFTD3 cutoff only</li>
 </ul>
 <h3 id="has_external_coulomb"><code>has_external_coulomb</code><a class="headerlink" href="#has_external_coulomb" title="Permanent link">&para;</a></h3>
@@ -4126,14 +4129,14 @@
 <h3 id="has_external_dftd3"><code>has_external_dftd3</code><a class="headerlink" href="#has_external_dftd3" title="Permanent link">&para;</a></h3>
 <p><code>True</code> if external <code>DFTD3</code> module is attached. <code>False</code> for legacy models or D3TS models.</p>
 <h3 id="coulomb_method"><code>coulomb_method</code><a class="headerlink" href="#coulomb_method" title="Permanent link">&para;</a></h3>
-<p>Current Coulomb method: <code>"simple"</code>, <code>"dsf"</code>, <code>"ewald"</code>, or <code>None</code>.</p>
+<p>Current Coulomb method: <code>"simple"</code>, <code>"dsf"</code>, <code>"ewald"</code>, <code>"pme"</code>, or <code>None</code>.</p>
 <p>Returns <code>None</code> for:</p>
 <ul>
 <li>Legacy models with embedded Coulomb</li>
 <li>Models without Coulomb</li>
 </ul>
-<p><strong>Note on Ewald:</strong></p>
-<p>Ewald summation uses its own internal real-space cutoff based on accuracy requirements. When Ewald is selected, <code>coulomb_cutoff</code> is <code>None</code> and does not contribute to neighbor list computation.</p>
+<p><strong>Note on Ewald and PME:</strong></p>
+<p>Both Ewald and PME use a per-call real-space cutoff derived from <code>ewald_accuracy</code> and the cell geometry. When either is selected, <code>coulomb_cutoff</code> is <code>None</code>; the calculator builds a dedicated dense neighbor list (<code>nbmat_coulomb</code>/<code>shifts_coulomb</code>) sized to that cutoff and aliases it to <code>nbmat_lr</code>/<code>shifts_lr</code>.</p>
 <h2 id="methods">Methods<a class="headerlink" href="#methods" title="Permanent link">&para;</a></h2>
 <h3 id="evaldata-forcesfalse-stressfalse-hessianfalse"><code>eval(data, forces=False, stress=False, hessian=False)</code><a class="headerlink" href="#evaldata-forcesfalse-stressfalse-hessianfalse" title="Permanent link">&para;</a></h3>
 <p>Main inference method. Also callable via <code>calculator(data, ...)</code>.</p>
@@ -4187,7 +4190,7 @@
 <span class="n">forces</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]</span>
 <span class="n">charges</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;charges&quot;</span><span class="p">]</span>
 </code></pre></div>
-<h3 id="set_lrcoulomb_methodmethod-cutoff150-dsf_alpha02-ewald_accuracy1e-8"><code>set_lrcoulomb_method(method, cutoff=15.0, dsf_alpha=0.2, ewald_accuracy=1e-8)</code><a class="headerlink" href="#set_lrcoulomb_methodmethod-cutoff150-dsf_alpha02-ewald_accuracy1e-8" title="Permanent link">&para;</a></h3>
+<h3 id="set_lrcoulomb_methodmethod-cutoff150-dsf_alpha02-ewald_accuracy1e-6"><code>set_lrcoulomb_method(method, cutoff=15.0, dsf_alpha=0.2, ewald_accuracy=1e-6)</code><a class="headerlink" href="#set_lrcoulomb_methodmethod-cutoff150-dsf_alpha02-ewald_accuracy1e-6" title="Permanent link">&para;</a></h3>
 <p>Set the long-range Coulomb method.</p>
 <p><strong>Parameters:</strong></p>
 <table>
@@ -4204,13 +4207,13 @@
 <td><code>method</code></td>
 <td><code>str</code></td>
 <td>required</td>
-<td><code>"simple"</code>, <code>"dsf"</code>, or <code>"ewald"</code></td>
+<td><code>"simple"</code>, <code>"dsf"</code>, <code>"ewald"</code>, or <code>"pme"</code></td>
 </tr>
 <tr>
 <td><code>cutoff</code></td>
 <td><code>float</code></td>
 <td><code>15.0</code></td>
-<td>Cutoff for DSF method (Å). Not used for Ewald.</td>
+<td>Cutoff for DSF method (Å). Not used for Ewald/PME.</td>
 </tr>
 <tr>
 <td><code>dsf_alpha</code></td>
@@ -4221,8 +4224,8 @@
 <tr>
 <td><code>ewald_accuracy</code></td>
 <td><code>float</code></td>
-<td><code>1e-8</code></td>
-<td>Target accuracy for Ewald summation</td>
+<td><code>1e-6</code></td>
+<td>Target accuracy for Ewald and PME</td>
 </tr>
 </tbody>
 </table>
@@ -4249,27 +4252,36 @@
 <tr>
 <td><code>"ewald"</code></td>
 <td>Ewald summation</td>
-<td>Computed from accuracy</td>
+<td>Estimated from accuracy</td>
+</tr>
+<tr>
+<td><code>"pme"</code></td>
+<td>Particle Mesh Ewald</td>
+<td>Estimated from accuracy</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Ewald Accuracy Parameter:</strong></p>
-<p>For Ewald summation, the <code>ewald_accuracy</code> parameter controls the real-space and reciprocal-space cutoffs. The cutoffs are computed automatically based on system geometry:</p>
-<div class="arithmatex">\[ \eta = \frac{(V^2 / N)^{1/6}}{\sqrt{2\pi}} \]</div>
-<div class="arithmatex">\[ r\_{\text{cutoff}} = \sqrt{-2 \ln \varepsilon} \cdot \eta \]</div>
-<div class="arithmatex">\[ k\_{\text{cutoff}} = \frac{\sqrt{-2 \ln \varepsilon}}{\eta} \]</div>
-<p>Where <span class="arithmatex">\(\varepsilon\)</span> is the accuracy parameter, <span class="arithmatex">\(V\)</span> is the cell volume, and <span class="arithmatex">\(N\)</span> is the number of atoms. Lower accuracy values (e.g., <code>1e-10</code>) give higher precision but require more computation.</p>
+<p><strong>Ewald / PME Accuracy:</strong></p>
+<p>For both Ewald and PME, <code>ewald_accuracy</code> (default <code>1e-6</code>, matching the nvalchemiops default) controls the splitting parameter, real-space cutoff, and reciprocal-space resolution. The calculator estimates these per call from the cell geometry; smaller values give tighter convergence at higher cost.</p>
+<p><strong>Derivative Support:</strong></p>
+<ul>
+<li><code>simple</code> and <code>dsf</code>: inference forces/stress are supported. DSF force/stress losses (<code>train=True</code> with <code>forces</code> or <code>stress</code>) and Hessian calculations raise <code>NotImplementedError</code>.</li>
+<li><code>ewald</code> and <code>pme</code>: forces, stress, force/stress losses in <code>train=True</code>, and Hessian requests are supported. Higher-order derivatives use the documented long-range approximation.</li>
+</ul>
+<p>See <a href="../long_range/#derivative-support">Long-Range Methods → Derivative Support</a> for the rationale.</p>
 <p><strong>Notes:</strong></p>
 <ul>
 <li>Updates external <code>LRCoulomb</code> module if present</li>
 <li>Automatically updates neighbor lists</li>
 <li>Issues warning for legacy models (no effect)</li>
 <li>Auto-switches to <code>"dsf"</code> when PBC is detected with <code>"simple"</code> method (see PBC notes below)</li>
+<li>Ewald/PME require <code>cell</code> to be present in input; otherwise raises <code>ValueError</code></li>
 </ul>
 <p><strong>Example:</strong></p>
 <div class="highlight"><pre><span></span><code><span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>
 <span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">12.0</span><span class="p">,</span> <span class="n">dsf_alpha</span><span class="o">=</span><span class="mf">0.20</span><span class="p">)</span>
 <span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">)</span>
+<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;pme&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="set_lr_cutoffcutoff"><code>set_lr_cutoff(cutoff)</code><a class="headerlink" href="#set_lr_cutoffcutoff" title="Permanent link">&para;</a></h3>
 <p>Set the unified long-range cutoff for all LR modules.</p>
@@ -4293,7 +4305,7 @@
 <p><strong>Notes:</strong></p>
 <ul>
 <li>Updates both Coulomb and DFTD3 cutoffs</li>
-<li>Ewald method ignores this cutoff (uses its own internal cutoff)</li>
+<li>Ewald and PME ignore this cutoff (they manage their own real-space cutoff)</li>
 <li>Automatically rebuilds neighbor lists</li>
 </ul>
 <p><strong>Example:</strong></p>
@@ -4575,7 +4587,7 @@
 <td>Auto-switch to <code>"dsf"</code> with warning</td>
 </tr>
 <tr>
-<td><code>"dsf"</code> / <code>"ewald"</code></td>
+<td><code>"dsf"</code> / <code>"ewald"</code> / <code>"pme"</code></td>
 <td>No change</td>
 </tr>
 </tbody>
@@ -4595,15 +4607,16 @@
 <li>Neighbor lists are stored as integer matrices <code>nbmat</code> with shape <code>(N_total, max_neighbors)</code>.</li>
 <li>Each row contains neighbor indices for a single atom.</li>
 <li>Rows are padded with a dummy index (typically <code>N_total</code>) when an atom has fewer neighbors than <code>max_neighbors</code>.</li>
+<li>Direct flat <code>nb_mode=1</code> module inputs must include a final padding atom. That atom should have <code>numbers[-1] == 0</code>, <code>charges[-1] == 0</code>, and invalid neighbor entries should point to its index.</li>
 <li>The buffer grows on overflow (×1.5) and shrinks when utilization drops well below target, which helps performance remain stable as density changes.</li>
 </ul>
 <h3 id="module-suffix-fallback">Module Suffix Fallback<a class="headerlink" href="#module-suffix-fallback" title="Permanent link">&para;</a></h3>
 <p>LR modules prefer their specific neighbor list key, with fallback to <code>_lr</code>:</p>
 <ul>
-<li><strong>LRCoulomb (simple/dsf)</strong>: Tries <code>nbmat_coulomb</code>, falls back to <code>nbmat_lr</code></li>
+<li><strong>LRCoulomb (simple/dsf/ewald/pme)</strong>: Tries <code>nbmat_coulomb</code>, falls back to <code>nbmat_lr</code></li>
 <li><strong>DFTD3/D3TS</strong>: Tries <code>nbmat_dftd3</code>, falls back to <code>nbmat_lr</code></li>
 </ul>
-<p><strong>Note:</strong> Ewald uses its own internal neighbor list and ignores calculator cutoffs.</p>
+<p><strong>Note:</strong> For Ewald and PME, the calculator builds a per-call dense neighbor list sized to the real-space cutoff derived from <code>ewald_accuracy</code>. The list is written under <code>nbmat_coulomb</code>/<code>shifts_coulomb</code> and aliased to <code>nbmat_lr</code>/<code>shifts_lr</code>.</p>
 <h2 id="device-handling">Device Handling<a class="headerlink" href="#device-handling" title="Permanent link">&para;</a></h2>
 <h3 id="automatic-selection">Automatic Selection<a class="headerlink" href="#automatic-selection" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span>
@@ -4669,10 +4682,10 @@
 <p>Explicit <code>needs_coulomb</code> / <code>needs_dispersion</code> flags override metadata.</p>
 <h3 id="cutoff-handling-for-lr-modules">Cutoff Handling for LR Modules<a class="headerlink" href="#cutoff-handling-for-lr-modules" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>Coulomb</strong>: <code>set_lrcoulomb_method()</code> selects the method and updates the Coulomb cutoff (<code>inf</code> for <code>"simple"</code>, finite for <code>"dsf"</code>, <code>None</code> for <code>"ewald"</code>).</li>
+<li><strong>Coulomb</strong>: <code>set_lrcoulomb_method()</code> selects the method and updates the Coulomb cutoff (<code>inf</code> for <code>"simple"</code>, finite for <code>"dsf"</code>, <code>None</code> for <code>"ewald"</code>/<code>"pme"</code>).</li>
 <li><strong>DFTD3</strong>: <code>set_dftd3_cutoff()</code> updates the DFTD3 cutoff and smoothing window.</li>
 <li><strong>Unified control</strong>: <code>set_lr_cutoff()</code> sets both Coulomb and DFTD3 cutoffs to the same value.</li>
-<li><strong>Ewald</strong>: Uses its own internal neighbor list; calculator cutoffs do not apply.</li>
+<li><strong>Ewald/PME</strong>: Use per-call real-space neighbor lists estimated from <code>ewald_accuracy</code>; calculator cutoffs do not apply.</li>
 </ul>
 <h2 id="default-values">Default Values<a class="headerlink" href="#default-values" title="Permanent link">&para;</a></h2>
 <h3 id="lr-module-defaults">LR Module Defaults<a class="headerlink" href="#lr-module-defaults" title="Permanent link">&para;</a></h3>
@@ -4691,9 +4704,9 @@
 <td>Default LR cutoff for DSF (Å)</td>
 </tr>
 <tr>
-<td><code>set_lrcoulomb_method(..., ewald_accuracy=1e-8)</code></td>
-<td><code>1e-8</code></td>
-<td>Default accuracy for Ewald summation</td>
+<td><code>set_lrcoulomb_method(..., ewald_accuracy=1e-6)</code></td>
+<td><code>1e-6</code></td>
+<td>Default accuracy for Ewald and PME</td>
 </tr>
 <tr>
 <td><code>set_dftd3_cutoff(..., smoothing_fraction=0.2)</code></td>
@@ -4969,24 +4982,29 @@
 <td>PBC systems</td>
 <td><code>"dsf"</code></td>
 <td>cutoff=12-15 Å</td>
-<td>Recommended</td>
+<td>Fast and robust default</td>
 </tr>
 <tr>
 <td>High-accuracy PBC</td>
 <td><code>"ewald"</code></td>
-<td>accuracy=1e-8</td>
-<td>Research-grade</td>
+<td><code>ewald_accuracy=1e-6</code></td>
+<td>Reciprocal sum on k-grid</td>
+</tr>
+<tr>
+<td>Large PBC cells</td>
+<td><code>"pme"</code></td>
+<td><code>ewald_accuracy=1e-6</code></td>
+<td>Better asymptotic scaling than Ewald</td>
 </tr>
 </tbody>
 </table>
-<div class="highlight"><pre><span></span><code><span class="c1"># Fast for non-PBC</span>
-<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;simple&quot;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;simple&quot;</span><span class="p">)</span>
 
-<span class="c1"># Efficient for PBC</span>
 <span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">)</span>
 
-<span class="c1"># High-accuracy for research</span>
-<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">)</span>
+<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">)</span>
+
+<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;pme&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="multi-threading-cpu">Multi-threading (CPU)<a class="headerlink" href="#multi-threading-cpu" title="Permanent link">&para;</a></h3>
 <p><strong>Set thread count for CPU execution:</strong></p>

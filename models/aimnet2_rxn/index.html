@@ -1947,7 +1947,7 @@
 
 
 <h1 id="aimnet2-rxn">AIMNet2-rxn<a class="headerlink" href="#aimnet2-rxn" title="Permanent link">&para;</a></h1>
-<p>A neural network interatomic potential specialized for <strong>closed-shell organic reactions</strong> (H, C, N, O), trained on ~4.7M reaction-relevant geometries at ωB97M-V/def2-TZVPP. Use for transition-state searches, NEB / batched-NEB, IRC profiles, and reaction-coordinate energy work.</p>
+<p>A neural network interatomic potential specialized for <strong>closed-shell organic reactions</strong> (H, C, N, O), trained on ~4.7M reaction-relevant geometries at wB97M-D3/def2-TZVPP. Use for transition-state searches, NEB / batched-NEB, IRC profiles, and reaction-coordinate energy work.</p>
 <h2 id="loading">Loading<a class="headerlink" href="#loading" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
 
@@ -1969,12 +1969,12 @@
 <li><strong>Net charge</strong>: only net-neutral systems (zwitterions OK). Non-zero <code>charge</code> raises <code>ValueError</code> pointing at <code>aimnet2-wb97m-d3</code> for ions.</li>
 <li><strong>AFV row sanitization</strong>: at conversion time, atomic-feature-vector rows for elements outside <code>[1, 6, 7, 8]</code> are NaN-padded so <code>validate_species=False</code> produces NaN-propagation rather than plausible-looking nonsense.</li>
 </ul>
-<p>Two further safeguards fire regardless of <code>validate_species</code>:</p>
+<p>Runtime corrections and safeguards fire regardless of <code>validate_species</code>:</p>
 <ul>
+<li><strong>Posthoc D3 dispersion</strong>: <code>AIMNet2Calculator</code> adds external DFT-D3(BJ) with the same wB97M-D3 parameters used by the default <code>aimnet2</code> model (<code>s6=1.0</code>, <code>s8=0.3908</code>, <code>a1=0.566</code>, <code>a2=3.128</code>). This also applies to older rxn artifacts that do not carry <code>needs_dispersion</code> / <code>d3_params</code> metadata.</li>
 <li><strong>Hessian + <code>torch.compile</code></strong>: setting both raises <code>RuntimeError</code> (Dynamo + double-backward through GELU is known to hang). Reconstruct with <code>compile_model=False</code> for TS / IRC / vibrational work.</li>
-<li><strong>Coulomb cutoff lock</strong>: calling <code>set_lrcoulomb_method(method, cutoff=…)</code> with a cutoff different from the model's <code>coulomb_sr_rc</code> (4.6 Å) emits a <code>UserWarning</code> because the SR/LR cancellation point was physically frozen during training.</li>
 </ul>
-<p>A separate one-time <code>UserWarning</code> fires if the same Python process constructs calculators from two different AIMNet2 families (rxn vs. wb97m-d3 etc.), because the energy scales are not comparable.</p>
+<p>A separate one-time <code>UserWarning</code> fires if the same Python process constructs calculators from two different AIMNet2 families (rxn vs. wb97m-d3 etc.), because their absolute energy scales are not comparable.</p>
 <h2 id="canonical-model-card">Canonical model card<a class="headerlink" href="#canonical-model-card" title="Permanent link">&para;</a></h2>
 <p>Full content (energy convention, training data details, full limitations list, citation) lives at the Hugging Face model card:</p>
 <p><a href="https://huggingface.co/isayevlab/aimnet2-rxn">https://huggingface.co/isayevlab/aimnet2-rxn</a></p>

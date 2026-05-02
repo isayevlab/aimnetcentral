@@ -1585,6 +1585,28 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#pme-particle-mesh-ewald" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PME (Particle Mesh Ewald)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#derivative-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Derivative Support
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1745,6 +1767,17 @@
     <span class="md-ellipsis">
       
         Ewald for High Accuracy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pme-for-large-cells" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PME for Large Cells
       
     </span>
   </a>
@@ -2154,6 +2187,28 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#pme-particle-mesh-ewald" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PME (Particle Mesh Ewald)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#derivative-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Derivative Support
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2321,6 +2376,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#pme-for-large-cells" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PME for Large Cells
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#changing-methods-at-runtime" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2463,6 +2529,7 @@
 <li>O(N) scaling with neighbor lists</li>
 <li>Energy and forces continuous at cutoff</li>
 <li>Based on Wolf summation method</li>
+<li>Inference forces and stress are supported; force/stress training and Hessians are not (see <a href="#derivative-support">Derivative Support</a>)</li>
 </ul>
 <h3 id="ewald-summation">Ewald Summation<a class="headerlink" href="#ewald-summation" title="Permanent link">&para;</a></h3>
 <p><strong>When to use:</strong></p>
@@ -2474,39 +2541,100 @@
 </ul>
 <p><strong>When NOT to use:</strong></p>
 <ul>
-<li>Long MD trajectories (slower than DSF)</li>
+<li>Long MD trajectories (slower than DSF; consider PME for large boxes)</li>
 <li>When DSF accuracy is sufficient</li>
-<li>Very large systems (reciprocal space cost increases)</li>
+<li>Very large systems (reciprocal-space cost grows; prefer PME)</li>
 </ul>
 <p><strong>Configuration:</strong></p>
-<div class="highlight"><pre><span></span><code><span class="c1"># Default accuracy (1e-8)</span>
+<div class="highlight"><pre><span></span><code><span class="c1"># Default accuracy (1e-6)</span>
 <span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">)</span>
 
-<span class="c1"># Custom accuracy (higher precision, more computation)</span>
-<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-10</span><span class="p">)</span>
-
-<span class="c1"># Lower accuracy (faster, but less precise)</span>
-<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">)</span>
+<span class="c1"># Tighter accuracy (more expensive)</span>
+<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-7</span><span class="p">)</span>
 </code></pre></div>
+<p>The Ewald and PME backends ignore the public <code>cutoff</code> argument; the calculator estimates a per-system real-space cutoff (and <code>alpha</code>/k-space cutoff or PME mesh) from <code>ewald_accuracy</code> and the cell geometry on every call.</p>
 <p><strong>Accuracy Parameter:</strong></p>
-<p>The <code>ewald_accuracy</code> parameter controls the real-space and reciprocal-space cutoffs. Lower values give higher precision but require more computation. The cutoffs are computed automatically based on system geometry:</p>
+<p>The <code>ewald_accuracy</code> parameter controls the splitting parameter, the real-space cutoff, and the reciprocal-space cutoff (or PME mesh dimensions). Lower values give higher precision at higher cost. The calculator default is <code>1e-6</code>, matching the nvalchemiops default.</p>
+<p><code>nvalchemiops</code> estimates Ewald parameters from system geometry (similar to the standard formulas):</p>
 <div class="arithmatex">\[ \eta = \frac{(V^2 / N)^{1/6}}{\sqrt{2\pi}} \]</div>
 <div class="arithmatex">\[ r*{\text{cutoff}} = \sqrt{-2 \ln \varepsilon} \cdot \eta, \quad k*{\text{cutoff}} = \frac{\sqrt{-2 \ln \varepsilon}}{\eta} \]</div>
-<p>Where <span class="arithmatex">\(\varepsilon\)</span> is the accuracy parameter, <span class="arithmatex">\(V\)</span> is the cell volume, and <span class="arithmatex">\(N\)</span> is the number of atoms.</p>
+<p>where <span class="arithmatex">\(\varepsilon\)</span> is the accuracy parameter, <span class="arithmatex">\(V\)</span> is the cell volume, and <span class="arithmatex">\(N\)</span> is the number of atoms.</p>
 <p><strong>Characteristics:</strong></p>
 <ul>
-<li>Splits Coulomb into real-space + reciprocal-space + self-energy terms</li>
-<li>Configurable accuracy target (default 1e-8)</li>
-<li>Automatically determines k-space vectors based on accuracy</li>
-<li>O(N^2) complexity (full pairwise Ewald sum)</li>
+<li>Splits Coulomb into real-space + reciprocal-space + self-energy + background terms</li>
+<li>Configurable accuracy target (default <code>1e-6</code>)</li>
+<li>Splitting parameter and cutoffs estimated per call from <code>ewald_accuracy</code></li>
+<li>Per-call dense neighbor list sized to the real-space cutoff</li>
 <li>Most accurate method for periodic systems</li>
 </ul>
-<p><strong>When Ewald matters:</strong></p>
+<h3 id="pme-particle-mesh-ewald">PME (Particle Mesh Ewald)<a class="headerlink" href="#pme-particle-mesh-ewald" title="Permanent link">&para;</a></h3>
+<p><strong>When to use:</strong></p>
 <ul>
-<li>Computing precise thermodynamic properties</li>
-<li>Benchmark comparisons against QM calculations</li>
-<li>Validation of other Coulomb methods</li>
-<li>Systems with significant long-range charge ordering</li>
+<li>Large periodic boxes where Ewald reciprocal cost becomes a bottleneck</li>
+<li>Production MD with large unit cells</li>
+<li>Ewald-like accuracy with better asymptotic scaling for large systems</li>
+</ul>
+<p><strong>When NOT to use:</strong></p>
+<ul>
+<li>Very small unit cells (Ewald may be faster)</li>
+<li>Non-periodic systems (use <code>simple</code>)</li>
+</ul>
+<p><strong>Configuration:</strong></p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Default accuracy (1e-6)</span>
+<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;pme&quot;</span><span class="p">)</span>
+
+<span class="c1"># Tighter accuracy (more expensive)</span>
+<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;pme&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-7</span><span class="p">)</span>
+</code></pre></div>
+<p>PME shares the <code>ewald_accuracy</code> knob with Ewald (default <code>1e-6</code>). The real-space cutoff, splitting parameter, and B-spline mesh dimensions are all estimated from this accuracy and the cell geometry; the mesh is not configured manually.</p>
+<p><strong>Characteristics:</strong></p>
+<ul>
+<li>Same physical model as Ewald but reciprocal space evaluated on a B-spline mesh via FFT</li>
+<li>Better asymptotic scaling for large systems</li>
+<li>Same <code>ewald_accuracy</code> semantics as Ewald</li>
+</ul>
+<h3 id="derivative-support">Derivative Support<a class="headerlink" href="#derivative-support" title="Permanent link">&para;</a></h3>
+<p>The nvalchemiops-backed external methods differ in how they expose derivatives:</p>
+<table>
+<thead>
+<tr>
+<th>Backend</th>
+<th>Inference forces/stress</th>
+<th>Force/stress training</th>
+<th>Hessian</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DSF</td>
+<td>Yes</td>
+<td>No</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Ewald</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>PME</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>DFT-D3</td>
+<td>Yes</td>
+<td>Not applicable; no trainable DFT-D3 parameters</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>DSF</strong>: energy is autograd-connected through charges only. The calculator assembles inference forces and stress by combining PyTorch autograd for the NN and the charge chain with explicit DSF forces/virial. Force/stress losses (<code>train=True</code> with <code>forces=True</code> or <code>stress=True</code>) and Hessian requests raise <code>NotImplementedError</code>.</li>
+<li><strong>Ewald / PME</strong>: support inference forces/stress, force/stress losses in <code>train=True</code>, and calculator Hessian requests through differentiable energy and double autograd.</li>
+<li><strong>DFT-D3</strong>: inference forces and stress come from detached nvalchemiops force/virial terms. Hessian requests use the pure-torch differentiable DFT-D3 path.</li>
 </ul>
 <h2 id="method-comparison">Method Comparison<a class="headerlink" href="#method-comparison" title="Permanent link">&para;</a></h2>
 <table>
@@ -2532,20 +2660,27 @@
 <td>O(N) with neighbor lists</td>
 <td>Yes</td>
 <td>Production MD, large systems</td>
-<td>Recommended for PBC</td>
+<td>Inference derivatives only</td>
 </tr>
 <tr>
 <td>Ewald</td>
-<td>O(N^2) full pairwise</td>
+<td>O(N · K) reciprocal + O(N) real-space</td>
 <td>Yes</td>
 <td>High-accuracy benchmarks</td>
-<td>Research-grade precision</td>
+<td>Default <code>ewald_accuracy=1e-6</code></td>
+</tr>
+<tr>
+<td>PME</td>
+<td>O(N log N) via B-spline + FFT</td>
+<td>Yes</td>
+<td>Large-cell production MD</td>
+<td>Scales better than Ewald</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Accuracy hierarchy:</strong> Ewald &gt; DSF &gt; Simple (for PBC)</p>
-<p><strong>Speed hierarchy:</strong> Simple (small N) &gt; DSF &gt; Ewald</p>
-<p><strong>Recommendation:</strong> Use DSF for periodic systems unless you need Ewald's precision.</p>
+<p><strong>Accuracy hierarchy:</strong> Ewald ≈ PME &gt; DSF &gt; Simple (for PBC)</p>
+<p><strong>Speed hierarchy:</strong> Simple (small N) &gt; DSF &gt; PME ≳ Ewald (depending on system size)</p>
+<p><strong>Recommendation:</strong> Use DSF for typical periodic systems. Switch to PME for large unit cells where reciprocal cost matters, and Ewald for benchmarking against PME or older Ewald-based references.</p>
 <h2 id="common-data-and-neighbor-list-handling">Common Data and Neighbor-List Handling<a class="headerlink" href="#common-data-and-neighbor-list-handling" title="Permanent link">&para;</a></h2>
 <p><strong>Neighbor-list keys and suffix fallback</strong></p>
 <ul>
@@ -2553,6 +2688,7 @@
 <li>Dispersion modules (<code>DFTD3</code>, <code>D3TS</code>) prefer <code>nbmat_dftd3</code> and fall back to <code>nbmat_lr</code>.</li>
 </ul>
 <p>This fallback behavior is implemented via <code>nbops.resolve_suffix</code>, and distance calculation is lazily computed with <code>ops.lazy_calc_dij</code>.</p>
+<p>Direct flat <code>nb_mode=1</code> calls into <code>LRCoulomb</code> must include the standard final padding atom. The padding atom should have atomic number and charge zero, and invalid neighbor entries should point to that final index. The calculator prepares this format internally.</p>
 <p><strong>Distance and masking</strong></p>
 <p>Distances use <code>d_ij{suffix}</code> derived from <code>coord</code> (and <code>shifts{suffix}</code> when PBC is present). Padding/diagonal pairs are masked via <code>mask_ij{suffix}</code>. For DSF, pairs beyond <code>Rc</code> are also masked.</p>
 <h2 id="lrcoulomb">LRCoulomb<a class="headerlink" href="#lrcoulomb" title="Permanent link">&para;</a></h2>
@@ -2579,19 +2715,28 @@
 <p><strong>DSF (damped shifted force)</strong></p>
 </li>
 </ol>
-<p>Uses <code>ops.coulomb_matrix_dsf</code>:</p>
+<p>Uses <code>nvalchemiops.torch.interactions.electrostatics.dsf_coulomb</code> with a full dense neighbor matrix:</p>
 <div class="highlight"><pre><span></span><code>J(r) = erfc(alpha r)/r
      - erfc(alpha Rc)/Rc
      + (r - Rc) * (erfc(alpha Rc)/Rc^2 + 2 alpha exp(-(alpha Rc)^2) / (Rc sqrt(pi)))
 </code></pre></div>
-<p>Pairs with <code>r &gt; Rc</code> or masked entries are zeroed. Energy is:</p>
-<p><code>E = factor * sum_i sum_j q_i q_j J(r_ij)</code></p>
+<p>Pairs with <code>r &gt; Rc</code> or masked entries are zeroed. nvalchemiops also applies the DSF self-energy correction and returns energy in e²/Å; AIMNet converts to eV with <code>Hartree * Bohr</code>.</p>
+<p>The DSF energy remains connected to autograd through charges via nvalchemiops' straight-through charge-gradient injection. It is not autograd-differentiable through positions or cell.</p>
 <p>If <code>subtract_sr=True</code>, the SR term is subtracted.</p>
 <ol>
 <li><strong>Ewald</strong></li>
 </ol>
-<p>Uses <code>ops.coulomb_matrix_ewald</code>, which implements real-space + reciprocal-space + self terms with fixed accuracy (<code>1e-8</code>). This path requires a single molecule with <code>coord.ndim == 2</code> and <code>cell.ndim == 2</code>.</p>
+<p>Uses <code>nvalchemiops.torch.interactions.electrostatics.ewald_summation</code>. The calculator estimates the splitting parameter, real-space cutoff, and reciprocal-space cutoff per call from <code>ewald_accuracy</code> (default <code>1e-6</code>) and the cell, then builds a per-call dense neighbor list (<code>nbmat_coulomb</code>/<code>shifts_coulomb</code>, also aliased as <code>nbmat_lr</code>/<code>shifts_lr</code>).</p>
+<p>The custom AIMNet wrapper exposes nvalchemiops forces, charge gradients, and virial through PyTorch autograd without requiring second derivatives of the underlying Warp kernels.</p>
 <p>If <code>subtract_sr=True</code>, the SR term is subtracted.</p>
+<ol>
+<li><strong>PME (Particle Mesh Ewald)</strong></li>
+</ol>
+<p>Uses <code>nvalchemiops.torch.interactions.electrostatics.particle_mesh_ewald</code>. Same accuracy and neighbor-list flow as Ewald, but reciprocal space is evaluated on a B-spline mesh via FFT for better asymptotic scaling on large cells. Derivative behavior is identical to Ewald.</p>
+<p>If <code>subtract_sr=True</code>, the SR term is subtracted.</p>
+<blockquote>
+<p><strong>Note:</strong> The legacy in-tree implementation <code>aimnet.ops.coulomb_matrix_ewald</code> (and its helper <code>aimnet.ops.get_shifts_within_cutoff</code>) is kept for backwards-compatibility cross-checks but is no longer wired into <code>LRCoulomb</code>.</p>
+</blockquote>
 <p><strong>SR subtraction (shared by all methods)</strong></p>
 <p>The SR term uses an envelope cutoff:</p>
 <ul>
@@ -2627,7 +2772,7 @@
 <p><code>e_ij = c6_ij * (s6 / (r^6 + r0_ij^6) + s8 * rr_ij / (r^8 + r0_ij^8))</code></p>
 <p>Total energy is summed per molecule and multiplied by <code>-half_Hartree</code>.</p>
 <h2 id="dftd3">DFTD3<a class="headerlink" href="#dftd3" title="Permanent link">&para;</a></h2>
-<p><code>DFTD3</code> computes DFT-D3 dispersion correction using the BJ damping function with C6/C8 terms. Uses the <code>dftd3_energy</code> custom autograd op from <code>aimnet.modules.ops</code>. No 3-body term (Axilrod-Teller-Muto) is included.</p>
+<p><code>DFTD3</code> computes DFT-D3 dispersion correction using the BJ damping function with C6/C8 terms. It calls the nvalchemiops DFT-D3 kernel directly and returns explicit detached forces/virial when requested; it does not expose coordinate/cell autograd. No 3-body term (Axilrod-Teller-Muto) is included.</p>
 <h3 id="smoothing-window">Smoothing Window<a class="headerlink" href="#smoothing-window" title="Permanent link">&para;</a></h3>
 <p>Dispersion interactions are smoothly damped to zero near the cutoff to ensure continuous energy and forces.</p>
 <p>The smoothing window is defined by:</p>
@@ -2684,7 +2829,7 @@
 </ul>
 <p><strong>Validation:</strong> Test energy convergence by varying cutoff. Dispersion energy should change by &lt; 0.05 kcal/mol when cutoff increases by 2 Å.</p>
 <h3 id="forces">Forces<a class="headerlink" href="#forces" title="Permanent link">&para;</a></h3>
-<p>If <code>compute_forces=True</code> and coordinates require grad, forces are automatically computed as <code>-grad(energy)</code> and added to <code>data["forces"]</code>.</p>
+<p>DFT-D3 is an explicit external backend for inference forces and stress. In calculator calls, forces and stress are requested from nvalchemiops and combined with the model derivatives by the calculator. The module API returns these detached terms with <code>forward(data, compute_forces=True)</code> or <code>forward(data, compute_virial=True)</code>. Hessian requests use a pure-torch differentiable DFT-D3 energy path.</p>
 <h3 id="d3-parameters">D3 Parameters<a class="headerlink" href="#d3-parameters" title="Permanent link">&para;</a></h3>
 <p>DFTD3 requires functional-specific parameters stored in model metadata:</p>
 <div class="highlight"><pre><span></span><code><span class="n">d3_params</span> <span class="o">=</span> <span class="p">{</span>
@@ -2724,10 +2869,8 @@
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Stress: </span><span class="si">{</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;stress&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># (3, 3)</span>
 </code></pre></div>
 <h3 id="ewald-for-high-accuracy">Ewald for High Accuracy<a class="headerlink" href="#ewald-for-high-accuracy" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><span class="c1"># Configure Ewald method with default accuracy (1e-8)</span>
-<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">)</span>
 
-<span class="c1"># Same periodic system as above</span>
 <span class="n">result_ewald</span> <span class="o">=</span> <span class="n">calc</span><span class="p">({</span>
     <span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">coords</span><span class="p">,</span>
     <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="n">numbers</span><span class="p">,</span>
@@ -2735,7 +2878,6 @@
     <span class="s2">&quot;cell&quot;</span><span class="p">:</span> <span class="n">cell</span><span class="p">,</span>
 <span class="p">},</span> <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-<span class="c1"># Compare with DSF</span>
 <span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">)</span>
 <span class="n">result_dsf</span> <span class="o">=</span> <span class="n">calc</span><span class="p">({</span>
     <span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">coords</span><span class="p">,</span>
@@ -2746,27 +2888,39 @@
 
 <span class="n">energy_diff</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">result_ewald</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span> <span class="o">-</span> <span class="n">result_dsf</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">])</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;DSF vs Ewald energy difference: </span><span class="si">{</span><span class="n">energy_diff</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
-<span class="c1"># Typically &lt; 0.01 eV for well-converged cutoffs</span>
+</code></pre></div>
+<h3 id="pme-for-large-cells">PME for Large Cells<a class="headerlink" href="#pme-for-large-cells" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;pme&quot;</span><span class="p">)</span>
+
+<span class="n">result_pme</span> <span class="o">=</span> <span class="n">calc</span><span class="p">({</span>
+    <span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">coords</span><span class="p">,</span>
+    <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="n">numbers</span><span class="p">,</span>
+    <span class="s2">&quot;charge&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="s2">&quot;cell&quot;</span><span class="p">:</span> <span class="n">cell</span><span class="p">,</span>
+<span class="p">},</span> <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">stress</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Energy: </span><span class="si">{</span><span class="n">result_pme</span><span class="p">[</span><span class="s1">&#39;energy&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Stress: </span><span class="si">{</span><span class="n">result_pme</span><span class="p">[</span><span class="s1">&#39;stress&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="changing-methods-at-runtime">Changing Methods at Runtime<a class="headerlink" href="#changing-methods-at-runtime" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>
 
-<span class="c1"># Start with simple</span>
 <span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;simple&quot;</span><span class="p">)</span>
 <span class="n">result_simple</span> <span class="o">=</span> <span class="n">calc</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 
-<span class="c1"># Switch to DSF</span>
 <span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">)</span>
 <span class="n">result_dsf</span> <span class="o">=</span> <span class="n">calc</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 
-<span class="c1"># Switch to Ewald</span>
-<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="n">ewald_accuracy</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">)</span>
+<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;ewald&quot;</span><span class="p">)</span>
 <span class="n">result_ewald</span> <span class="o">=</span> <span class="n">calc</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 
-<span class="c1"># Compare energies</span>
+<span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;pme&quot;</span><span class="p">)</span>
+<span class="n">result_pme</span> <span class="o">=</span> <span class="n">calc</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Simple: </span><span class="si">{</span><span class="n">result_simple</span><span class="p">[</span><span class="s1">&#39;energy&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;DSF:    </span><span class="si">{</span><span class="n">result_dsf</span><span class="p">[</span><span class="s1">&#39;energy&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Ewald:  </span><span class="si">{</span><span class="n">result_ewald</span><span class="p">[</span><span class="s1">&#39;energy&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;PME:    </span><span class="si">{</span><span class="n">result_pme</span><span class="p">[</span><span class="s1">&#39;energy&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="separate-coulomb-and-dftd3-cutoffs">Separate Coulomb and DFTD3 Cutoffs<a class="headerlink" href="#separate-coulomb-and-dftd3-cutoffs" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="c1"># Set different cutoffs for Coulomb and DFTD3</span>

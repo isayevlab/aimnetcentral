@@ -2075,8 +2075,8 @@
 <p>Because this runs in Python on every MD step, performance is bounded by the same eager-mode AIMNet2 throughput you get from <a href="../ase/"><code>AIMNet2ASE</code></a>.</p>
 <h2 id="caveats">Caveats<a class="headerlink" href="#caveats" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Model coverage in this engine</strong>: only the wb97m-d3 model is exposed upstream as <code>MLPotential('aimnet2')</code>. Other variants (B97-3c, NSE, rxn) require per-family changes upstream, not just a model-name string -- e.g. AIMNet2-rxn has <code>supports_charged_systems=False</code>, fixed 4.6 A SR/LR cutoffs, and a learned energy scale that makes cross-family <code>createMixedSystem</code> energies meaningless. Exposing another variant in <code>openmmml</code> is a per-family contract, not a one-line change.</li>
-<li>Performance is the eager Python path -- not the eventual TorchScript fast path planned in <a href="../../superpowers/plans/2026-04-26-torchscript-export/"><code>docs/superpowers/plans/2026-04-26-torchscript-export.md</code></a>.</li>
+<li><strong>Model coverage in this engine</strong>: only the wb97m-d3 model is exposed upstream as <code>MLPotential('aimnet2')</code>. Other variants (B97-3c, NSE, rxn) require per-family changes upstream, not just a model-name string -- e.g. AIMNet2-rxn has <code>supports_charged_systems=False</code> and a learned energy scale that makes cross-family <code>createMixedSystem</code> energies meaningless. Exposing another variant in <code>openmmml</code> is a per-family contract, not a one-line change.</li>
+<li>Performance is the eager Python path -- not the eventual TorchScript fast path tracked in the internal export plan.</li>
 </ul>
 
 
