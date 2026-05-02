@@ -160,10 +160,18 @@ PME shares the `ewald_accuracy` knob with Ewald (default `1e-6`). The real-space
 
 ### Derivative Support
 
-The three nvalchemiops-backed methods differ in how they expose forces and stress:
+The nvalchemiops-backed external methods differ in how they expose derivatives:
+
+| Backend | Inference forces/stress | Force/stress training | Hessian |
+| --- | --- | --- | --- |
+| DSF | Yes | No | No |
+| Ewald | Yes | Yes | Yes |
+| PME | Yes | Yes | Yes |
+| DFT-D3 | Yes | Not applicable; no trainable DFT-D3 parameters | Yes |
 
 - **DSF**: energy is autograd-connected through charges only. The calculator assembles inference forces and stress by combining PyTorch autograd for the NN and the charge chain with explicit DSF forces/virial. Force/stress losses (`train=True` with `forces=True` or `stress=True`) and Hessian requests raise `NotImplementedError`.
-- **Ewald / PME**: support inference forces/stress, force/stress losses in `train=True`, and calculator Hessian requests. Higher-order derivatives use the nvalchemiops first-derivative outputs; the explicit position/cell contribution is treated as constant for higher-order derivatives, while the charge chain remains differentiable.
+- **Ewald / PME**: support inference forces/stress, force/stress losses in `train=True`, and calculator Hessian requests through differentiable energy and double autograd.
+- **DFT-D3**: inference forces and stress come from detached nvalchemiops force/virial terms. Hessian requests use the pure-torch differentiable DFT-D3 path.
 
 ## Method Comparison
 
@@ -349,7 +357,7 @@ calc.set_dftd3_cutoff(cutoff=20.0, smoothing_fraction=0.15)
 
 ### Forces
 
-DFT-D3 is an explicit external backend. In calculator calls, forces and stress are requested from nvalchemiops and combined with the model derivatives by the calculator. The module API returns these detached terms with `forward(data, compute_forces=True, return_terms=True)` or `forward(data, compute_virial=True, return_terms=True)`; DFT-D3 energy itself is not used for coordinate/cell autograd or Hessians.
+DFT-D3 is an explicit external backend for inference forces and stress. In calculator calls, forces and stress are requested from nvalchemiops and combined with the model derivatives by the calculator. The module API returns these detached terms with `forward(data, compute_forces=True)` or `forward(data, compute_virial=True)`. Hessian requests use a pure-torch differentiable DFT-D3 energy path.
 
 ### D3 Parameters
 
