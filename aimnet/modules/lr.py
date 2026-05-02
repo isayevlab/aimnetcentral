@@ -114,74 +114,14 @@ def _periodic_coulomb_hybrid(
 
 
 class _PeriodicCoulombFunction(Function):
-    """Local training wrapper for Ewald/PME force losses."""
+    """Local training wrapper for Ewald/PME force and strain losses."""
 
     @staticmethod
     def forward(
         ctx: Any,
         coord: Tensor,
         cell: Tensor,
-        charges: Tensor,
-        batch_idx: Tensor,
-        neighbor_matrix: Tensor,
-        shifts: Tensor,
-        mask_value: int,
-        num_systems: int,
-        accuracy: float,
-        is_pme: bool,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        energies, forces, charge_grad, _virial = _periodic_coulomb_hybrid(
-            coord=coord,
-            cell=cell,
-            charges=charges,
-            batch_idx=batch_idx,
-            neighbor_matrix=neighbor_matrix,
-            shifts=shifts,
-            mask_value=mask_value,
-            num_systems=num_systems,
-            accuracy=accuracy,
-            compute_virial=False,
-            is_pme=is_pme,
-        )
-        virial = coord.new_empty(0)
-        ctx.save_for_backward(forces, charge_grad, batch_idx.to(torch.int64))
-        return energies, forces, charge_grad, virial
-
-    @staticmethod
-    def backward(
-        ctx: Any,
-        grad_energies: Tensor,
-        _grad_forces: Tensor,
-        _grad_charge_grad: Tensor,
-        _grad_virial: Tensor,
-    ) -> tuple[Tensor | None, ...]:
-        forces, charge_grad, batch_idx = ctx.saved_tensors
-        g = grad_energies.to(forces.dtype).index_select(0, batch_idx)
-        grad_coord = -forces * g.unsqueeze(-1)
-        grad_charges = charge_grad * g
-        return (
-            grad_coord,
-            None,
-            grad_charges,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-
-
-class _StrainedPeriodicCoulombFunction(Function):
-    """Training wrapper for row-vector strain stress with Ewald/PME."""
-
-    @staticmethod
-    def forward(
-        ctx: Any,
-        coord: Tensor,
-        cell: Tensor,
-        scaling: Tensor,
+        scaling: Tensor | None,
         charges: Tensor,
         batch_idx: Tensor,
         neighbor_matrix: Tensor,
@@ -192,15 +132,19 @@ class _StrainedPeriodicCoulombFunction(Function):
         is_pme: bool,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         batch_idx_long = batch_idx.to(torch.int64)
-        if scaling.ndim == 2:
-            coord_eval = coord @ scaling
-            cell_eval = cell @ scaling
-        elif scaling.ndim == 3:
-            atom_scaling = scaling.index_select(0, batch_idx_long)
-            coord_eval = (coord.unsqueeze(1) @ atom_scaling).squeeze(1)
-            cell_eval = cell @ scaling
+        if scaling is None:
+            coord_eval = coord
+            cell_eval = cell
         else:
-            raise ValueError("scaling must have shape (3, 3) or (B, 3, 3)")
+            if scaling.ndim == 2:
+                coord_eval = coord @ scaling
+                cell_eval = cell @ scaling
+            elif scaling.ndim == 3:
+                atom_scaling = scaling.index_select(0, batch_idx_long)
+                coord_eval = (coord.unsqueeze(1) @ atom_scaling).squeeze(1)
+                cell_eval = cell @ scaling
+            else:
+                raise ValueError("scaling must have shape (3, 3) or (B, 3, 3)")
 
         energies, forces, charge_grad, virial = _periodic_coulomb_hybrid(
             coord=coord_eval,
@@ -212,10 +156,13 @@ class _StrainedPeriodicCoulombFunction(Function):
             mask_value=mask_value,
             num_systems=num_systems,
             accuracy=accuracy,
-            compute_virial=True,
+            compute_virial=scaling is not None,
             is_pme=is_pme,
         )
-        ctx.save_for_backward(forces, charge_grad, virial, batch_idx_long, scaling)
+        if scaling is None:
+            ctx.save_for_backward(forces, charge_grad, batch_idx_long)
+        else:
+            ctx.save_for_backward(forces, charge_grad, virial, batch_idx_long, scaling)
         return energies, forces, charge_grad, virial
 
     @staticmethod
@@ -226,21 +173,25 @@ class _StrainedPeriodicCoulombFunction(Function):
         _grad_charge_grad: Tensor,
         _grad_virial: Tensor,
     ) -> tuple[Tensor | None, ...]:
-        forces, charge_grad, virial, batch_idx, scaling = ctx.saved_tensors
+        if len(ctx.saved_tensors) == 5:
+            forces, charge_grad, virial, batch_idx, scaling = ctx.saved_tensors
+        else:
+            forces, charge_grad, batch_idx = ctx.saved_tensors
+            scaling = None
         g = grad_energies.to(forces.dtype).index_select(0, batch_idx)
         grad_coord_eval = -forces * g.unsqueeze(-1)
         grad_charges = charge_grad * g
 
-        if scaling.ndim == 2:
+        if scaling is None:
+            grad_coord = grad_coord_eval
+            grad_scaling = None
+        elif scaling.ndim == 2:
             grad_coord = grad_coord_eval @ scaling.mT
             grad_scaling = (-virial.mT * grad_energies.to(virial.dtype).view(-1, 1, 1)).sum(dim=0)
         elif scaling.ndim == 3:
             atom_scaling = scaling.index_select(0, batch_idx)
             grad_coord = (grad_coord_eval.unsqueeze(1) @ atom_scaling.mT).squeeze(1)
             grad_scaling = -virial.mT * grad_energies.to(virial.dtype).view(-1, 1, 1)
-        else:
-            grad_coord = None
-            grad_scaling = None
 
         return (
             grad_coord,
@@ -649,7 +600,7 @@ class LRCoulomb(nn.Module):
             if needs_strain_grad:
                 if coord_unstrained is None or cell_unstrained is None:
                     raise ValueError("scaling-aware Coulomb requires coord_unstrained and cell_unstrained")
-                e_periodic, _forces, _charge_grad, _virial = _StrainedPeriodicCoulombFunction.apply(
+                e_periodic, _forces, _charge_grad, _virial = _PeriodicCoulombFunction.apply(
                     coord_unstrained[:-1],
                     cell_unstrained,
                     scaling,
@@ -666,6 +617,7 @@ class LRCoulomb(nn.Module):
                 e_periodic, _forces, _charge_grad, _virial = _PeriodicCoulombFunction.apply(
                     coord_real,
                     cell,
+                    None,
                     charges_real,
                     mol_idx_real,
                     nbmat_real,
@@ -1064,71 +1016,14 @@ def _call_dftd3_kernel(
 
 
 class _DFTD3EnergyFunction(Function):
-    """Embedded DFT-D3 energy wrapper that injects explicit forces into autograd."""
+    """Embedded DFT-D3 wrapper that injects explicit forces/strain into autograd."""
 
     @staticmethod
     def forward(
         ctx: Any,
         coord: Tensor,
-        numbers: Tensor,
-        batch_idx: Tensor,
-        neighbor_matrix: Tensor,
-        neighbor_matrix_shifts: Tensor | None,
-        fill_value: int,
-        num_systems: int,
         cell: Tensor | None,
-        rcov: Tensor,
-        r4r2: Tensor,
-        c6_reference: Tensor,
-        coord_num_ref: Tensor,
-        a1: float,
-        a2: float,
-        s8: float,
-        s6: float,
-        smoothing_on: float,
-        smoothing_off: float,
-    ) -> Tensor:
-        energy, forces, _virial = _call_dftd3_kernel(
-            coord=coord,
-            numbers=numbers,
-            batch_idx=batch_idx,
-            neighbor_matrix=neighbor_matrix,
-            neighbor_matrix_shifts=neighbor_matrix_shifts,
-            fill_value=fill_value,
-            num_systems=num_systems,
-            cell=cell,
-            rcov=rcov,
-            r4r2=r4r2,
-            c6_reference=c6_reference,
-            coord_num_ref=coord_num_ref,
-            a1=a1,
-            a2=a2,
-            s8=s8,
-            s6=s6,
-            smoothing_on=smoothing_on,
-            smoothing_off=smoothing_off,
-            compute_virial=False,
-        )
-        ctx.save_for_backward(forces, batch_idx.to(torch.int64))
-        return energy
-
-    @staticmethod
-    def backward(ctx: Any, grad_energies: Tensor) -> tuple[Tensor | None, ...]:
-        forces, batch_idx = ctx.saved_tensors
-        g = grad_energies.to(forces.dtype).index_select(0, batch_idx)
-        grad_coord = -forces * g.unsqueeze(-1)
-        return (grad_coord,) + (None,) * 17
-
-
-class _StrainedDFTD3EnergyFunction(Function):
-    """Embedded DFT-D3 stress wrapper using the kernel strain virial directly."""
-
-    @staticmethod
-    def forward(
-        ctx: Any,
-        coord: Tensor,
-        cell: Tensor,
-        scaling: Tensor,
+        scaling: Tensor | None,
         numbers: Tensor,
         batch_idx: Tensor,
         neighbor_matrix: Tensor,
@@ -1147,15 +1042,21 @@ class _StrainedDFTD3EnergyFunction(Function):
         smoothing_off: float,
     ) -> Tensor:
         batch_idx_long = batch_idx.to(torch.int64)
-        if scaling.ndim == 2:
-            coord_eval = coord @ scaling
-            cell_eval = cell @ scaling
-        elif scaling.ndim == 3:
-            atom_scaling = scaling.index_select(0, batch_idx_long)
-            coord_eval = (coord.unsqueeze(1) @ atom_scaling).squeeze(1)
-            cell_eval = cell @ scaling
+        if scaling is None:
+            coord_eval = coord
+            cell_eval = cell
         else:
-            raise ValueError("scaling must have shape (3, 3) or (B, 3, 3)")
+            if cell is None:
+                raise ValueError("strain-aware DFTD3 requires cell")
+            if scaling.ndim == 2:
+                coord_eval = coord @ scaling
+                cell_eval = cell @ scaling
+            elif scaling.ndim == 3:
+                atom_scaling = scaling.index_select(0, batch_idx_long)
+                coord_eval = (coord.unsqueeze(1) @ atom_scaling).squeeze(1)
+                cell_eval = cell @ scaling
+            else:
+                raise ValueError("scaling must have shape (3, 3) or (B, 3, 3)")
 
         energy, forces, virial = _call_dftd3_kernel(
             coord=coord_eval,
@@ -1176,27 +1077,34 @@ class _StrainedDFTD3EnergyFunction(Function):
             s6=s6,
             smoothing_on=smoothing_on,
             smoothing_off=smoothing_off,
-            compute_virial=True,
+            compute_virial=scaling is not None,
         )
-        ctx.save_for_backward(forces, virial, batch_idx_long, scaling)
+        if scaling is None:
+            ctx.save_for_backward(forces, batch_idx_long)
+        else:
+            ctx.save_for_backward(forces, virial, batch_idx_long, scaling)
         return energy
 
     @staticmethod
     def backward(ctx: Any, grad_energies: Tensor) -> tuple[Tensor | None, ...]:
-        forces, virial, batch_idx, scaling = ctx.saved_tensors
+        if len(ctx.saved_tensors) == 4:
+            forces, virial, batch_idx, scaling = ctx.saved_tensors
+        else:
+            forces, batch_idx = ctx.saved_tensors
+            scaling = None
         g = grad_energies.to(forces.dtype).index_select(0, batch_idx)
         grad_coord_eval = -forces * g.unsqueeze(-1)
 
-        if scaling.ndim == 2:
+        if scaling is None:
+            grad_coord = grad_coord_eval
+            grad_scaling = None
+        elif scaling.ndim == 2:
             grad_coord = grad_coord_eval @ scaling.mT
             grad_scaling = (-virial.mT * grad_energies.to(virial.dtype).view(-1, 1, 1)).sum(dim=0)
         elif scaling.ndim == 3:
             atom_scaling = scaling.index_select(0, batch_idx)
             grad_coord = (grad_coord_eval.unsqueeze(1) @ atom_scaling.mT).squeeze(1)
             grad_scaling = -virial.mT * grad_energies.to(virial.dtype).view(-1, 1, 1)
-        else:
-            grad_coord = None
-            grad_scaling = None
 
         return (grad_coord, None, grad_scaling) + (None,) * 16
 
@@ -1596,7 +1504,7 @@ class DFTD3(nn.Module):
                 )
             energy_ev = energy_ev.detach().double()
         elif use_strain_wrapper:
-            energy_ev = _StrainedDFTD3EnergyFunction.apply(
+            energy_ev = _DFTD3EnergyFunction.apply(
                 kernel_inputs.coord_flat,
                 kernel_inputs.cell_for_kernel,
                 scaling,
@@ -1607,23 +1515,9 @@ class DFTD3(nn.Module):
         elif kernel_inputs.coord_flat.requires_grad:
             energy_ev = _DFTD3EnergyFunction.apply(
                 kernel_inputs.coord_flat,
-                kernel_inputs.numbers_flat,
-                kernel_inputs.batch_idx,
-                kernel_inputs.neighbor_matrix,
-                kernel_inputs.neighbor_matrix_shifts,
-                int(kernel_inputs.fill_value),
-                int(kernel_inputs.num_systems),
                 kernel_inputs.cell_for_kernel,
-                self.rcov,
-                self.r4r2,
-                self.c6ab,
-                self.cn_ref,
-                float(self.a1),
-                float(self.a2),
-                float(self.s8),
-                float(self.s6),
-                float(self.smoothing_on),
-                float(self.smoothing_off),
+                None,
+                *common_args,
             )
             forces_ev_flat = kernel_inputs.coord_flat.new_empty(0)
             virial_kernel = kernel_inputs.coord_flat.new_empty(0)
