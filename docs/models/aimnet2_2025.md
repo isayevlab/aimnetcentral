@@ -132,9 +132,9 @@ AIMNet2-2025 builds on the B97-3c training set with additional emphasis on inter
 Non-covalent interactions at longer range are captured by the external DFT-D3 dispersion and long-range Coulomb modules. For molecular complexes in vacuum, these activate automatically. For periodic systems with significant intermolecular interactions (e.g., molecular crystals), proper long-range electrostatics configuration is important:
 
 ```python
-calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-5)
+calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-6)
 
-calc.set_lrcoulomb_method("pme", ewald_accuracy=1e-5)
+calc.set_lrcoulomb_method("pme", ewald_accuracy=1e-6)
 
 calc.set_lrcoulomb_method("dsf", cutoff=15.0)
 ```

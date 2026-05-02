@@ -174,7 +174,7 @@ class TestCoulombMethods:
 
     @pytest.mark.parametrize("method", ["ewald", "pme"])
     def test_set_coulomb_ewald_pme_default_accuracy(self, method):
-        """Default ``ewald_accuracy`` is 1e-5 and applies to both ewald and pme."""
+        """Default ``ewald_accuracy`` is 1e-6 and applies to both ewald and pme."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
@@ -182,7 +182,7 @@ class TestCoulombMethods:
         assert calc._coulomb_method == method
         assert calc.coulomb_cutoff is None
         if calc.external_coulomb is not None:
-            assert calc.external_coulomb.ewald_accuracy == pytest.approx(1e-5)
+            assert calc.external_coulomb.ewald_accuracy == pytest.approx(1e-6)
 
     @pytest.mark.parametrize("method", ["ewald", "pme"])
     def test_set_coulomb_ewald_pme_custom_accuracy(self, method):

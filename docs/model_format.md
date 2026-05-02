@@ -417,10 +417,10 @@ assert force_diff < 1e-4, "Force mismatch!"
 calc_v2.set_lrcoulomb_method("dsf", cutoff=15.0)
 result_dsf = calc_v2(data)
 
-calc_v2.set_lrcoulomb_method("ewald", ewald_accuracy=1e-5)
+calc_v2.set_lrcoulomb_method("ewald", ewald_accuracy=1e-6)
 result_ewald = calc_v2(data)
 
-calc_v2.set_lrcoulomb_method("pme", ewald_accuracy=1e-5)
+calc_v2.set_lrcoulomb_method("pme", ewald_accuracy=1e-6)
 result_pme = calc_v2(data)
 
 # v1 models show warning but don't change

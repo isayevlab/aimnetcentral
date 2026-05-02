@@ -687,7 +687,7 @@ class AIMNet2Calculator:
         method: Literal["simple", "dsf", "ewald", "pme"],
         cutoff: float = 15.0,
         dsf_alpha: float = 0.2,
-        ewald_accuracy: float = 1e-5,
+        ewald_accuracy: float = 1e-6,
     ):
         """Set the long-range Coulomb method.
 
@@ -705,7 +705,7 @@ class AIMNet2Calculator:
             Target accuracy for Ewald and PME summation. Controls the
             real-space and reciprocal-space cutoffs (and PME mesh dimensions).
             Smaller values give higher accuracy at the cost of more
-            computation. Default is 1e-5.
+            computation. Default is 1e-6, matching the nvalchemiops default.
 
             The Ewald cutoffs follow the Kolafa-Perram formula:
             - eta = (V^2 / N)^(1/6) / sqrt(2*pi)
@@ -916,7 +916,9 @@ class AIMNet2Calculator:
         coulomb_terms = None
         if self.external_coulomb is not None:
             training_derivatives = hessian or (
-                self.external_coulomb.method in ("ewald", "pme") and getattr(self, "_train", False) and (forces or stress)
+                self.external_coulomb.method in ("ewald", "pme")
+                and getattr(self, "_train", False)
+                and (forces or stress)
             )
             kwargs: dict[str, Any] = {
                 "compute_forces": forces,

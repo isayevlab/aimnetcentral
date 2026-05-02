@@ -191,8 +191,8 @@ Two external modules add long-range physics that the short-range NN cannot captu
 | --- | --- | --- |
 | `simple` | Non-periodic, small systems | All pairs |
 | `dsf` | Periodic systems | Finite cutoff (default 15 A) |
-| `ewald` | Periodic, high accuracy | Estimated from `ewald_accuracy` (default `1e-5`) |
-| `pme` | Periodic, large cells | Estimated from `ewald_accuracy` (default `1e-5`) |
+| `ewald` | Periodic, high accuracy | Estimated from `ewald_accuracy` (default `1e-6`) |
+| `pme` | Periodic, large cells | Estimated from `ewald_accuracy` (default `1e-6`) |
 
 The Coulomb module uses the charges predicted by the equilibration loop and subtracts the short-range Coulomb component (already learned by the NN) to avoid double-counting.
 

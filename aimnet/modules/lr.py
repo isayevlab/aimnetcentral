@@ -282,7 +282,7 @@ class LRCoulomb(nn.Module):
     ewald_accuracy : float
         Target accuracy for Ewald and PME summation. Controls real-space and
         reciprocal-space cutoffs (and PME mesh dimensions). Lower values give
-        higher accuracy at higher cost. Default is 1e-5.
+        higher accuracy at higher cost. Default is 1e-6.
     subtract_sr : bool
         Whether to subtract short-range contribution. Default is True.
     envelope : str
@@ -319,7 +319,7 @@ class LRCoulomb(nn.Module):
         method: str = "simple",
         dsf_alpha: float = 0.2,
         dsf_rc: float = 15.0,
-        ewald_accuracy: float = 1e-5,
+        ewald_accuracy: float = 1e-6,
         subtract_sr: bool = True,
         envelope: str = "exp",
     ):

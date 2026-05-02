@@ -318,7 +318,7 @@ forces = result["forces"]
 charges = result["charges"]
 ```
 
-### `set_lrcoulomb_method(method, cutoff=15.0, dsf_alpha=0.2, ewald_accuracy=1e-5)`
+### `set_lrcoulomb_method(method, cutoff=15.0, dsf_alpha=0.2, ewald_accuracy=1e-6)`
 
 Set the long-range Coulomb method.
 
@@ -329,7 +329,7 @@ Set the long-range Coulomb method.
 | `method` | `str` | required | `"simple"`, `"dsf"`, `"ewald"`, or `"pme"` |
 | `cutoff` | `float` | `15.0` | Cutoff for DSF method (Å). Not used for Ewald/PME. |
 | `dsf_alpha` | `float` | `0.2` | Alpha parameter for DSF method |
-| `ewald_accuracy` | `float` | `1e-5` | Target accuracy for Ewald and PME |
+| `ewald_accuracy` | `float` | `1e-6` | Target accuracy for Ewald and PME |
 
 **Behavior:**
 
@@ -342,7 +342,7 @@ Set the long-range Coulomb method.
 
 **Ewald / PME Accuracy:**
 
-For both Ewald and PME, `ewald_accuracy` (default `1e-5`) controls the splitting parameter, real-space cutoff, and reciprocal-space resolution. The calculator estimates these per call from the cell geometry; smaller values give tighter convergence at higher cost.
+For both Ewald and PME, `ewald_accuracy` (default `1e-6`, matching the nvalchemiops default) controls the splitting parameter, real-space cutoff, and reciprocal-space resolution. The calculator estimates these per call from the cell geometry; smaller values give tighter convergence at higher cost.
 
 **Derivative Support:**
 
@@ -364,8 +364,8 @@ See [Long-Range Methods → Derivative Support](long_range.md#derivative-support
 ```python
 calc = AIMNet2Calculator("aimnet2")
 calc.set_lrcoulomb_method("dsf", cutoff=12.0, dsf_alpha=0.20)
-calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-5)
-calc.set_lrcoulomb_method("pme", ewald_accuracy=1e-5)
+calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-6)
+calc.set_lrcoulomb_method("pme", ewald_accuracy=1e-6)
 ```
 
 ### `set_lr_cutoff(cutoff)`
@@ -684,7 +684,7 @@ Explicit `needs_coulomb` / `needs_dispersion` flags override metadata.
 | Parameter | Default | Description |
 | --- | --- | --- |
 | `set_lrcoulomb_method(..., cutoff=15.0)` | `15.0` | Default LR cutoff for DSF (Å) |
-| `set_lrcoulomb_method(..., ewald_accuracy=1e-5)` | `1e-5` | Default accuracy for Ewald and PME |
+| `set_lrcoulomb_method(..., ewald_accuracy=1e-6)` | `1e-6` | Default accuracy for Ewald and PME |
 | `set_dftd3_cutoff(..., smoothing_fraction=0.2)` | `0.2` | DFTD3 smoothing width as fraction of cutoff |
 
 ### Coulomb Defaults
@@ -882,8 +882,8 @@ for _ in range(1000):
 | Small non-PBC | `"simple"` | N/A | All pairs, exact |
 | Large non-PBC | `"dsf"` | cutoff=12-15 Å | O(N) scaling |
 | PBC systems | `"dsf"` | cutoff=12-15 Å | Fast and robust default |
-| High-accuracy PBC | `"ewald"` | `ewald_accuracy=1e-5` | Reciprocal sum on k-grid |
-| Large PBC cells | `"pme"` | `ewald_accuracy=1e-5` | Better asymptotic scaling than Ewald |
+| High-accuracy PBC | `"ewald"` | `ewald_accuracy=1e-6` | Reciprocal sum on k-grid |
+| Large PBC cells | `"pme"` | `ewald_accuracy=1e-6` | Better asymptotic scaling than Ewald |
 
 ```python
 calc.set_lrcoulomb_method("simple")

@@ -251,14 +251,14 @@ print(f"Water dipole: {np.linalg.norm(dipole):.3f} e*A")
 
 ### Single Molecule in a Periodic Box
 
-For charged molecules in a periodic box, Ewald summation (or PME for larger cells) handles the long-range electrostatics with controllable accuracy. Both methods share the `ewald_accuracy` parameter (default `1e-5`) and use a per-call neighbor list sized to the estimated real-space cutoff:
+For charged molecules in a periodic box, Ewald summation (or PME for larger cells) handles the long-range electrostatics with controllable accuracy. Both methods share the `ewald_accuracy` parameter (default `1e-6`, matching the nvalchemiops default) and use a per-call neighbor list sized to the estimated real-space cutoff:
 
 ```python
 import torch
 from aimnet.calculators import AIMNet2Calculator
 
 calc = AIMNet2Calculator("aimnet2")
-calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-5)
+calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-6)
 
 cell = torch.tensor([
     [15.0, 0.0, 0.0],
@@ -273,7 +273,7 @@ result = calc({
     "cell": cell,
 }, forces=True, stress=True)
 
-calc.set_lrcoulomb_method("pme", ewald_accuracy=1e-5)
+calc.set_lrcoulomb_method("pme", ewald_accuracy=1e-6)
 result_pme = calc({
     "coord": coords_ion,
     "numbers": numbers_ion,

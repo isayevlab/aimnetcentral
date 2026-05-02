@@ -98,18 +98,18 @@ calc.set_lrcoulomb_method("dsf", cutoff=15.0, dsf_alpha=0.2)
 **Configuration:**
 
 ```python
-# Default accuracy (1e-5)
+# Default accuracy (1e-6)
 calc.set_lrcoulomb_method("ewald")
 
 # Tighter accuracy (more expensive)
-calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-6)
+calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-7)
 ```
 
 The Ewald and PME backends ignore the public `cutoff` argument; the calculator estimates a per-system real-space cutoff (and `alpha`/k-space cutoff or PME mesh) from `ewald_accuracy` and the cell geometry on every call.
 
 **Accuracy Parameter:**
 
-The `ewald_accuracy` parameter controls the splitting parameter, the real-space cutoff, and the reciprocal-space cutoff (or PME mesh dimensions). Lower values give higher precision at higher cost. The calculator default is `1e-5`.
+The `ewald_accuracy` parameter controls the splitting parameter, the real-space cutoff, and the reciprocal-space cutoff (or PME mesh dimensions). Lower values give higher precision at higher cost. The calculator default is `1e-6`, matching the nvalchemiops default.
 
 `nvalchemiops` estimates Ewald parameters from system geometry (similar to the standard formulas):
 
@@ -122,7 +122,7 @@ where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and \
 **Characteristics:**
 
 - Splits Coulomb into real-space + reciprocal-space + self-energy + background terms
-- Configurable accuracy target (default `1e-5`)
+- Configurable accuracy target (default `1e-6`)
 - Splitting parameter and cutoffs estimated per call from `ewald_accuracy`
 - Per-call dense neighbor list sized to the real-space cutoff
 - Most accurate method for periodic systems
@@ -143,14 +143,14 @@ where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and \
 **Configuration:**
 
 ```python
-# Default accuracy (1e-5)
+# Default accuracy (1e-6)
 calc.set_lrcoulomb_method("pme")
 
 # Tighter accuracy (more expensive)
-calc.set_lrcoulomb_method("pme", ewald_accuracy=1e-6)
+calc.set_lrcoulomb_method("pme", ewald_accuracy=1e-7)
 ```
 
-PME shares the `ewald_accuracy` knob with Ewald (default `1e-5`). The real-space cutoff, splitting parameter, and B-spline mesh dimensions are all estimated from this accuracy and the cell geometry; the mesh is not configured manually.
+PME shares the `ewald_accuracy` knob with Ewald (default `1e-6`). The real-space cutoff, splitting parameter, and B-spline mesh dimensions are all estimated from this accuracy and the cell geometry; the mesh is not configured manually.
 
 **Characteristics:**
 
@@ -171,7 +171,7 @@ The three nvalchemiops-backed methods differ in how they expose forces and stres
 | --- | --- | --- | --- | --- |
 | Simple | O(N²) fully connected | No | Small molecules, quick tests | Auto-switches for PBC |
 | DSF | O(N) with neighbor lists | Yes | Production MD, large systems | Inference derivatives only |
-| Ewald | O(N · K) reciprocal + O(N) real-space | Yes | High-accuracy benchmarks | Default `ewald_accuracy=1e-5` |
+| Ewald | O(N · K) reciprocal + O(N) real-space | Yes | High-accuracy benchmarks | Default `ewald_accuracy=1e-6` |
 | PME | O(N log N) via B-spline + FFT | Yes | Large-cell production MD | Scales better than Ewald |
 
 **Accuracy hierarchy:** Ewald ≈ PME > DSF > Simple (for PBC)
@@ -231,7 +231,7 @@ If `subtract_sr=True`, the SR term is subtracted.
 
 3. **Ewald**
 
-Uses `nvalchemiops.torch.interactions.electrostatics.ewald_summation`. The calculator estimates the splitting parameter, real-space cutoff, and reciprocal-space cutoff per call from `ewald_accuracy` (default `1e-5`) and the cell, then builds a per-call dense neighbor list (`nbmat_coulomb`/`shifts_coulomb`, also aliased as `nbmat_lr`/`shifts_lr`).
+Uses `nvalchemiops.torch.interactions.electrostatics.ewald_summation`. The calculator estimates the splitting parameter, real-space cutoff, and reciprocal-space cutoff per call from `ewald_accuracy` (default `1e-6`) and the cell, then builds a per-call dense neighbor list (`nbmat_coulomb`/`shifts_coulomb`, also aliased as `nbmat_lr`/`shifts_lr`).
 
 The custom AIMNet wrapper exposes nvalchemiops forces, charge gradients, and virial through PyTorch autograd without requiring second derivatives of the underlying Warp kernels.
 

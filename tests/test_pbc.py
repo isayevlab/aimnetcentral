@@ -1018,7 +1018,7 @@ class TestNvAlchemiCoulombBackend:
                 })["energy"].item()
                 stress_fd[i, j] = (e_p - e_m) / (2 * delta * volume)
 
-        # Loose tolerance: NN energy + Ewald accuracy 1e-5 + FD step noise.
+        # Loose tolerance: NN energy + Ewald accuracy 1e-6 + FD step noise.
         assert np.abs(stress_autograd - stress_fd).max() < 5e-3, (
             f"{method}: stress mismatch\nautograd={stress_autograd}\nfd      ={stress_fd}"
         )

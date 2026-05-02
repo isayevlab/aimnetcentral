@@ -93,7 +93,7 @@ The default parameters (`cutoff=15.0`, `dsf_alpha=0.2`) work well for most molec
 
 ### Ewald (High-Accuracy Benchmarks)
 
-Ewald summation splits the Coulomb sum into real-space and reciprocal-space components. The splitting parameter and real/reciprocal cutoffs are estimated per call from `ewald_accuracy` (default `1e-5`):
+Ewald summation splits the Coulomb sum into real-space and reciprocal-space components. The splitting parameter and real/reciprocal cutoffs are estimated per call from `ewald_accuracy` (default `1e-6`, matching the nvalchemiops default):
 
 ```python
 calc.base_calc.set_lrcoulomb_method("ewald")
@@ -132,10 +132,10 @@ You can verify convergence by comparing DSF, Ewald, and PME on the same system:
 calc.base_calc.set_lrcoulomb_method("dsf", cutoff=15.0)
 energy_dsf = atoms.get_potential_energy()
 
-calc.base_calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-5)
+calc.base_calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-6)
 energy_ewald = atoms.get_potential_energy()
 
-calc.base_calc.set_lrcoulomb_method("pme", ewald_accuracy=1e-5)
+calc.base_calc.set_lrcoulomb_method("pme", ewald_accuracy=1e-6)
 energy_pme = atoms.get_potential_energy()
 
 print(f"DSF energy:   {energy_dsf:.6f} eV")
@@ -240,8 +240,8 @@ print(f"Cell angles:  {atoms.cell.angles()}")
 | --- | --- | --- | --- | --- |
 | `simple` | O(N^2) | No | Exact (non-PBC) | Auto-switches to DSF for PBC |
 | `dsf` | O(N) | Yes | `cutoff`, `dsf_alpha` | Routine PBC, MD, optimization |
-| `ewald` | ~O(N^{3/2}) | Yes | `ewald_accuracy` (default `1e-5`) | High-accuracy reference |
-| `pme` | ~O(N log N) | Yes | `ewald_accuracy` (default `1e-5`) | Large cells |
+| `ewald` | ~O(N^{3/2}) | Yes | `ewald_accuracy` (default `1e-6`) | High-accuracy reference |
+| `pme` | ~O(N log N) | Yes | `ewald_accuracy` (default `1e-6`) | Large cells |
 
 ## What's Next
 

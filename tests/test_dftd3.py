@@ -590,9 +590,7 @@ class TestDFTD3ForwardTerms:
         template = _setup_pbc_dftd3_data(coord_real, cell0, numbers_real, device)
 
         # forces+virial in one call
-        _, terms_both = module(
-            dict(template), compute_forces=True, compute_virial=True, return_terms=True
-        )
+        _, terms_both = module(dict(template), compute_forces=True, compute_virial=True, return_terms=True)
         assert terms_both is not None
         assert terms_both.forces is not None
         assert terms_both.virial is not None
