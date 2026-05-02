@@ -105,6 +105,31 @@ def setup_dftd3_data_mode_1(device, n_atoms=5):
     return data
 
 
+def _central_fd_hessian(energy_fn, coord_flat: torch.Tensor, step: float = 5e-3) -> torch.Tensor:
+    """Central finite-difference Hessian for small coordinate-only test systems."""
+    coord0 = coord_flat.detach()
+    ndim = coord0.numel()
+    hessian = torch.empty(ndim, ndim, dtype=coord0.dtype, device=coord0.device)
+    eye = torch.eye(ndim, dtype=coord0.dtype, device=coord0.device)
+    energy0 = energy_fn(coord0)
+
+    for i in range(ndim):
+        e_i = eye[i]
+        e_plus = energy_fn(coord0 + step * e_i)
+        e_minus = energy_fn(coord0 - step * e_i)
+        hessian[i, i] = (e_plus - 2.0 * energy0 + e_minus) / (step * step)
+        for j in range(i + 1, ndim):
+            e_j = eye[j]
+            e_pp = energy_fn(coord0 + step * e_i + step * e_j)
+            e_pm = energy_fn(coord0 + step * e_i - step * e_j)
+            e_mp = energy_fn(coord0 - step * e_i + step * e_j)
+            e_mm = energy_fn(coord0 - step * e_i - step * e_j)
+            value = (e_pp - e_pm - e_mp + e_mm) / (4.0 * step * step)
+            hessian[i, j] = value
+            hessian[j, i] = value
+    return hessian
+
+
 # =============================================================================
 # Initialization Tests
 # =============================================================================
@@ -480,6 +505,27 @@ class TestDFTD3ExplicitDerivatives:
         assert torch.isfinite(second).all()
         assert second.abs().sum() > 0
 
+    def test_hessian_path_matches_energy_finite_difference(self, device):
+        """Pure-torch DFTD3 Hessian matches central FD on its own energy."""
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, cutoff=8.0).to(device=device, dtype=torch.float64)
+
+        coord0 = torch.tensor([[0.0, 0.0, 0.0], [1.65, 0.10, 0.0]], dtype=torch.float64, device=device)
+        numbers = torch.tensor([[6, 8]], device=device)
+        template = {"coord": coord0.unsqueeze(0), "numbers": numbers}
+        template = add_dftd3_keys(template, device, cutoff=8.0)
+        template = nbops.set_nb_mode(template)
+        template = nbops.calc_masks(template)
+
+        def energy_fn(coord_flat: torch.Tensor) -> torch.Tensor:
+            data = {**template, "coord": coord_flat.reshape(1, 2, 3)}
+            return module._compute_energy_torch(data).sum()
+
+        coord_flat = coord0.reshape(-1)
+        h_auto = torch.autograd.functional.hessian(energy_fn, coord_flat)
+        h_fd = _central_fd_hessian(energy_fn, coord_flat)
+
+        torch.testing.assert_close(h_auto, h_fd, rtol=5e-3, atol=5e-3)
+
 
 # =============================================================================
 # Forward explicit terms (calculator stress path)
@@ -628,6 +674,27 @@ class TestDFTD3ForwardTerms:
         second = torch.autograd.grad(grad_coord[:-1].pow(2).sum(), coord_unstrained)[0]
         assert torch.isfinite(second).all()
         assert second.abs().sum() > 0
+
+    def test_hessian_path_pbc_hessian_matches_energy_finite_difference(self, device):
+        """PBC pure-torch DFTD3 Hessian matches central FD with a fixed neighbor list."""
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, cutoff=8.0).to(device=device, dtype=torch.float64)
+
+        cell = torch.diag(torch.tensor([10.0, 11.0, 12.0], dtype=torch.float64, device=device))
+        coord0 = torch.tensor([[2.0, 2.0, 2.0], [3.65, 2.15, 2.05]], dtype=torch.float64, device=device)
+        numbers = torch.tensor([6, 8], device=device)
+        template = _setup_pbc_dftd3_data(coord0, cell, numbers, device, cutoff=8.0)
+
+        def energy_fn(coord_flat: torch.Tensor) -> torch.Tensor:
+            coord_real = coord_flat.reshape(2, 3)
+            coord = torch.cat([coord_real, coord_real.new_zeros((1, 3))], dim=0)
+            data = {**template, "coord": coord}
+            return module._compute_energy_torch(data).sum()
+
+        coord_flat = coord0.reshape(-1)
+        h_auto = torch.autograd.functional.hessian(energy_fn, coord_flat)
+        h_fd = _central_fd_hessian(energy_fn, coord_flat)
+
+        torch.testing.assert_close(h_auto, h_fd, rtol=5e-3, atol=5e-3)
 
     def test_explicit_virial_matches_finite_difference(self, pbc_crystal_small, device):
         """Explicit virial from ``forward(...)`` matches row-vector strain FD.
