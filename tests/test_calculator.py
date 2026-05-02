@@ -105,11 +105,11 @@ class RecordingExternalCoulomb:
         self._forces = forces
         self._virial = virial
 
-    def __call__(self, data, *, compute_forces=False, compute_virial=False, return_terms=False, **kwargs):
+    def __call__(self, data, *, compute_forces=False, compute_virial=False, **kwargs):
         from aimnet.modules.lr import ExternalDerivativeTerms
 
         self.calls.append((compute_forces, compute_virial))
-        self.kwargs.append({"return_terms": return_terms, **kwargs})
+        self.kwargs.append(kwargs)
         data["energy"] = data.get("energy", torch.zeros(1)).double() + torch.ones(1, dtype=torch.float64)
         terms = None
         if (compute_forces and self._forces is not None) or (compute_virial and self._virial is not None):
@@ -117,7 +117,7 @@ class RecordingExternalCoulomb:
                 forces=self._forces if compute_forces else None,
                 virial=self._virial if compute_virial else None,
             )
-        if return_terms:
+        if compute_forces or compute_virial:
             return data, terms
         return data
 
@@ -127,13 +127,15 @@ class RecordingExternalDFTD3:
 
     def __init__(self, *, forces: torch.Tensor | None = None, virial: torch.Tensor | None = None):
         self.calls = []
+        self.kwargs = []
         self._forces = forces
         self._virial = virial
 
-    def __call__(self, data, *, compute_forces=False, compute_virial=False, return_terms=False, hessian=False):
+    def __call__(self, data, *, compute_forces=False, compute_virial=False, hessian=False, **kwargs):
         from aimnet.modules.lr import ExternalDerivativeTerms
 
         self.calls.append((compute_forces, compute_virial))
+        self.kwargs.append({"hessian": hessian, **kwargs})
         data["energy"] = data.get("energy", torch.zeros(1)).double() + torch.ones(1, dtype=torch.float64)
         if hessian:
             return data
@@ -143,7 +145,7 @@ class RecordingExternalDFTD3:
                 forces=self._forces if compute_forces else None,
                 virial=self._virial if compute_virial else None,
             )
-        if return_terms:
+        if compute_forces or compute_virial:
             return data, terms
         return data
 
@@ -257,6 +259,23 @@ class TestCoulombMethods:
         assert torch.isfinite(res["hessian"]).all()
         assert res["hessian"].abs().sum() > 0
 
+    def test_set_grad_tensors_preserves_external_strain_inputs(self):
+        """Stress setup stores shared explicit kwargs for external strain wrappers."""
+        calc = AIMNet2Calculator.__new__(AIMNet2Calculator)
+        data = {
+            "coord": torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0]]),
+            "cell": torch.eye(3),
+        }
+
+        out = calc.set_grad_tensors(data, stress=True)
+
+        strain_inputs = calc._external_strain_inputs
+        assert strain_inputs is not None
+        assert set(strain_inputs) == {"coord_unstrained", "cell_unstrained", "scaling"}
+        assert "_dftd3_coord_unstrained" not in out
+        assert "_dftd3_cell_unstrained" not in out
+        assert "_dftd3_scaling" not in out
+
     def test_invalid_coulomb_method(self):
         """Test that invalid Coulomb method raises ValueError."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
@@ -276,8 +295,8 @@ class TestCoulombMethods:
         assert (calc._coulomb_method, calc._coulomb_cutoff, calc.cutoff_lr) == before
 
     @pytest.mark.parametrize("method", COULOMB_METHODS)
-    def test_external_coulomb_uses_forward_terms(self, method):
-        """All external Coulomb methods are run through the common forward-terms interface."""
+    def test_external_coulomb_uses_derivative_flags(self, method):
+        """All external Coulomb methods are run through the common derivative flag interface."""
         calc = AIMNet2Calculator.__new__(AIMNet2Calculator)
         calc.external_coulomb = RecordingExternalCoulomb(method)
         calc.external_dftd3 = None
@@ -286,7 +305,6 @@ class TestCoulombMethods:
 
         assert terms is None
         assert calc.external_coulomb.calls == [(True, True)]
-        assert calc.external_coulomb.kwargs[0]["return_terms"] is True
         torch.testing.assert_close(data["energy"], torch.ones(1, dtype=torch.float64))
 
     @pytest.mark.parametrize("method", ["ewald", "pme"])
@@ -315,8 +333,8 @@ class TestCoulombMethods:
         kwargs = calc.external_coulomb.kwargs[0]
         assert kwargs["training_derivatives"] is False
 
-    def test_external_dftd3_uses_forward_terms(self):
-        """Calculator dispatches DFTD3 through ``forward(..., return_terms=True)``."""
+    def test_external_dftd3_uses_derivative_flags(self):
+        """Calculator dispatches DFTD3 through the shared derivative flag interface."""
         calc = AIMNet2Calculator.__new__(AIMNet2Calculator)
         calc.external_coulomb = None
         calc.external_dftd3 = RecordingExternalDFTD3()

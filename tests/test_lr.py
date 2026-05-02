@@ -172,7 +172,7 @@ class TestLRCoulombDSF:
         module = LRCoulomb(method="dsf", subtract_sr=False).to(device)
         data = setup_data_mode_0(device, n_atoms=5)
 
-        result, terms = module(data, compute_forces=True, return_terms=True)
+        result, terms = module(data, compute_forces=True)
 
         assert "e_h" in result
         assert terms is not None
@@ -592,7 +592,7 @@ class TestLRCoulombDSFPBC:
         n_atoms = data["coord"].shape[0]
         data["charges"] = _random_padded_charges(n_atoms, device)
 
-        result, terms = module(data, compute_forces=True, return_terms=True)
+        result, terms = module(data, compute_forces=True)
 
         assert "e_h" in result
         assert terms is not None
@@ -644,7 +644,7 @@ class TestLRCoulombDSFPBC:
             "mol_idx": torch.arange(B, device=device).repeat_interleave(N),
             "mol_sizes": torch.full((B,), N, device=device, dtype=torch.long),
         }
-        result_mode2, terms_mode2 = module(data_mode2, compute_forces=True, return_terms=True)
+        result_mode2, terms_mode2 = module(data_mode2, compute_forces=True)
         e_mode2 = result_mode2["e_h"]
         assert terms_mode2 is not None and terms_mode2.forces is not None
         assert terms_mode2.forces.shape == coord.shape
@@ -664,7 +664,7 @@ class TestLRCoulombDSFPBC:
                 "mol_idx": torch.zeros(N, device=device, dtype=torch.long),
                 "mol_sizes": torch.tensor([N], device=device, dtype=torch.long),
             }
-            result_b, terms_b = module(data_b, compute_forces=True, return_terms=True)
+            result_b, terms_b = module(data_b, compute_forces=True)
             assert terms_b is not None and terms_b.forces is not None
             e_ref.append(result_b["e_h"])
             f_ref.append(terms_b.forces.squeeze(0))
@@ -704,7 +704,7 @@ class TestLRCoulombDSFPBC:
             "mol_idx": torch.arange(B, device=device).repeat_interleave(N),
             "mol_sizes": torch.tensor([N - 1, N], device=device, dtype=torch.long),
         }
-        result_mode0, terms_mode0 = module(data_mode0, compute_forces=True, return_terms=True)
+        result_mode0, terms_mode0 = module(data_mode0, compute_forces=True)
         e_mode0 = result_mode0["e_h"]
         assert terms_mode0 is not None and terms_mode0.forces is not None
         assert terms_mode0.forces.shape == coord.shape
@@ -723,7 +723,7 @@ class TestLRCoulombDSFPBC:
                 "mol_idx": torch.zeros(N, device=device, dtype=torch.long),
                 "mol_sizes": data_mode0["mol_sizes"][b : b + 1],
             }
-            result_b, terms_b = module(data_b, compute_forces=True, return_terms=True)
+            result_b, terms_b = module(data_b, compute_forces=True)
             assert terms_b is not None and terms_b.forces is not None
             e_ref.append(result_b["e_h"])
             f_ref.append(terms_b.forces.squeeze(0))
@@ -767,7 +767,7 @@ class TestLRCoulombDSFPBC:
         assert torch.all(nbmat[padded_idx] == fill_value)
         assert torch.all(nbmat[-1] == fill_value)
 
-        result_padded, terms_padded = module(data_padded, compute_forces=True, return_terms=True)
+        result_padded, terms_padded = module(data_padded, compute_forces=True)
         assert terms_padded is not None and terms_padded.forces is not None
 
         data_ref = {
@@ -780,7 +780,7 @@ class TestLRCoulombDSFPBC:
             "mol_idx": torch.zeros(2, device=device, dtype=torch.long),
             "mol_sizes": torch.tensor([2], device=device, dtype=torch.long),
         }
-        result_ref, terms_ref = module(data_ref, compute_forces=True, return_terms=True)
+        result_ref, terms_ref = module(data_ref, compute_forces=True)
         assert terms_ref is not None and terms_ref.forces is not None
 
         torch.testing.assert_close(result_padded["e_h"], result_ref["e_h"], atol=1e-5, rtol=1e-5)
@@ -896,7 +896,7 @@ class TestLRCoulombBackendInterface:
         n_atoms = data["coord"].shape[0]
         data["charges"] = _neutral_padded_charges(n_atoms, device)
 
-        result, terms = module(data, compute_forces=True, compute_virial=True, return_terms=True)
+        result, terms = module(data, compute_forces=True, compute_virial=True)
 
         assert "e_h" in result
         assert torch.isfinite(result["e_h"]).all()
@@ -918,7 +918,6 @@ class TestLRCoulombBackendInterface:
             data,
             compute_forces=True,
             compute_virial=True,
-            return_terms=True,
             training_derivatives=True,
         )
 
@@ -1171,7 +1170,7 @@ class TestLRCoulombTraining:
         f_autograd = -torch.autograd.grad(energy, data["coord"])[0]
 
         data_hybrid = {**data, "coord": data["coord"].detach(), "charges": data["charges"].detach()}
-        _result, terms = coulomb(data_hybrid, compute_forces=True, return_terms=True)
+        _result, terms = coulomb(data_hybrid, compute_forces=True)
         assert terms is not None and terms.forces is not None
         torch.testing.assert_close(f_autograd, terms.forces, atol=1e-5, rtol=1e-5)
         assert torch.allclose(f_autograd[-1], torch.zeros(3, device=device))

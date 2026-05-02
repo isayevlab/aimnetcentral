@@ -174,7 +174,7 @@ class TestDSFPeriodic:
         n_atoms = data["coord"].shape[0]
         data["charges"] = _random_padded_charges(n_atoms, device)
 
-        result, terms = module(data, compute_forces=True, return_terms=True)
+        result, terms = module(data, compute_forces=True)
 
         assert "e_h" in result
         assert terms is not None
@@ -191,7 +191,7 @@ class TestDSFPeriodic:
         n_atoms = data["coord"].shape[0]
         data["charges"] = _random_padded_charges(n_atoms, device)
 
-        _result, terms = module(data.copy(), compute_virial=True, return_terms=True)
+        _result, terms = module(data.copy(), compute_virial=True)
         assert terms is not None and terms.virial is not None
         assert not terms.virial.requires_grad
         volume = data["cell"].det().abs()

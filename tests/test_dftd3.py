@@ -141,16 +141,6 @@ class TestDFTD3Init:
         assert module.c6ab.shape == (95, 95, 5, 5)
         assert module.cn_ref.shape == (95, 95, 5, 5)
 
-    def test_derivative_flags_require_terms(self, device):
-        """Explicit derivative requests require the tuple-return path."""
-        module = DFTD3(s8=0.5, a1=0.4, a2=4.0).to(device)
-        data = setup_dftd3_data_mode_0(device, n_atoms=3)
-
-        with pytest.raises(ValueError, match="return_terms=True"):
-            module(data, compute_forces=True)
-        with pytest.raises(ValueError, match="return_terms=True"):
-            module(data, compute_virial=True)
-
 
 # =============================================================================
 # Forward Pass Tests
@@ -167,7 +157,7 @@ class TestDFTD3Forward:
         data = setup_dftd3_data_mode_0(device, n_atoms=5)
         data["coord"] = data["coord"].requires_grad_(True)
 
-        result, terms = module(data, compute_forces=True, return_terms=True)
+        result, terms = module(data, compute_forces=True)
 
         assert "energy" in result
         assert result["energy"].shape == (1,)  # Per-molecule energy
@@ -180,7 +170,7 @@ class TestDFTD3Forward:
         data = setup_dftd3_data_mode_1(device, n_atoms=5)
         data["coord"] = data["coord"].requires_grad_(True)
 
-        result, terms = module(data, compute_forces=True, return_terms=True)
+        result, terms = module(data, compute_forces=True)
 
         assert "energy" in result
         assert result["energy"].shape == (1,)
@@ -211,7 +201,7 @@ class TestDFTD3Forward:
         data = setup_dftd3_data_mode_0(device, n_atoms=5)
         data["coord"] = data["coord"].requires_grad_(True)
 
-        result, terms = module(data, compute_forces=True, return_terms=True)
+        result, terms = module(data, compute_forces=True)
 
         assert torch.isfinite(result["energy"]).all()
         assert terms is not None and terms.forces is not None
@@ -284,7 +274,7 @@ class TestDFTD3Additive:
         initial_forces = torch.ones((1, 3, 3), device=device) * 0.5
         data["forces"] = initial_forces.clone()
 
-        result, terms = module(data, compute_forces=True, return_terms=True)
+        result, terms = module(data, compute_forces=True)
 
         torch.testing.assert_close(result["forces"], initial_forces)
         assert terms is not None and terms.forces is not None
@@ -383,7 +373,7 @@ class TestDFTD3Batching:
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
-        result, terms = module(data, compute_forces=True, return_terms=True)
+        result, terms = module(data, compute_forces=True)
 
         assert result["energy"].shape == (2,)
         assert torch.isfinite(result["energy"]).all()
@@ -422,7 +412,7 @@ class TestDFTD3ExplicitDerivatives:
         assert coord.grad is not None
 
         terms_data = {**data, "coord": coord.detach()}
-        _, terms = module(terms_data, compute_forces=True, return_terms=True)
+        _, terms = module(terms_data, compute_forces=True)
         assert terms is not None and terms.forces is not None
         torch.testing.assert_close(-coord.grad, terms.forces, rtol=1e-4, atol=1e-5)
 
@@ -455,7 +445,7 @@ class TestDFTD3ExplicitDerivatives:
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
-        result, terms = module(data.copy(), compute_forces=True, return_terms=True)
+        result, terms = module(data.copy(), compute_forces=True)
 
         assert terms is not None and terms.forces is not None
         assert not result["energy"].requires_grad
@@ -482,7 +472,7 @@ class TestDFTD3ExplicitDerivatives:
         grad_coord = torch.autograd.grad(out["energy"].sum(), coord, create_graph=True)[0]
 
         terms_data = {**data, "coord": coord.detach()}
-        _, terms = module(terms_data, compute_forces=True, return_terms=True)
+        _, terms = module(terms_data, compute_forces=True)
         assert terms is not None and terms.forces is not None
         torch.testing.assert_close(-grad_coord, terms.forces, rtol=2e-3, atol=2e-4)
 
@@ -492,7 +482,7 @@ class TestDFTD3ExplicitDerivatives:
 
 
 # =============================================================================
-# Forward return_terms=True (calculator stress path)
+# Forward explicit terms (calculator stress path)
 # =============================================================================
 
 
@@ -568,16 +558,13 @@ class TestDFTD3ForwardTerms:
             **template,
             "coord": coord_unstrained @ scaling,
             "cell": cell0 @ scaling,
-            "_dftd3_coord_unstrained": coord_unstrained,
-            "_dftd3_cell_unstrained": cell0,
-            "_dftd3_scaling": scaling,
         }
 
-        out = module(data)
+        out = module(data, scaling=scaling, coord_unstrained=coord_unstrained, cell_unstrained=cell0)
         grad_coord, grad_scaling = torch.autograd.grad(out["energy"].sum(), (coord_unstrained, scaling))
 
         terms_data = _data_with_strain(template, torch.eye(3, device=device), coord_real, cell0)
-        _, terms = module(terms_data, compute_forces=True, compute_virial=True, return_terms=True)
+        _, terms = module(terms_data, compute_forces=True, compute_virial=True)
         assert terms is not None and terms.forces is not None and terms.virial is not None
         external_virial = terms.virial
         if external_virial.ndim == 3:
@@ -643,7 +630,7 @@ class TestDFTD3ForwardTerms:
         assert second.abs().sum() > 0
 
     def test_explicit_virial_matches_finite_difference(self, pbc_crystal_small, device):
-        """Explicit virial from ``forward(..., return_terms=True)`` matches row-vector strain FD.
+        """Explicit virial from ``forward(...)`` matches row-vector strain FD.
 
         The calculator consumes ``terms.virial`` via ``dedc -= terms.virial.mT``,
         so the contract is ``-terms.virial.mT == dE/dscaling``. FD is computed
@@ -661,14 +648,14 @@ class TestDFTD3ForwardTerms:
         def energy_at(scaling: torch.Tensor) -> float:
             data = _data_with_strain(template, scaling, coord_real, cell0)
             with torch.no_grad():
-                # Use the same kernel branch (compute_virial=True, return_terms=True) as the terms
+                # Use the same kernel branch (compute_virial=True) as the terms
                 # call below to avoid mixing branches across forward and FD.
-                out, _ = module(data, compute_virial=True, return_terms=True)
+                out, _ = module(data, compute_virial=True)
             return float(out["energy"].sum().item())
 
         identity = torch.eye(3, device=device)
         data0 = _data_with_strain(template, identity, coord_real, cell0)
-        _, terms = module(data0, compute_virial=True, return_terms=True)
+        _, terms = module(data0, compute_virial=True)
         assert terms is not None and terms.virial is not None
         external_virial = terms.virial.detach().cpu()
         if external_virial.ndim == 3:
@@ -697,27 +684,26 @@ class TestDFTD3ForwardTerms:
         template = _setup_pbc_dftd3_data(coord_real, cell0, numbers_real, device)
 
         data_a = dict(template)
-        _, terms_a = module(data_a, compute_forces=True, return_terms=True)
+        _, terms_a = module(data_a, compute_forces=True)
         assert terms_a is not None and terms_a.forces is not None
         forces_first = terms_a.forces.detach()
 
         data_b = dict(template)
-        _, terms = module(data_b, compute_forces=True, return_terms=True)
+        _, terms = module(data_b, compute_forces=True)
         assert terms is not None and terms.forces is not None
         forces_explicit = terms.forces.detach()
 
         torch.testing.assert_close(forces_explicit, forces_first, rtol=1e-4, atol=1e-5)
 
-    def test_no_virial_no_forces_returns_none_terms(self, pbc_crystal_small, device):
-        """When neither flag is requested, the terms object is None to mirror DSF."""
+    def test_no_virial_no_forces_returns_data(self, pbc_crystal_small, device):
+        """When neither derivative flag is requested, forward returns only data."""
         coord_real = pbc_crystal_small["coord"].to(device)
         cell0 = pbc_crystal_small["cell"].to(device)
         numbers_real = pbc_crystal_small["numbers"].to(device)
         module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, cutoff=8.0).to(device)
 
         data = _setup_pbc_dftd3_data(coord_real, cell0, numbers_real, device)
-        out, terms = module(data, return_terms=True)
-        assert terms is None
+        out = module(data)
         assert "energy" in out
 
     def test_forces_and_virial_in_one_call(self, pbc_crystal_small, device):
@@ -729,20 +715,20 @@ class TestDFTD3ForwardTerms:
         template = _setup_pbc_dftd3_data(coord_real, cell0, numbers_real, device)
 
         # forces+virial in one call
-        _, terms_both = module(dict(template), compute_forces=True, compute_virial=True, return_terms=True)
+        _, terms_both = module(dict(template), compute_forces=True, compute_virial=True)
         assert terms_both is not None
         assert terms_both.forces is not None
         assert terms_both.virial is not None
 
         # forces alone - virial omitted, forces populated
-        _, terms_f = module(dict(template), compute_forces=True, return_terms=True)
+        _, terms_f = module(dict(template), compute_forces=True)
         assert terms_f is not None
         assert terms_f.forces is not None
         assert terms_f.virial is None
         torch.testing.assert_close(terms_both.forces, terms_f.forces, rtol=1e-4, atol=1e-5)
 
         # virial alone - forces omitted, virial populated and agrees with combined.
-        _, terms_v = module(dict(template), compute_virial=True, return_terms=True)
+        _, terms_v = module(dict(template), compute_virial=True)
         assert terms_v is not None
         assert terms_v.virial is not None
         assert terms_v.forces is None

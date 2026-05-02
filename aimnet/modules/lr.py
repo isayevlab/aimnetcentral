@@ -709,15 +709,11 @@ class LRCoulomb(nn.Module):
         *,
         compute_forces: bool = False,
         compute_virial: bool = False,
-        return_terms: bool = False,
         training_derivatives: bool = False,
         scaling: Tensor | None = None,
         coord_unstrained: Tensor | None = None,
         cell_unstrained: Tensor | None = None,
     ) -> dict[str, Tensor] | tuple[dict[str, Tensor], ExternalDerivativeTerms | None]:
-        if (compute_forces or compute_virial) and not return_terms:
-            raise ValueError("compute_forces/compute_virial require return_terms=True")
-
         if self.method == "simple":
             e = self.coul_simple(data)
             terms = None
@@ -758,7 +754,7 @@ class LRCoulomb(nn.Module):
             data[self.key_out] = data[self.key_out].double() + e
         else:
             data[self.key_out] = e
-        if return_terms:
+        if compute_forces or compute_virial:
             return data, terms
         return data
 
@@ -1420,24 +1416,25 @@ class DFTD3(nn.Module):
         *,
         compute_forces: bool = False,
         compute_virial: bool = False,
-        return_terms: bool = False,
         hessian: bool = False,
+        scaling: Tensor | None = None,
+        coord_unstrained: Tensor | None = None,
+        cell_unstrained: Tensor | None = None,
     ) -> dict[str, Tensor] | tuple[dict[str, Tensor], ExternalDerivativeTerms | None]:
         """Compute DFT-D3 energy and optional explicit derivative terms.
 
         The embedded path returns an autograd-capable energy only when the
-        coordinate or calculator strain inputs require it. The external
-        ``return_terms=True`` path always returns detached energy/terms.
+        coordinate or explicit calculator strain inputs require it. Explicit
+        derivative requests return detached energy and derivative terms.
 
         The returned virial follows the calculator-side external-derivative
         convention: ``get_derivatives`` subtracts ``terms.virial.mT`` from the
         strain gradient (the same path DSF uses). FD-validated against
         ``dE/dscaling`` in :class:`tests.test_dftd3.TestDFTD3ForwardTerms`.
         """
-        if (compute_forces or compute_virial) and not return_terms:
-            raise ValueError("compute_forces/compute_virial require return_terms=True")
+        derivative_terms = compute_forces or compute_virial
         if hessian:
-            if return_terms or compute_forces or compute_virial:
+            if derivative_terms:
                 raise ValueError("hessian=True uses differentiable DFTD3 energy; do not request explicit terms")
             energy_ev = self._compute_energy_torch(data).double()
             if self.key_out in data:
@@ -1446,11 +1443,8 @@ class DFTD3(nn.Module):
                 data[self.key_out] = energy_ev
             return data
 
-        scaling = data.get("_dftd3_scaling")
-        coord_unstrained = data.get("_dftd3_coord_unstrained")
-        cell_unstrained = data.get("_dftd3_cell_unstrained")
         use_strain_wrapper = False
-        if not return_terms and isinstance(scaling, Tensor) and scaling.requires_grad:
+        if not derivative_terms and isinstance(scaling, Tensor) and scaling.requires_grad:
             if not isinstance(coord_unstrained, Tensor) or not isinstance(cell_unstrained, Tensor):
                 raise ValueError("strain-aware DFTD3 requires coord_unstrained and cell_unstrained")
             use_strain_wrapper = True
@@ -1479,7 +1473,7 @@ class DFTD3(nn.Module):
             float(self.smoothing_off),
         )
 
-        if return_terms:
+        if derivative_terms:
             with torch.no_grad():
                 energy_ev, forces_ev_flat, virial_kernel = _call_dftd3_kernel(
                     coord=kernel_inputs.coord_flat.detach(),
@@ -1569,8 +1563,7 @@ class DFTD3(nn.Module):
             external_virial = virial_kernel.detach().contiguous()
 
         terms = None
-        if compute_forces or compute_virial:
+        if derivative_terms:
             terms = ExternalDerivativeTerms(forces=forces_ev, virial=external_virial)
-        if return_terms:
             return data, terms
         return data

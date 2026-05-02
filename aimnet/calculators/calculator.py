@@ -905,11 +905,9 @@ class AIMNet2Calculator:
     ) -> tuple[dict[str, Tensor], ExternalDerivativeTerms | None]:
         """Run external Coulomb and DFTD3 modules if attached.
 
-        External backends expose a shared ``forward(..., return_terms=True)``
-        interface. Inference-style backends publish detached forces/virial
-        that :meth:`get_derivatives` adds back into autograd-derived
-        derivatives. Ewald/PME switch to their local training wrapper when
-        force/stress training or Hessians need second derivatives.
+        External backends return ``(data, terms)`` when explicit force/virial
+        derivatives are requested. Ewald/PME switch to their local training
+        wrapper when force/stress training or Hessians need second derivatives.
         """
         coulomb_terms = None
         if self.external_coulomb is not None:
@@ -924,10 +922,14 @@ class AIMNet2Calculator:
                 "training_derivatives": training_derivatives,
             }
             if training_derivatives and stress and self.external_coulomb.method in ("ewald", "pme"):
-                strain_inputs = getattr(self, "_coulomb_strain_inputs", None)
+                strain_inputs = getattr(self, "_external_strain_inputs", None)
                 if strain_inputs is not None:
                     kwargs.update(strain_inputs)
-            data, coulomb_terms = self.external_coulomb(data, return_terms=True, **kwargs)
+            result = self.external_coulomb(data, **kwargs)
+            if forces or stress:
+                data, coulomb_terms = result
+            else:
+                data = result
 
         dftd3_terms = None
         if self.external_dftd3 is not None:
@@ -938,12 +940,15 @@ class AIMNet2Calculator:
             if dftd3_energy_graph:
                 data = self.external_dftd3(data, hessian=True)
             else:
-                data, dftd3_terms = self.external_dftd3(
+                result = self.external_dftd3(
                     data,
                     compute_forces=forces,
                     compute_virial=stress,
-                    return_terms=True,
                 )
+                if forces or stress:
+                    data, dftd3_terms = result
+                else:
+                    data = result
 
         return data, _combine_external_terms(coulomb_terms, dftd3_terms)
 
@@ -1239,7 +1244,7 @@ class AIMNet2Calculator:
 
     def set_grad_tensors(self, data: dict[str, Tensor], forces=False, stress=False, hessian=False) -> dict[str, Tensor]:
         self._saved_for_grad = {}
-        self._coulomb_strain_inputs = None
+        self._external_strain_inputs = None
         if forces or hessian:
             data["coord"].requires_grad_(True)
             self._saved_for_grad["coord"] = data["coord"]
@@ -1264,15 +1269,11 @@ class AIMNet2Calculator:
                 data["coord"] = (data["coord"].unsqueeze(1) @ atom_scaling).squeeze(1)
                 data["cell"] = cell @ scaling
             self._saved_for_grad["scaling"] = scaling
-            data["_dftd3_coord_unstrained"] = coord_unstrained
-            data["_dftd3_cell_unstrained"] = cell_unstrained
-            data["_dftd3_scaling"] = scaling
-            if self.external_coulomb is not None and self._coulomb_method in ("ewald", "pme"):
-                self._coulomb_strain_inputs = {
-                    "coord_unstrained": coord_unstrained,
-                    "cell_unstrained": cell_unstrained,
-                    "scaling": scaling,
-                }
+            self._external_strain_inputs = {
+                "coord_unstrained": coord_unstrained,
+                "cell_unstrained": cell_unstrained,
+                "scaling": scaling,
+            }
         return data
 
     def keep_only(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
