@@ -13,7 +13,9 @@ from aimnet.models.base import load_model
 from aimnet.modules import DFTD3, LRCoulomb
 from aimnet.modules.lr import ExternalDerivativeTerms
 
-from .model_registry import get_model_path
+from .model_registry import get_model_path, get_registry_model_family
+
+_WB97M_D3_PARAMS = {"s6": 1.0, "s8": 0.3908, "a1": 0.566, "a2": 3.128}
 
 
 def _sum_optional_tensor(x: Tensor | None, y: Tensor | None) -> Tensor | None:
@@ -45,6 +47,34 @@ def _combine_external_terms(
         forces=_sum_optional_tensor(a.forces, b.forces),
         virial=_sum_optional_tensor(a.virial, b.virial),
     )
+
+
+def _apply_family_defaults(metadata: dict, registry_family: str | None) -> dict:
+    """Apply calculator-side compatibility defaults for released model families."""
+    metadata = dict(metadata)
+    if registry_family is not None:
+        metadata_family = metadata.get("family")
+        if metadata_family is None:
+            metadata["family"] = registry_family
+        elif metadata_family != registry_family:
+            raise ValueError(
+                f"Registry family '{registry_family}' does not match model metadata family "
+                f"'{metadata_family}'. Refusing to load ambiguous energy scale."
+            )
+
+    if metadata.get("family") == "rxn":
+        supports_charged = metadata.get("supports_charged_systems")
+        if supports_charged is None:
+            metadata["supports_charged_systems"] = False
+        elif supports_charged is not False:
+            raise ValueError("aimnet2-rxn models must declare supports_charged_systems=False.")
+
+        if not metadata.get("has_embedded_d3ts", False):
+            metadata["needs_dispersion"] = True
+            if metadata.get("d3_params") is None:
+                metadata["d3_params"] = dict(_WB97M_D3_PARAMS)
+
+    return metadata
 
 
 class AdaptiveNeighborList:
@@ -276,6 +306,7 @@ class AIMNet2Calculator:
 
         # Load model and get metadata
         metadata: dict | None = None
+        registry_family: str | None = None
         # Inline org/name pattern — exactly one slash, both segments alphanumeric+._-
         # This avoids importing optional HF deps for ordinary file paths containing slashes.
         _HF_ID_RE = re.compile(r"^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$")
@@ -304,10 +335,14 @@ class AIMNet2Calculator:
                     self.cutoff = metadata["cutoff"]
                 else:
                     # _looks_like_hf matched but it's a local file path — fall through
+                    if not os.path.isfile(model):
+                        registry_family = get_registry_model_family(model)
                     p = get_model_path(model)
                     self.model, metadata = load_model(p, device=self.device)
                     self.cutoff = metadata["cutoff"]
             else:
+                if not os.path.isfile(model):
+                    registry_family = get_registry_model_family(model)
                 p = get_model_path(model)
                 self.model, metadata = load_model(p, device=self.device)
                 self.cutoff = metadata["cutoff"]
@@ -317,6 +352,10 @@ class AIMNet2Calculator:
             metadata = getattr(self.model, "_metadata", None)
         else:
             raise TypeError("Invalid model type/name.")
+
+        if metadata is not None:
+            metadata = _apply_family_defaults(metadata, registry_family)
+            self.model._metadata = metadata
 
         # Compile model if requested
         self._was_compiled = bool(compile_model)
@@ -469,12 +508,9 @@ class AIMNet2Calculator:
         ``nn.Module`` inputs or from .pt files that don't declare ``family``
         in metadata pass ``None`` here and skip both tracking and warning.
 
-        Bypass: set the AIMNET_QUIET_FAMILY_MIX environment variable to '1'.
+        Use Python's standard warnings filters if this warning needs to be silenced.
         """
         if family is None:
-            return
-        if os.environ.get("AIMNET_QUIET_FAMILY_MIX") == "1":
-            self._constructed_families.add(family)
             return
         already_warned = family in self._constructed_families
         self._constructed_families.add(family)
@@ -482,10 +518,10 @@ class AIMNet2Calculator:
             warnings.warn(
                 f"AIMNet2Calculator instances from different families have been "
                 f"constructed in this process: {sorted(self._constructed_families)}. "
-                f"Energy scales differ across families (e.g. rxn uses a learned "
-                f"shifted-electronic scale; aimnet2-wb97m-d3 uses absolute "
-                f"electronic energies on the ~-1100 eV scale). Do not mix or compare "
-                f"energies across families. Set AIMNET_QUIET_FAMILY_MIX=1 to silence.",
+                f"Energy targets and reference conventions differ across families "
+                f"(e.g. rxn uses a learned shifted-electronic scale, while wb97m-d3 "
+                f"and b973c-d3 use different DFT targets). Do not mix or compare "
+                f"energies across families.",
                 UserWarning,
                 stacklevel=2,
             )
@@ -724,21 +760,6 @@ class AIMNet2Calculator:
         """
         if method not in ("simple", "dsf", "ewald", "pme"):
             raise ValueError(f"Invalid method: {method}")
-
-        # rxn-family guard: the 4.6 A SR/LR cancellation point is physically
-        # frozen for this family. Changing the cutoff silently breaks matching.
-        meta = self.metadata or {}
-        if meta.get("family") == "rxn":
-            sr_rc = meta.get("coulomb_sr_rc")
-            if sr_rc is not None and method in ("dsf", "ewald", "pme") and abs(cutoff - float(sr_rc)) > 1e-6:
-                warnings.warn(
-                    f"Setting Coulomb {method} cutoff to {cutoff} A on aimnet2-rxn breaks "
-                    f"the SR/LR cancellation matching (this family was trained with a "
-                    f"physically frozen crossover at coulomb_sr_rc={sr_rc} A). Use the "
-                    f"matching cutoff or revert to the default external Coulomb.",
-                    UserWarning,
-                    stacklevel=2,
-                )
 
         # Warn if model has embedded Coulomb (legacy models)
         if self._has_embedded_coulomb() and self.external_coulomb is None:

@@ -1307,8 +1307,9 @@ def test_calculator_metadata_property_returns_model_metadata():
 
     calc = AIMNet2Calculator("aimnet2", device="cpu")
     assert calc.metadata is calc.model._metadata
-    # Existing aimnet2 family declares neither family nor supports_charged_systems.
-    assert calc.metadata.get("family") is None
+    # Older .pt artifacts do not declare family, so the calculator infers it
+    # from the canonical registry key for consistent energy-scale warnings.
+    assert calc.metadata.get("family") == "wb97m-d3"
     assert calc.metadata.get("supports_charged_systems") is None
 
 
@@ -1423,12 +1424,8 @@ def test_hessian_with_compile_raises():
         calc(data, hessian=True)
 
 
-def test_set_lrcoulomb_method_warns_on_rxn_cutoff_change():
-    """For family='rxn', changing the coulomb cutoff away from coulomb_sr_rc
-    (4.6 A) must emit a UserWarning about SR/LR matching."""
-
-    import pytest
-
+def test_set_lrcoulomb_method_does_not_warn_on_rxn_cutoff_change():
+    """aimnet2-rxn uses the same external Coulomb cutoff metadata as other v2 families."""
     from aimnet.calculators import AIMNet2Calculator
 
     calc = AIMNet2Calculator("aimnet2", device="cpu")
@@ -1436,8 +1433,11 @@ def test_set_lrcoulomb_method_warns_on_rxn_cutoff_change():
     calc.model._metadata["family"] = "rxn"
     calc.model._metadata["coulomb_sr_rc"] = 4.6
 
-    with pytest.warns(UserWarning, match=r"SR/LR"):
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
         calc.set_lrcoulomb_method("dsf", cutoff=10.0)
+    rxn_cutoff_warnings = [w for w in caught if "SR/LR" in str(w.message) or "coulomb_sr_rc" in str(w.message)]
+    assert rxn_cutoff_warnings == []
 
 
 def test_set_lrcoulomb_method_no_warn_on_matching_cutoff():
@@ -1455,7 +1455,7 @@ def test_set_lrcoulomb_method_no_warn_on_matching_cutoff():
     assert sr_lr_warnings == []
 
 
-def test_constructing_two_families_warns_once(monkeypatch):
+def test_constructing_two_registered_families_warns_once():
     """Constructing calculators from two different families in one process must
     emit a UserWarning about energy-scale incompatibility."""
 
@@ -1465,25 +1465,80 @@ def test_constructing_two_families_warns_once(monkeypatch):
 
     # Reset the class-level set so test order does not pollute it.
     AIMNet2Calculator._constructed_families.clear()
-    monkeypatch.delenv("AIMNET_QUIET_FAMILY_MIX", raising=False)
+    try:
+        calc_a = AIMNet2Calculator("aimnet2", device="cpu")
+        assert calc_a.metadata.get("family") == "wb97m-d3"
 
-    # First calculator: synthetic 'family-A'.
-    calc_a = AIMNet2Calculator("aimnet2", device="cpu")
-    calc_a.model._metadata = dict(calc_a.model._metadata)
-    calc_a.model._metadata["family"] = "family-A"
-    AIMNet2Calculator._constructed_families.add("family-A")  # mimic what __init__ does
+        with pytest.warns(UserWarning, match=r"different families"):
+            calc_b = AIMNet2Calculator("aimnet2-b973c", device="cpu")
+        assert calc_b.metadata.get("family") == "b973c-d3"
+    finally:
+        AIMNet2Calculator._constructed_families.clear()
 
-    # Second calculator: a different family — should warn.
-    with pytest.warns(UserWarning, match=r"different families"):
-        calc_b = AIMNet2Calculator("aimnet2", device="cpu")
-        # The constructor itself must add the (synthetic) family. Since we cannot
-        # change metadata before __init__ finishes, simulate by constructing then
-        # injecting+re-running the warn step. For this PR's purposes the warn
-        # logic lives in __init__ AFTER load. Test it by direct invocation:
-        calc_b.model._metadata = dict(calc_b.model._metadata)
-        calc_b.model._metadata["family"] = "family-B"
-        # Call the production helper that __init__ calls (see Step 3).
-        calc_b._maybe_warn_family_mix("family-B")
+
+def test_registry_family_metadata_mismatch_raises(monkeypatch):
+    """A registry model whose embedded metadata declares another family is ambiguous."""
+    from torch import nn
+
+    from aimnet.calculators import AIMNet2Calculator
+    from aimnet.calculators import calculator as calculator_mod
+
+    class DummyModel(nn.Module):
+        pass
+
+    def fake_load_model(_path, device="cpu"):
+        model = DummyModel()
+        metadata = {
+            "cutoff": 5.0,
+            "needs_coulomb": False,
+            "needs_dispersion": False,
+            "coulomb_mode": "none",
+            "implemented_species": [],
+            "family": "rxn",
+        }
+        model._metadata = metadata
+        return model, metadata
+
+    monkeypatch.setattr(calculator_mod, "get_model_path", lambda _model: "/fake/model.pt")
+    monkeypatch.setattr(calculator_mod, "load_model", fake_load_model)
+
+    with pytest.raises(ValueError, match=r"Registry family 'wb97m-d3'"):
+        AIMNet2Calculator("aimnet2", device="cpu")
+
+
+def test_rxn_family_gets_posthoc_wb97m_d3_from_metadata():
+    """rxn artifacts without D3 metadata get the AIMNet2 wB97M-D3 correction at calculator load time."""
+    from torch import nn
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    class DummyModel(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self._metadata = {
+                "cutoff": 5.0,
+                "needs_coulomb": False,
+                "needs_dispersion": False,
+                "coulomb_mode": "none",
+                "d3_params": None,
+                "implemented_species": [1, 6, 7, 8],
+                "family": "rxn",
+            }
+
+    AIMNet2Calculator._constructed_families.clear()
+    try:
+        calc = AIMNet2Calculator(DummyModel(), device="cpu")
+
+        assert calc.metadata["supports_charged_systems"] is False
+        assert calc.metadata["needs_dispersion"] is True
+        assert calc.metadata["d3_params"] == {"s6": 1.0, "s8": 0.3908, "a1": 0.566, "a2": 3.128}
+        assert calc.external_dftd3 is not None
+        assert calc.external_dftd3.s6 == 1.0
+        assert calc.external_dftd3.s8 == 0.3908
+        assert calc.external_dftd3.a1 == 0.566
+        assert calc.external_dftd3.a2 == 3.128
+    finally:
+        AIMNet2Calculator._constructed_families.clear()
 
 
 def test_has_embedded_dispersion_explicit_d3ts_flag():
@@ -1542,5 +1597,8 @@ def test_aimnet2rxn_alias_calculator_e2e():
     assert calc.metadata is not None
     assert calc.metadata.get("family") == "rxn"
     assert calc.metadata.get("supports_charged_systems") is False
+    assert calc.metadata.get("needs_dispersion") is True
+    assert calc.metadata.get("d3_params") == {"s6": 1.0, "s8": 0.3908, "a1": 0.566, "a2": 3.128}
+    assert calc.external_dftd3 is not None
     assert calc.metadata.get("implemented_species") == [1, 6, 7, 8]
     assert abs(calc.metadata.get("cutoff") - 5.0) < 1e-6

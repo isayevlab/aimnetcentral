@@ -18,13 +18,28 @@ def create_assets_dir():
     os.makedirs(os.path.join(os.path.dirname(__file__), "assets"), exist_ok=True)
 
 
-def get_registry_model_path(model_name: str) -> str:
+def resolve_registry_model_name(model_name: str) -> str:
     model_registry = load_model_registry()
-    create_assets_dir()
     if model_name in model_registry["aliases"]:
         model_name = model_registry["aliases"][model_name]  # type: ignore
     if model_name not in model_registry["models"]:
         raise ValueError(f"Model {model_name} not found in the registry.")
+    return model_name
+
+
+def get_registry_model_family(model_name: str) -> str:
+    """Return the canonical family tag for a registered model name or alias."""
+    model_name = resolve_registry_model_name(model_name)
+    family_key, member = model_name.rsplit("_", 1)
+    if not member.isdigit() or not family_key.startswith("aimnet2-"):
+        raise ValueError(f"Model {model_name} does not follow the canonical registry naming convention.")
+    return family_key.removeprefix("aimnet2-")
+
+
+def get_registry_model_path(model_name: str) -> str:
+    model_registry = load_model_registry()
+    create_assets_dir()
+    model_name = resolve_registry_model_name(model_name)
     cfg = model_registry["models"][model_name]  # type: ignore
     model_path = _maybe_download_asset(**cfg)  # type: ignore
     return model_path

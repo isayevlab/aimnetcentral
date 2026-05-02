@@ -15,7 +15,7 @@ AIMNet2 cannot currently produce a `.pt` that the NNPot interface accepts. The r
 
 A starter wrapper is parked at `aimnet/interfaces/gromacs.py` -- the forward signature, unit conversions (nm -> A on input; eV -> kJ/mol on output), and pure-PyTorch all-pairs neighbor list have been verified to `torch.jit.script` cleanly with a dummy inner model and to round-trip via `jit.save` / `jit.load`. It will become functional once the blockers above are resolved.
 
-The remediation plan lives at [`docs/superpowers/plans/2026-04-26-torchscript-export.md`](../superpowers/plans/2026-04-26-torchscript-export.md).
+The remediation plan is tracked internally with the TorchScript export work.
 
 ## What works today instead
 

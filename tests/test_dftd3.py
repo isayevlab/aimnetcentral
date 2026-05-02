@@ -202,6 +202,58 @@ class TestDFTD3Forward:
         assert terms is not None and terms.forces is not None
         assert terms.forces.shape == (6, 3)  # n_atoms + 1 for padding
 
+    def test_mode_1_uses_trailing_padding_atom_as_fill_value(self, device):
+        """Flat padded DFTD3 inputs use the final atom index as the kernel sentinel."""
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
+        data = setup_dftd3_data_mode_1(device, n_atoms=5)
+
+        kernel_inputs = module._prepare_dftd3_inputs(data)
+
+        assert kernel_inputs.fill_value == data["coord"].shape[0] - 1
+        assert torch.equal(
+            kernel_inputs.neighbor_matrix[data["mask_ij_dftd3"]],
+            torch.full_like(kernel_inputs.neighbor_matrix[data["mask_ij_dftd3"]], kernel_inputs.fill_value),
+        )
+
+    def test_mode_2_masks_padded_neighbors_after_global_offset(self, device):
+        """Batched sparse DFTD3 inputs convert local padding indices to the global fill value."""
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
+        coord = torch.tensor(
+            [
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [0.0, 0.0, 0.0]],
+                [[0.0, 0.0, 0.0], [1.10, 0.0, 0.0], [0.0, 0.0, 0.0]],
+            ],
+            dtype=torch.float32,
+            device=device,
+        )
+        numbers = torch.tensor([[8, 1, 0], [6, 1, 0]], device=device)
+        nbmat = torch.tensor(
+            [
+                [[1, 2], [0, 2], [2, 2]],
+                [[1, 2], [0, 2], [2, 2]],
+            ],
+            device=device,
+        )
+        data = {
+            "coord": coord,
+            "numbers": numbers,
+            "nbmat": nbmat,
+            "nbmat_dftd3": nbmat,
+            "cutoff_dftd3": torch.tensor(15.0, device=device),
+        }
+        data = nbops.set_nb_mode(data)
+        data = nbops.calc_masks(data)
+
+        kernel_inputs = module._prepare_dftd3_inputs(data)
+
+        assert kernel_inputs.fill_value == coord.numel() // 3
+        mask_flat = data["mask_ij_dftd3"].flatten(0, 1)
+        assert torch.equal(
+            kernel_inputs.neighbor_matrix[mask_flat],
+            torch.full_like(kernel_inputs.neighbor_matrix[mask_flat], kernel_inputs.fill_value),
+        )
+        assert kernel_inputs.neighbor_matrix[3, 0].item() == 4
+
     def test_energy_is_negative(self, device):
         """Test that dispersion energy is negative (attractive)."""
         module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)

@@ -1294,7 +1294,7 @@ class DFTD3(nn.Module):
 
             shifts = data.get(f"shifts{suffix}")
             neighbor_matrix_shifts = shifts.to(torch.int32) if shifts is not None else None
-            fill_value = N
+            fill_value = N - 1
             cell_for_kernel = cell
 
         elif nb_mode == 2:
@@ -1308,6 +1308,10 @@ class DFTD3(nn.Module):
             nbmat = data[f"nbmat{suffix}"]
             offsets = torch.arange(B, device=coord.device).unsqueeze(1) * N
             neighbor_matrix = (nbmat + offsets.unsqueeze(-1)).flatten(0, 1).to(torch.int32)
+            mask_ij = data.get(f"mask_ij{suffix}")
+            if mask_ij is not None:
+                fill_matrix = torch.full_like(neighbor_matrix, B * N)
+                neighbor_matrix = torch.where(mask_ij.flatten(0, 1), fill_matrix, neighbor_matrix)
 
             shifts = data.get(f"shifts{suffix}")
             neighbor_matrix_shifts = shifts.flatten(0, 1).to(torch.int32) if shifts is not None else None

@@ -207,7 +207,7 @@ The available model aliases are:
 | `aimnet2-b973c` | B97-3c            | Legacy (superseded by 2025)   |
 | `aimnet2-nse`   | wB97M-D3          | Open-shell / radical systems  |
 | `aimnet2-pd`    | B97-3c/CPCM (THF) | Palladium-containing systems  |
-| `aimnet2-rxn`   | wB97M-V           | Reactive chemistry / TS / IRC |
+| `aimnet2-rxn`   | wB97M-D3          | Reactive chemistry / TS / IRC |
 
 Each alias points to ensemble member `_0` by default. For uncertainty estimation, you can load all four ensemble members (e.g., `aimnet2-wb97m-d3_0` through `aimnet2-wb97m-d3_3`) and compare their predictions. Previously published aliases (`aimnet2_2025`, `aimnet2nse`, etc.) continue to resolve.
 

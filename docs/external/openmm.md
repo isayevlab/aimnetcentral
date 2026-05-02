@@ -63,5 +63,5 @@ Because this runs in Python on every MD step, performance is bounded by the same
 
 ## Caveats
 
-- **Model coverage in this engine**: only the wb97m-d3 model is exposed upstream as `MLPotential('aimnet2')`. Other variants (B97-3c, NSE, rxn) require per-family changes upstream, not just a model-name string -- e.g. AIMNet2-rxn has `supports_charged_systems=False`, fixed 4.6 A SR/LR cutoffs, and a learned energy scale that makes cross-family `createMixedSystem` energies meaningless. Exposing another variant in `openmmml` is a per-family contract, not a one-line change.
-- Performance is the eager Python path -- not the eventual TorchScript fast path planned in [`docs/superpowers/plans/2026-04-26-torchscript-export.md`](../superpowers/plans/2026-04-26-torchscript-export.md).
+- **Model coverage in this engine**: only the wb97m-d3 model is exposed upstream as `MLPotential('aimnet2')`. Other variants (B97-3c, NSE, rxn) require per-family changes upstream, not just a model-name string -- e.g. AIMNet2-rxn has `supports_charged_systems=False` and a learned energy scale that makes cross-family `createMixedSystem` energies meaningless. Exposing another variant in `openmmml` is a per-family contract, not a one-line change.
+- Performance is the eager Python path -- not the eventual TorchScript fast path tracked in the internal export plan.
