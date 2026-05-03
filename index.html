@@ -2275,7 +2275,7 @@
 <ul>
 <li>Accurate predictions for neutral, charged, organic, and elemental-organic systems</li>
 <li>Fast inference on both CPU and GPU</li>
-<li>Integration with popular simulation packages (ASE, PySisyphus)</li>
+<li>Integration with popular simulation packages (ASE, PySisyphus, TorchSim)</li>
 <li>Configurable long-range electrostatics (DSF, Ewald, PME) for periodic systems</li>
 </ul>
 <p>AIMNet2 combines a graph neural network architecture with flexible long-range interactions, making it suitable for molecular dynamics, geometry optimization, and property prediction across diverse chemical systems.</p>
@@ -2324,6 +2324,12 @@ pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot
 <span class="c1"># Sella TS optimizer</span>
 pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;aimnet[sella]&quot;</span>
 
+<span class="c1"># Hugging Face Hub model loading</span>
+pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;aimnet[hf]&quot;</span>
+
+<span class="c1"># TorchSim integration (Python 3.12+)</span>
+pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;aimnet[torchsim,ase]&quot;</span>
+
 <span class="c1"># Training tools</span>
 pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;aimnet[train]&quot;</span>
 </code></pre></div>
@@ -2371,7 +2377,7 @@ pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot
 </ul>
 <h3 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong><a href="api/calculators/">Calculators</a></strong> - <code>AIMNet2Calculator</code>, <code>AIMNet2ASE</code>, <code>AIMNet2Pysis</code></li>
+<li><strong><a href="api/calculators/">Calculators</a></strong> - <code>AIMNet2Calculator</code>, <code>AIMNet2ASE</code>, <code>AIMNet2Pysis</code>, <code>AIMNet2TorchSim</code></li>
 <li><strong><a href="api/modules/">Modules</a></strong> - Core neural network modules</li>
 <li><strong><a href="api/data/">Data</a></strong> - Dataset and sampling utilities</li>
 <li><strong><a href="api/config/">Config</a></strong> - Configuration utilities</li>

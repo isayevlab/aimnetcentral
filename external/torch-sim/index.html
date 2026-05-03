@@ -1968,7 +1968,8 @@
 <div class="admonition note">
 <p class="admonition-title">Installation</p>
 <p>TorchSim requires Python 3.12+. For the ASE-based examples below, install both extras:
-<code>pip install "aimnet[torchsim,ase]"</code>.</p>
+<code>pip install "aimnet[torchsim,ase]"</code>.
+AIMNet itself supports Python 3.11, but the TorchSim extra is only available on Python 3.12+.</p>
 </div>
 <h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">ase.io</span>
@@ -2016,7 +2017,7 @@
 <span class="p">)</span>
 <span class="n">results</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
 </code></pre></div>
-<p>Use <code>mult</code> for AIMNet2-NSE spin multiplicity. The wrapper also accepts a <code>spin</code> extra as a compatibility fallback. AIMNet partial atomic charges are returned as both <code>charges</code> and TorchSim-compatible <code>partial_charges</code> extras.</p>
+<p>Use <code>mult</code> for AIMNet2-NSE spin multiplicity. The wrapper also accepts a <code>spin</code> extra as a compatibility fallback. AIMNet partial atomic charges are returned as both <code>charges</code> and TorchSim-compatible <code>partial_charges</code> output fields.</p>
 <h2 id="periodic-systems">Periodic Systems<a class="headerlink" href="#periodic-systems" title="Permanent link">&para;</a></h2>
 <p>Periodic states are detected from TorchSim's cell and PBC tensors. Construct the wrapper with <code>compute_stress=True</code> when using NPT integrators or cell relaxation:</p>
 <div class="highlight"><pre><span></span><code><span class="n">model</span> <span class="o">=</span> <span class="n">AIMNet2TorchSim</span><span class="p">(</span><span class="n">base_calc</span><span class="p">,</span> <span class="n">compute_stress</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -2024,9 +2025,9 @@
 <span class="n">results</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">static</span><span class="p">(</span><span class="n">system</span><span class="o">=</span><span class="n">periodic_atoms</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;stress&quot;</span><span class="p">])</span>
 </code></pre></div>
-<p>Stress requires a periodic TorchSim state with non-zero cell vectors.</p>
+<p>Stress requires a periodic TorchSim state with non-zero cell vectors. <code>ts.static</code> keeps the per-system batch dimension for stress, so a single periodic system returns stress with shape <code>(1, 3, 3)</code>.</p>
 <h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
-<p>Runnable examples are available in the repository:</p>
+<p>Runnable examples are available in the repository. CI smoke tests cover static evaluation and periodic stress; the optimization and dynamics scripts are intended as manual examples.</p>
 <ul>
 <li><a href="https://github.com/isayevlab/aimnetcentral/blob/main/examples/ts_opt.py"><code>examples/ts_opt.py</code></a> optimizes a batch of molecular systems with TorchSim autobatching.</li>
 <li><a href="https://github.com/isayevlab/aimnetcentral/blob/main/examples/ts_opt_pbc.py"><code>examples/ts_opt_pbc.py</code></a> runs periodic optimization and NVT dynamics with stress enabled.</li>

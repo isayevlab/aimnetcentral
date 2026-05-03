@@ -409,6 +409,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#with-torchsim" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        With TorchSim
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#gpu-support" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2031,6 +2042,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#with-torchsim" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        With TorchSim
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#gpu-support" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2160,6 +2182,11 @@
 <div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;aimnet[hf]&quot;</span>
 </code></pre></div>
 <p>See the <a href="../tutorials/hugging_face/">Hugging Face tutorial</a> for details.</p>
+<h3 id="with-torchsim">With TorchSim<a class="headerlink" href="#with-torchsim" title="Permanent link">&para;</a></h3>
+<p>For TorchSim static evaluation, optimization, molecular dynamics, and autobatching, use Python 3.12+:</p>
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;aimnet[torchsim,ase]&quot;</span>
+</code></pre></div>
+<p>See the <a href="../external/torch-sim/">TorchSim external package guide</a> for examples.</p>
 <h3 id="gpu-support">GPU Support<a class="headerlink" href="#gpu-support" title="Permanent link">&para;</a></h3>
 <p>AIMNet2 works on CPU by default. For GPU acceleration, install PyTorch with CUDA:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># For CUDA 12.4</span>
