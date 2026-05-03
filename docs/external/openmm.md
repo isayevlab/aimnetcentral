@@ -2,7 +2,7 @@
 
 **Status: supported.**
 
-[`openmm-ml`](https://github.com/openmm/openmm-ml) ships a built-in `AIMNet2PotentialImpl` that wraps `aimnet.calculators.AIMNet2Calculator` behind OpenMM's `MLPotential` API. The integration uses `openmm.PythonForce` -- a Python callback per step -- so it does **not** require a TorchScript export and is unaffected by the [TorchScript-export blockers](gromacs.md) that gate GROMACS and LAMMPS.
+[`openmm-ml`](https://github.com/openmm/openmm-ml) ships a built-in `AIMNet2PotentialImpl` that wraps `aimnet.calculators.AIMNet2Calculator` behind OpenMM's `MLPotential` API. The integration uses `openmm.PythonForce` -- a Python callback per step -- so it does **not** require a TorchScript export.
 
 ## Install
 
@@ -64,4 +64,4 @@ Because this runs in Python on every MD step, performance is bounded by the same
 ## Caveats
 
 - **Model coverage in this engine**: only the wb97m-d3 model is exposed upstream as `MLPotential('aimnet2')`. Other variants (B97-3c, NSE, rxn) require per-family changes upstream, not just a model-name string -- e.g. AIMNet2-rxn has `supports_charged_systems=False` and a learned energy scale that makes cross-family `createMixedSystem` energies meaningless. Exposing another variant in `openmmml` is a per-family contract, not a one-line change.
-- Performance is the eager Python path -- not the eventual TorchScript fast path tracked in the internal export plan.
+- Performance is the eager Python path.

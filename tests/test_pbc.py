@@ -1127,8 +1127,8 @@ class TestNvAlchemiCoulombBackend:
         assert any(torch.isfinite(g).all() and g.abs().sum() > 0 for g in grads)
 
     @pytest.mark.parametrize("method", ["ewald", "pme"])
-    def test_hessian_matches_force_finite_difference_component(self, pbc_crystal_small, device, method):
-        """A selected Hessian component matches finite differences of force."""
+    def test_hessian_raises(self, pbc_crystal_small, device, method):
+        """Ewald/PME Hessians require second coordinate derivatives not exposed by nvalchemiops."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0, train=False)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
@@ -1136,28 +1136,8 @@ class TestNvAlchemiCoulombBackend:
         calc.external_dftd3 = None
 
         data_calc = _data_calc_from_fixture(pbc_crystal_small)
-        res = calc(data_calc, hessian=True)
-
-        n_atoms = pbc_crystal_small["coord"].shape[0]
-        assert res["hessian"].shape == (n_atoms, 3, n_atoms, 3)
-        assert torch.isfinite(res["hessian"]).all()
-
-        atom_idx = 0
-        axis = 0
-        delta = 1e-3
-        coord = pbc_crystal_small["coord"]
-        coord_plus = coord.clone()
-        coord_plus[atom_idx, axis] += delta
-        coord_minus = coord.clone()
-        coord_minus[atom_idx, axis] -= delta
-
-        data_plus = _data_calc_from_fixture({**pbc_crystal_small, "coord": coord_plus})
-        data_minus = _data_calc_from_fixture({**pbc_crystal_small, "coord": coord_minus})
-        f_plus = calc(data_plus, forces=True)["forces"][atom_idx, axis]
-        f_minus = calc(data_minus, forces=True)["forces"][atom_idx, axis]
-        h_fd = -(f_plus - f_minus) / (2.0 * delta)
-
-        torch.testing.assert_close(res["hessian"][atom_idx, axis, atom_idx, axis], h_fd, atol=5e-2, rtol=5e-2)
+        with pytest.raises(NotImplementedError, match="Ewald/PME Coulomb"):
+            calc(data_calc, hessian=True)
 
     @pytest.mark.parametrize("method", ["ewald", "pme"])
     def test_calculator_pbc_batched(self, pbc_crystal_small, device, method):

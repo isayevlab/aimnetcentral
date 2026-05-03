@@ -11,7 +11,5 @@ AIMNet2 is consumed by several external simulation and analysis packages. This s
 | AMBER (`torchani-amber`) | Supported upstream | [AMBER](amber.md) |
 | SCM AMS (`MLPotential` engine) | Supported upstream | [SCM AMS](ams.md) |
 | ORCA (`!ExtOpt`) | Supported upstream | [ORCA](orca.md) |
-| GROMACS NNPot | Blocked on TorchScript export | [GROMACS](gromacs.md) |
-| LAMMPS (`pair_style mliap`) | Blocked on TorchScript export | [LAMMPS](lammps.md) |
 
-The TorchScript-export blockers shared by GROMACS and LAMMPS are tracked in the internal TorchScript export plan. AMBER also benefits from that work -- `torchani-amber` accepts a TorchScript `.pt` via the `model_type` keyword, so the same export pathway would let us ship a self-contained AIMNet2 jit asset.
+Packages without a maintained AIMNet2 connector are intentionally omitted from this section.

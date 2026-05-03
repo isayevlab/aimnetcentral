@@ -259,7 +259,9 @@ class LRCoulomb(nn.Module):
     and fixed-charge geometry derivatives are returned as explicit terms.
     Training derivative paths use a small local ``autograd.Function`` wrapper
     because the installed nvalchemiops coordinate backward kernels do not
-    currently provide a registered backward-of-backward.
+    currently provide a registered backward-of-backward. Calculator Hessian
+    requests are rejected for Ewald/PME because complete Hessians require true
+    second coordinate derivatives.
     """
 
     def __init__(

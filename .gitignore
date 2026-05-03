@@ -157,11 +157,12 @@ cython_debug/
 .cursor/
 .cursorrules
 
-# Claude Code
+# Local-only tooling files
 .claude/
-# CLAUDE.md is checked in as a project rule reference for contributors using Claude Code
-
-# Other AI assistants
+CLAUDE.md
+.github/workflows/claude*.yml
+.agents/
+.codex/
 AGENTS.md
 GEMINI.md
 copilot-instructions.md
