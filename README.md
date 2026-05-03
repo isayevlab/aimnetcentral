@@ -1,108 +1,85 @@
-[![Release](https://img.shields.io/github/v/release/isayevlab/aimnetcentral)](https://github.com/isayevlab/aimnetcentral/releases) [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/) [![Build status](https://img.shields.io/github/actions/workflow/status/isayevlab/aimnetcentral/main.yml?branch=main)](https://github.com/isayevlab/aimnetcentral/actions/workflows/main.yml?query=branch%3Amain) [![codecov](https://codecov.io/gh/isayevlab/aimnetcentral/branch/main/graph/badge.svg)](https://codecov.io/gh/isayevlab/aimnetcentral) [![License](https://img.shields.io/github/license/isayevlab/aimnetcentral)](https://github.com/isayevlab/aimnetcentral/blob/main/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/aimnet)](https://pypi.org/project/aimnet/) [![Release](https://img.shields.io/github/v/release/isayevlab/aimnetcentral)](https://github.com/isayevlab/aimnetcentral/releases) [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/) [![Build status](https://img.shields.io/github/actions/workflow/status/isayevlab/aimnetcentral/main.yml?branch=main)](https://github.com/isayevlab/aimnetcentral/actions/workflows/main.yml?query=branch%3Amain) [![codecov](https://codecov.io/gh/isayevlab/aimnetcentral/branch/main/graph/badge.svg)](https://codecov.io/gh/isayevlab/aimnetcentral) [![License](https://img.shields.io/github/license/isayevlab/aimnetcentral)](https://github.com/isayevlab/aimnetcentral/blob/main/LICENSE)
 
-- **Documentation**: <https://isayevlab.github.io/aimnetcentral/>
-- **Repository**: <https://github.com/isayevlab/aimnetcentral/>
+# AIMNet2
 
-# AIMNet2 : ML Interatomic Potential for Fast and Accurate Atomistic Simulations
+Fast neural-network interatomic potentials for organic, elemental-organic, open-shell, reactive, and palladium chemistry.
 
-AIMNet2 is a neural network interatomic potential that predicts energies, forces, atomic charges, stress tensors, and Hessians for organic and elemental-organic molecules. It supports 14 elements (H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I) with specialized models for open-shell chemistry and palladium catalysis.
+- **Documentation:** <https://isayevlab.github.io/aimnetcentral/>
+- **Repository:** <https://github.com/isayevlab/aimnetcentral>
+- **PyPI:** <https://pypi.org/project/aimnet/>
+- **Demo:** <https://huggingface.co/spaces/isayevlab/aimnet2-demo>
 
-## Key Features
+## What It Does
 
-- Accurate for neutral, charged, organic, and elemental-organic systems
-- GPU-accelerated with NVIDIA Warp CUDA kernels and `torch.compile` support
-- ASE, PySisyphus, and TorchSim calculator interfaces
-- Periodic boundary conditions with DSF and Ewald Coulomb methods
-- DFT-D3 dispersion corrections (BJ damping, GPU-accelerated)
-- Adaptive neighbor lists with automatic dense/sparse mode selection
+AIMNet2 predicts energies, forces, atomic charges, stress tensors, and Hessians for molecular and periodic atomistic simulations. It combines AIMNet2 neural potentials with adaptive dense/sparse neighbor handling, optional long-range electrostatics, DFT-D3 dispersion, and integrations for simulation workflows.
 
-## Installation
+**Highlights**
 
-### Requirements
+- Pretrained model families for general organic chemistry, B97-3c, open-shell chemistry, palladium catalysis, and reactive paths
+- Core inference through `AIMNet2Calculator`
+- ASE, PySisyphus, Sella, TorchSim, Hugging Face Hub, and CLI workflows
+- Periodic systems with DSF, Ewald, and PME Coulomb methods
+- DFT-D3(BJ) dispersion through GPU-accelerated nvalchemiops kernels
+- Python 3.11, 3.12, and 3.13 support; TorchSim extra is available on Python 3.12+
 
-- **Python** 3.11+
-- **PyTorch** 2.8+ ([pytorch.org](https://pytorch.org/get-started/locally/))
+## Install
 
-### Using pip
+AIMNet2 requires Python 3.11+ and PyTorch 2.8+.
 
 ```bash
-# Install PyTorch first (with CUDA if you have a GPU)
-pip install torch --index-url https://download.pytorch.org/whl/cu126
+# CPU or PyTorch-default install
+pip install aimnet
 
-# Install AIMNet2
+# CUDA example: install PyTorch first, then AIMNet2
+pip install torch --index-url https://download.pytorch.org/whl/cu126
 pip install aimnet
 ```
 
-### Using uv (recommended for fast installs)
+With `uv`:
 
 ```bash
-# Install PyTorch + AIMNet2
 uv pip install torch --index-url https://download.pytorch.org/whl/cu126
 uv pip install aimnet
 ```
 
-### Using conda/mamba
+Optional integrations:
 
 ```bash
-# Create environment with PyTorch from conda-forge
-mamba create -n aimnet python=3.12 pytorch pytorch-cuda=12.6 -c pytorch -c nvidia -c conda-forge
-mamba activate aimnet
-
-# Install AIMNet2 via pip (not yet on conda-forge)
-pip install aimnet
+pip install "aimnet[ase]"              # ASE calculator
+pip install "aimnet[pysis]"            # PySisyphus reaction paths
+pip install "aimnet[sella]"            # Sella TS optimization, includes ASE
+pip install "aimnet[hf]"               # Hugging Face Hub model loading
+pip install "aimnet[torchsim,ase]"     # TorchSim, Python 3.12+
+pip install "aimnet[train]"            # training and export commands
 ```
 
-### Optional Extras
-
-```bash
-pip install "aimnet[ase]"             # ASE calculator interface
-pip install "aimnet[pysis]"           # PySisyphus reaction path calculator
-pip install "aimnet[sella]"           # Sella TS optimizer (includes ASE)
-pip install "aimnet[hf]"              # Hugging Face Hub model loading
-pip install "aimnet[torchsim,ase]"    # TorchSim integration (Python 3.12+)
-pip install "aimnet[train]"           # Training pipeline (W&B, ignite)
-pip install "aimnet[ase,pysis,sella,hf,torchsim,train]" # All extras available on this Python
-```
-
-### Development Setup
+For a full development environment:
 
 ```bash
 git clone https://github.com/isayevlab/aimnetcentral.git
 cd aimnetcentral
-make install        # Creates venv, installs all extras + dev tools
+make install
 source .venv/bin/activate
 ```
 
-## Available Models
-
-| Model | Elements | Description |
-| --- | --- | --- |
-| `aimnet2` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | wB97M-D3 (default) |
-| `aimnet2-2025` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c + improved intermolecular (recommended) |
-| `aimnet2-b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c (superseded by aimnet2-2025) |
-| `aimnet2-nse` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | Open-shell / radical chemistry |
-| `aimnet2-pd` | H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I | Pd systems with CPCM solvation (THF) |
-| `aimnet2-rxn` | H, C, N, O | Reactive chemistry (TS, NEB, IRC) |
-
-Each model has 4 ensemble members (0-3). Models are auto-downloaded on first use. Previously published aliases (`aimnet2_2025`, `aimnet2nse`, `aimnet2pd`, etc.) continue to resolve.
-
 ## Quick Start
-
-### Core Calculator
 
 ```python
 from aimnet.calculators import AIMNet2Calculator
 
 calc = AIMNet2Calculator("aimnet2")
 
-results = calc(
+result = calc(
     {"coord": coordinates, "numbers": atomic_numbers, "charge": 0.0},
     forces=True,
 )
-print(results["energy"], results["forces"])
+
+print(result["energy"])   # eV
+print(result["forces"])   # eV/Angstrom
+print(result["charges"])  # e
 ```
 
-### ASE Integration
+### ASE
 
 ```python
 from ase.io import read
@@ -115,44 +92,58 @@ energy = atoms.get_potential_energy()
 forces = atoms.get_forces()
 ```
 
+### TorchSim
+
+```python
+import ase.io
+import torch_sim as ts
+
+from aimnet.calculators import AIMNet2Calculator, AIMNet2TorchSim
+
+atoms = ase.io.read("molecule.xyz")
+model = AIMNet2TorchSim(AIMNet2Calculator("aimnet2"))
+
+results = ts.static(system=atoms, model=model)
+print(results[0]["potential_energy"], results[0]["forces"])
+```
+
 ### Periodic Systems
 
 ```python
-data = {
-    "coord": coordinates,
-    "numbers": atomic_numbers,
-    "charge": 0.0,
-    "cell": cell_vectors,  # 3x3 array in Angstrom
-}
-results = calc(data, forces=True, stress=True)
-
-# Configure Coulomb method for periodic systems
-calc.set_lrcoulomb_method("dsf", cutoff=15.0, dsf_alpha=0.2)
-# or Ewald summation with the default nvalchemiops accuracy
+calc = AIMNet2Calculator("aimnet2")
 calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-6)
+
+result = calc(
+    {
+        "coord": coordinates,
+        "numbers": atomic_numbers,
+        "charge": 0.0,
+        "cell": cell_vectors,
+        "pbc": True,
+    },
+    forces=True,
+    stress=True,
+)
 ```
 
-### Performance: torch.compile
+## Model Families
 
-For molecular dynamics, `compile_model=True` gives ~5x speedup (requires CUDA):
+| Model | Elements | Best for |
+| --- | --- | --- |
+| `aimnet2` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | General organic and elemental-organic chemistry, wB97M-D3 |
+| `aimnet2-2025` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | B97-3c with improved intermolecular interactions |
+| `aimnet2-b973c` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | Legacy B97-3c reproducibility |
+| `aimnet2-nse` | H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I | Open-shell systems and radicals |
+| `aimnet2-pd` | H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I | Pd catalysis with B97-3c/CPCM(THF) reference data |
+| `aimnet2-rxn` | H, C, N, O | Reactive chemistry, transition states, NEB, IRC; net-neutral systems only |
 
-```python
-calc = AIMNet2Calculator("aimnet2", compile_model=True)
-```
+Each family has four ensemble members indexed `0` through `3`. Short aliases load member `0` by default. Previously published aliases such as `aimnet2_2025`, `aimnet2nse`, and `aimnet2pd` continue to resolve.
 
-### Output Reference
+See the [model selection guide](https://isayevlab.github.io/aimnetcentral/models/guide/) for limitations, aliases, citations, and download links.
 
-| Key       | Shape                   | Description                          |
-| --------- | ----------------------- | ------------------------------------ |
-| `energy`  | `(,)` or `(B,)`         | Total energy in eV                   |
-| `charges` | `(N,)` or `(B, N)`      | Atomic partial charges in e          |
-| `forces`  | `(N, 3)` or `(B, N, 3)` | Atomic forces in eV/A (if requested) |
-| `hessian` | `(N, 3, N, 3)`          | Second derivatives (if requested)    |
-| `stress`  | `(3, 3)`                | Stress tensor for PBC (if requested) |
+## Hugging Face Models
 
-### Loading from Hugging Face
-
-AIMNet2 models are available on [Hugging Face](https://huggingface.co/isayevlab). Install the optional HF extras:
+Install the HF extra and pass a repo ID directly:
 
 ```bash
 pip install "aimnet[hf]"
@@ -161,81 +152,60 @@ pip install "aimnet[hf]"
 ```python
 from aimnet.calculators import AIMNet2Calculator
 
-# Load from Hugging Face — downloads and caches automatically
 calc = AIMNet2Calculator("isayevlab/aimnet2-wb97m-d3")
-
-# All available HF repos:
-# isayevlab/aimnet2-wb97m-d3   general purpose (wB97M-D3)
-# isayevlab/aimnet2-2025       improved intermolecular (B97-3c)
-# isayevlab/aimnet2-nse        open-shell / radicals
-# isayevlab/aimnet2-pd         palladium chemistry
-# isayevlab/aimnet2-rxn        reactive chemistry / TS / IRC
-
-# Load a specific ensemble member (0–3) or a pinned revision:
 calc = AIMNet2Calculator("isayevlab/aimnet2-wb97m-d3", ensemble_member=2)
 calc = AIMNet2Calculator("isayevlab/aimnet2-wb97m-d3", revision="v1.0")
-
-# Private repos — pass a HF token:
-calc = AIMNet2Calculator("myorg/private-model", token="hf_...")
-
-# Local directory in HF repo layout (config.json + ensemble_N.safetensors):
-calc = AIMNet2Calculator("/path/to/local/repo")
-
-# Existing registry aliases still work without any HF deps:
-calc = AIMNet2Calculator("aimnet2")
 ```
 
-Try the [interactive demo](https://huggingface.co/spaces/isayevlab/aimnet2-demo)!
+Published repositories:
 
-## How It Works
+| HF repo | Alias | Use |
+| --- | --- | --- |
+| `isayevlab/aimnet2-wb97m-d3` | `aimnet2` | General organic chemistry |
+| `isayevlab/aimnet2-2025` | `aimnet2-2025` | Improved intermolecular interactions |
+| `isayevlab/aimnet2-nse` | `aimnet2-nse` | Open-shell chemistry |
+| `isayevlab/aimnet2-pd` | `aimnet2-pd` | Palladium chemistry |
+| `isayevlab/aimnet2-rxn` | `aimnet2-rxn` | Reactive paths and transition states |
 
-### Architecture
+Private repos can be loaded with `token=` or the `HF_TOKEN` environment variable. Local HF-style directories with `config.json` and `ensemble_N.safetensors` are also supported.
 
-AIMNet2 uses a message-passing neural network with iterative charge equilibration:
+## Outputs
 
-1. **AEVSV** - Gaussian basis expansion of pairwise distances and displacement vectors
-2. **ConvSV** - Sparse indexed convolution combining atomic features with local geometry (GPU-accelerated via NVIDIA Warp kernels)
-3. **MLP passes** - Iterative refinement with charge prediction and Coulomb-aware features
-4. **Output modules** - Energy, forces (via autograd), charges, stress, Hessian
+| Key       | Shape                   | Units           |
+| --------- | ----------------------- | --------------- |
+| `energy`  | scalar or `(B,)`        | eV              |
+| `forces`  | `(N, 3)` or `(B, N, 3)` | eV/Angstrom     |
+| `charges` | `(N,)` or `(B, N)`      | electron charge |
+| `stress`  | `(3, 3)`                | eV/Angstrom^3   |
+| `hessian` | `(N, 3, N, 3)`          | eV/Angstrom^2   |
 
-### Dense vs Sparse Mode
+Hessians are single-molecule only and are incompatible with `compile_model=True`. Long-range backends differ in derivative support; see the [calculator](https://isayevlab.github.io/aimnetcentral/calculator/) and [long-range](https://isayevlab.github.io/aimnetcentral/long_range/) docs for the exact contracts.
 
-The calculator automatically selects the optimal strategy:
-
-- **Dense mode (O(N^2))** - Small molecules on GPU. Fully connected graph, maximum parallelism.
-- **Sparse mode (O(N))** - Large systems or CPU. Adaptive neighbor lists with ~75% buffer utilization, 16-byte aligned allocations, automatic overflow handling.
-
-The threshold is configurable via `nb_threshold` (default: 120 atoms).
-
-### Long-Range Corrections
-
-- **DFT-D3** dispersion with BJ damping (GPU-accelerated via nvalchemiops)
-- **Coulomb**: Simple (all-pairs), DSF (damped-shifted force), or Ewald summation
-- Long-range modules support inference forces and stress where documented; DSF and DFT-D3 use specialized backend paths, with Hessian support limited to the documented pure-torch DFT-D3 path
-
-## Training
+## Training and CLI
 
 ```bash
 pip install "aimnet[train]"
 aimnet train --config my_config.yaml --model aimnet2.yaml
 ```
 
-See the [training documentation](https://isayevlab.github.io/aimnetcentral/train/) for dataset preparation, configuration, and W&B integration.
+The `aimnet` entry point is installed with the core package. Training, export, and self-atomic-energy commands require the `train` extra.
 
 ## Development
 
 ```bash
-make check       # Linters and code quality (ruff, markdownlint, prettier)
-make test        # Tests with coverage (pytest, parallel)
-make docs        # Build and serve documentation (mkdocs)
-make docs-test   # Validate docs build
+make check       # formatting, linting, dependency checks
+make test        # pytest suite
+make docs        # serve docs locally
+make docs-test   # strict docs build
 ```
+
+CI runs the core test suite across Python 3.11-3.13 and separate optional-extra lanes for ASE, PySisyphus, Sella, Hugging Face, TorchSim, docs, and security checks.
 
 ## Citation
 
-If you use AIMNet2 in your research, please cite:
+If AIMNet2 is useful in your work, please cite the relevant model papers:
 
-**AIMNet2:**
+**AIMNet2**
 
 ```bibtex
 @article{aimnet2,
@@ -249,10 +219,10 @@ If you use AIMNet2 in your research, please cite:
 }
 ```
 
-**AIMNet2-NSE:** [ChemRxiv preprint](https://chemrxiv.org/engage/chemrxiv/article-details/692d304c65a54c2d4a7ab3c7)
+**AIMNet2-NSE:** Kalita, B.; Zubatyuk, R.; Anstine, D. M.; Bergeler, M.; Settels, V.; Stork, C.; Spicher, S.; Isayev, O. AIMNet2-NSE: A Transferable Reactive Neural Network Potential for Open-Shell Chemistry. _Angew. Chem. Int. Ed._ **2026**. DOI: [10.1002/anie.202516763](https://doi.org/10.1002/anie.202516763)
 
-**AIMNet2-Pd:** [ChemRxiv preprint](https://chemrxiv.org/engage/chemrxiv/article-details/67d7b7f7fa469535b97c021a)
+**AIMNet2-Pd:** Anstine, D. M.; Zubatyuk, R.; Gallegos, L.; Paton, R.; Wiest, O.; Nebgen, B.; Jones, T.; Gomes, G.; Tretiak, S.; Isayev, O. Transferable Machine Learning Interatomic Potential for Pd-Catalyzed Cross-Coupling Reactions. _ChemRxiv_ **2025**. DOI: [10.26434/chemrxiv-2025-n36r6](https://doi.org/10.26434/chemrxiv-2025-n36r6)
 
 ## License
 
-See [LICENSE](LICENSE) file for details.
+See [LICENSE](LICENSE).
