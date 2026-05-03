@@ -4,12 +4,37 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - Unreleased
+## [0.2.0] - 2026-05-03
 
 ### Added
 
 - Added `AIMNet2TorchSim`, an optional TorchSim `ModelInterface` wrapper for static evaluation, optimization, molecular dynamics, and autobatched workloads via the Python 3.12+ `torchsim` extra (`torch-sim-atomistic>=0.6,<0.7`).
 - Added TorchSim external/API documentation and runnable `examples/ts_opt.py` and `examples/ts_opt_pbc.py` scripts.
+- Added dedicated CI coverage for the Sella optional extra.
+- Added TorchSim CI coverage on Python 3.13.
+
+### Changed
+
+- Split Sella tests out of the ASE-only CI lane.
+- Updated the CodeQL security workflow to `github/codeql-action` v4.
+- Clarified README installation guidance now that AIMNet's core dependencies already include the GPU-accelerated nvalchemiops package.
+
+### Fixed
+
+- Made ASE and PySisyphus calculator modules importable in docs builds even when optional dependencies are not installed.
+- Marked the local Hugging Face metadata propagation test with the `hf` marker so the HF CI lane runs it.
+- Clarified that `aimnet2-rxn` supports only net-neutral systems.
+- Fixed the reaction-path Hessian example to avoid `compile_model=True`, which is incompatible with Hessian requests.
+- Corrected PySisyphus unit conversion documentation from Bohr to Angstrom input conversion.
+- Repaired malformed Markdown fences in the batch-processing tutorial.
+
+### Documentation
+
+- Expanded API docs coverage for `DataGroup`, config helpers, AEV modules, and long-range modules.
+- Added a public import inventory to the API overview.
+- Added `aimnet2-rxn` to the README Hugging Face repo list, docs index, and pre-trained model changelog inventory.
+- Aligned CUDA wheel examples on the CUDA 12.6 PyTorch index.
+- Renamed the molecular dynamics NPT section to match ASE `NPT` rather than Berendsen.
 
 ## [0.1.1] - 2026-04-05
 
