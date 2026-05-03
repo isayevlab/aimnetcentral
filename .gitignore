@@ -157,7 +157,7 @@ cython_debug/
 .cursor/
 .cursorrules
 
-# AI coding assistant files
+# Local-only tooling files
 .claude/
 CLAUDE.md
 .github/workflows/claude*.yml
