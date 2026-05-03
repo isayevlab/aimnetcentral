@@ -309,9 +309,8 @@ charge = torch.tensor([0.0, 0.0, 0.0])
 ```
 
 !!! note "Hessian is single-molecule only"
-Hessian calculation (`hessian=True`) is not supported for batched inputs. If you
-need Hessians, compute them one molecule at a time. Hessian computation also
-requires O(N^2) memory, so it is impractical for large molecules.
+
+    Hessian calculation (`hessian=True`) is not supported for batched inputs. If you need Hessians, compute them one molecule at a time. Hessian computation also requires O(N^2) memory, so it is impractical for large molecules.
 
 ## What's Next
 
