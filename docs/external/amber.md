@@ -61,13 +61,13 @@ ML/MM example with electrostatic embedding via AIMNet2's predicted atomic charge
 
 The `mlmm_coupling` keyword selects the QM/MM coupling scheme. The exact embedding details (which AIMNet2 charges are used, whether MM point charges polarise the QM region within a step, etc.) are documented in the upstream `torchani-amber` reference paper and source.
 
-`model_type` may also be a full path to a **TorchScript-jit-compiled** `.pt` file. The v2 `.pt` assets shipped in `aimnet/calculators/assets/` are `torch.save` state-dict archives, not TorchScript -- they cannot currently be passed as `model_type` directly. The internal TorchScript-export work in this repo would unblock shipping a self-contained AIMNet2 jit asset for `torchani-amber` rather than relying on the upstream-bundled model.
+The v2 `.pt` assets shipped in `aimnet/calculators/assets/` are `torch.save` state-dict archives for AIMNet's Python loader. They are not a supported compatibility target for AMBER's custom model path.
 
 ## Caveats
 
 - Hard rebuild of AmberTools required. Once linked, the AMBER binaries depend on the torchani libraries even for non-ML runs.
 - Supported AMBER versions: AmberTools 25 (with patch) and 26.
-- The integration is tied to the `torchani_sandbox` build; the AIMNet2 model selection is constrained to what `torchani-amber` exposes upstream until a custom jit `.pt` path is provided.
+- The integration is tied to the `torchani_sandbox` build; the AIMNet2 model selection is constrained to what `torchani-amber` exposes upstream.
 
 ## Model coverage
 
