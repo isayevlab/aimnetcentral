@@ -89,8 +89,9 @@ def center_coordinates(coord: Tensor, data: dict[str, Tensor], masses: Tensor | 
     return coord
 
 
-def cosine_cutoff(d_ij: Tensor, rc: float) -> Tensor:
-    fc = 0.5 * (torch.cos(d_ij.clamp(min=1e-6, max=rc) * (math.pi / rc)) + 1.0)
+def cosine_cutoff(d_ij: Tensor, rc: float | Tensor) -> Tensor:
+    rc = torch.as_tensor(rc, dtype=d_ij.dtype, device=d_ij.device)
+    fc = 0.5 * (torch.cos(d_ij.clamp(min=torch.full_like(rc, 1e-6), max=rc) * (math.pi / rc)) + 1.0)
     return fc
 
 
@@ -99,7 +100,8 @@ def exp_cutoff(d: Tensor, rc: Tensor) -> Tensor:
     return fc
 
 
-def exp_expand(d_ij: Tensor, shifts: Tensor, eta: float) -> Tensor:
+def exp_expand(d_ij: Tensor, shifts: Tensor, eta: float | Tensor) -> Tensor:
+    eta = torch.as_tensor(eta, dtype=d_ij.dtype, device=d_ij.device)
     # expand on axis -1, e.g. (b, n, m) -> (b, n, m, shifts)
     return torch.exp(-eta * (d_ij.unsqueeze(-1) - shifts) ** 2)
 
@@ -177,9 +179,9 @@ def get_shifts_within_cutoff(cell: Tensor, cutoff: Tensor) -> Tensor:
     num_repeats = torch.ceil(cutoff * inv_distances).to(torch.long)
     device = cell.device
     shifts = torch.cartesian_prod(
-        torch.arange(-num_repeats[0], num_repeats[0] + 1, device=device),  # type: ignore[attr-defined]
-        torch.arange(-num_repeats[1], num_repeats[1] + 1, device=device),  # type: ignore[attr-defined]
-        torch.arange(-num_repeats[2], num_repeats[2] + 1, device=device),  # type: ignore[attr-defined]
+        torch.arange(-int(num_repeats[0].item()), int(num_repeats[0].item()) + 1, device=device),
+        torch.arange(-int(num_repeats[1].item()), int(num_repeats[1].item()) + 1, device=device),
+        torch.arange(-int(num_repeats[2].item()), int(num_repeats[2].item()) + 1, device=device),
     ).to(torch.float)
     return shifts
 

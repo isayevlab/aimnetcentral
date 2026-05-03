@@ -93,6 +93,8 @@ def load_model(path: str, device: str = "cpu") -> tuple[nn.Module, ModelMetadata
         # New state dict format
         model_config = yaml.safe_load(data["model_yaml"])
         model = build_module(model_config)
+        if not isinstance(model, nn.Module):
+            raise TypeError("Built model configuration did not produce an nn.Module.")
 
         # Atomic shifts store SAE/reference-energy values and may be float64 in
         # the file. Cast before load_state_dict so copy_ does not truncate them
@@ -132,14 +134,14 @@ def load_model(path: str, device: str = "cpu") -> tuple[nn.Module, ModelMetadata
         }
 
         # Attach metadata to model for easy access
-        model._metadata = metadata
+        model._metadata = metadata  # type: ignore[assignment]
 
         return model, metadata
 
     elif isinstance(data, torch.jit.ScriptModule):
         # Legacy JIT format - LR modules are already embedded in the TorchScript model
         model = data
-        metadata: ModelMetadata = {
+        legacy_metadata: ModelMetadata = {
             "format_version": 1,  # Legacy .jpt format is v1
             "cutoff": float(model.cutoff),
             # Legacy models have LR modules embedded - don't add external ones
@@ -153,9 +155,9 @@ def load_model(path: str, device: str = "cpu") -> tuple[nn.Module, ModelMetadata
 
         # Attempt metadata assignment; silently fails for JIT models
         with contextlib.suppress(AttributeError, RuntimeError):
-            model._metadata = metadata  # type: ignore[attr-defined]
+            model._metadata = legacy_metadata  # type: ignore[attr-defined]
 
-        return model, metadata
+        return model, legacy_metadata
 
     else:
         raise ValueError(f"Unknown model format: {type(data)}")
@@ -184,21 +186,23 @@ class AIMNet2Base(nn.Module):
         "nbmat_coulomb",
         "shifts_coulomb",
         "cutoff_coulomb",
+        "pbc",
     ]
     _optional_keys_dtype: Final = [
         __default_dtype,  # mult
-        torch.int64,  # nbmat
-        torch.int64,  # nbmat_lr
+        torch.int32,  # nbmat
+        torch.int32,  # nbmat_lr
         torch.int64,  # mol_idx
         __default_dtype,  # shifts
         __default_dtype,  # shifts_lr
         __default_dtype,  # cell
-        torch.int64,  # nbmat_dftd3
+        torch.int32,  # nbmat_dftd3
         __default_dtype,  # shifts_dftd3
         __default_dtype,  # cutoff_dftd3
-        torch.int64,  # nbmat_coulomb
+        torch.int32,  # nbmat_coulomb
         __default_dtype,  # shifts_coulomb
         __default_dtype,  # cutoff_coulomb
+        torch.bool,  # pbc
     ]
     __constants__: ClassVar = ["_required_keys", "_required_keys_dtype", "_optional_keys", "_optional_keys_dtype"]
     # TypedDict not supported in TorchScript; exclude from serialization

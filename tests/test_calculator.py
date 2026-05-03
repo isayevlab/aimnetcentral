@@ -9,8 +9,8 @@ from conftest import CAFFEINE_FILE, load_mol
 
 from aimnet.calculators import AIMNet2Calculator
 
-# All tests in this module require ASE for molecule loading
-pytestmark = pytest.mark.ase
+# These are calculator integration tests: most construct and run a model.
+pytestmark = [pytest.mark.ase, pytest.mark.slow]
 
 
 def test_from_zoo():
@@ -634,6 +634,28 @@ class TestDerivatives:
 
         H_ext = torch.autograd.functional.hessian(energy_fn, coords_batch.squeeze(0))
         assert (H_internal - H_ext).abs().max().item() < 5e-3
+
+    def test_hessian_singleton_batch_is_force_flattened(self):
+        """A singleton 3D batch should use the flat Hessian path."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=1000, device=torch.device("cpu"))
+        calc.external_dftd3 = None
+        data = {
+            "coord": torch.tensor([[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]], dtype=torch.float32),
+            "numbers": torch.tensor([[8, 1]]),
+            "charge": torch.tensor([0.0]),
+        }
+        res = calc(data, hessian=True)
+        assert res["hessian"].shape == (2, 3, 2, 3)
+
+    def test_hessian_batched_input_raises(self):
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=1000)
+        data = {
+            "coord": torch.zeros(2, 2, 3),
+            "numbers": torch.tensor([[8, 1], [8, 1]]),
+            "charge": torch.zeros(2),
+        }
+        with pytest.raises(NotImplementedError, match="batched inputs with B > 1"):
+            calc(data, hessian=True)
 
     def test_requires_grad_false_still_works(self):
         """Backward-compat: forces=True still works when coord has no requires_grad."""
@@ -1319,15 +1341,17 @@ def test_relative_path_with_slash_loads_correctly(tmp_path, monkeypatch):
 
 
 def test_calculator_metadata_property_returns_model_metadata():
-    """AIMNet2Calculator.metadata must return the same dict as model._metadata."""
+    """AIMNet2Calculator.metadata returns a read-only view of model metadata."""
     from aimnet.calculators import AIMNet2Calculator
 
     calc = AIMNet2Calculator("aimnet2", device="cpu")
-    assert calc.metadata is calc.model._metadata
+    assert calc.metadata is not calc.model._metadata
     # Older .pt artifacts do not declare family, so the calculator infers it
     # from the canonical registry key for consistent energy-scale warnings.
     assert calc.metadata.get("family") == "wb97m-d3"
     assert calc.metadata.get("supports_charged_systems") is None
+    with pytest.raises(TypeError):
+        calc.metadata["family"] = "mutated"  # type: ignore[index]
 
 
 def test_calculator_was_compiled_flag_default_false():
@@ -1554,6 +1578,37 @@ def test_rxn_family_gets_posthoc_wb97m_d3_from_metadata():
         assert calc.external_dftd3.s8 == 0.3908
         assert calc.external_dftd3.a1 == 0.566
         assert calc.external_dftd3.a2 == 3.128
+    finally:
+        AIMNet2Calculator._constructed_families.clear()
+
+
+def test_raw_module_metadata_property_is_used():
+    from torch import nn
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    class DummyModel(nn.Module):
+        cutoff = 5.0
+
+        @property
+        def metadata(self):
+            return {
+                "cutoff": 5.0,
+                "needs_coulomb": False,
+                "needs_dispersion": False,
+                "coulomb_mode": "none",
+                "implemented_species": [],
+                "family": "custom",
+            }
+
+        def forward(self, data):
+            data["energy"] = torch.zeros(1)
+            return data
+
+    AIMNet2Calculator._constructed_families.clear()
+    try:
+        calc = AIMNet2Calculator(DummyModel(), device="cpu")
+        assert calc.metadata["family"] == "custom"
     finally:
         AIMNet2Calculator._constructed_families.clear()
 

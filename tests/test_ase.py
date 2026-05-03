@@ -630,14 +630,14 @@ class TestHessian:
 def test_aimnet2ase_propagates_validate_species(monkeypatch):
     """AIMNet2ASE.calculate(..., validate_species=False) must propagate the kwarg
     through to the underlying AIMNet2Calculator.__call__."""
-    from ase import Atoms
+    ase = pytest.importorskip("ase", reason="ASE not installed")
 
     from aimnet.calculators.aimnet2ase import AIMNet2ASE
 
     calc = AIMNet2ASE("aimnet2")
     # H2O — only H, O which are supported. Use validate_species=False to verify the
     # kwarg flows through (the call should succeed regardless).
-    atoms = Atoms("H2O", positions=[[0, 0, 0], [0, 0, 1], [0, 1, 0]])
+    atoms = ase.Atoms("H2O", positions=[[0, 0, 0], [0, 0, 1], [0, 1, 0]])
     atoms.calc = calc
 
     # Fast path: just access energy. This exercises the full pipeline.

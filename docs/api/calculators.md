@@ -66,7 +66,7 @@ This interface adapts AIMNet2 for use with PySisyphus optimizers. It handles uni
 
 ## Model Registry
 
-Utilities for loading pre-trained models. Models are automatically downloaded from the remote repository to a local cache (`aimnet/calculators/assets/`) upon first use.
+Utilities for loading pre-trained models. Models are automatically downloaded from the remote repository to the local model cache (`AIMNET_CACHE_DIR` when set, otherwise `~/.cache/aimnet/`) upon first use.
 
 ### CLI Command
 

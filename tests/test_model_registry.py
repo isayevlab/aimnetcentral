@@ -1,6 +1,7 @@
 import yaml
 
 from aimnet.calculators.model_registry import (
+    get_cache_dir,
     get_registry_model_family,
     load_model_registry,
     resolve_registry_model_name,
@@ -108,7 +109,7 @@ def test_legacy_member_aliases_resolve_via_loader(monkeypatch):
     monkeypatch.setattr(
         mr,
         "_maybe_download_asset",
-        lambda file, url: f"/assets/{file}",
+        lambda file, url, sha256=None: f"/assets/{file}",
     )
 
     registry = mr.load_model_registry()
@@ -154,3 +155,18 @@ def test_no_alias_to_alias_chains():
     for src, dst in aliases.items():
         assert dst in models, f"alias {src!r} -> {dst!r} is not a model entry"
         assert dst not in aliases, f"alias {src!r} -> {dst!r} is itself an alias (would require >1 hop)"
+
+
+def test_cache_dir_respects_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("AIMNET_CACHE_DIR", str(tmp_path))
+    assert get_cache_dir() == str(tmp_path)
+
+
+def test_registry_sha256_entries_are_valid_hex():
+    registry = load_model_registry()
+    for key, entry in registry["models"].items():
+        digest = entry.get("sha256")
+        if digest is None:
+            continue
+        assert len(digest) == 64, key
+        int(digest, 16)

@@ -630,3 +630,13 @@ class TestBatchedCells:
 
         assert d_ij.shape == (B, N, M)
         assert d_ij[0, 0, 0].item() == pytest.approx(1.0, abs=1e-5)
+
+
+def test_move_coord_to_cell_respects_partial_pbc(device):
+    from aimnet.calculators.calculator import move_coord_to_cell
+
+    cell = torch.eye(3, device=device) * 10.0
+    coord = torch.tensor([[12.0, 13.0, 14.0]], device=device)
+    wrapped = move_coord_to_cell(coord, cell, pbc=torch.tensor([True, False, True], device=device))
+    expected = torch.tensor([[2.0, 13.0, 4.0]], device=device)
+    assert torch.allclose(wrapped, expected)

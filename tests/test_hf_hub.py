@@ -151,6 +151,7 @@ def test_load_from_hf_repo_propagates_family_and_charge_fields(fake_hf_repo_with
 
 
 @pytest.mark.hf
+@pytest.mark.network
 def test_aimnet2_rxn_hf_load_matches_gcs_metadata():
     """Loading aimnet2-rxn from the HF repo must produce the expected calculator metadata:
     GCS/HF structural metadata plus posthoc wB97M-D3 dispersion defaults.

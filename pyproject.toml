@@ -176,7 +176,7 @@ ignore = [
     # DoNotAssignLambda
     "E731",
     # Deprecated/slow isinstance union syntax
-    "UP006", "UP035", "UP038",
+    "UP006", "UP035",
     # Use ternary operator - prefer readability with comments
     "SIM108",
     "TRY003",
@@ -209,6 +209,7 @@ markers = [
     "network: marks tests that hit external services (deselect with: -m 'not network')",
     "pysis: marks tests that require PySisyphus (deselect with: -m 'not pysis')",
     "sella: marks tests that require Sella (deselect with: -m 'not sella')",
+    "slow: marks tests that are intentionally expensive (deselect with: -m 'not slow')",
     "train: marks tests that require training dependencies (deselect with: -m 'not train')",
 ]
 

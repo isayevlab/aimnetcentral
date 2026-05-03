@@ -17,9 +17,24 @@ jobs:
             - name: Set up the environment
               uses: ./.github/actions/setup-uv-env
 
+            - name: Verify release tag checkout
+              run: |
+                  set -euo pipefail
+                  test "$(git describe --tags --exact-match)" = "${{ github.event.release.tag_name }}"
+
             - name: Build and publish
               run: |
                   uv build
+                  python - <<'PY'
+                  import os
+                  import re
+
+                  tag = os.environ["GITHUB_REF_NAME"].removeprefix("v")
+                  files = os.listdir("dist")
+                  pattern = re.compile(rf"aimnet-{re.escape(tag)}(?:\.|-)")
+                  if not any(pattern.match(name) for name in files):
+                      raise SystemExit(f"dist artifacts {files!r} do not match release tag {tag!r}")
+                  PY
                   uv publish --token ${{ secrets.PYPI_TOKEN }}
 
     deploy-docs:

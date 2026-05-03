@@ -73,6 +73,18 @@ def test_merge_groups():
         assert len(g) >= 32
 
 
+def test_merge_groups_handles_tiny_dataset():
+    ds = SizeGroupedDataset({
+        2: {
+            "numbers": np.ones((1, 2), dtype=np.int64),
+            "energy": np.zeros(1, dtype=np.float32),
+        }
+    })
+    ds.merge_groups(10_000)
+    assert len(ds) > 0
+    assert len(ds.groups) == 1
+
+
 def test_loader():
     ds = dataset()
     ds.merge_groups(32)
@@ -102,6 +114,15 @@ def test_loader():
         assert len(batch[1]["energy"]) <= 12
         n += len(batch[0]["coord"])
     assert n == len(ds)
+
+
+def test_atom_mode_sampler_does_not_emit_empty_batches():
+    ds = dataset(keys=["coord", "numbers", "energy"])
+    sampler = SizeGroupedSampler(ds, batch_size=1, batch_mode="atoms", shuffle=False, batches_per_epoch=-1)
+    for batch in sampler:
+        ((group_key, idx),) = batch
+        assert group_key in ds
+        assert len(idx) > 0
 
 
 # =============================================================================

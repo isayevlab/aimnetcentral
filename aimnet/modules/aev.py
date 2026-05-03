@@ -1,4 +1,5 @@
 import math
+from typing import cast
 
 import torch
 from torch import Tensor, nn
@@ -90,11 +91,14 @@ class AEVSV(nn.Module):
         return data
 
     def _calc_aev(self, r_ij: Tensor, d_ij: Tensor, data: dict[str, Tensor]) -> Tensor:
-        fc_ij = ops.cosine_cutoff(d_ij, self.rc_s)  # (..., m)
+        rc_s = cast(Tensor, self.rc_s)
+        shifts_s = cast(Tensor, self.shifts_s)
+        eta_s = cast(Tensor, self.eta_s)
+        fc_ij = ops.cosine_cutoff(d_ij, rc_s)  # (..., m)
         fc_ij = nbops.mask_ij_(fc_ij, data, 0.0)
         # Apply cutoff envelope to Gaussian-expanded distances
         # Shape: (..., m, nshifts) * (..., m, 1) -> (..., m, nshifts)
-        gs = ops.exp_expand(d_ij, self.shifts_s, self.eta_s) * fc_ij.unsqueeze(-1)
+        gs = ops.exp_expand(d_ij, shifts_s, eta_s) * fc_ij.unsqueeze(-1)
         # Normalize displacement vectors to unit direction vectors
         # Shape: (..., m, 3) / (..., m, 1) -> (..., m, 3)
         u_ij = r_ij / d_ij.unsqueeze(-1)

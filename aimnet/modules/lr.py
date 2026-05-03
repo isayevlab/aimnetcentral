@@ -282,6 +282,7 @@ class LRCoulomb(nn.Module):
         # Pairwise convention factor used by simple/dsf (sums over ordered pairs).
         # Ewald/PME nvalchemiops outputs are converted with k_e = Hartree * Bohr.
         self._factor = constants.half_Hartree * constants.Bohr
+        self.rc: Tensor
         self.register_buffer("rc", torch.tensor(rc))
         self.dsf_alpha = dsf_alpha
         self.dsf_rc = dsf_rc
@@ -799,6 +800,7 @@ class SRCoulomb(nn.Module):
         self.key_in = key_in
         self.key_out = key_out
         self._factor = constants.half_Hartree * constants.Bohr
+        self.rc: Tensor
         self.register_buffer("rc", torch.tensor(rc))
         if envelope not in ("exp", "cosine"):
             raise ValueError(f"Unknown envelope {envelope}, must be 'exp' or 'cosine'")
@@ -849,6 +851,7 @@ class DispParam(nn.Module):
         # Element 0 represents dummy atoms with c6=0 and alpha=1
         ref[0, 0] = 0.0
         ref[0, 1] = 1.0
+        self.disp_param0: Tensor
         self.register_buffer("disp_param0", ref)
         self.key_in = key_in
         self.key_out = key_out
@@ -899,6 +902,7 @@ class D3TS(nn.Module):
 
     def __init__(self, a1: float, a2: float, s8: float, s6: float = 1.0, key_in="disp_param", key_out="energy"):
         super().__init__()
+        self.r4r2: Tensor
         self.register_buffer("r4r2", constants.get_r4r2())
         self.a1 = a1
         self.a2 = a2
@@ -1194,6 +1198,10 @@ class DFTD3(nn.Module):
         cn_ref = c6ab_packed[..., 1].contiguous()
 
         # Register buffers for D3 parameters
+        self.rcov: Tensor
+        self.r4r2: Tensor
+        self.c6ab: Tensor
+        self.cn_ref: Tensor
         self.register_buffer("rcov", param["rcov"].float())
         self.register_buffer("r4r2", param["r4r2"].float())
         self.register_buffer("c6ab", c6ab.float())
@@ -1266,16 +1274,27 @@ class DFTD3(nn.Module):
             batch_idx = torch.arange(B, device=coord.device, dtype=torch.int32).repeat_interleave(N)
             num_systems = B
             total_atoms = B * N
-            max_neighbors = N - 1
-
-            arange_n = torch.arange(N, device=coord.device, dtype=torch.int32)
-            all_indices = arange_n.unsqueeze(0).expand(N, -1)
-            mask = all_indices != arange_n.unsqueeze(1)
-            template = all_indices[mask].view(N, N - 1)
-            batch_offsets = torch.arange(B, device=coord.device, dtype=torch.int32).unsqueeze(1).unsqueeze(2) * N
-            neighbor_matrix = (template.unsqueeze(0) + batch_offsets).view(total_atoms, max_neighbors)
-
             fill_value = total_atoms
+            cutoff = float(self.smoothing_off)
+            sphere_volume = 4.0 / 3.0 * math.pi * cutoff**3
+            max_neighbors = max(16, min(max(1, N - 1), ((int(0.2 * sphere_volume) + 15) // 16) * 16))
+            while True:
+                try:
+                    neighbor_matrix, _ = neighbor_list(
+                        positions=coord_flat,
+                        cutoff=cutoff,
+                        batch_idx=batch_idx,
+                        max_neighbors=max_neighbors,
+                        half_fill=False,
+                        fill_value=fill_value,
+                        method="batch_naive",
+                    )
+                    break
+                except NeighborOverflowError:
+                    if max_neighbors >= max(1, N - 1):
+                        raise
+                    max_neighbors = min(max(1, N - 1), ((int(max_neighbors * 1.5) + 15) // 16) * 16)
+            neighbor_matrix = neighbor_matrix.to(torch.int32)
             neighbor_matrix_shifts: Tensor | None = None
             cell_for_kernel: Tensor | None = None
 
@@ -1467,6 +1486,8 @@ class DFTD3(nn.Module):
 
         kernel_data = data
         if use_strain_wrapper:
+            assert isinstance(coord_unstrained, Tensor)
+            assert isinstance(cell_unstrained, Tensor)
             kernel_data = {**data, "coord": coord_unstrained, "cell": cell_unstrained}
         kernel_inputs = self._prepare_dftd3_inputs(kernel_data)
 

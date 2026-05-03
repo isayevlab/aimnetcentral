@@ -22,7 +22,7 @@
 
 import torch
 
-from .conv_sv_2d_sp_wp import conv_sv_2d_sp
+from .conv_sv_2d_sp_wp import conv_sv_2d_sp  # type: ignore[attr-defined]
 
 
 def load_ops():

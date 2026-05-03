@@ -1,4 +1,5 @@
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 import torch
 from torch import Tensor, nn
@@ -15,7 +16,7 @@ class AIMNet2(AIMNet2Base):
         nfeature: int,
         d2features: bool,
         ncomb_v: int,
-        hidden: tuple[list[int]],
+        hidden: tuple[list[int], ...],
         aim_size: int,
         outputs: list[nn.Module] | dict[str, nn.Module],
         num_charge_channels: int = 1,
@@ -52,8 +53,8 @@ class AIMNet2(AIMNet2Base):
         self.conv_a = ConvSV(nchannel=nfeature, d2features=d2features, **conv_param)
         self.conv_q = ConvSV(nchannel=num_charge_channels, d2features=False, **conv_param)
 
-        mlp_param = {"activation_fn": nn.GELU(), "last_linear": True}
-        mlps = [
+        mlp_param: dict[str, Any] = {"activation_fn": nn.GELU(), "last_linear": True}
+        mlps: list[nn.Module] = [
             MLP(
                 n_in=self.conv_a.output_size() + nfeature_tot,
                 n_out=nfeature_tot + 2 * num_charge_channels,
@@ -82,6 +83,7 @@ class AIMNet2(AIMNet2Base):
         )
         self.mlps = nn.ModuleList(mlps)
 
+        self.outputs: nn.ModuleList | nn.ModuleDict
         if isinstance(outputs, Sequence):
             self.outputs = nn.ModuleList(outputs)
         elif isinstance(outputs, Mapping):

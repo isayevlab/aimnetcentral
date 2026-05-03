@@ -11,6 +11,7 @@ models:
     aimnet2-wb97m-d3_0:
         file: aimnet2_wb97m_d3_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_0.pt
+        sha256: f0f7c054539ad3261bd36f9b11c56d12f87cb723e25bea7521755bbd3ec24e28
     aimnet2-wb97m-d3_1:
         file: aimnet2_wb97m_d3_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_1.pt
@@ -23,6 +24,7 @@ models:
     aimnet2-b973c-d3_0:
         file: aimnet2_b973c_d3_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_0.pt
+        sha256: 7ec7a3db67bd3a393ad59647d4020398deeb041c07dba1c9cf212d226268e549
     aimnet2-b973c-d3_1:
         file: aimnet2_b973c_d3_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_1.pt
@@ -35,6 +37,7 @@ models:
     aimnet2-b973c-2025-d3_0:
         file: aimnet2_2025_b973c_d3_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_0.pt
+        sha256: 043ed5418a104e31f79462f8e5ebeca64a2d24422174f5d29f894d32271981b5
     aimnet2-b973c-2025-d3_1:
         file: aimnet2_2025_b973c_d3_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_1.pt
@@ -47,6 +50,7 @@ models:
     aimnet2-nse_0:
         file: aimnet2nse_wb97m_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_0.pt
+        sha256: b98b3449b2a3765de6a188edff9344a38cc72df75f9d9bf68f4b898a253c5864
     aimnet2-nse_1:
         file: aimnet2nse_wb97m_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_1.pt
@@ -59,6 +63,7 @@ models:
     aimnet2-pd_0:
         file: aimnet2-pd_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2Pd/aimnet2-pd_0.pt
+        sha256: 93f10dd5522e187d7d6aaf3b18d54c07746f5452c2e8063cf77fd0420dc39ebd
     aimnet2-pd_1:
         file: aimnet2-pd_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2Pd/aimnet2-pd_1.pt
@@ -71,6 +76,7 @@ models:
     aimnet2-rxn_0:
         file: aimnet2_rxn_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_0.pt
+        sha256: ce8bc2a4cc6fcb5ebaa1bc8897fcd75104e5a00fe86e9d5fc6a020d572174894
     aimnet2-rxn_1:
         file: aimnet2_rxn_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_1.pt

@@ -9,7 +9,7 @@
 
 ## Prerequisites
 
-- Python 3.11 or 3.12
+- Python 3.11, 3.12, or 3.13
 - AIMNet2 installed (`pip install aimnet`)
 - A CUDA-capable GPU is recommended but not required
 

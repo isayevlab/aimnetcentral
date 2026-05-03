@@ -1,8 +1,7 @@
 import logging
 import os
 import re
-from collections.abc import Callable, Sequence
-from typing import Any
+from collections.abc import Callable
 
 import numpy as np
 import omegaconf
@@ -32,6 +31,14 @@ def make_seed(all_reduce=True):
     seed = int.from_bytes(os.urandom(2), "big")
     if all_reduce and idist.get_world_size() > 1:
         seed = idist.all_reduce(seed)
+    return seed
+
+
+def _to_config_dict(cfg: omegaconf.DictConfig, name: str) -> dict:
+    d = OmegaConf.to_container(cfg)
+    if not isinstance(d, dict):
+        raise TypeError(f"{name} configuration must be a dictionary.")
+    return d
 
 
 def load_dataset(cfg: omegaconf.DictConfig, kind="train"):
@@ -39,17 +46,16 @@ def load_dataset(cfg: omegaconf.DictConfig, kind="train"):
     keys = list(cfg.x) + list(cfg.y)
     # in DDP setting, will only load 1/WORLD_SIZE of the data
     if idist.get_world_size() > 1 and not cfg.ddp_load_full_dataset:
-        shard = (idist.get_local_rank(), idist.get_world_size())
+        shard = (idist.get_rank(), idist.get_world_size())
     else:
         shard = None
 
-    extra_kwargs = {
-        "keys": keys,
-        "shard": shard,
-    }
-    cfg.datasets[kind].kwargs.update(extra_kwargs)
-    cfg.datasets[kind].args = [cfg[kind]]
-    ds = build_module(OmegaConf.to_container(cfg.datasets[kind]))  # type: ignore[arg-type]
+    d = _to_config_dict(cfg.datasets[kind], "Dataset")
+    kwargs = dict(d.get("kwargs", {}))
+    kwargs.update({"keys": keys, "shard": shard})
+    d["kwargs"] = kwargs
+    d["args"] = [cfg[kind]]
+    ds = build_module(d)  # type: ignore[arg-type]
     ds = apply_sae(ds, cfg)  # type: ignore[arg-type]
     return ds
 
@@ -58,8 +64,10 @@ def apply_sae(ds: SizeGroupedDataset, cfg: omegaconf.DictConfig):
     for k, c in cfg.sae.items():
         if c is not None and k in cfg.y:
             sae = load_yaml(c.file)
+            if not isinstance(sae, dict):
+                raise TypeError(f"SAE file {c.file} must contain a dictionary.")
             unique_numbers = set(np.unique(ds.concatenate("numbers").tolist()))
-            if not unique_numbers.issubset(sae.keys()):  # type: ignore[attr-defined]
+            if not unique_numbers.issubset(sae.keys()):
                 raise ValueError(f"Keys in SAE file {c.file} do not cover all the dataset atoms")
             if c.mode == "linreg":
                 ds.apply_peratom_shift(k, k, sap_dict=sae)
@@ -73,9 +81,7 @@ def apply_sae(ds: SizeGroupedDataset, cfg: omegaconf.DictConfig):
 
 
 def get_sampler(ds: SizeGroupedDataset, cfg: omegaconf.DictConfig, kind="train"):
-    d = OmegaConf.to_container(cfg.samplers[kind])
-    if not isinstance(d, dict):
-        raise TypeError("Sampler configuration must be a dictionary.")
+    d = _to_config_dict(cfg.samplers[kind], "Sampler")
     if "kwargs" not in d:
         d["kwargs"] = {}
     d["kwargs"]["ds"] = ds
@@ -126,9 +132,7 @@ def get_optimizer(model: nn.Module, cfg: omegaconf.DictConfig):
     logging.info("Building optimizer")
     param_groups = {}
     for k, c in cfg.param_groups.items():
-        c = OmegaConf.to_container(c)
-        if not isinstance(c, dict):
-            raise TypeError("Param groups must be a dictionary.")
+        c = _to_config_dict(c, "Param group")
         c.pop("re")
         param_groups[k] = {"params": [], **c}
     param_groups["default"] = {"params": []}
@@ -145,9 +149,7 @@ def get_optimizer(model: nn.Module, cfg: omegaconf.DictConfig):
                 break
         if not _matched:
             param_groups["default"]["params"].append(p)
-    d = OmegaConf.to_container(cfg)
-    if not isinstance(d, dict):
-        raise TypeError("Optimizer configuration must be a dictionary.")
+    d = _to_config_dict(cfg, "Optimizer")
     d["args"] = [[v for v in param_groups.values() if len(v["params"])]]
     optimizer = get_init_module(d["class"], d["args"], d["kwargs"])
     logging.info(f"Optimizer: {optimizer}")
@@ -162,18 +164,14 @@ def get_optimizer(model: nn.Module, cfg: omegaconf.DictConfig):
 
 
 def get_scheduler(optimizer: torch.optim.Optimizer, cfg: omegaconf.DictConfig):
-    d = OmegaConf.to_container(cfg)
-    if not isinstance(d, dict):
-        raise TypeError("Scheduler configuration must be a dictionary.")
+    d = _to_config_dict(cfg, "Scheduler")
     d["args"] = [optimizer]
     scheduler = build_module(d)
     return scheduler
 
 
 def get_loss(cfg: omegaconf.DictConfig):
-    d = OmegaConf.to_container(cfg)
-    if not isinstance(d, dict):
-        raise TypeError("Loss configuration must be a dictionary.")
+    d = _to_config_dict(cfg, "Loss")
     loss = build_module(d)
     return loss
 
@@ -198,59 +196,23 @@ def unwrap_module(net):
 
 
 def build_model(cfg, forces=False):
-    d = OmegaConf.to_container(cfg)
-    if not isinstance(d, dict):
-        raise TypeError("Model configuration must be a dictionary.")
+    d = _to_config_dict(cfg, "Model")
     model = build_module(d)
-    if forces is not None:
+    if forces:
         model = Forces(model)  # type: ignore[attr-defined]
     return model
 
 
 def get_metrics(cfg: omegaconf.DictConfig):
-    d = OmegaConf.to_container(cfg)
-    if not isinstance(d, dict):
-        raise TypeError("Metrics configuration must be a dictionary.")
+    d = _to_config_dict(cfg, "Metrics")
     metrics = build_module(d)
     return metrics
 
 
-def train_step(engine: Engine, batch: Sequence[torch.Tensor]) -> Any | tuple[torch.Tensor]:
-    global model
-    global optimizer
-    global prepare_batch
-    global loss_fn
-    global device
-
-    model.train()  # type: ignore
-    optimizer.zero_grad()  # type: ignore
-    x, y = prepare_batch(batch, device=device, non_blocking=True)  # type: ignore
-    y_pred = model(x)  # type: ignore
-    loss = loss_fn(y_pred, y)["loss"]  # type: ignore
-    loss.backward()
-    optimizer.step()  # type: ignore
-
-    return loss.item()
-
-
-def val_step(engine: Engine, batch: Sequence[torch.Tensor]) -> Any | tuple[torch.Tensor]:
-    global model
-    global optimizer
-    global prepare_batch
-    global loss_fn
-    global device
-
-    model.eval()  # type: ignore
-    if not next(iter(batch[0].values())).numel():
-        return None
-    x, y = prepare_batch(batch, device=device, non_blocking=True)  # type: ignore
-    with torch.no_grad():
-        y_pred = model(x)  # type: ignore
-    return y_pred, y
-
-
-def prepare_batch(batch: dict[str, Tensor], device="cuda", non_blocking=True) -> dict[str, Tensor]:  # noqa: F811
+def prepare_batch(batch: dict[str, Tensor], device="cuda", non_blocking=True) -> dict[str, Tensor]:
     for k, v in batch.items():
+        if v.is_floating_point() and v.dtype != torch.float32:
+            v = v.float()
         batch[k] = v.to(device, non_blocking=non_blocking)
     return batch
 

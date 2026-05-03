@@ -486,6 +486,8 @@ def _vmap_conv_sv_2d_sp_bwd(info, in_dims, grad_output, a, idx, g):
 
     Strategy: K-loop, same reasoning as the bwd_bwd rule.
     """
+    if any(dim is not None for dim in in_dims[1:]):
+        raise RuntimeError(f"aimnet::conv_sv_2d_sp_bwd vmap supports batching only grad_output; got in_dims={in_dims}")
     K = info.batch_size
 
     out0: list[Tensor] = []
@@ -512,8 +514,8 @@ def _vmap_conv_sv_2d_sp_bwd_bwd(info, in_dims, grad_output, grad2_a, grad2_g, a,
 
     Hit when torch.func.vmap traverses a vjp closure that reaches the second-order
     backward (the Hessian-via-vmap path).  Only
-    in_dims = (None, 0, 0, None, None, None) — vmap on the two upstream cotangents
-    only — is supported.  Batching idx, a, or g along their leading B dim is unsafe
+    vmap on grad_output and the two upstream cotangents is supported. Batching idx,
+    a, or g along their leading B dim is unsafe
     (it scatters the kernel's padding-row sentinel at index B-1) and is not detected
     at runtime.
 
@@ -526,6 +528,11 @@ def _vmap_conv_sv_2d_sp_bwd_bwd(info, in_dims, grad_output, grad2_a, grad2_g, a,
     copies would scatter padding rows. The K calls queue async on the CUDA
     stream, so the loop's per-call cost is dominated by GPU work, not Python.
     """
+    if any(dim is not None for dim in in_dims[3:]):
+        raise RuntimeError(
+            "aimnet::conv_sv_2d_sp_bwd_bwd vmap supports batching only grad_output, "
+            f"grad2_a, and grad2_g; got in_dims={in_dims}"
+        )
     K = info.batch_size
 
     out0: list[Tensor] = []
@@ -580,4 +587,20 @@ def conv_sv_2d_sp(a: Tensor, idx: Tensor, g: Tensor) -> Tensor:
     Tensor
         Output tensor of shape (B, A, G, 4).
     """
+    if a.device.type != "cuda" or idx.device.type != "cuda" or g.device.type != "cuda":
+        raise RuntimeError("conv_sv_2d_sp is a CUDA-only Warp kernel")
+    if a.dtype != torch.float32 or g.dtype != torch.float32:
+        raise TypeError("conv_sv_2d_sp supports float32 tensors only")
+    if idx.dtype != torch.int32:
+        idx = idx.to(torch.int32)
+    if a.ndim != 3 or idx.ndim != 2 or g.ndim != 4 or g.shape[-1] != 4:
+        raise ValueError("Expected shapes a=(B,A,G), idx=(B,M), g=(B,M,G,4)")
+    if a.shape[0] != idx.shape[0] or idx.shape[0] != g.shape[0] or a.shape[2] != g.shape[2]:
+        raise ValueError("Incompatible conv_sv_2d_sp leading or basis dimensions")
+    if not a.is_contiguous():
+        a = a.contiguous()
+    if not idx.is_contiguous():
+        idx = idx.contiguous()
+    if not g.is_contiguous():
+        g = g.contiguous()
     return torch.ops.aimnet.conv_sv_2d_sp_fwd(a, idx, g)

@@ -141,6 +141,40 @@ class TestCalcMasks:
         assert data["mol_sizes"][0].item() == 3
         assert data["mol_sizes"][1].item() == 2
 
+        # local padded neighbor indices are masked per batch
+        assert data["mask_ij"][0, 0, 2].item() is True
+        assert data["mask_ij"][1, 0, 1].item() is True
+        # padded center rows are fully masked
+        assert data["mask_ij"][1, 2].all()
+
+    def test_calc_masks_mode_2_masks_local_and_global_padding(self, device):
+        numbers = torch.tensor([[6, 0, 1], [6, 1, 0]], device=device)
+        nbmat_local = torch.tensor(
+            [
+                [[1, 2], [0, 2], [0, 1]],
+                [[1, 2], [0, 2], [0, 1]],
+            ],
+            device=device,
+        )
+        nbmat_global = torch.tensor(
+            [
+                [[1, 2], [0, 2], [0, 1]],
+                [[4, 5], [3, 5], [3, 4]],
+            ],
+            device=device,
+        )
+
+        data = {"numbers": numbers, "nbmat": nbmat_local, "nbmat_lr": nbmat_global}
+        data = nbops.set_nb_mode(data)
+        data = nbops.calc_masks(data)
+
+        assert data["mask_ij"][0, 0, 0].item() is True  # local pad atom 1 in batch 0
+        assert data["mask_ij"][1, 0, 1].item() is True  # local pad atom 2 in batch 1
+        assert data["mask_ij_lr"][0, 0, 0].item() is True  # global pad atom 1
+        assert data["mask_ij_lr"][1, 0, 1].item() is True  # global pad atom 5
+        assert data["mask_ij"][0, 1].all()
+        assert data["mask_ij_lr"][1, 2].all()
+
 
 class TestMaskIj:
     """Tests for mask_ij_ function."""
@@ -233,12 +267,10 @@ class TestMaskI:
     def test_mask_i_mode_2(self, device):
         """Test atomic masking for mode 2.
 
-        In mode 2, mask_i_ only masks the last atom position in each batch,
-        assuming padding atoms are always placed at the end.
+        In mode 2, mask_i_ masks every atom where numbers == 0.
         """
         B, N = 2, 3
-        # Padding (number=0) should be at the last position
-        numbers = torch.tensor([[6, 1, 0], [6, 1, 0]], device=device)
+        numbers = torch.tensor([[6, 0, 1], [6, 1, 0]], device=device)
         nbmat = torch.randint(0, N, (B, N, 2), device=device)
 
         data = {"numbers": numbers, "nbmat": nbmat}
@@ -248,12 +280,11 @@ class TestMaskI:
         x = torch.ones((B, N), device=device)
         nbops.mask_i_(x, data, mask_value=0.0, inplace=True)
 
-        # In mode 2, only the last position is masked (assumes padding at end)
-        assert x[0, 2].item() == 0.0
+        assert x[0, 1].item() == 0.0
         assert x[1, 2].item() == 0.0
-        # First positions should remain unmasked
+        # Non-padding positions should remain unmasked
         assert x[0, 0].item() == 1.0
-        assert x[0, 1].item() == 1.0
+        assert x[0, 2].item() == 1.0
 
 
 class TestGetIj:
