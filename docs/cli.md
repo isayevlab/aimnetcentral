@@ -4,10 +4,10 @@ AIMNet2 provides command-line tools for training, model export, conversion, and 
 
 ## Installation
 
-CLI tools are available with the `train` extras:
+The `aimnet` entry point is installed with the core package. Training, export, and self-atomic-energy commands require the `train` extra:
 
 ```bash
-pip install "aimnet[train] @ git+https://github.com/isayevlab/aimnetcentral.git"
+pip install "aimnet[train]"
 ```
 
 ## Commands Overview

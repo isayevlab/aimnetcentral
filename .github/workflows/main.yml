@@ -81,7 +81,7 @@ jobs:
                   extras: ase
 
             - name: Run ASE tests
-              run: uv run pytest tests -m ase --cov --cov-config=pyproject.toml --cov-report=xml
+              run: uv run pytest tests -m "ase and not sella" --cov --cov-config=pyproject.toml --cov-report=xml
 
             - name: Upload coverage reports to Codecov
               uses: codecov/codecov-action@v6
@@ -162,6 +162,43 @@ jobs:
               with:
                   flags: pysis
 
+    tests-sella:
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        strategy:
+            matrix:
+                python-version: ["3.11"]
+            fail-fast: false
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - name: Check out
+              uses: actions/checkout@v6
+
+            - name: Set up the environment
+              uses: ./.github/actions/setup-uv-env
+              with:
+                  python-version: ${{ matrix.python-version }}
+                  groups: dev
+                  extras: sella
+
+            - name: Run sella-marked tests (allow empty)
+              run: |
+                  set -e
+                  uv run pytest tests -m sella --cov --cov-config=pyproject.toml --cov-report=xml || rc=$?
+                  if [ "${rc:-0}" -eq 5 ]; then
+                    echo "No sella-marked tests collected; treating as success."
+                    exit 0
+                  fi
+                  exit "${rc:-0}"
+
+            - name: Upload coverage reports to Codecov
+              if: hashFiles('coverage.xml') != ''
+              uses: codecov/codecov-action@v6
+              with:
+                  flags: sella
+
     tests-hf:
         runs-on: ubuntu-latest
         timeout-minutes: 20
@@ -204,7 +241,7 @@ jobs:
         timeout-minutes: 20
         strategy:
             matrix:
-                python-version: ["3.12"]
+                python-version: ["3.12", "3.13"]
             fail-fast: false
         defaults:
             run:
@@ -261,6 +298,7 @@ jobs:
                 tests-ase,
                 tests-train,
                 tests-pysis,
+                tests-sella,
                 tests-hf,
                 tests-torchsim,
                 check-docs,

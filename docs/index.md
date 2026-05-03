@@ -60,7 +60,7 @@ charges = result["charges"] # partial charges
 
 ## Available Models
 
-AIMNet2 provides six model families covering a wide range of chemistry -- from general organic molecules to open-shell radicals, palladium catalysis, and reactive chemistry. Each model has ensemble members (append `_0` to `_3`) for uncertainty estimation.
+AIMNet2 provides six model families covering a wide range of chemistry -- from general organic molecules to open-shell radicals, palladium catalysis, and reactive chemistry. Each family has four ensemble members indexed `_0` through `_3` for uncertainty estimation.
 
 See the **[Model Selection Guide](models/guide.md)** for a detailed comparison and decision flowchart.
 
@@ -111,6 +111,7 @@ pip install "aimnet[train]"
 - **[AIMNet2-B97-3c](models/aimnet2_b973c.md)** - Legacy B97-3c (for reproducibility)
 - **[AIMNet2-NSE](models/aimnet2nse.md)** - Open-shell and radical chemistry
 - **[AIMNet2-Pd](models/aimnet2pd.md)** - Palladium-containing systems
+- **[AIMNet2-rxn](models/aimnet2_rxn.md)** - Reactive chemistry, transition states, and IRC paths
 
 ### Tutorials
 

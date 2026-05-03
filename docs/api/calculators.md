@@ -56,8 +56,9 @@ print(atoms.get_forces())
 
 This interface adapts AIMNet2 for use with PySisyphus optimizers. It handles unit conversion automatically:
 
-- **Input**: Converts Angstrom (PySisyphus) to Angstrom (AIMNet2).
-- **Output**: Converts eV/Angstrom (AIMNet2) to **Hartree/Bohr** (PySisyphus).
+- **Input**: Converts Bohr coordinates (PySisyphus) to Angstrom (AIMNet2).
+- **Output**: Converts eV and eV/Angstrom (AIMNet2) to Hartree and Hartree/Bohr (PySisyphus).
+- **Hessian**: Converts eV/Angstrom^2 (AIMNet2) to Hartree/Bohr^2 (PySisyphus).
 
 ::: aimnet.calculators.aimnet2pysis.AIMNet2Pysis
     options:

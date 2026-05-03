@@ -8,8 +8,20 @@ try:
     from pysisyphus.calculators.Calculator import Calculator  # type: ignore
     from pysisyphus.constants import ANG2BOHR, AU2EV, BOHR2ANG  # type: ignore
     from pysisyphus.elem_data import ATOMIC_NUMBERS  # type: ignore
-except ImportError:
-    raise ImportError("Pysisyphus is not installed. Please install Pysisyphus to use this module.") from None
+except ImportError as exc:
+    _PYSIS_IMPORT_ERROR: ImportError | None = exc
+
+    class Calculator:  # type: ignore[no-redef]
+        def __init__(self, *args, **kwargs):
+            pass
+
+    ANG2BOHR = 1.0
+    AU2EV = 1.0
+    BOHR2ANG = 1.0
+    ATOMIC_NUMBERS: dict[str, int] = {}
+    pysisyphus = None  # type: ignore[assignment]
+else:
+    _PYSIS_IMPORT_ERROR = None
 
 EV2AU = 1 / AU2EV
 
@@ -18,6 +30,11 @@ class AIMNet2Pysis(Calculator):
     def __init__(
         self, model: AIMNet2Calculator | str = "aimnet2", charge=0, mult=1, validate_species: bool = True, **kwargs
     ):
+        if _PYSIS_IMPORT_ERROR is not None:
+            raise ImportError(
+                'AIMNet2Pysis requires PySisyphus. Install it with `pip install "aimnet[pysis]"`.'
+            ) from _PYSIS_IMPORT_ERROR
+
         super().__init__(charge=charge, mult=mult, **kwargs)
         if isinstance(model, str):
             model = AIMNet2Calculator(model)
@@ -90,5 +107,10 @@ class AIMNet2Pysis(Calculator):
 
 
 def run_pysis():
+    if _PYSIS_IMPORT_ERROR is not None:
+        raise ImportError(
+            'AIMNet2Pysis requires PySisyphus. Install it with `pip install "aimnet[pysis]"`.'
+        ) from _PYSIS_IMPORT_ERROR
+
     pysisyphus.run.CALC_DICT["aimnet"] = AIMNet2Pysis
     pysisyphus.run.run()

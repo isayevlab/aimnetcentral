@@ -51,8 +51,8 @@ See the [TorchSim external package guide](external/torch-sim.md) for examples.
 AIMNet2 works on CPU by default. For GPU acceleration, install PyTorch with CUDA:
 
 ```bash
-# For CUDA 12.4
-pip install torch --index-url https://download.pytorch.org/whl/cu124
+# For CUDA 12.6
+pip install torch --index-url https://download.pytorch.org/whl/cu126
 ```
 
 Check [pytorch.org](https://pytorch.org/get-started/locally/) for other CUDA versions.

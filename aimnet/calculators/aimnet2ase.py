@@ -6,8 +6,28 @@ import torch
 
 try:
     from ase.calculators.calculator import Calculator, PropertyNotImplementedError, all_changes  # type: ignore
-except ImportError:
-    raise ImportError("ASE is not installed. Please install ASE to use this module.") from None
+except ImportError as exc:
+    _ASE_IMPORT_ERROR: ImportError | None = exc
+
+    class Calculator:  # type: ignore[no-redef]
+        def __init__(self, *args, **kwargs):
+            self.results = {}
+
+        def reset(self):
+            self.results = {}
+
+        def check_state(self, *args, **kwargs):
+            return []
+
+        def calculate(self, *args, **kwargs):
+            return None
+
+    class PropertyNotImplementedError(RuntimeError):  # type: ignore[no-redef]
+        pass
+
+    all_changes = []  # type: ignore[assignment]
+else:
+    _ASE_IMPORT_ERROR = None
 
 from .calculator import AIMNet2Calculator
 
@@ -29,6 +49,11 @@ class AIMNet2ASE(Calculator):
         mult=1,
         validate_species: bool = True,
     ):
+        if _ASE_IMPORT_ERROR is not None:
+            raise ImportError(
+                'AIMNet2ASE requires ASE. Install it with `pip install "aimnet[ase]"`.'
+            ) from _ASE_IMPORT_ERROR
+
         super().__init__()
         if isinstance(base_calc, str):
             base_calc = AIMNet2Calculator(base_calc)

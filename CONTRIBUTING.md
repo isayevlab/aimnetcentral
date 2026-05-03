@@ -99,7 +99,7 @@ make test
 CI runs tests in separate jobs:
 
 - Core tests on a minimal install
-- Optional extras tests (`ase`, `pysis`, `train`) in dedicated jobs
+- Optional extras tests (`ase`, `pysis`, `sella`, `hf`, `torchsim`, `train`) in dedicated jobs
 
 10. Commit your changes and push your branch to GitHub:
 

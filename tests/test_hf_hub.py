@@ -144,6 +144,7 @@ def fake_hf_repo_with_family(tmp_path):
     return tmp_path
 
 
+@pytest.mark.hf
 def test_load_from_hf_repo_propagates_family_and_charge_fields(fake_hf_repo_with_family):
     _, metadata = load_from_hf_repo(str(fake_hf_repo_with_family), ensemble_member=0, device="cpu")
     assert metadata.get("family") == "test-family"

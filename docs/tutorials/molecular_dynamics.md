@@ -144,13 +144,13 @@ traj.close()
 
     When in doubt, run a short trajectory at 0.5 fs and check energy conservation in NVE (see below).
 
-## Step 3: NPT Simulation with Berendsen Barostat
+## Step 3: NPT Simulation with ASE NPT
 
 NPT (constant pressure) is needed for condensed-phase simulations where the volume should fluctuate. ASE provides the `NPT` integrator for this purpose.
 
 !!! note "NPT requires periodic boundary conditions"
 
-    The Berendsen barostat adjusts the unit cell dimensions, which only makes sense for periodic systems. For an isolated molecule in vacuum, use NVT instead.
+    The NPT integrator adjusts the unit cell dimensions, which only makes sense for periodic systems. For an isolated molecule in vacuum, use NVT instead.
 
 ```python
 from ase.md.npt import NPT as NPTIntegrator
@@ -349,7 +349,7 @@ calc = AIMNet2ASE(base_calc)
 
 ### Thermostat Parameters
 
-| Parameter            | Langevin                | Berendsen (NPT)        |
+| Parameter            | Langevin                | ASE NPT                |
 | -------------------- | ----------------------- | ---------------------- |
 | Temperature coupling | `friction=0.01/fs`      | `ttime=25*fs`          |
 | Pressure coupling    | N/A                     | `pfactor=None` (auto)  |

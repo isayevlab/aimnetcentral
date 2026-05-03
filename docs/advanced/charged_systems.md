@@ -15,7 +15,7 @@
 
 ## Relevant Models
 
-Charge handling is universal across all AIMNet2 models. The examples in this guide work with any model variant (`aimnet2`, `aimnet2-2025`, `aimnet2-nse`, `aimnet2-pd`, `aimnet2-b973c`). Choose the model based on your chemistry, not your charge state.
+Charge handling is available across the standard AIMNet2 model families (`aimnet2`, `aimnet2-2025`, `aimnet2-nse`, `aimnet2-pd`, `aimnet2-b973c`). The `aimnet2-rxn` family is the exception: it supports only net-neutral systems, including zwitterions, and rejects nonzero total charge. Choose the model based on both chemistry and charge state.
 
 ## Setting the Charge
 

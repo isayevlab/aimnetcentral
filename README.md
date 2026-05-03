@@ -31,17 +31,14 @@ pip install torch --index-url https://download.pytorch.org/whl/cu126
 
 # Install AIMNet2
 pip install aimnet
-
-# Install GPU-accelerated neighbor lists and dispersion kernels
-pip install 'nvalchemi-toolkit-ops[torch]'
 ```
 
 ### Using uv (recommended for fast installs)
 
 ```bash
-# Install PyTorch + AIMNet2 in one step
+# Install PyTorch + AIMNet2
 uv pip install torch --index-url https://download.pytorch.org/whl/cu126
-uv pip install aimnet 'nvalchemi-toolkit-ops[torch]'
+uv pip install aimnet
 ```
 
 ### Using conda/mamba
@@ -51,8 +48,8 @@ uv pip install aimnet 'nvalchemi-toolkit-ops[torch]'
 mamba create -n aimnet python=3.12 pytorch pytorch-cuda=12.6 -c pytorch -c nvidia -c conda-forge
 mamba activate aimnet
 
-# Install AIMNet2 and GPU kernels via pip (not yet on conda-forge)
-pip install aimnet 'nvalchemi-toolkit-ops[torch]'
+# Install AIMNet2 via pip (not yet on conda-forge)
+pip install aimnet
 ```
 
 ### Optional Extras
@@ -172,6 +169,7 @@ calc = AIMNet2Calculator("isayevlab/aimnet2-wb97m-d3")
 # isayevlab/aimnet2-2025       improved intermolecular (B97-3c)
 # isayevlab/aimnet2-nse        open-shell / radicals
 # isayevlab/aimnet2-pd         palladium chemistry
+# isayevlab/aimnet2-rxn        reactive chemistry / TS / IRC
 
 # Load a specific ensemble member (0–3) or a pinned revision:
 calc = AIMNet2Calculator("isayevlab/aimnet2-wb97m-d3", ensemble_member=2)
@@ -213,7 +211,7 @@ The threshold is configurable via `nb_threshold` (default: 120 atoms).
 
 - **DFT-D3** dispersion with BJ damping (GPU-accelerated via nvalchemiops)
 - **Coulomb**: Simple (all-pairs), DSF (damped-shifted force), or Ewald summation
-- All long-range modules are differentiable and support stress tensor computation
+- Long-range modules support inference forces and stress where documented; DSF and DFT-D3 use specialized backend paths, with Hessian support limited to the documented pure-torch DFT-D3 path
 
 ## Training
 

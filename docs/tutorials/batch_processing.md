@@ -290,20 +290,23 @@ for i, mol in enumerate(dataset):
 
 !!! warning "Unsorted mol_idx"
 
-````python # WRONG -- mol_idx is not sorted
+```python
+# WRONG -- mol_idx is not sorted
 mol_idx = torch.tensor([0, 1, 0, 1])
 
-    # CORRECT -- atoms grouped by molecule
-    mol_idx = torch.tensor([0, 0, 1, 1])
-    ```
+# CORRECT -- atoms grouped by molecule
+mol_idx = torch.tensor([0, 0, 1, 1])
+```
 
 !!! warning "Scalar charge with batched input"
-```python # WRONG -- scalar charge with multiple molecules
+
+```python
+# WRONG -- scalar charge with multiple molecules
 charge = 0.0
 
-    # CORRECT -- one charge per molecule
-    charge = torch.tensor([0.0, 0.0, 0.0])
-    ```
+# CORRECT -- one charge per molecule
+charge = torch.tensor([0.0, 0.0, 0.0])
+```
 
 !!! note "Hessian is single-molecule only"
 Hessian calculation (`hessian=True`) is not supported for batched inputs. If you
@@ -315,4 +318,3 @@ requires O(N^2) memory, so it is impractical for large molecules.
 - [Performance Tuning](performance.md) -- Optimize batch size, compilation, and GPU memory
 - [Geometry Optimization](geometry_optimization.md) -- Optimize structures before ranking
 - [Conformer Search](../advanced/conformer_search.md) -- Full conformational sampling workflow
-````

@@ -12,7 +12,7 @@
 
 - Familiarity with the [AIMNet2Calculator API](../calculator.md)
 - Understanding of [AIMNet2-NSE for open-shell chemistry](open_shell.md)
-- Installation: `pip install "aimnet[ase]" pysisyphus`
+- Installation: `pip install "aimnet[ase,pysis]"`
 - Basic knowledge of transition state theory and reaction coordinates
 
 ## Why Use AIMNet2 for Reaction Paths?
@@ -48,6 +48,8 @@ calc = AIMNet2Pysis("aimnet2-nse", charge=-1, mult=1)
 base = AIMNet2Calculator("aimnet2-nse", compile_model=True)
 calc = AIMNet2Pysis(base, charge=-1, mult=1)
 ```
+
+Use `compile_model=True` for repeated force-only evaluations such as NEB image optimization. Leave compilation disabled for Hessian workflows because the calculator rejects `compile_model=True` together with `hessian=True`.
 
 ### The run_pysis() Entry Point
 
@@ -184,7 +186,7 @@ import torch
 import numpy as np
 from aimnet.calculators import AIMNet2Calculator
 
-calc = AIMNet2Calculator("aimnet2-nse", compile_model=True)
+calc = AIMNet2Calculator("aimnet2-nse", compile_model=False)
 
 # TS geometry (from NEB climbing image)
 # Replace with actual TS coordinates from your NEB result
@@ -218,7 +220,7 @@ hessian_au = hessian_2d * EV_TO_HARTREE / (ANG_TO_BOHR ** 2)
 
 !!! warning "Hessian limitations"
 
-    The Hessian computation is supported for **single molecules only**. If `mol_idx` indicates multiple molecules, the calculator raises `NotImplementedError`. The Hessian output has shape `(N, 3, N, 3)` and should be flattened to `(3N, 3N)` for eigenvalue analysis.
+    The Hessian computation is supported for **single molecules only**. If `mol_idx` indicates multiple molecules, the calculator raises `NotImplementedError`. `compile_model=True` is also incompatible with Hessian requests. The Hessian output has shape `(N, 3, N, 3)` and should be flattened to `(3N, 3N)` for eigenvalue analysis.
 
 ### Vibrational Frequency Analysis
 

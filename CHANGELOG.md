@@ -76,3 +76,4 @@ Initial public wheel of AIMNet2.
 - **aimnet2_2025**: B97-3c with improved intermolecular interactions (H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I)
 - **aimnet2nse**: Open-shell chemistry (H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I)
 - **aimnet2pd**: Palladium-containing complexes (H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I)
+- **aimnet2-rxn**: Reactive chemistry, transition states, and IRC paths (H, C, N, O)
