@@ -1274,6 +1274,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#optimization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optimization
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#charge-and-multiplicity" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1289,6 +1300,17 @@
     <span class="md-ellipsis">
       
         Periodic Systems
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
       
     </span>
   </a>
@@ -1877,6 +1899,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#optimization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optimization
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#charge-and-multiplicity" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1892,6 +1925,17 @@
     <span class="md-ellipsis">
       
         Periodic Systems
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
       
     </span>
   </a>
@@ -1923,7 +1967,8 @@
 <p><a href="https://torchsim.github.io/torch-sim/">TorchSim</a> is a Torch-native atomistic simulation engine with high-level runners for static evaluation, geometry optimization, molecular dynamics, and autobatching.</p>
 <div class="admonition note">
 <p class="admonition-title">Installation</p>
-<p>TorchSim requires Python 3.12+. Install AIMNet with <code>pip install "aimnet[torchsim]"</code>.</p>
+<p>TorchSim requires Python 3.12+. For the ASE-based examples below, install both extras:
+<code>pip install "aimnet[torchsim,ase]"</code>.</p>
 </div>
 <h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">ase.io</span>
@@ -1935,10 +1980,29 @@
 <span class="n">base_calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>
 <span class="n">model</span> <span class="o">=</span> <span class="n">AIMNet2TorchSim</span><span class="p">(</span><span class="n">base_calc</span><span class="p">)</span>
 
-<span class="n">state</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">static</span><span class="p">(</span><span class="n">system</span><span class="o">=</span><span class="n">atoms</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;potential_energy&quot;</span><span class="p">])</span>
+<span class="n">results</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">static</span><span class="p">(</span><span class="n">system</span><span class="o">=</span><span class="n">atoms</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;potential_energy&quot;</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;forces&quot;</span><span class="p">])</span>
 </code></pre></div>
-<p>For energy-only static batches, construct the wrapper with <code>compute_forces=False</code>. Geometry optimization and molecular dynamics require the default <code>compute_forces=True</code>.</p>
+<p><code>ts.static</code> returns a list of property dictionaries, one per input system. AIMNet energies are in eV and forces are in eV/Angstrom.</p>
+<p>For energy-only static batches, construct the wrapper with <code>compute_forces=False</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">model</span> <span class="o">=</span> <span class="n">AIMNet2TorchSim</span><span class="p">(</span><span class="n">base_calc</span><span class="p">,</span> <span class="n">compute_forces</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">results</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">static</span><span class="p">(</span><span class="n">system</span><span class="o">=</span><span class="p">[</span><span class="n">atoms</span><span class="p">,</span> <span class="n">atoms</span><span class="o">.</span><span class="n">copy</span><span class="p">()],</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
+</code></pre></div>
+<p>Geometry optimization and molecular dynamics require the default <code>compute_forces=True</code>.</p>
+<h2 id="optimization">Optimization<a class="headerlink" href="#optimization" title="Permanent link">&para;</a></h2>
+<p>TorchSim runners accept a single ASE <code>Atoms</code>, a list of <code>Atoms</code>, or a <code>SimState</code>. Use <code>autobatcher=True</code> for heterogeneous batches when memory is the limiting factor:</p>
+<div class="highlight"><pre><span></span><code><span class="n">systems</span> <span class="o">=</span> <span class="p">[</span><span class="n">atoms</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">50</span><span class="p">)]</span>
+
+<span class="n">final_state</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">optimize</span><span class="p">(</span>
+    <span class="n">system</span><span class="o">=</span><span class="n">systems</span><span class="p">,</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">optimizer</span><span class="o">=</span><span class="n">ts</span><span class="o">.</span><span class="n">Optimizer</span><span class="o">.</span><span class="n">fire</span><span class="p">,</span>
+    <span class="n">autobatcher</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">final_state</span><span class="o">.</span><span class="n">n_systems</span><span class="p">)</span>
+</code></pre></div>
 <h2 id="charge-and-multiplicity">Charge and Multiplicity<a class="headerlink" href="#charge-and-multiplicity" title="Permanent link">&para;</a></h2>
 <p>For charged systems or NSE multiplicities, convert ASE objects to a TorchSim state with <code>system_extras_map</code> so the wrapper receives per-system values:</p>
 <div class="highlight"><pre><span></span><code><span class="n">atoms</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;charge&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
@@ -1956,8 +2020,17 @@
 <h2 id="periodic-systems">Periodic Systems<a class="headerlink" href="#periodic-systems" title="Permanent link">&para;</a></h2>
 <p>Periodic states are detected from TorchSim's cell and PBC tensors. Construct the wrapper with <code>compute_stress=True</code> when using NPT integrators or cell relaxation:</p>
 <div class="highlight"><pre><span></span><code><span class="n">model</span> <span class="o">=</span> <span class="n">AIMNet2TorchSim</span><span class="p">(</span><span class="n">base_calc</span><span class="p">,</span> <span class="n">compute_stress</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">results</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">static</span><span class="p">(</span><span class="n">system</span><span class="o">=</span><span class="n">periodic_atoms</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;stress&quot;</span><span class="p">])</span>
 </code></pre></div>
 <p>Stress requires a periodic TorchSim state with non-zero cell vectors.</p>
+<h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
+<p>Runnable examples are available in the repository:</p>
+<ul>
+<li><a href="https://github.com/isayevlab/aimnetcentral/blob/main/examples/ts_opt.py"><code>examples/ts_opt.py</code></a> optimizes a batch of molecular systems with TorchSim autobatching.</li>
+<li><a href="https://github.com/isayevlab/aimnetcentral/blob/main/examples/ts_opt_pbc.py"><code>examples/ts_opt_pbc.py</code></a> runs periodic optimization and NVT dynamics with stress enabled.</li>
+</ul>
 
 
 
