@@ -911,6 +911,7 @@ class AIMNet2Calculator:
                     "force/stress training. Use 'ewald' or 'pme' for force/stress training."
                 )
         if hessian and self._coulomb_method in ("ewald", "pme"):
+            # TODO: Add an explicit finite-difference Hessian API for PBC/LR if needed.
             raise NotImplementedError(
                 "Ewald/PME Coulomb uses nvalchemiops explicit first derivatives and does not support "
                 "Hessian calculations."
