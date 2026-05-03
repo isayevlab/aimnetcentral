@@ -9,8 +9,8 @@ from conftest import CAFFEINE_FILE, load_mol
 
 from aimnet.calculators import AIMNet2Calculator
 
-# All tests in this module require ASE for molecule loading
-pytestmark = pytest.mark.ase
+# These are calculator integration tests: most construct and run a model.
+pytestmark = [pytest.mark.ase, pytest.mark.slow]
 
 
 def test_from_zoo():

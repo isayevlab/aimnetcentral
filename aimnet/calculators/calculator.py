@@ -2,8 +2,9 @@ import math
 import os
 import re
 import warnings
+from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Any, ClassVar, Literal, Mapping, cast
+from typing import Any, ClassVar, Literal, cast
 
 import torch
 from nvalchemiops.neighbors import NeighborOverflowError
