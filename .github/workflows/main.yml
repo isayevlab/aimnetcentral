@@ -51,7 +51,7 @@ jobs:
                   groups: dev
 
             - name: Run tests
-              run: uv run pytest tests -m "not gpu and not network and not ase and not pysis and not train and not hf" --cov --cov-config=pyproject.toml --cov-report=xml
+              run: uv run pytest tests -m "not gpu and not network and not ase and not pysis and not train and not hf and not torch_sim" --cov --cov-config=pyproject.toml --cov-report=xml
 
             - name: Upload coverage reports to Codecov with GitHub Action on Python 3.11
               uses: codecov/codecov-action@v6
@@ -199,6 +199,43 @@ jobs:
               with:
                   flags: hf
 
+    tests-torchsim:
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        strategy:
+            matrix:
+                python-version: ["3.12"]
+            fail-fast: false
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - name: Check out
+              uses: actions/checkout@v6
+
+            - name: Set up the environment
+              uses: ./.github/actions/setup-uv-env
+              with:
+                  python-version: ${{ matrix.python-version }}
+                  groups: dev
+                  extras: torchsim,ase
+
+            - name: Run torch_sim-marked tests (allow empty)
+              run: |
+                  set -e
+                  uv run pytest tests -m torch_sim --cov --cov-config=pyproject.toml --cov-report=xml || rc=$?
+                  if [ "${rc:-0}" -eq 5 ]; then
+                    echo "No torch_sim-marked tests collected; treating as success."
+                    exit 0
+                  fi
+                  exit "${rc:-0}"
+
+            - name: Upload coverage reports to Codecov
+              if: hashFiles('coverage.xml') != ''
+              uses: codecov/codecov-action@v6
+              with:
+                  flags: torchsim
+
     check-docs:
         runs-on: ubuntu-latest
         timeout-minutes: 20
@@ -225,6 +262,7 @@ jobs:
                 tests-train,
                 tests-pysis,
                 tests-hf,
+                tests-torchsim,
                 check-docs,
             ]
         runs-on: ubuntu-latest

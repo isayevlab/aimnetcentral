@@ -37,6 +37,7 @@ nav:
           - Overview: external/index.md
           - ASE: external/ase.md
           - pysisyphus: external/pysis.md
+          - TorchSim: external/torch-sim.md
           - Sella: external/sella.md
           - OpenMM (openmm-ml): external/openmm.md
           - AMBER (torchani-amber): external/amber.md

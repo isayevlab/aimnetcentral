@@ -64,6 +64,42 @@ This interface adapts AIMNet2 for use with PySisyphus optimizers. It handles uni
       show_root_heading: true
       show_source: true
 
+## AIMNet2TorchSim
+
+[TorchSim](https://torchsim.github.io/torch-sim/) `ModelInterface` wrapper.
+
+!!! note "Installation"
+
+    Requires the `torchsim` extra and Python 3.12+: `pip install "aimnet[torchsim]"`
+
+`AIMNet2TorchSim` wraps an `AIMNet2Calculator` as a `torch-sim-atomistic` model for static evaluation, geometry optimization, molecular dynamics, and autobatched workloads.
+
+### Usage Example
+
+```python
+import ase.io
+import torch_sim as ts
+
+from aimnet.calculators import AIMNet2Calculator, AIMNet2TorchSim
+
+atoms = ase.io.read("molecule.xyz")
+
+base_calc = AIMNet2Calculator("aimnet2")
+calc = AIMNet2TorchSim(base_calc)
+
+results = ts.static(system=atoms, model=calc)
+print(results[0]["potential_energy"], results[0]["forces"])
+```
+
+!!! note "Stress"
+
+    By default `compute_stress=False`. Pass `compute_stress=True` when constructing `AIMNet2TorchSim` for NPT integrators and PBC cell relaxation.
+
+::: aimnet.calculators.aimnet2torchsim.AIMNet2TorchSim
+    options:
+      show_root_heading: true
+      show_source: true
+
 ## Model Registry
 
 Utilities for loading pre-trained models. Models are automatically downloaded from the remote repository to the local model cache (`AIMNET_CACHE_DIR` when set, otherwise `~/.cache/aimnet/`) upon first use.
