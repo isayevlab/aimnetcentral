@@ -70,7 +70,7 @@ This interface adapts AIMNet2 for use with PySisyphus optimizers. It handles uni
 
 !!! note "Installation"
 
-    Requires the `torchsim` extra and Python 3.12+: `pip install "aimnet[torchsim]"`
+    Requires the `torchsim` extra and Python 3.12+: `pip install "aimnet[torchsim]"`. Add the `ase` extra for ASE-based input/output examples: `pip install "aimnet[torchsim,ase]"`.
 
 `AIMNet2TorchSim` wraps an `AIMNet2Calculator` as a `torch-sim-atomistic` model for static evaluation, geometry optimization, molecular dynamics, and autobatched workloads.
 

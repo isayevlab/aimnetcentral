@@ -6,7 +6,8 @@
 
 !!! note "Installation"
 
-    TorchSim requires Python 3.12+. Install AIMNet with `pip install "aimnet[torchsim]"`.
+    TorchSim requires Python 3.12+. For the ASE-based examples below, install both extras:
+    `pip install "aimnet[torchsim,ase]"`.
 
 ## Quick Start
 
@@ -20,11 +21,38 @@ atoms = ase.io.read("molecule.xyz")
 base_calc = AIMNet2Calculator("aimnet2")
 model = AIMNet2TorchSim(base_calc)
 
-state = ts.static(system=atoms, model=model)
-print(state[0]["potential_energy"])
+results = ts.static(system=atoms, model=model)
+print(results[0]["potential_energy"])
+print(results[0]["forces"])
 ```
 
-For energy-only static batches, construct the wrapper with `compute_forces=False`. Geometry optimization and molecular dynamics require the default `compute_forces=True`.
+`ts.static` returns a list of property dictionaries, one per input system. AIMNet energies are in eV and forces are in eV/Angstrom.
+
+For energy-only static batches, construct the wrapper with `compute_forces=False`:
+
+```python
+model = AIMNet2TorchSim(base_calc, compute_forces=False)
+results = ts.static(system=[atoms, atoms.copy()], model=model)
+```
+
+Geometry optimization and molecular dynamics require the default `compute_forces=True`.
+
+## Optimization
+
+TorchSim runners accept a single ASE `Atoms`, a list of `Atoms`, or a `SimState`. Use `autobatcher=True` for heterogeneous batches when memory is the limiting factor:
+
+```python
+systems = [atoms.copy() for _ in range(50)]
+
+final_state = ts.optimize(
+    system=systems,
+    model=model,
+    optimizer=ts.Optimizer.fire,
+    autobatcher=True,
+)
+
+print(final_state.n_systems)
+```
 
 ## Charge and Multiplicity
 
@@ -51,6 +79,16 @@ Periodic states are detected from TorchSim's cell and PBC tensors. Construct the
 
 ```python
 model = AIMNet2TorchSim(base_calc, compute_stress=True)
+
+results = ts.static(system=periodic_atoms, model=model)
+print(results[0]["stress"])
 ```
 
 Stress requires a periodic TorchSim state with non-zero cell vectors.
+
+## Examples
+
+Runnable examples are available in the repository:
+
+- [`examples/ts_opt.py`](https://github.com/isayevlab/aimnetcentral/blob/main/examples/ts_opt.py) optimizes a batch of molecular systems with TorchSim autobatching.
+- [`examples/ts_opt_pbc.py`](https://github.com/isayevlab/aimnetcentral/blob/main/examples/ts_opt_pbc.py) runs periodic optimization and NVT dynamics with stress enabled.
