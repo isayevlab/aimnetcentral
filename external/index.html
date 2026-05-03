@@ -1346,62 +1346,6 @@
 
               
             
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="gromacs/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    GROMACS (NNPot)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="lammps/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    LAMMPS (mliap)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
           </ul>
         </nav>
       
@@ -1881,19 +1825,9 @@
 <td>Supported upstream</td>
 <td><a href="orca/">ORCA</a></td>
 </tr>
-<tr>
-<td>GROMACS NNPot</td>
-<td>Blocked on TorchScript export</td>
-<td><a href="gromacs/">GROMACS</a></td>
-</tr>
-<tr>
-<td>LAMMPS (<code>pair_style mliap</code>)</td>
-<td>Blocked on TorchScript export</td>
-<td><a href="lammps/">LAMMPS</a></td>
-</tr>
 </tbody>
 </table>
-<p>The TorchScript-export blockers shared by GROMACS and LAMMPS are tracked in the internal TorchScript export plan. AMBER also benefits from that work -- <code>torchani-amber</code> accepts a TorchScript <code>.pt</code> via the <code>model_type</code> keyword, so the same export pathway would let us ship a self-contained AIMNet2 jit asset.</p>
+<p>Packages without a maintained AIMNet2 connector are intentionally omitted from this section.</p>
 
 
 

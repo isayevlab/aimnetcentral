@@ -1543,62 +1543,6 @@
 
               
             
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../external/gromacs/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    GROMACS (NNPot)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../external/lammps/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    LAMMPS (mliap)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
           </ul>
         </nav>
       
@@ -2284,7 +2228,7 @@
 <span class="n">forces</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_forces</span><span class="p">()</span>
 <span class="n">stress</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_stress</span><span class="p">()</span>
 </code></pre></div>
-<p>DSF supports inference forces and stress, but force/stress losses (<code>train=True</code> with <code>forces=True</code> or <code>stress=True</code>) and Hessians are not supported. Ewald and PME support all derivative modes, including training. See <a href="../../long_range/#derivative-support">Long-Range Methods → Derivative Support</a>.</p>
+<p>DSF supports inference forces and stress, but force/stress losses (<code>train=True</code> with <code>forces=True</code> or <code>stress=True</code>) and Hessians are not supported. Ewald and PME support force/stress losses in training, but not calculator Hessian requests. See <a href="../../long_range/#derivative-support">Long-Range Methods → Derivative Support</a>.</p>
 <p><strong>When to use Ewald:</strong></p>
 <ul>
 <li>Validating DSF results for a new system type</li>

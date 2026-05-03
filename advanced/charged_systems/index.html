@@ -1599,62 +1599,6 @@
 
               
             
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../external/gromacs/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    GROMACS (NNPot)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../external/lammps/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    LAMMPS (mliap)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
           </ul>
         </nav>
       
@@ -2553,7 +2497,7 @@
     <span class="s2">&quot;cell&quot;</span><span class="p">:</span> <span class="n">cell</span><span class="p">,</span>
 <span class="p">},</span> <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">stress</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
-<p>Ewald and PME support force/stress losses (<code>train=True</code>) and calculator Hessian requests; DSF only supports inference forces/stress. See <a href="../../long_range/#derivative-support">Long-Range Methods → Derivative Support</a>.</p>
+<p>Ewald and PME support force/stress losses (<code>train=True</code>), but not calculator Hessian requests. DSF only supports inference forces/stress. See <a href="../../long_range/#derivative-support">Long-Range Methods → Derivative Support</a>.</p>
 <p>For non-neutral cells, Ewald and PME use the standard uniform-background convention. DSF is cutoff-based and remains finite for non-neutral inputs, but it does not apply the same Ewald/PME background correction.</p>
 <h3 id="automatic-method-switching-for-pbc">Automatic Method Switching for PBC<a class="headerlink" href="#automatic-method-switching-for-pbc" title="Permanent link">&para;</a></h3>
 <p>When periodic boundary conditions are detected (a <code>cell</code> is provided), the calculator automatically switches from the "simple" Coulomb method to DSF:</p>

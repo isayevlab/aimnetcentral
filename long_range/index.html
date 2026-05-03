@@ -1334,62 +1334,6 @@
 
               
             
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../external/gromacs/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    GROMACS (NNPot)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../external/lammps/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    LAMMPS (mliap)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
           </ul>
         </nav>
       
@@ -2615,13 +2559,13 @@
 <td>Ewald</td>
 <td>Yes</td>
 <td>Yes</td>
-<td>Yes</td>
+<td>No</td>
 </tr>
 <tr>
 <td>PME</td>
 <td>Yes</td>
 <td>Yes</td>
-<td>Yes</td>
+<td>No</td>
 </tr>
 <tr>
 <td>DFT-D3</td>
@@ -2633,7 +2577,7 @@
 </table>
 <ul>
 <li><strong>DSF</strong>: energy is autograd-connected through charges only. The calculator assembles inference forces and stress by combining PyTorch autograd for the NN and the charge chain with explicit DSF forces/virial. Force/stress losses (<code>train=True</code> with <code>forces=True</code> or <code>stress=True</code>) and Hessian requests raise <code>NotImplementedError</code>.</li>
-<li><strong>Ewald / PME</strong>: support inference forces/stress, force/stress losses in <code>train=True</code>, and calculator Hessian requests through differentiable energy and double autograd.</li>
+<li><strong>Ewald / PME</strong>: support inference forces/stress and force/stress losses in <code>train=True</code>. Hessian requests raise <code>NotImplementedError</code> because nvalchemiops exposes explicit first coordinate derivatives, not the second coordinate derivatives needed for a complete Coulomb Hessian.</li>
 <li><strong>DFT-D3</strong>: inference forces and stress come from detached nvalchemiops force/virial terms. Hessian requests use the pure-torch differentiable DFT-D3 path.</li>
 </ul>
 <h2 id="method-comparison">Method Comparison<a class="headerlink" href="#method-comparison" title="Permanent link">&para;</a></h2>

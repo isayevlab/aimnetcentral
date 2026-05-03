@@ -1449,62 +1449,6 @@
 
               
             
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../gromacs/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    GROMACS (NNPot)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../lammps/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    LAMMPS (mliap)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
           </ul>
         </nav>
       
@@ -2075,12 +2019,12 @@
 /
 </code></pre></div>
 <p>The <code>mlmm_coupling</code> keyword selects the QM/MM coupling scheme. The exact embedding details (which AIMNet2 charges are used, whether MM point charges polarise the QM region within a step, etc.) are documented in the upstream <code>torchani-amber</code> reference paper and source.</p>
-<p><code>model_type</code> may also be a full path to a <strong>TorchScript-jit-compiled</strong> <code>.pt</code> file. The v2 <code>.pt</code> assets shipped in <code>aimnet/calculators/assets/</code> are <code>torch.save</code> state-dict archives, not TorchScript -- they cannot currently be passed as <code>model_type</code> directly. The internal TorchScript-export work in this repo would unblock shipping a self-contained AIMNet2 jit asset for <code>torchani-amber</code> rather than relying on the upstream-bundled model.</p>
+<p>The v2 <code>.pt</code> assets shipped in <code>aimnet/calculators/assets/</code> are <code>torch.save</code> state-dict archives for AIMNet's Python loader. They are not a supported compatibility target for AMBER's custom model path.</p>
 <h2 id="caveats">Caveats<a class="headerlink" href="#caveats" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Hard rebuild of AmberTools required. Once linked, the AMBER binaries depend on the torchani libraries even for non-ML runs.</li>
 <li>Supported AMBER versions: AmberTools 25 (with patch) and 26.</li>
-<li>The integration is tied to the <code>torchani_sandbox</code> build; the AIMNet2 model selection is constrained to what <code>torchani-amber</code> exposes upstream until a custom jit <code>.pt</code> path is provided.</li>
+<li>The integration is tied to the <code>torchani_sandbox</code> build; the AIMNet2 model selection is constrained to what <code>torchani-amber</code> exposes upstream.</li>
 </ul>
 <h2 id="model-coverage">Model coverage<a class="headerlink" href="#model-coverage" title="Permanent link">&para;</a></h2>
 <p>What <code>torchani-amber</code> exposes upstream as <code>model_type = "aimnet2"</code>. The NSE (open-shell) and rxn (reactive) AIMNet2 families are not currently exposed by the upstream integration.</p>
