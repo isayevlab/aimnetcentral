@@ -233,12 +233,10 @@ class TestMaskI:
     def test_mask_i_mode_2(self, device):
         """Test atomic masking for mode 2.
 
-        In mode 2, mask_i_ only masks the last atom position in each batch,
-        assuming padding atoms are always placed at the end.
+        In mode 2, mask_i_ masks every atom where numbers == 0.
         """
         B, N = 2, 3
-        # Padding (number=0) should be at the last position
-        numbers = torch.tensor([[6, 1, 0], [6, 1, 0]], device=device)
+        numbers = torch.tensor([[6, 0, 1], [6, 1, 0]], device=device)
         nbmat = torch.randint(0, N, (B, N, 2), device=device)
 
         data = {"numbers": numbers, "nbmat": nbmat}
@@ -248,12 +246,11 @@ class TestMaskI:
         x = torch.ones((B, N), device=device)
         nbops.mask_i_(x, data, mask_value=0.0, inplace=True)
 
-        # In mode 2, only the last position is masked (assumes padding at end)
-        assert x[0, 2].item() == 0.0
+        assert x[0, 1].item() == 0.0
         assert x[1, 2].item() == 0.0
-        # First positions should remain unmasked
+        # Non-padding positions should remain unmasked
         assert x[0, 0].item() == 1.0
-        assert x[0, 1].item() == 1.0
+        assert x[0, 2].item() == 1.0
 
 
 class TestGetIj:

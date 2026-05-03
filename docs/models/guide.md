@@ -1,6 +1,6 @@
 # Model Selection Guide
 
-AIMNet2 ships with five model variants, each trained on a different DFT functional or element set. This guide helps you pick the right one.
+AIMNet2 ships with six model variants, each trained on a different DFT functional or element set. This guide helps you pick the right one.
 
 !!! warning "What AIMNet2 Cannot Do"
 

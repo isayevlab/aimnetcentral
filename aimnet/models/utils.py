@@ -71,9 +71,9 @@ def get_jit_attr(module: nn.Module, attr: str, default: float) -> float:
         return default
 
     # Convert tensor/number to float
-    if hasattr(val, "item"):
+    if isinstance(val, torch.Tensor):
         return float(val.item())
-    elif hasattr(val, "__float__") or isinstance(val, (int, float)):
+    elif isinstance(val, (int, float)):
         return float(val)
 
     return default
@@ -406,18 +406,27 @@ def strip_lr_modules_from_yaml(
     config = copy.deepcopy(config)
     outputs = config.get("kwargs", {}).get("outputs", {})
 
-    # Determine source type
-    is_jit_model = isinstance(source, nn.Module)
+    # Determine source type. Keep narrowed variables for mypy; bool flags do not
+    # narrow a union across the rest of the function.
+    source_model: nn.Module | None
+    source_sd: dict | None
+    if isinstance(source, nn.Module):
+        source_model = source
+        source_sd = None
+    else:
+        source_model = None
+        source_sd = source
 
     # --- Detect Coulomb ---
-    if is_jit_model:
-        has_coulomb = has_lrcoulomb(source)
-        coulomb_sr_rc = extract_coulomb_rc(source) if has_coulomb else None
+    if source_model is not None:
+        has_coulomb = has_lrcoulomb(source_model)
+        coulomb_sr_rc = extract_coulomb_rc(source_model) if has_coulomb else None
         # Legacy models always used exp envelope
         coulomb_sr_envelope = "exp"
     else:
+        assert source_sd is not None
         # State dict path - check YAML config first, then state dict
-        has_coulomb_in_sd = any(k.startswith("outputs.lrcoulomb") for k in source)
+        has_coulomb_in_sd = any(k.startswith("outputs.lrcoulomb") for k in source_sd)
         if "lrcoulomb" in outputs:
             has_coulomb = True
             lrc_config = outputs["lrcoulomb"]
@@ -428,7 +437,7 @@ def strip_lr_modules_from_yaml(
         elif has_coulomb_in_sd:
             has_coulomb = True
             rc_key = "outputs.lrcoulomb.rc"
-            coulomb_sr_rc = float(source[rc_key].item()) if rc_key in source else None
+            coulomb_sr_rc = float(source_sd[rc_key].item()) if rc_key in source_sd else None
             coulomb_sr_envelope = "exp"  # Cannot extract from state dict
         else:
             has_coulomb = False
@@ -443,9 +452,9 @@ def strip_lr_modules_from_yaml(
         )
 
     # --- Detect Dispersion ---
-    if is_jit_model:
+    if source_model is not None:
         # Check if model has dftd3/d3bj modules
-        has_d3_module = any(name in ("dftd3", "d3bj") for name, _ in named_children_rec(source))
+        has_d3_module = any(name in ("dftd3", "d3bj") for name, _ in named_children_rec(source_model))
 
         # Check YAML to determine if it's D3TS (not externalizable)
         # D3TS uses NN-predicted C6/alpha and must stay embedded
@@ -463,7 +472,7 @@ def strip_lr_modules_from_yaml(
 
         if needs_dispersion:
             # Try to extract from JIT model first
-            d3_params = extract_d3_params(source)
+            d3_params = extract_d3_params(source_model)
             # If extraction failed or returned zeros, try YAML config
             if d3_params is None or (
                 d3_params.get("s8") == 0.0 and d3_params.get("a1") == 0.0 and d3_params.get("a2") == 0.0
@@ -507,7 +516,7 @@ def strip_lr_modules_from_yaml(
                 break
 
     # Validate: D3TS + DFTD3/D3BJ is invalid (would cause double dispersion)
-    has_d3ts_model = has_d3ts(source) if is_jit_model else False
+    has_d3ts_model = has_d3ts(source_model) if source_model is not None else False
     if needs_dispersion and (has_d3ts_model or has_d3ts_in_config(config)):
         raise ValueError(
             "Model has both D3TS (learned) and DFTD3/D3BJ (tabulated) dispersion. "

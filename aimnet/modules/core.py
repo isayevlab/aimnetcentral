@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import torch
 from torch import Tensor, nn
@@ -27,20 +27,22 @@ def MLP(
     hidden = [x for x in hidden if x > 0]
     if isinstance(activation_fn, str):
         activation_fn = get_init_module(activation_fn, kwargs=activation_kwargs)
+    activation = cast(nn.Module, activation_fn)
     if isinstance(weight_init_fn, str):
         weight_init_fn = get_module(weight_init_fn)
+    weight_init = cast(Callable[[Tensor], Any], weight_init_fn)
     sizes = [n_in, *hidden, n_out]
-    layers = []
+    layers: list[nn.Module] = []
     for i in range(1, len(sizes)):
         n_in, n_out = sizes[i - 1], sizes[i]
         layer = nn.Linear(n_in, n_out, bias=bias)
         with torch.no_grad():
-            weight_init_fn(layer.weight)
+            weight_init(layer.weight)
             if bias:
                 nn.init.zeros_(layer.bias)
         layers.append(layer)
         if not (last_linear and i == len(sizes) - 1):
-            layers.append(activation_fn)
+            layers.append(activation)
     return nn.Sequential(*layers)
 
 
@@ -125,9 +127,10 @@ class Output(nn.Module):
         super().__init__()
         self.key_in = key_in
         self.key_out = key_out
-        if not isinstance(mlp, nn.Module):
-            mlp = MLP(n_in=n_in, n_out=n_out, **mlp)
-        self.mlp = mlp
+        if isinstance(mlp, nn.Module):
+            self.mlp = mlp
+        else:
+            self.mlp = MLP(n_in=n_in, n_out=n_out, **mlp)
 
     def extra_repr(self) -> str:
         return f"key_in: {self.key_in}, key_out: {self.key_out}"
@@ -167,6 +170,7 @@ class Dipole(nn.Module):
         self.center_coord = center_coord
         self.key_out = key_out
         self.key_in = key_in
+        self.mass: Tensor
         self.register_buffer("mass", constants.get_masses())
 
     def extra_repr(self) -> str:
@@ -210,6 +214,7 @@ class SRRep(nn.Module):
         self.cutoff_fn = cutoff_fn
         self.reduce_sum = reduce_sum
 
+        self.rc: Tensor
         self.register_buffer("rc", torch.tensor(rc))
         gfn1_repa, gfn1_repb = get_gfn1_rep()
         weight = torch.stack([gfn1_repa, gfn1_repb], dim=-1)

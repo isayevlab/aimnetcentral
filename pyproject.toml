@@ -176,7 +176,7 @@ ignore = [
     # DoNotAssignLambda
     "E731",
     # Deprecated/slow isinstance union syntax
-    "UP006", "UP035", "UP038",
+    "UP006", "UP035",
     # Use ternary operator - prefer readability with comments
     "SIM108",
     "TRY003",

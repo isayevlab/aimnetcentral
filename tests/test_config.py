@@ -128,6 +128,7 @@ class TestLoadYaml:
         hyperpar = {"x": 42}
         result = config.load_yaml(input_dict, hyperpar)
         assert result["value"] == "42"
+        assert input_dict == {"value": "{{ x }}"}
 
     def test_load_yaml_nested_yaml_include(self):
         """Test load_yaml with nested YAML file includes."""
@@ -143,6 +144,14 @@ class TestLoadYaml:
                 result = config.load_yaml(str(main_path))
                 assert result["main_key"] == "main_value"
                 assert result["included"]["nested_key"] == "nested_value"
+
+    def test_load_yaml_nested_relative_include(self, tmp_path):
+        """Nested YAML includes resolve relative to the parent config file."""
+        (tmp_path / "nested.yaml").write_text("nested_key: nested_value\n")
+        main_path = tmp_path / "main.yaml"
+        main_path.write_text("included: nested.yaml\n")
+        result = config.load_yaml(str(main_path))
+        assert result["included"]["nested_key"] == "nested_value"
 
     def test_load_yaml_hyperpar_from_file(self):
         """Test load_yaml with hyperparameters loaded from file."""
@@ -202,6 +211,7 @@ class TestBuildModule:
         result = config.build_module(cfg)
         assert isinstance(result["layer1"], torch.nn.Linear)
         assert isinstance(result["layer2"], torch.nn.ReLU)
+        assert cfg["layer1"]["class"] == "torch.nn.Linear"
 
     def test_build_module_from_file(self):
         """Test building module from YAML file."""

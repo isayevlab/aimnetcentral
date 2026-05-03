@@ -1,3 +1,4 @@
+import copy
 import os
 from collections.abc import Callable, Iterator
 from importlib import import_module
@@ -7,7 +8,7 @@ import yaml
 from jinja2 import Template
 
 
-def get_module(name: str) -> Callable:
+def get_module(name: str) -> Callable[..., Any]:
     """
     Retrieves a module and function based on the given name.
 
@@ -28,7 +29,7 @@ def get_module(name: str) -> Callable:
     return func  # type: ignore[no-any-return]
 
 
-def get_init_module(name: str, args: list | None = None, kwargs: dict | None = None) -> Callable:
+def get_init_module(name: str, args: list | None = None, kwargs: dict | None = None) -> Any:
     """
     Get the initialized module based on the given name, arguments, and keyword arguments.
 
@@ -47,7 +48,10 @@ def get_init_module(name: str, args: list | None = None, kwargs: dict | None = N
 
 
 def load_yaml(
-    config: dict[str, Any] | list | str, hyperpar: dict[str, Any] | str | None = None
+    config: dict[str, Any] | list | str,
+    hyperpar: dict[str, Any] | str | None = None,
+    *,
+    basedir: str | None = None,
 ) -> dict[str, Any] | list:
     """
     Load a YAML configuration file and apply optional hyperparameters.
@@ -63,17 +67,18 @@ def load_yaml(
         FileNotFoundError: If a file specified in the configuration does not exist.
 
     """
-    basedir = ""
     if isinstance(hyperpar, str):
         hyperpar = load_yaml(hyperpar)  # type: ignore[assignment]
         if not isinstance(hyperpar, dict):
             raise TypeError("Loaded hyperpar must be a dict")
     if isinstance(config, (list, dict)):
+        config = copy.deepcopy(config)
         if hyperpar:
             for d, k, v in _iter_rec_bottomup(config):
                 if isinstance(v, str) and "{{" in v:
                     d[k] = Template(v).render(**hyperpar)  # type: ignore[assignment, index]
     else:
+        basedir = os.path.dirname(os.path.abspath(config))
         with open(config, encoding="utf-8") as f:
             config = f.read()
         if hyperpar:
@@ -82,7 +87,7 @@ def load_yaml(
     # plugin yaml configs
     for d, k, v in _iter_rec_bottomup(config):  # type: ignore[arg-type]
         if isinstance(v, str) and any(v.endswith(x) for x in (".yml", ".yaml")):
-            if not os.path.isfile(v):
+            if not os.path.isfile(v) and basedir is not None:
                 v = os.path.join(basedir, v)
             d[k] = load_yaml(v, hyperpar)  # type: ignore[assignment, index]
     return config  # type: ignore[return-value]
@@ -103,7 +108,7 @@ def _iter_rec_bottomup(
         yield d, k, v
 
 
-def build_module(config: str | dict | list, hyperpar: str | dict | None = None) -> list | dict | Callable:
+def build_module(config: str | dict | list, hyperpar: str | dict | None = None) -> Any:
     """
     Build a module based on the provided configuration.
     Every (possibly nested) dictionary with a 'class' key will be replaced by an instance initialized with

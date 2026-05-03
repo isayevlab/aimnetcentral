@@ -63,15 +63,15 @@ def calc_masks(data: dict[str, Tensor]) -> dict[str, Tensor]:
         w = torch.where(data["mask_i"])
         pad_idx = w[0] * data["numbers"].shape[1] + w[1]
         # Track processed arrays by their data pointer to avoid redundant mask calculations
-        processed: dict[int, str] = {}  # data_ptr -> mask_suffix
+        processed_nb2: dict[int, str] = {}  # data_ptr -> mask_suffix
         for suffix in ("", "_lr", "_coulomb", "_dftd3"):
             nbmat_key = f"nbmat{suffix}"
             if nbmat_key in data:
                 ptr = data[nbmat_key].data_ptr()
-                if ptr in processed:
-                    data[f"mask_ij{suffix}"] = data[f"mask_ij{processed[ptr]}"]
+                if ptr in processed_nb2:
+                    data[f"mask_ij{suffix}"] = data[f"mask_ij{processed_nb2[ptr]}"]
                     continue
-                processed[ptr] = suffix
+                processed_nb2[ptr] = suffix
                 data[f"mask_ij{suffix}"] = torch.isin(data[nbmat_key], pad_idx)
         data["_input_padded"] = torch.tensor(True)
         data["mol_sizes"] = (~data["mask_i"]).sum(-1)
@@ -115,10 +115,13 @@ def mask_i_(x: Tensor, data: dict[str, Tensor], mask_value: float = 0.0, inplace
         else:
             x = torch.cat([x[:-1], torch.zeros_like(x[:1])], dim=0)
     elif nb_mode == 2:
+        mask = data["mask_i"]
+        for _i in range(x.ndim - mask.ndim):
+            mask = mask.unsqueeze(-1)
         if inplace:
-            x[:, -1] = mask_value
+            x.masked_fill_(mask, mask_value)
         else:
-            x = torch.cat([x[:, :-1], torch.zeros_like(x[:, :1])], dim=1)
+            x = x.masked_fill(mask, mask_value)
     else:
         raise ValueError(f"Invalid neighbor mode: {nb_mode}")
     return x

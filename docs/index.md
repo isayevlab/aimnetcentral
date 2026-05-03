@@ -60,7 +60,7 @@ charges = result["charges"] # partial charges
 
 ## Available Models
 
-AIMNet2 provides five model families covering a wide range of chemistry -- from general organic molecules to open-shell radicals and palladium catalysis. Each model has ensemble members (append `_0` to `_3`) for uncertainty estimation.
+AIMNet2 provides six model families covering a wide range of chemistry -- from general organic molecules to open-shell radicals, palladium catalysis, and reactive chemistry. Each model has ensemble members (append `_0` to `_3`) for uncertainty estimation.
 
 See the **[Model Selection Guide](models/guide.md)** for a detailed comparison and decision flowchart.
 
@@ -88,7 +88,7 @@ pip install "aimnet[sella]"
 pip install "aimnet[train]"
 ```
 
-**Requirements:** Python 3.11 or 3.12. GPU support optional (PyTorch with CUDA).
+**Requirements:** Python 3.11, 3.12, or 3.13. GPU support optional (PyTorch with CUDA).
 
 ## Documentation Guide
 

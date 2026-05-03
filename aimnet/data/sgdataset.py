@@ -45,9 +45,8 @@ class DataGroup:
                 raise ValueError(f"Data file {data} does not contain named arrays.")
 
         # take only keys
-        if keys is None:
-            keys = data.keys()  # type: ignore[union-attr]
-        data = {k: v[s] for k, v in data.items() if k in keys}  # type: ignore[union-attr]
+        selected_keys = set(keys) if keys is not None else set(data.keys())  # type: ignore[union-attr]
+        data = {k: v[s] for k, v in data.items() if k in selected_keys}  # type: ignore[union-attr]
 
         # check data
         _n = None
@@ -115,8 +114,8 @@ class DataGroup:
         if not all(f > 0 for f in fractions):
             raise ValueError("All fractions must be greater than 0.")
         idx = np.arange(len(self))
-        np.random.seed(seed)
-        np.random.shuffle(idx)
+        rng = np.random.default_rng(seed)
+        rng.shuffle(idx)
         sections = np.around(np.cumsum(fractions) * len(self)).astype(np.int64)
         return [self.sample(sidx) if len(sidx) else self.__class__() for sidx in np.array_split(idx, sections)]
 
@@ -140,8 +139,8 @@ class DataGroup:
 
     def shuffle(self, seed=None):
         idx = np.arange(len(self))
-        np.random.seed(seed)
-        np.random.shuffle(idx)
+        rng = np.random.default_rng(seed)
+        rng.shuffle(idx)
         for k, v in self.items():
             self[k] = v[idx]
 
@@ -366,7 +365,11 @@ class SizeGroupedDataset:
                 sgroups.append(sg)
                 n = 0
                 sg = []
-        sgroups[-1].extend(sg)
+        if sg:
+            if sgroups:
+                sgroups[-1].extend(sg)
+            else:
+                sgroups.append(sg)
 
         # merge
         keys = self.datakeys()
@@ -443,20 +446,36 @@ class SizeGroupedDataset:
             yield from g.iter_batched(batch_size, keys)
 
     def get_loader(self, sampler, x: list[str], y: list[str] | None = None, **loader_kwargs):
-        self.loader_mode = True
-        self.x = x
-        self.y = y or []
-
-        loader = DataLoader(self, batch_sampler=sampler, **loader_kwargs)  # type: ignore
-
-        def _squeeze(t):
-            for d in t:
-                for v in d.values():
-                    v.squeeze_(0)
-            return t
-
-        loader.collate_fn = lambda x: _squeeze(default_collate(x))
+        view = _SizeGroupedLoaderView(self, x=x, y=y or [])
+        loader = DataLoader(view, batch_sampler=sampler, **loader_kwargs)  # type: ignore
+        loader.collate_fn = _squeeze_loader_batch
         return loader
+
+
+class _SizeGroupedLoaderView:
+    def __init__(self, ds: SizeGroupedDataset, x: list[str], y: list[str]):
+        self.ds = ds
+        self.x = x
+        self.y = y
+
+    def __len__(self):
+        return len(self.ds)
+
+    def __getitem__(self, item: tuple[int, Sequence]) -> tuple[dict, dict]:
+        grp, idx = item
+        group = self.ds[grp]
+        return (
+            {k: v[idx] for k, v in group.items() if k in self.x},  # type: ignore[union-attr]
+            {k: v[idx] for k, v in group.items() if k in self.y},  # type: ignore[union-attr]
+        )
+
+
+def _squeeze_loader_batch(batch):
+    collated = default_collate(batch)
+    for d in collated:
+        for v in d.values():
+            v.squeeze_(0)
+    return collated
 
 
 class SizeGroupedSampler:
@@ -467,6 +486,7 @@ class SizeGroupedSampler:
         batch_mode: str = "molecules",
         shuffle: bool = False,
         batches_per_epoch: int = -1,
+        seed: int | None = None,
     ):
         self.ds = ds
         self.batch_size = batch_size
@@ -475,6 +495,7 @@ class SizeGroupedSampler:
         self.batch_mode = batch_mode
         self.shuffle = shuffle
         self.batches_per_epoch = batches_per_epoch
+        self.seed = seed
 
     def __len__(self):
         if self.batches_per_epoch > 0:
@@ -494,6 +515,7 @@ class SizeGroupedSampler:
             raise ValueError(f"Unknown batch_mode: {self.batch_mode}")
 
     def _samples_list(self):
+        rng = np.random.default_rng(self.seed)
         samples = []
         for group_key, g in self.ds.items():
             n = len(g)
@@ -501,18 +523,18 @@ class SizeGroupedSampler:
                 continue
             idx = np.arange(n)
             if self.shuffle:
-                np.random.shuffle(idx)
-            n_batches = self._get_num_batches_for_group(g)
-            samples.extend(((group_key, idx_batch),) for idx_batch in np.array_split(idx, n_batches))
+                rng.shuffle(idx)
+            n_batches = min(n, self._get_num_batches_for_group(g))
+            samples.extend(((group_key, idx_batch),) for idx_batch in np.array_split(idx, n_batches) if len(idx_batch))
         if self.shuffle:
-            np.random.shuffle(samples)
+            rng.shuffle(samples)
         if self.batches_per_epoch > 0:
             if len(samples) > self.batches_per_epoch:
                 samples = samples[: self.batches_per_epoch]
-            else:
+            elif samples:
                 # add some random duplicates
                 idx = np.arange(len(samples))
-                np.random.shuffle(idx)
+                rng.shuffle(idx)
                 n = self.batches_per_epoch - len(samples)
-                samples.extend([samples[i] for i in np.random.choice(idx, n, replace=True)])
+                samples.extend([samples[i] for i in rng.choice(idx, n, replace=True)])
         return samples

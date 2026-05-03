@@ -2,7 +2,8 @@ import math
 import os
 import re
 import warnings
-from typing import Any, ClassVar, Literal
+from types import MappingProxyType
+from typing import Any, ClassVar, Literal, Mapping, cast
 
 import torch
 from nvalchemiops.neighbors import NeighborOverflowError
@@ -49,7 +50,7 @@ def _combine_external_terms(
     )
 
 
-def _apply_family_defaults(metadata: dict, registry_family: str | None) -> dict:
+def _apply_family_defaults(metadata: Mapping[str, Any], registry_family: str | None) -> dict[str, Any]:
     """Apply calculator-side compatibility defaults for released model families."""
     metadata = dict(metadata)
     if registry_family is not None:
@@ -273,6 +274,7 @@ class AIMNet2Calculator:
         "shifts": torch.float,
         "shifts_lr": torch.float,
         "cell": torch.float,
+        "pbc": torch.bool,
     }
     keys_out: ClassVar[list[str]] = ["energy", "charges", "spin_charges", "forces", "hessian", "stress"]
     atom_feature_keys: ClassVar[list[str]] = ["coord", "numbers", "charges", "spin_charges", "forces"]
@@ -293,10 +295,10 @@ class AIMNet2Calculator:
         token: str | None = None,
     ):
         # Device selection: use provided or auto-detect
-        if device is not None:
-            self.device = device
-        else:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = str(torch.device(device))
+        self.model: nn.Module
         self.external_coulomb: LRCoulomb | None = None
         self.external_dftd3: DFTD3 | None = None
         # Default cutoffs for LR modules
@@ -305,7 +307,7 @@ class AIMNet2Calculator:
         self._default_dftd3_smoothing = 0.2
 
         # Load model and get metadata
-        metadata: dict | None = None
+        metadata: Mapping[str, Any] | None = None
         registry_family: str | None = None
         # Inline org/name pattern — exactly one slash, both segments alphanumeric+._-
         # This avoids importing optional HF deps for ordinary file paths containing slashes.
@@ -349,19 +351,21 @@ class AIMNet2Calculator:
         elif isinstance(model, nn.Module):
             self.model = model.to(self.device)
             self.cutoff = getattr(self.model, "cutoff", 5.0)
-            metadata = getattr(self.model, "_metadata", None)
+            metadata = cast(Mapping[str, Any] | None, getattr(self.model, "metadata", None))
+            if metadata is None:
+                metadata = cast(Mapping[str, Any] | None, getattr(self.model, "_metadata", None))
         else:
             raise TypeError("Invalid model type/name.")
 
         if metadata is not None:
             metadata = _apply_family_defaults(metadata, registry_family)
-            self.model._metadata = metadata
+            self.model._metadata = metadata  # type: ignore[assignment]
 
         # Compile model if requested
         self._was_compiled = bool(compile_model)
         if compile_model:
             kwargs = compile_kwargs or {}
-            self.model = torch.compile(self.model, **kwargs)
+            self.model = cast(nn.Module, torch.compile(self.model, **kwargs))
 
         # Resolve final flags (explicit overrides metadata)
         final_needs_coulomb = (
@@ -458,10 +462,10 @@ class AIMNet2Calculator:
         self._update_lr_nblists()
 
         # indicator if input was flattened
-        self._batch = None
+        self._batch: int | None = None
         self._max_mol_size: int = 0
         # placeholder for tensors that require grad
-        self._saved_for_grad = {}
+        self._saved_for_grad: dict[str, Tensor] = {}
         # set flag of current Coulomb method
         self._coulomb_method: str | None = None
         if self.external_coulomb is not None:
@@ -490,15 +494,16 @@ class AIMNet2Calculator:
         return self.eval(*args, **kwargs)
 
     @property
-    def metadata(self) -> dict | None:
+    def metadata(self) -> Mapping[str, Any] | None:
         """Read-only view of the model's metadata dict.
 
-        Returns the same object as ``model._metadata`` for v2 .pt models,
-        or ``None`` for raw ``nn.Module`` inputs that don't carry metadata.
-        Downstream consumers should prefer this accessor over reaching into
-        the private ``model._metadata`` attribute.
+        Returns a read-only mapping for v2 .pt models, or ``None`` for raw
+        ``nn.Module`` inputs that don't carry metadata. Downstream consumers
+        should prefer this accessor over reaching into the private
+        ``model._metadata`` attribute.
         """
-        return getattr(self.model, "_metadata", None)
+        metadata = getattr(self.model, "_metadata", None)
+        return MappingProxyType(metadata) if metadata is not None else None
 
     def _maybe_warn_family_mix(self, family: str | None) -> None:
         """If multiple distinct families have been constructed in this process,
@@ -895,7 +900,7 @@ class AIMNet2Calculator:
                 "with compile_model=False."
             )
 
-        data = self.prepare_input(data)
+        data = self.prepare_input(data, hessian=hessian)
 
         if hessian and "mol_idx" in data and data["mol_idx"][-1] > 0:
             raise NotImplementedError("Hessian calculation is not supported for multiple molecules")
@@ -985,9 +990,9 @@ class AIMNet2Calculator:
 
         return data, _combine_external_terms(coulomb_terms, dftd3_terms)
 
-    def prepare_input(self, data: dict[str, Any]) -> dict[str, Tensor]:
+    def prepare_input(self, data: dict[str, Any], *, hessian: bool = False) -> dict[str, Tensor]:
         data = self.to_input_tensors(data)
-        data = self.mol_flatten(data)
+        data = self.mol_flatten(data, hessian=hessian)
         if data.get("cell") is not None and self._coulomb_method == "simple":
             warnings.warn("Switching to DSF Coulomb for PBC", stacklevel=1)
             self.set_lrcoulomb_method("dsf")
@@ -1034,7 +1039,7 @@ class AIMNet2Calculator:
                 ret[k] = v.unsqueeze(0)
         return ret
 
-    def mol_flatten(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+    def mol_flatten(self, data: dict[str, Tensor], *, hessian: bool = False) -> dict[str, Tensor]:
         """Flatten the input data for multiple molecules.
         Will not flatten for batched input and molecule size below threshold.
         """
@@ -1051,8 +1056,15 @@ class AIMNet2Calculator:
 
         elif ndim == 3:
             B, N = data["coord"].shape[:2]
+            if hessian and B != 1:
+                raise NotImplementedError("Hessian calculation is not supported for batched inputs with B > 1")
             # Force flattening for PBC (cell present) to ensure make_nbmat computes proper neighbor lists with shifts
-            if self.nb_threshold < N or self.device == "cpu" or data.get("cell") is not None:
+            if (
+                hessian
+                or self.nb_threshold < N
+                or torch.device(self.device).type == "cpu"
+                or data.get("cell") is not None
+            ):
                 self._batch = B
                 data["mol_idx"] = torch.repeat_interleave(
                     torch.arange(0, B, device=self.device), torch.full((B,), N, device=self.device)
@@ -1079,24 +1091,20 @@ class AIMNet2Calculator:
         # Prepare batch_idx from mol_idx
         mol_idx = data.get("mol_idx")
 
-        if "cell" in data and data["cell"] is not None:
-            data["coord"] = move_coord_to_cell(data["coord"], data["cell"], mol_idx)
-            cell = data["cell"]
-        else:
-            cell = None
+        cell = data.get("cell")
+        if cell is not None:
+            data["coord"] = move_coord_to_cell(data["coord"], cell, mol_idx, data.get("pbc"))
 
         N = data["coord"].shape[0]
-        _pbc = cell is not None
         batch_idx = mol_idx.to(torch.int32) if mol_idx is not None else None
 
         # Prepare cell and pbc tensors for nvalchemiops
-        if _pbc:
+        if cell is not None:
+            pbc = normalize_pbc(data.get("pbc"), cell, self.device)
             if cell.ndim == 2:
                 cell_batched = cell.unsqueeze(0)  # (1, 3, 3)
             else:
                 cell_batched = cell  # (num_systems, 3, 3)
-            num_systems = cell_batched.shape[0]
-            pbc = torch.tensor([[True, True, True]] * num_systems, dtype=torch.bool, device=cell.device)
         else:
             cell_batched = None
             pbc = None
@@ -1443,7 +1451,34 @@ def maybe_unpad_dim0(a: Tensor, N: int) -> Tensor:
     return a
 
 
-def move_coord_to_cell(coord: Tensor, cell: Tensor, mol_idx: Tensor | None = None) -> Tensor:
+def normalize_pbc(pbc: Tensor | None, cell: Tensor, device: str | torch.device) -> Tensor:
+    """Return PBC flags as ``(B, 3)`` bool tensor matching ``cell``."""
+    num_systems = 1 if cell.ndim == 2 else cell.shape[0]
+    if pbc is None:
+        return torch.ones((num_systems, 3), dtype=torch.bool, device=device)
+    pbc = torch.as_tensor(pbc, dtype=torch.bool, device=device)
+    if pbc.ndim == 1:
+        if pbc.shape[0] != 3:
+            raise ValueError("pbc must have shape (3,) or (B, 3)")
+        return pbc.unsqueeze(0).expand(num_systems, -1)
+    if pbc.ndim == 2 and pbc.shape == (num_systems, 3):
+        return pbc
+    raise ValueError(f"pbc must have shape (3,) or ({num_systems}, 3), got {tuple(pbc.shape)}")
+
+
+def _wrap_fractional(coord_f: Tensor, pbc: Tensor) -> Tensor:
+    pbc = pbc.to(device=coord_f.device, dtype=torch.bool)
+    while pbc.ndim < coord_f.ndim:
+        pbc = pbc.unsqueeze(-2)
+    return torch.where(pbc, coord_f % 1, coord_f)
+
+
+def move_coord_to_cell(
+    coord: Tensor,
+    cell: Tensor,
+    mol_idx: Tensor | None = None,
+    pbc: Tensor | None = None,
+) -> Tensor:
     """Move coordinates into the periodic cell.
 
     Parameters
@@ -1455,17 +1490,20 @@ def move_coord_to_cell(coord: Tensor, cell: Tensor, mol_idx: Tensor | None = Non
     mol_idx : Tensor | None
         Molecule index for each atom, shape (N,).
         Required for batched cells with flat coordinates.
+    pbc : Tensor | None
+        Periodic axes, shape (3,) or (B, 3). Defaults to all periodic axes.
 
     Returns
     -------
     Tensor
         Coordinates wrapped into the cell.
     """
+    pbc = normalize_pbc(pbc, cell, coord.device)
     if cell.ndim == 2:
         # Single cell (3, 3)
         cell_inv = torch.linalg.inv(cell)
         coord_f = coord @ cell_inv
-        coord_f = coord_f % 1
+        coord_f = _wrap_fractional(coord_f, pbc[0])
         return coord_f @ cell
     else:
         # Batched cells (B, 3, 3)
@@ -1473,7 +1511,7 @@ def move_coord_to_cell(coord: Tensor, cell: Tensor, mol_idx: Tensor | None = Non
             # Batched coords (B, N, 3) with batched cells (B, 3, 3)
             cell_inv = torch.linalg.inv(cell)  # (B, 3, 3)
             coord_f = torch.bmm(coord, cell_inv)  # (B, N, 3)
-            coord_f = coord_f % 1
+            coord_f = _wrap_fractional(coord_f, pbc)
             return torch.bmm(coord_f, cell)
         else:
             # Flat coords (N_total, 3) with batched cells (B, 3, 3) - need mol_idx
@@ -1482,6 +1520,7 @@ def move_coord_to_cell(coord: Tensor, cell: Tensor, mol_idx: Tensor | None = Non
             # Get cell and cell_inv for each atom
             atom_cell = cell[mol_idx]  # (N_total, 3, 3)
             atom_cell_inv = cell_inv[mol_idx]  # (N_total, 3, 3)
+            atom_pbc = pbc[mol_idx]
             coord_f = torch.bmm(coord.unsqueeze(1), atom_cell_inv).squeeze(1)  # (N_total, 3)
-            coord_f = coord_f % 1
+            coord_f = _wrap_fractional(coord_f, atom_pbc)
             return torch.bmm(coord_f.unsqueeze(1), atom_cell).squeeze(1)

@@ -61,7 +61,7 @@ ML/MM example with electrostatic embedding via AIMNet2's predicted atomic charge
 
 The `mlmm_coupling` keyword selects the QM/MM coupling scheme. The exact embedding details (which AIMNet2 charges are used, whether MM point charges polarise the QM region within a step, etc.) are documented in the upstream `torchani-amber` reference paper and source.
 
-The v2 `.pt` assets shipped in `aimnet/calculators/assets/` are `torch.save` state-dict archives for AIMNet's Python loader. They are not a supported compatibility target for AMBER's custom model path.
+The v2 `.pt` assets downloaded by the AIMNet model registry are `torch.save` state-dict archives for AIMNet's Python loader. They are not a supported compatibility target for AMBER's custom model path.
 
 ## Caveats
 

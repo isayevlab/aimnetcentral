@@ -1,4 +1,5 @@
 import warnings
+from typing import ClassVar
 
 import numpy as np
 import torch
@@ -12,8 +13,6 @@ from .calculator import AIMNet2Calculator
 
 
 class AIMNet2ASE(Calculator):
-    from typing import ClassVar
-
     implemented_properties: ClassVar[list[str]] = [
         "energy",
         "forces",
@@ -36,7 +35,7 @@ class AIMNet2ASE(Calculator):
         self.base_calc = base_calc
         self.validate_species = validate_species
         if self.base_calc.is_nse:
-            self.implemented_properties = [*self.__class__.implemented_properties, "spin_charges"]
+            self.__dict__["implemented_properties"] = [*self.__class__.implemented_properties, "spin_charges"]
         self.reset()
         self.charge = charge
         self.mult = mult
@@ -220,6 +219,7 @@ class AIMNet2ASE(Calculator):
         _unsqueezed = False
         if cell is not None:
             _in["cell"] = cell
+            _in["pbc"] = self.atoms.pbc
         else:
             for k, v in _in.items():
                 _in[k] = v.unsqueeze(0)
