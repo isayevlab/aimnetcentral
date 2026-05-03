@@ -2487,7 +2487,7 @@
 <ul>
 <li>Familiarity with the <a href="../../calculator/">AIMNet2Calculator API</a></li>
 <li>Understanding of <a href="../open_shell/">AIMNet2-NSE for open-shell chemistry</a></li>
-<li>Installation: <code>pip install "aimnet[ase]" pysisyphus</code></li>
+<li>Installation: <code>pip install "aimnet[ase,pysis]"</code></li>
 <li>Basic knowledge of transition state theory and reaction coordinates</li>
 </ul>
 <h2 id="why-use-aimnet2-for-reaction-paths">Why Use AIMNet2 for Reaction Paths?<a class="headerlink" href="#why-use-aimnet2-for-reaction-paths" title="Permanent link">&para;</a></h2>
@@ -2516,6 +2516,7 @@
 <span class="n">base</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Pysis</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">charge</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">mult</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </code></pre></div>
+<p>Use <code>compile_model=True</code> for repeated force-only evaluations such as NEB image optimization. Leave compilation disabled for Hessian workflows because the calculator rejects <code>compile_model=True</code> together with <code>hessian=True</code>.</p>
 <h3 id="the-run_pysis-entry-point">The run_pysis() Entry Point<a class="headerlink" href="#the-run_pysis-entry-point" title="Permanent link">&para;</a></h3>
 <p>For YAML-driven workflows, <code>run_pysis()</code> registers AIMNet2 as a calculator named <code>"aimnet"</code> within PySisyphus and launches the standard PySisyphus CLI:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators.aimnet2pysis</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_pysis</span>
@@ -2625,7 +2626,7 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;f
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
 
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2-nse&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
 <span class="c1"># TS geometry (from NEB climbing image)</span>
 <span class="c1"># Replace with actual TS coordinates from your NEB result</span>
@@ -2658,7 +2659,7 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;f
 </code></pre></div>
 <div class="admonition warning">
 <p class="admonition-title">Hessian limitations</p>
-<p>The Hessian computation is supported for <strong>single molecules only</strong>. If <code>mol_idx</code> indicates multiple molecules, the calculator raises <code>NotImplementedError</code>. The Hessian output has shape <code>(N, 3, N, 3)</code> and should be flattened to <code>(3N, 3N)</code> for eigenvalue analysis.</p>
+<p>The Hessian computation is supported for <strong>single molecules only</strong>. If <code>mol_idx</code> indicates multiple molecules, the calculator raises <code>NotImplementedError</code>. <code>compile_model=True</code> is also incompatible with Hessian requests. The Hessian output has shape <code>(N, 3, N, 3)</code> and should be flattened to <code>(3N, 3N)</code> for eigenvalue analysis.</p>
 </div>
 <h3 id="vibrational-frequency-analysis">Vibrational Frequency Analysis<a class="headerlink" href="#vibrational-frequency-analysis" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>

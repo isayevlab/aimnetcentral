@@ -2369,33 +2369,30 @@
 <div class="admonition warning">
 <p class="admonition-title">Unsorted mol_idx</p>
 </div>
-<p>````python # WRONG -- mol_idx is not sorted
-mol_idx = torch.tensor([0, 1, 0, 1])</p>
-<pre><code># CORRECT -- atoms grouped by molecule
-mol_idx = torch.tensor([0, 0, 1, 1])
-```
-</code></pre>
+<div class="highlight"><pre><span></span><code><span class="c1"># WRONG -- mol_idx is not sorted</span>
+<span class="n">mol_idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+
+<span class="c1"># CORRECT -- atoms grouped by molecule</span>
+<span class="n">mol_idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+</code></pre></div>
 <div class="admonition warning">
 <p class="admonition-title">Scalar charge with batched input</p>
 </div>
-<p>```python # WRONG -- scalar charge with multiple molecules
-charge = 0.0</p>
-<pre><code># CORRECT -- one charge per molecule
-charge = torch.tensor([0.0, 0.0, 0.0])
-```
-</code></pre>
+<div class="highlight"><pre><span></span><code><span class="c1"># WRONG -- scalar charge with multiple molecules</span>
+<span class="n">charge</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+<span class="c1"># CORRECT -- one charge per molecule</span>
+<span class="n">charge</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span>
+</code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Hessian is single-molecule only</p>
+<p>Hessian calculation (<code>hessian=True</code>) is not supported for batched inputs. If you need Hessians, compute them one molecule at a time. Hessian computation also requires O(N^2) memory, so it is impractical for large molecules.</p>
 </div>
-<p>Hessian calculation (<code>hessian=True</code>) is not supported for batched inputs. If you
-need Hessians, compute them one molecule at a time. Hessian computation also
-requires O(N^2) memory, so it is impractical for large molecules.</p>
 <h2 id="whats-next">What's Next<a class="headerlink" href="#whats-next" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="../performance/">Performance Tuning</a> -- Optimize batch size, compilation, and GPU memory</li>
 <li><a href="../geometry_optimization/">Geometry Optimization</a> -- Optimize structures before ranking</li>
-<li><a href="../../advanced/conformer_search/">Conformer Search</a> -- Full conformational sampling workflow
-````</li>
+<li><a href="../../advanced/conformer_search/">Conformer Search</a> -- Full conformational sampling workflow</li>
 </ul>
 
 

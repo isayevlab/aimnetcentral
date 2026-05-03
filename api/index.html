@@ -1690,6 +1690,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#supported-public-imports" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported Public Imports
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#quick-links" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1894,6 +1905,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#supported-public-imports" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported Public Imports
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#quick-links" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1953,7 +1975,7 @@
 
 
 <h1 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h1>
-<p>This section contains the complete API reference for AIMNet2.</p>
+<p>This section contains the selected public API reference for AIMNet2. Lower-level kernels, tensor operators, and training internals are documented through source code and focused guides where they are intended for extension.</p>
 <h2 id="package-structure">Package Structure<a class="headerlink" href="#package-structure" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong><a href="calculators/">Calculators</a></strong> - Calculator interfaces for molecular simulations</li>
@@ -1961,6 +1983,38 @@
 <li><strong><a href="data/">Data</a></strong> - Dataset handling and data loading utilities</li>
 <li><strong><a href="config/">Config</a></strong> - Configuration and model building utilities</li>
 </ul>
+<h2 id="supported-public-imports">Supported Public Imports<a class="headerlink" href="#supported-public-imports" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Import path</th>
+<th>Public surface</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>aimnet.calculators</code></td>
+<td><code>AIMNet2Calculator</code>, <code>AIMNet2ASE</code>, <code>AIMNet2Pysis</code>, <code>AIMNet2TorchSim</code></td>
+</tr>
+<tr>
+<td><code>aimnet.data</code></td>
+<td><code>DataGroup</code>, <code>SizeGroupedDataset</code>, <code>SizeGroupedSampler</code></td>
+</tr>
+<tr>
+<td><code>aimnet.models</code></td>
+<td><code>AIMNet2</code>, model loading helpers</td>
+</tr>
+<tr>
+<td><code>aimnet.modules</code></td>
+<td>Model building blocks intended for configuration and extension</td>
+</tr>
+<tr>
+<td><code>aimnet.config</code></td>
+<td>YAML/module construction helpers</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>aimnet.ops</code>, <code>aimnet.nbops</code>, <code>aimnet.kernels</code>, <code>aimnet.train</code>, and <code>aimnet.cli</code> modules are importable but are primarily advanced or internal extension points. Their contracts may be narrower than the calculator and model APIs.</p>
 <h2 id="quick-links">Quick Links<a class="headerlink" href="#quick-links" title="Permanent link">&para;</a></h2>
 <h3 id="calculators">Calculators<a class="headerlink" href="#calculators" title="Permanent link">&para;</a></h3>
 <p>The main entry points for using AIMNet2:</p>

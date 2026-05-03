@@ -2299,7 +2299,7 @@
 <li>Understanding of <a href="../../long_range/">long-range methods</a> (DSF, Ewald, PME)</li>
 </ul>
 <h2 id="relevant-models">Relevant Models<a class="headerlink" href="#relevant-models" title="Permanent link">&para;</a></h2>
-<p>Charge handling is universal across all AIMNet2 models. The examples in this guide work with any model variant (<code>aimnet2</code>, <code>aimnet2-2025</code>, <code>aimnet2-nse</code>, <code>aimnet2-pd</code>, <code>aimnet2-b973c</code>). Choose the model based on your chemistry, not your charge state.</p>
+<p>Charge handling is available across the standard AIMNet2 model families (<code>aimnet2</code>, <code>aimnet2-2025</code>, <code>aimnet2-nse</code>, <code>aimnet2-pd</code>, <code>aimnet2-b973c</code>). The <code>aimnet2-rxn</code> family is the exception: it supports only net-neutral systems, including zwitterions, and rejects nonzero total charge. Choose the model based on both chemistry and charge state.</p>
 <h2 id="setting-the-charge">Setting the Charge<a class="headerlink" href="#setting-the-charge" title="Permanent link">&para;</a></h2>
 <h3 id="direct-calculator">Direct Calculator<a class="headerlink" href="#direct-calculator" title="Permanent link">&para;</a></h3>
 <p>With <code>AIMNet2Calculator</code>, the charge is passed in the input dictionary as a scalar or tensor:</p>

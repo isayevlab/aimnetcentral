@@ -807,10 +807,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#step-3-npt-simulation-with-berendsen-barostat" class="md-nav__link">
+  <a href="#step-3-npt-simulation-with-ase-npt" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Step 3: NPT Simulation with Berendsen Barostat
+        Step 3: NPT Simulation with ASE NPT
       
     </span>
   </a>
@@ -2054,10 +2054,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#step-3-npt-simulation-with-berendsen-barostat" class="md-nav__link">
+  <a href="#step-3-npt-simulation-with-ase-npt" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Step 3: NPT Simulation with Berendsen Barostat
+        Step 3: NPT Simulation with ASE NPT
       
     </span>
   </a>
@@ -2343,11 +2343,11 @@
 </ul>
 <p>When in doubt, run a short trajectory at 0.5 fs and check energy conservation in NVE (see below).</p>
 </div>
-<h2 id="step-3-npt-simulation-with-berendsen-barostat">Step 3: NPT Simulation with Berendsen Barostat<a class="headerlink" href="#step-3-npt-simulation-with-berendsen-barostat" title="Permanent link">&para;</a></h2>
+<h2 id="step-3-npt-simulation-with-ase-npt">Step 3: NPT Simulation with ASE NPT<a class="headerlink" href="#step-3-npt-simulation-with-ase-npt" title="Permanent link">&para;</a></h2>
 <p>NPT (constant pressure) is needed for condensed-phase simulations where the volume should fluctuate. ASE provides the <code>NPT</code> integrator for this purpose.</p>
 <div class="admonition note">
 <p class="admonition-title">NPT requires periodic boundary conditions</p>
-<p>The Berendsen barostat adjusts the unit cell dimensions, which only makes sense for periodic systems. For an isolated molecule in vacuum, use NVT instead.</p>
+<p>The NPT integrator adjusts the unit cell dimensions, which only makes sense for periodic systems. For an isolated molecule in vacuum, use NVT instead.</p>
 </div>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase.md.npt</span><span class="w"> </span><span class="kn">import</span> <span class="n">NPT</span> <span class="k">as</span> <span class="n">NPTIntegrator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">ase.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">read</span>
@@ -2570,7 +2570,7 @@
 <tr>
 <th>Parameter</th>
 <th>Langevin</th>
-<th>Berendsen (NPT)</th>
+<th>ASE NPT</th>
 </tr>
 </thead>
 <tbody>
