@@ -141,6 +141,40 @@ class TestCalcMasks:
         assert data["mol_sizes"][0].item() == 3
         assert data["mol_sizes"][1].item() == 2
 
+        # local padded neighbor indices are masked per batch
+        assert data["mask_ij"][0, 0, 2].item() is True
+        assert data["mask_ij"][1, 0, 1].item() is True
+        # padded center rows are fully masked
+        assert data["mask_ij"][1, 2].all()
+
+    def test_calc_masks_mode_2_masks_local_and_global_padding(self, device):
+        numbers = torch.tensor([[6, 0, 1], [6, 1, 0]], device=device)
+        nbmat_local = torch.tensor(
+            [
+                [[1, 2], [0, 2], [0, 1]],
+                [[1, 2], [0, 2], [0, 1]],
+            ],
+            device=device,
+        )
+        nbmat_global = torch.tensor(
+            [
+                [[1, 2], [0, 2], [0, 1]],
+                [[4, 5], [3, 5], [3, 4]],
+            ],
+            device=device,
+        )
+
+        data = {"numbers": numbers, "nbmat": nbmat_local, "nbmat_lr": nbmat_global}
+        data = nbops.set_nb_mode(data)
+        data = nbops.calc_masks(data)
+
+        assert data["mask_ij"][0, 0, 0].item() is True  # local pad atom 1 in batch 0
+        assert data["mask_ij"][1, 0, 1].item() is True  # local pad atom 2 in batch 1
+        assert data["mask_ij_lr"][0, 0, 0].item() is True  # global pad atom 1
+        assert data["mask_ij_lr"][1, 0, 1].item() is True  # global pad atom 5
+        assert data["mask_ij"][0, 1].all()
+        assert data["mask_ij_lr"][1, 2].all()
+
 
 class TestMaskIj:
     """Tests for mask_ij_ function."""

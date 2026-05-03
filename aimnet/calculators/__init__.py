@@ -1,6 +1,14 @@
+import importlib.util
+
 from .calculator import AIMNet2Calculator
 
-__all__ = ["AIMNet2ASE", "AIMNet2Calculator", "AIMNet2Pysis"]
+__all__ = ["AIMNet2Calculator"]
+
+if importlib.util.find_spec("ase") is not None:
+    __all__.append("AIMNet2ASE")
+
+if importlib.util.find_spec("pysisyphus") is not None:
+    __all__.append("AIMNet2Pysis")
 
 
 def __getattr__(name: str):

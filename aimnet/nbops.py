@@ -60,8 +60,6 @@ def calc_masks(data: dict[str, Tensor]) -> dict[str, Tensor]:
         data["mol_sizes"][-1] -= 1
     elif nb_mode == 2:
         data["mask_i"] = data["numbers"] == 0
-        w = torch.where(data["mask_i"])
-        pad_idx = w[0] * data["numbers"].shape[1] + w[1]
         # Track processed arrays by their data pointer to avoid redundant mask calculations
         processed_nb2: dict[int, str] = {}  # data_ptr -> mask_suffix
         for suffix in ("", "_lr", "_coulomb", "_dftd3"):
@@ -72,13 +70,35 @@ def calc_masks(data: dict[str, Tensor]) -> dict[str, Tensor]:
                     data[f"mask_ij{suffix}"] = data[f"mask_ij{processed_nb2[ptr]}"]
                     continue
                 processed_nb2[ptr] = suffix
-                data[f"mask_ij{suffix}"] = torch.isin(data[nbmat_key], pad_idx)
+                data[f"mask_ij{suffix}"] = _calc_mask_ij_mode2(data[nbmat_key], data["mask_i"])
         data["_input_padded"] = torch.tensor(True)
         data["mol_sizes"] = (~data["mask_i"]).sum(-1)
     else:
         raise ValueError(f"Invalid neighbor mode: {nb_mode}")
 
     return data
+
+
+def _calc_mask_ij_mode2(nbmat: Tensor, mask_i: Tensor) -> Tensor:
+    """Mask padded neighbor entries for batched neighbor matrices.
+
+    Historically mode-2 callers have used both local per-system indices
+    ``0..N-1`` and flattened global indices ``b*N + i``. Treat both as valid
+    input conventions for masking so padded atoms are excluded consistently
+    before downstream code canonicalizes its own neighbor representation.
+    """
+    _, N = mask_i.shape
+    local_idx = torch.arange(N, device=nbmat.device).view(1, 1, N)
+    local_pad = (nbmat.unsqueeze(-1) == local_idx) & mask_i.to(device=nbmat.device).unsqueeze(1).unsqueeze(1)
+
+    global_pad_idx = torch.where(mask_i.to(device=nbmat.device).flatten())[0]
+    if global_pad_idx.numel():
+        global_pad = torch.isin(nbmat, global_pad_idx)
+    else:
+        global_pad = torch.zeros_like(nbmat, dtype=torch.bool)
+
+    center_pad = mask_i.to(device=nbmat.device).unsqueeze(-1)
+    return center_pad | local_pad.any(dim=-1) | global_pad
 
 
 def mask_ij_(
