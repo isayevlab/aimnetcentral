@@ -10,6 +10,9 @@ if importlib.util.find_spec("ase") is not None:
 if importlib.util.find_spec("pysisyphus") is not None:
     __all__.append("AIMNet2Pysis")
 
+if importlib.util.find_spec("torch_sim") is not None:
+    __all__.append("AIMNet2TorchSim")
+
 
 def __getattr__(name: str):
     if name == "AIMNet2ASE":
@@ -20,4 +23,8 @@ def __getattr__(name: str):
         from .aimnet2pysis import AIMNet2Pysis
 
         return AIMNet2Pysis
+    if name == "AIMNet2TorchSim":
+        from .aimnet2torchsim import AIMNet2TorchSim
+
+        return AIMNet2TorchSim
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

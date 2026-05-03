@@ -61,6 +61,11 @@ sella = [
     "sella>=2.4.0",
 ]
 
+# TorchSim calculator integration
+torchsim = [
+    "torch-sim-atomistic>=0.6.0,<0.7.0; python_version >= '3.12'",
+]
+
 # Training dependencies
 train = [
     "omegaconf>=2.3.0",
@@ -210,6 +215,7 @@ markers = [
     "pysis: marks tests that require PySisyphus (deselect with: -m 'not pysis')",
     "sella: marks tests that require Sella (deselect with: -m 'not sella')",
     "slow: marks tests that are intentionally expensive (deselect with: -m 'not slow')",
+    "torch_sim: marks tests that require TorchSim (deselect with: -m 'not torch_sim')",
     "train: marks tests that require training dependencies (deselect with: -m 'not train')",
 ]
 
@@ -229,10 +235,10 @@ exclude_lines = [
 # Deptry configuration
 [tool.deptry]
 # Map package names to their import names
-package_module_name_map = { "pytorch-ignite" = "ignite" }
+package_module_name_map = { "pytorch-ignite" = "ignite", "torch-sim-atomistic" = "torch_sim" }
 
 [tool.deptry.per_rule_ignores]
 # Optional extras (ase, pysisyphus, sella) — installed via [project.optional-dependencies]; deptry can't see them statically
-DEP001 = ["ase", "pysisyphus", "sella"]
-DEP003 = ["ase", "pysisyphus", "sella"]
-DEP004 = ["ase", "pysisyphus", "sella"]
+DEP001 = ["ase", "pysisyphus", "sella", "torch_sim"]
+DEP003 = ["ase", "pysisyphus", "sella", "torch_sim"]
+DEP004 = ["ase", "pysisyphus", "sella", "torch_sim"]
