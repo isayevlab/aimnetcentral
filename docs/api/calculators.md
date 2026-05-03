@@ -95,6 +95,10 @@ print(results[0]["potential_energy"], results[0]["forces"])
 
     By default `compute_stress=False`. Pass `compute_stress=True` when constructing `AIMNet2TorchSim` for NPT integrators and PBC cell relaxation.
 
+!!! note "TorchSim extras"
+
+    AIMNet partial charges are returned as both `charges` and `partial_charges`. Set per-system `charge` and NSE `mult` through TorchSim system extras.
+
 ::: aimnet.calculators.aimnet2torchsim.AIMNet2TorchSim
     options:
       show_root_heading: true

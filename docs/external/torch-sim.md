@@ -24,6 +24,8 @@ state = ts.static(system=atoms, model=model)
 print(state[0]["potential_energy"])
 ```
 
+For energy-only static batches, construct the wrapper with `compute_forces=False`. Geometry optimization and molecular dynamics require the default `compute_forces=True`.
+
 ## Charge and Multiplicity
 
 For charged systems or NSE multiplicities, convert ASE objects to a TorchSim state with `system_extras_map` so the wrapper receives per-system values:
@@ -41,7 +43,7 @@ state = ts.io.atoms_to_state(
 results = model(state)
 ```
 
-Use `mult` for AIMNet2-NSE spin multiplicity. The wrapper also accepts a `spin` extra as a compatibility fallback.
+Use `mult` for AIMNet2-NSE spin multiplicity. The wrapper also accepts a `spin` extra as a compatibility fallback. AIMNet partial atomic charges are returned as both `charges` and TorchSim-compatible `partial_charges` extras.
 
 ## Periodic Systems
 
@@ -50,3 +52,5 @@ Periodic states are detected from TorchSim's cell and PBC tensors. Construct the
 ```python
 model = AIMNet2TorchSim(base_calc, compute_stress=True)
 ```
+
+Stress requires a periodic TorchSim state with non-zero cell vectors.
