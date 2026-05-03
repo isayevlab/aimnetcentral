@@ -36,6 +36,16 @@ pip install "aimnet[hf]"
 
 See the [Hugging Face tutorial](tutorials/hugging_face.md) for details.
 
+### With TorchSim
+
+For TorchSim static evaluation, optimization, molecular dynamics, and autobatching, use Python 3.12+:
+
+```bash
+pip install "aimnet[torchsim,ase]"
+```
+
+See the [TorchSim external package guide](external/torch-sim.md) for examples.
+
 ### GPU Support
 
 AIMNet2 works on CPU by default. For GPU acceleration, install PyTorch with CUDA:

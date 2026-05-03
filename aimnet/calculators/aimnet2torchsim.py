@@ -1,12 +1,39 @@
 """TorchSim ``ModelInterface`` wrapper for AIMNet2."""
 
+from __future__ import annotations
+
 from collections.abc import Mapping
 from typing import Any
 
 import torch
 from torch import Tensor
-from torch_sim.models.interface import ModelInterface
-from torch_sim.state import SimState
+
+try:
+    from torch_sim.models.interface import ModelInterface
+    from torch_sim.state import SimState
+except ImportError as exc:  # pragma: no cover - exercised by docs builds without torchsim
+    _TORCHSIM_IMPORT_ERROR: ImportError | None = exc
+
+    class ModelInterface(torch.nn.Module):  # type: ignore[no-redef]
+        @property
+        def compute_forces(self) -> bool:
+            return self._compute_forces
+
+        @compute_forces.setter
+        def compute_forces(self, value: bool) -> None:
+            self._compute_forces = bool(value)
+
+        @property
+        def compute_stress(self) -> bool:
+            return self._compute_stress
+
+        @compute_stress.setter
+        def compute_stress(self, value: bool) -> None:
+            self._compute_stress = bool(value)
+
+    SimState = Any  # type: ignore[misc, assignment]
+else:
+    _TORCHSIM_IMPORT_ERROR = None
 
 from .calculator import AIMNet2Calculator
 
@@ -20,10 +47,17 @@ class AIMNet2TorchSim(ModelInterface):
         Underlying AIMNet2 calculator. AIMNet2 inference uses float32
         internally, so the wrapper reports ``torch.float32`` regardless of the
         incoming TorchSim state dtype.
+    compute_forces
+        Request AIMNet2 forces on each forward call. Keep this enabled for
+        geometry optimization and molecular dynamics. Set it false only for
+        energy-only static batches.
     compute_stress
         Request AIMNet2 stress on every forward call. This is required for NPT
         integrators and PBC cell relaxation. Leave it false for energy/force
         workflows to avoid retaining extra autograd state.
+    validate_species
+        Forward AIMNet2 calculator species and charge-domain validation. Leave
+        enabled unless intentionally bypassing model metadata checks.
     """
 
     def __init__(
@@ -34,6 +68,11 @@ class AIMNet2TorchSim(ModelInterface):
         compute_stress: bool = False,
         validate_species: bool = True,
     ) -> None:
+        if _TORCHSIM_IMPORT_ERROR is not None:
+            raise ImportError(
+                'AIMNet2TorchSim requires TorchSim. Install it on Python 3.12+ with `pip install "aimnet[torchsim]"`.'
+            ) from _TORCHSIM_IMPORT_ERROR
+
         super().__init__()
         self._base_calc = base_calc
         self._device = torch.device(base_calc.device)

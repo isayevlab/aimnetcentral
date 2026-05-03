@@ -8,7 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- Added `AIMNet2TorchSim`, an optional TorchSim `ModelInterface` wrapper for static evaluation, optimization, molecular dynamics, and autobatched workloads via the `torchsim` extra.
+- Added `AIMNet2TorchSim`, an optional TorchSim `ModelInterface` wrapper for static evaluation, optimization, molecular dynamics, and autobatched workloads via the Python 3.12+ `torchsim` extra (`torch-sim-atomistic>=0.6,<0.7`).
+- Added TorchSim external/API documentation and runnable `examples/ts_opt.py` and `examples/ts_opt_pbc.py` scripts.
 
 ## [0.1.1] - 2026-04-05
 

@@ -12,7 +12,7 @@ AIMNet2 is a neural network potential for fast and accurate atomistic simulation
 
 - Accurate predictions for neutral, charged, organic, and elemental-organic systems
 - Fast inference on both CPU and GPU
-- Integration with popular simulation packages (ASE, PySisyphus)
+- Integration with popular simulation packages (ASE, PySisyphus, TorchSim)
 - Configurable long-range electrostatics (DSF, Ewald, PME) for periodic systems
 
 AIMNet2 combines a graph neural network architecture with flexible long-range interactions, making it suitable for molecular dynamics, geometry optimization, and property prediction across diverse chemical systems.
@@ -84,6 +84,12 @@ pip install "aimnet[pysis]"
 # Sella TS optimizer
 pip install "aimnet[sella]"
 
+# Hugging Face Hub model loading
+pip install "aimnet[hf]"
+
+# TorchSim integration (Python 3.12+)
+pip install "aimnet[torchsim,ase]"
+
 # Training tools
 pip install "aimnet[train]"
 ```
@@ -134,7 +140,7 @@ pip install "aimnet[train]"
 
 ### API Reference
 
-- **[Calculators](api/calculators.md)** - `AIMNet2Calculator`, `AIMNet2ASE`, `AIMNet2Pysis`
+- **[Calculators](api/calculators.md)** - `AIMNet2Calculator`, `AIMNet2ASE`, `AIMNet2Pysis`, `AIMNet2TorchSim`
 - **[Modules](api/modules.md)** - Core neural network modules
 - **[Data](api/data.md)** - Dataset and sampling utilities
 - **[Config](api/config.md)** - Configuration utilities

@@ -18,6 +18,7 @@ The main entry points for using AIMNet2:
 - `AIMNet2Calculator` - Core calculator for inference
 - `AIMNet2ASE` - ASE calculator interface (requires `aimnet[ase]`)
 - `AIMNet2Pysis` - PySisyphus calculator interface (requires `aimnet[pysis]`)
+- `AIMNet2TorchSim` - TorchSim model interface (requires Python 3.12+ and `aimnet[torchsim]`)
 
 ### Command Line Interface
 

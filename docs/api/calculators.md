@@ -70,7 +70,7 @@ This interface adapts AIMNet2 for use with PySisyphus optimizers. It handles uni
 
 !!! note "Installation"
 
-    Requires the `torchsim` extra and Python 3.12+: `pip install "aimnet[torchsim]"`. Add the `ase` extra for ASE-based input/output examples: `pip install "aimnet[torchsim,ase]"`.
+    Requires the `torchsim` extra and Python 3.12+: `pip install "aimnet[torchsim]"`. Add the `ase` extra for ASE-based input/output examples: `pip install "aimnet[torchsim,ase]"`. On Python 3.11, the base AIMNet package is supported but the TorchSim extra is not installed.
 
 `AIMNet2TorchSim` wraps an `AIMNet2Calculator` as a `torch-sim-atomistic` model for static evaluation, geometry optimization, molecular dynamics, and autobatched workloads.
 
@@ -97,7 +97,7 @@ print(results[0]["potential_energy"], results[0]["forces"])
 
 !!! note "TorchSim extras"
 
-    AIMNet partial charges are returned as both `charges` and `partial_charges`. Set per-system `charge` and NSE `mult` through TorchSim system extras.
+    AIMNet partial charges are returned as both `charges` and `partial_charges` output fields. Set per-system `charge` and NSE `mult` through TorchSim system extras.
 
 ::: aimnet.calculators.aimnet2torchsim.AIMNet2TorchSim
     options:

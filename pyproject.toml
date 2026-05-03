@@ -238,7 +238,7 @@ exclude_lines = [
 package_module_name_map = { "pytorch-ignite" = "ignite", "torch-sim-atomistic" = "torch_sim" }
 
 [tool.deptry.per_rule_ignores]
-# Optional extras (ase, pysisyphus, sella) — installed via [project.optional-dependencies]; deptry can't see them statically
+# Optional extras are installed via [project.optional-dependencies]; deptry can't see them statically
 DEP001 = ["ase", "pysisyphus", "sella", "torch_sim"]
 DEP003 = ["ase", "pysisyphus", "sella", "torch_sim"]
 DEP004 = ["ase", "pysisyphus", "sella", "torch_sim"]

@@ -8,6 +8,7 @@
 
     TorchSim requires Python 3.12+. For the ASE-based examples below, install both extras:
     `pip install "aimnet[torchsim,ase]"`.
+    AIMNet itself supports Python 3.11, but the TorchSim extra is only available on Python 3.12+.
 
 ## Quick Start
 
@@ -71,7 +72,7 @@ state = ts.io.atoms_to_state(
 results = model(state)
 ```
 
-Use `mult` for AIMNet2-NSE spin multiplicity. The wrapper also accepts a `spin` extra as a compatibility fallback. AIMNet partial atomic charges are returned as both `charges` and TorchSim-compatible `partial_charges` extras.
+Use `mult` for AIMNet2-NSE spin multiplicity. The wrapper also accepts a `spin` extra as a compatibility fallback. AIMNet partial atomic charges are returned as both `charges` and TorchSim-compatible `partial_charges` output fields.
 
 ## Periodic Systems
 
@@ -84,11 +85,11 @@ results = ts.static(system=periodic_atoms, model=model)
 print(results[0]["stress"])
 ```
 
-Stress requires a periodic TorchSim state with non-zero cell vectors.
+Stress requires a periodic TorchSim state with non-zero cell vectors. `ts.static` keeps the per-system batch dimension for stress, so a single periodic system returns stress with shape `(1, 3, 3)`.
 
 ## Examples
 
-Runnable examples are available in the repository:
+Runnable examples are available in the repository. CI smoke tests cover static evaluation and periodic stress; the optimization and dynamics scripts are intended as manual examples.
 
 - [`examples/ts_opt.py`](https://github.com/isayevlab/aimnetcentral/blob/main/examples/ts_opt.py) optimizes a batch of molecular systems with TorchSim autobatching.
 - [`examples/ts_opt_pbc.py`](https://github.com/isayevlab/aimnetcentral/blob/main/examples/ts_opt_pbc.py) runs periodic optimization and NVT dynamics with stress enabled.

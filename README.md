@@ -11,7 +11,7 @@ AIMNet2 is a neural network interatomic potential that predicts energies, forces
 
 - Accurate for neutral, charged, organic, and elemental-organic systems
 - GPU-accelerated with NVIDIA Warp CUDA kernels and `torch.compile` support
-- ASE and PySisyphus calculator interfaces
+- ASE, PySisyphus, and TorchSim calculator interfaces
 - Periodic boundary conditions with DSF and Ewald Coulomb methods
 - DFT-D3 dispersion corrections (BJ damping, GPU-accelerated)
 - Adaptive neighbor lists with automatic dense/sparse mode selection
@@ -61,8 +61,10 @@ pip install aimnet 'nvalchemi-toolkit-ops[torch]'
 pip install "aimnet[ase]"             # ASE calculator interface
 pip install "aimnet[pysis]"           # PySisyphus reaction path calculator
 pip install "aimnet[sella]"           # Sella TS optimizer (includes ASE)
+pip install "aimnet[hf]"              # Hugging Face Hub model loading
+pip install "aimnet[torchsim,ase]"    # TorchSim integration (Python 3.12+)
 pip install "aimnet[train]"           # Training pipeline (W&B, ignite)
-pip install "aimnet[ase,pysis,sella,train]" # All extras
+pip install "aimnet[ase,pysis,sella,hf,torchsim,train]" # All extras available on this Python
 ```
 
 ### Development Setup
