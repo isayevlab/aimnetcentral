@@ -282,7 +282,7 @@ result_pme = calc({
 }, forces=True, stress=True)
 ```
 
-Ewald and PME support force/stress losses (`train=True`) and calculator Hessian requests; DSF only supports inference forces/stress. See [Long-Range Methods → Derivative Support](../long_range.md#derivative-support).
+Ewald and PME support force/stress losses (`train=True`), but not calculator Hessian requests. DSF only supports inference forces/stress. See [Long-Range Methods → Derivative Support](../long_range.md#derivative-support).
 
 For non-neutral cells, Ewald and PME use the standard uniform-background convention. DSF is cutoff-based and remains finite for non-neutral inputs, but it does not apply the same Ewald/PME background correction.
 

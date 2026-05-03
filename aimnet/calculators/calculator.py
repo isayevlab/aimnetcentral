@@ -899,10 +899,21 @@ class AIMNet2Calculator:
 
         if hessian and "mol_idx" in data and data["mol_idx"][-1] > 0:
             raise NotImplementedError("Hessian calculation is not supported for multiple molecules")
-        if self._coulomb_method == "dsf" and (hessian or (self._train and (forces or stress))):
+        if self._coulomb_method == "dsf":
+            if hessian:
+                raise NotImplementedError(
+                    "DSF Coulomb uses nvalchemiops explicit coordinate/cell derivatives and does not support "
+                    "Hessian calculations."
+                )
+            if self._train and (forces or stress):
+                raise NotImplementedError(
+                    "DSF Coulomb uses nvalchemiops explicit coordinate/cell derivatives and does not support "
+                    "force/stress training. Use 'ewald' or 'pme' for force/stress training."
+                )
+        if hessian and self._coulomb_method in ("ewald", "pme"):
             raise NotImplementedError(
-                "DSF Coulomb uses nvalchemiops explicit coordinate/cell derivatives and does not support "
-                "force/stress training or Hessian calculations. Use 'ewald' or 'pme' for these derivative modes."
+                "Ewald/PME Coulomb uses nvalchemiops explicit first derivatives and does not support "
+                "Hessian calculations."
             )
         data = self.set_grad_tensors(data, forces=forces, stress=stress, hessian=hessian)
         if isinstance(self.model, torch.jit.ScriptModule):
@@ -928,7 +939,7 @@ class AIMNet2Calculator:
 
         External backends return ``(data, terms)`` when explicit force/virial
         derivatives are requested. Ewald/PME switch to their local training
-        wrapper when force/stress training or Hessians need second derivatives.
+        wrapper for force/stress training.
         """
         coulomb_terms = None
         if self.external_coulomb is not None:

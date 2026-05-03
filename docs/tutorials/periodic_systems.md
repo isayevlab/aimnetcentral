@@ -103,7 +103,7 @@ forces = atoms.get_forces()
 stress = atoms.get_stress()
 ```
 
-DSF supports inference forces and stress, but force/stress losses (`train=True` with `forces=True` or `stress=True`) and Hessians are not supported. Ewald and PME support all derivative modes, including training. See [Long-Range Methods → Derivative Support](../long_range.md#derivative-support).
+DSF supports inference forces and stress, but force/stress losses (`train=True` with `forces=True` or `stress=True`) and Hessians are not supported. Ewald and PME support force/stress losses in training, but not calculator Hessian requests. See [Long-Range Methods → Derivative Support](../long_range.md#derivative-support).
 
 **When to use Ewald:**
 

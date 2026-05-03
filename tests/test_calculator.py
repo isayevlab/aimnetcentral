@@ -245,6 +245,23 @@ class TestCoulombMethods:
         with pytest.raises(NotImplementedError, match="DSF Coulomb"):
             calc(data, hessian=True)
 
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_ewald_pme_hessian_raises(self, method):
+        """Ewald/PME Hessians need second coordinate derivatives that nvalchemiops does not expose."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method(method)
+
+        data = {
+            "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+            "numbers": np.array([8, 1, 1]),
+            "charge": 0.0,
+            "cell": np.eye(3) * 8.0,
+        }
+        with pytest.raises(NotImplementedError, match="Ewald/PME Coulomb"):
+            calc(data, hessian=True)
+
     def test_dftd3_hessian_is_finite(self):
         """External DFT-D3 uses its differentiable fallback for Hessian calls."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
