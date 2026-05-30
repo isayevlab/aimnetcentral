@@ -250,19 +250,26 @@ class LRCoulomb(nn.Module):
     for module-specific keys (e.g., nbmat_coulomb, shifts_coulomb), falling
     back to shared _lr suffix (nbmat_lr, shifts_lr) if not found.
 
-    DSF uses ``nvalchemiops.torch.interactions.electrostatics.dsf_coulomb``.
-    Its energy is differentiable through charges, but not through positions
-    or cell; the calculator consumes explicit DSF forces/virial for inference
-    and rejects DSF force/stress training and Hessian requests.
+    DSF uses ``nvalchemiops.torch.interactions.electrostatics.dsf_coulomb``
+    for plain inference. DSF Hessian and force/stress training instead go
+    through a closed-form pure-PyTorch path (:meth:`_coul_dsf_torch`), which is
+    twice-differentiable by autograd and RELAXED-CHARGE: it differentiates
+    through the model-predicted charges, so its Hessian includes the
+    charge-response (the d^2E / (dq . dr) coupling).
 
     Ewald/PME call ``nvalchemiops`` directly. Inference uses
     ``hybrid_forces=True`` so energy remains differentiable through charges
     and fixed-charge geometry derivatives are returned as explicit terms.
     Training derivative paths use a small local ``autograd.Function`` wrapper
     because the installed nvalchemiops coordinate backward kernels do not
-    currently provide a registered backward-of-backward. Calculator Hessian
-    requests are rejected for Ewald/PME because complete Hessians require true
-    second coordinate derivatives.
+    currently provide a registered backward-of-backward. Ewald/PME Hessians are
+    provided by finite-difference of the analytic nvalchemiops forces
+    (:meth:`_coul_nvalchemi_fd_hessian`) and are FIXED-CHARGE: they omit the
+    d^2E / (dq . dr) charge-response coupling.
+
+    Because of this, DSF (relaxed-charge) and Ewald/PME (fixed-charge) Hessians
+    differ slightly for an otherwise-equivalent system, which matters when
+    comparing vibrational frequencies / IR across backends.
     """
 
     def __init__(
@@ -557,7 +564,9 @@ class LRCoulomb(nn.Module):
         Because the pair term is force-shifted, energy and force are continuous
         at ``rc`` but the second derivative is not, so the energy is only C^1
         there; the Hessian therefore has a small discontinuity for pairs sitting
-        exactly at ``rc``.
+        exactly at ``rc``. For vibrational / IR work a large ``dsf_rc`` is
+        advisable so that no chemically relevant pair sits near the cutoff where
+        this Hessian discontinuity occurs.
 
         RELAXED-CHARGE Hessian: unlike the Ewald/PME finite-difference Hessian,
         this DSF torch energy is fully autograd-differentiable through the
@@ -594,7 +603,7 @@ class LRCoulomb(nn.Module):
         # Mask the trailing padding atom locally so it contributes zero to the
         # self-energy, mirroring how _dsf_inputs_mode0 / coul_simple mask
         # (instead of relying on the upstream invariant that padding q is ~0).
-        q_self = nbops.mask_i_(q.clone(), data, 0.0, inplace=False)
+        q_self = nbops.mask_i_(q, data, 0.0, inplace=False)
         e_self_i = (self_coeff * q_self.pow(2)).to(torch.float64)
         e = e + 2.0 * self._factor * nbops.mol_sum(e_self_i, data)
         if self.subtract_sr:
@@ -785,6 +794,11 @@ class LRCoulomb(nn.Module):
         forces and the ``(F(+h) - F(-h))`` cancellation happens in float64,
         avoiding the ~3-4 digit accuracy cap of float32 subtraction.
 
+        The displacement ``step`` (default 5e-4 Ang) is fixed, so the resulting
+        Hessian accuracy is truncation-limited (the central-difference O(step^2)
+        error) and additionally coupled to ``ewald_accuracy`` through the
+        kernel-force accuracy; neither error is reduced below those limits.
+
         The Coulomb neighbor list is built at the Ewald real-space cutoff with no
         geometric skin, so a pair within ``step`` of the cutoff could cross during
         the +-step displacement. This is numerically negligible because the Ewald
@@ -829,15 +843,18 @@ class LRCoulomb(nn.Module):
 
         hessian = coord_real.new_zeros((N, 3, N, 3), dtype=torch.float64)
         with torch.no_grad():
+            scratch = coord_real.clone()
             for j in range(N):
                 for b in range(3):
-                    cp = coord_real.clone()
-                    cm = coord_real.clone()
-                    cp[j, b] += step
-                    cm[j, b] -= step
+                    orig = scratch[j, b].item()
+                    scratch[j, b] = orig + step
+                    fp = forces_at(scratch)
+                    scratch[j, b] = orig - step
+                    fm = forces_at(scratch)
+                    scratch[j, b] = orig
                     # H_{ia,jb} = d^2E/dr_ia dr_jb = -dF_ia/dr_jb
-                    dF = (forces_at(cp) - forces_at(cm)) / (2.0 * step)
-                    hessian[:, :, j, b] = -dF
+                    dF = (fp - fm) / (2.0 * step)
+                    hessian[:, :, j, b] = (-dF).double()
         return hessian
 
     def coul_ewald(self, data: dict[str, Tensor]) -> Tensor:

@@ -19,6 +19,9 @@ from .model_registry import get_model_path, get_registry_model_family
 
 _WB97M_D3_PARAMS = {"s6": 1.0, "s8": 0.3908, "a1": 0.566, "a2": 3.128}
 
+# Sentinel for "attribute did not exist" when snapshotting/restoring instance state.
+_SENTINEL = object()
+
 
 def _sum_optional_tensor(x: Tensor | None, y: Tensor | None) -> Tensor | None:
     """Elementwise sum of two ``Optional[Tensor]`` operands."""
@@ -492,7 +495,7 @@ class AIMNet2Calculator:
 
         self._maybe_warn_family_mix((metadata or {}).get("family") if metadata else None)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs) -> dict[str, Any]:
         return self.eval(*args, **kwargs)
 
     @property
@@ -764,6 +767,13 @@ class AIMNet2Calculator:
         ``"ewald"`` and ``"pme"`` both require periodic systems (``cell`` set);
         invoking the calculator without a cell raises ``ValueError`` at
         ``prepare_input``.
+
+        Hessian note: ``"ewald"``/``"pme"`` Hessians are computed at fixed charge
+        (finite-difference of the analytic forces; the charge-response coupling
+        ``d^2E/(dq.dr)`` through the model's predicted charges is omitted), while
+        ``"dsf"`` Hessians are relaxed-charge (fully autograd). Vibrational
+        frequencies / IR intensities are therefore not directly comparable across
+        these backends.
         """
         if method not in ("simple", "dsf", "ewald", "pme"):
             raise ValueError(f"Invalid method: {method}")
@@ -858,7 +868,15 @@ class AIMNet2Calculator:
 
     def eval(
         self, data: dict[str, Any], forces=False, stress=False, hessian=False, *, validate_species: bool = True
-    ) -> dict[str, Tensor]:
+    ) -> dict[str, Any]:
+        """Run the model on ``data`` and return the output dict.
+
+        For a single structure each value is a ``Tensor``. For batched Hessian
+        requests the output is collected per structure: a 3D ``coord`` batch
+        (B, N, 3) yields values with a new leading batch dim (stacked), while a
+        multi-molecule ``mol_idx`` input yields a per-molecule ``list[Tensor]``
+        for each key (molecules are independent and generally ragged).
+        """
         # Species validation — opt-out via validate_species=False.
         # Silent no-op for models that did not declare implemented_species (older .pt,
         # raw nn.Module).
@@ -913,7 +931,10 @@ class AIMNet2Calculator:
         data = self.prepare_input(data, hessian=hessian)
 
         if hessian and "mol_idx" in data and data["mol_idx"][-1] > 0:
-            raise NotImplementedError("Hessian calculation is not supported for multiple molecules")
+            raise NotImplementedError(
+                "In-call Hessian for hand-flattened multi-molecule input is not supported; "
+                "pass a 3D batch or a mol_idx dict to get per-structure Hessians."
+            )
         data = self.set_grad_tensors(data, forces=forces, stress=stress, hessian=hessian)
         if isinstance(self.model, torch.jit.ScriptModule):
             with torch.jit.optimized_execution(False):  # type: ignore
@@ -1030,7 +1051,11 @@ class AIMNet2Calculator:
     @staticmethod
     def _select_for_structure(value: Any, index: int, n_struct: int) -> Any:
         """Pick the per-structure slice when ``value`` is batched along structures,
-        else return it unchanged (shared across structures)."""
+        else return it unchanged (shared across structures).
+
+        Note: the ``shape[0] == n_struct`` test is a heuristic valid only for
+        per-structure scalar quantities (charge/mult), not general per-atom tensors.
+        """
         t = torch.as_tensor(value)
         return t[index] if t.ndim >= 1 and t.shape[0] == n_struct else t
 
@@ -1049,6 +1074,11 @@ class AIMNet2Calculator:
                 elif k == "cell":
                     t = torch.as_tensor(v)
                     sub[k] = t[b] if t.ndim == 3 else t
+                elif k.startswith(("nbmat", "shifts")) or k == "mol_idx":
+                    # Precomputed neighbor-list keys must not be shared unsliced
+                    # across subsystems (they'd be wrong per-structure); the
+                    # recursive eval rebuilds them.
+                    continue
                 else:
                     sub[k] = v
             subs.append(sub)
@@ -1070,6 +1100,8 @@ class AIMNet2Calculator:
                 sub["mult"] = self._select_for_structure(data["mult"], m, num_molecules)
             if cell is not None:
                 sub["cell"] = cell[m] if cell.ndim == 3 else cell
+            if data.get("pbc") is not None:
+                sub["pbc"] = data["pbc"]
             subs.append(sub)
         return subs
 
@@ -1090,10 +1122,28 @@ class AIMNet2Calculator:
         Multi-molecule (``mol_idx``) inputs always use ``stack=False`` because the
         molecules are independent and generally ragged.
         """
-        results = [
-            self.eval(sub, forces=forces, stress=stress, hessian=True, validate_species=validate_species)
-            for sub in subsystems
-        ]
+        # Recursive eval(...) mutates instance scratch state and can persistently
+        # flip _coulomb_method / external_coulomb.method via prepare_input's
+        # simple->dsf PBC auto-switch. Snapshot and restore so a batched call
+        # leaves the calculator unmodified.
+        _saved_attrs = {
+            name: getattr(self, name, _SENTINEL)
+            for name in ("_batch", "_max_mol_size", "_saved_for_grad", "_coulomb_method")
+        }
+        _saved_ext_method = (
+            getattr(self.external_coulomb, "method", _SENTINEL) if self.external_coulomb is not None else _SENTINEL
+        )
+        try:
+            results = [
+                self.eval(sub, forces=forces, stress=stress, hessian=True, validate_species=validate_species)
+                for sub in subsystems
+            ]
+        finally:
+            for name, val in _saved_attrs.items():
+                if val is not _SENTINEL:
+                    setattr(self, name, val)
+            if _saved_ext_method is not _SENTINEL and self.external_coulomb is not None:
+                self.external_coulomb.method = _saved_ext_method
         out: dict[str, Any] = {}
         for k in results[0]:
             vals = [r[k] for r in results]
@@ -1456,7 +1506,10 @@ class AIMNet2Calculator:
         if hessian:
             H = self.calculate_hessian(data["forces"], self._saved_for_grad["coord"])
             if coulomb_terms is not None and getattr(coulomb_terms, "hessian", None) is not None:
-                H = H + coulomb_terms.hessian.to(dtype=H.dtype, device=H.device)
+                # The LR coulomb hessian is computed in float64 via finite
+                # differences. Accumulate in that (higher) precision rather than
+                # downcasting it to H's dtype, which would discard the FD precision.
+                H = H.to(dtype=coulomb_terms.hessian.dtype, device=H.device) + coulomb_terms.hessian.to(device=H.device)
             data["hessian"] = H
         return data
 
