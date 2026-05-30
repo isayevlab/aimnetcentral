@@ -1537,6 +1537,146 @@ class AIMNet2Calculator:
         hessian = -torch.func.vmap(vjp, 0)(eye)
         return hessian.view(-1, 3, coord.shape[0], 3)[:-1, :, :-1, :]
 
+    @torch.inference_mode(False)
+    @torch.enable_grad()
+    def hessian_vector_product(self, data: dict[str, Any], vectors: Tensor, *, eps: float = 5e-4) -> Tensor:
+        """Matrix-free Hessian-vector product(s) ``H @ v`` for one structure.
+
+        Computes ``H @ v`` without forming the dense ``(N, 3, N, 3)`` Hessian,
+        enabling Lanczos/LOBPCG negative-curvature checks and CG-Newton
+        preconditioning on large systems.
+
+        Parameters
+        ----------
+        data : dict
+            Single-structure input (same keys as ``eval``). 3D batched or
+            multi-molecule ``mol_idx`` inputs are not supported.
+        vectors : Tensor
+            Direction(s), shape ``(N, 3)`` or ``(K, N, 3)`` over the real atoms.
+        eps : float
+            Central-difference step (Angstrom) for the periodic Ewald/PME
+            long-range term. Ignored for ``simple``/``dsf``.
+
+        Returns
+        -------
+        Tensor
+            ``H @ v``, shape ``(N, 3)`` or ``(K, N, 3)``, matching ``vectors``.
+
+        Notes
+        -----
+        The autograd part (NN + short-range + ``simple``/``dsf`` Coulomb +
+        DFTD3) is an exact reverse-mode product. For ``ewald``/``pme`` the
+        long-range block is a fixed-charge directional finite difference (2
+        force evals per vector); the same charge-response and step caveats as
+        the dense Ewald/PME Hessian apply (see
+        :meth:`aimnet.modules.lr.LRCoulomb._coul_nvalchemi_fd_hessian`). This
+        mirrors the dense :meth:`calculate_hessian` assembly term-by-term, so
+        ``hessian_vector_product(v)`` equals ``H.reshape(3N, 3N) @ v`` to the
+        backend's tolerance.
+
+        Integration note: the external modules run via
+        ``_run_external_modules(forces=True, hessian=(method == 'dsf'))`` -- the
+        SAME force graph the dense ``eval(..., forces=True)`` path builds. The
+        ``hessian`` flag controls the dsf-vs-ewald/pme split: dsf passes
+        ``hessian=True`` so ``LRCoulomb.forward`` routes through its
+        differentiable closed-form torch path (``_coul_dsf_torch``), keeping the
+        dsf curvature in the autograd graph (dsf has no dense FD block, so this is
+        free); ewald/pme pass ``hessian=False`` so the dense O(2*3N) FD block is
+        NOT computed, while the periodic energy is still added
+        differentiable-through-charges (capturing the charge-response curvature)
+        with detached position forces. The autograd vjp of the differentiable
+        forces equals the dense autograd Hessian block, and the directional FD
+        helper adds the remaining full-periodic block -- matching the dense
+        assembly term-by-term.
+        """
+        if getattr(self, "_was_compiled", False):
+            raise RuntimeError(
+                "hessian_vector_product is incompatible with compile_model=True "
+                "(Dynamo + double-backward through GELU hangs). Reconstruct with compile_model=False."
+            )
+        coord_in = torch.as_tensor(data["coord"])
+        if coord_in.ndim == 3 and coord_in.shape[0] > 1:
+            raise NotImplementedError("hessian_vector_product supports a single structure only (got 3D batch).")
+        if coord_in.ndim == 2 and data.get("mol_idx") is not None:
+            mol_idx_t = torch.as_tensor(data["mol_idx"])
+            if mol_idx_t.numel() and int(mol_idx_t.max()) > 0:
+                raise NotImplementedError(
+                    "hessian_vector_product supports a single structure only (got mol_idx batch)."
+                )
+
+        prepared = self.prepare_input(data, hessian=True)
+        if "mol_idx" in prepared and prepared["mol_idx"][-1] > 0:
+            raise NotImplementedError("hessian_vector_product supports a single structure only.")
+        prepared = self.set_grad_tensors(prepared, forces=True, hessian=True)
+        if isinstance(self.model, torch.jit.ScriptModule):
+            with torch.jit.optimized_execution(False):  # type: ignore
+                prepared = self.model(prepared)
+        else:
+            prepared = self.model(prepared)
+
+        method = self._coulomb_method
+        # Build the SAME force graph the dense path builds. The ``hessian`` flag
+        # controls the dsf-vs-ewald/pme split:
+        #   * dsf: ``hessian=True`` routes ``LRCoulomb.forward`` through its
+        #     DIFFERENTIABLE closed-form torch path (``_coul_dsf_torch``), so the
+        #     dsf curvature is in the autograd graph. dsf has no dense FD block, so
+        #     ``hessian=True`` adds no wasteful work, and this guarantees correct
+        #     routing regardless of how the (process-wide cached) model's embedded
+        #     Coulomb method was last set by another caller.
+        #   * ewald/pme/simple: ``hessian=False`` so the dense O(2*3N) Ewald/PME FD
+        #     block is NOT computed. The periodic energy is still added
+        #     differentiable-through-charges (capturing the charge-response
+        #     curvature d^2E/(dq.dr)); its analytic position forces come back as a
+        #     detached ``coulomb_terms`` term, and the full-periodic fixed-position
+        #     curvature is supplied per-vector by the directional FD helper below.
+        # DFTD3 (if attached) always contributes its differentiable torch-energy
+        # curvature, captured by the vjp.
+        external_hessian = method == "dsf"
+        prepared, _coulomb_terms = self._run_external_modules(
+            prepared, forces=True, stress=False, hessian=external_hessian
+        )
+
+        coord = self._saved_for_grad["coord"]  # (N+1, 3), requires_grad
+        tot_energy = prepared["energy"].sum()
+        # Differentiable part of the forces only. The detached ``coulomb_terms``
+        # forces are a constant w.r.t. coord (zero second derivative), so they are
+        # intentionally excluded from the vjp; the periodic curvature they would
+        # have carried is supplied by the directional FD helper instead.
+        forces_diff = -torch.autograd.grad(tot_energy, coord, create_graph=True)[0]  # (N+1, 3)
+        N = coord.shape[0] - 1
+
+        device = coord.device
+        vecs = torch.as_tensor(vectors, device=device)
+        single = vecs.ndim == 2
+        if single:
+            vecs = vecs.unsqueeze(0)
+        if vecs.shape[-2:] != (N, 3):
+            raise ValueError(f"vectors must have trailing shape ({N}, 3); got {tuple(vecs.shape)}")
+
+        outs = []
+        for k in range(vecs.shape[0]):
+            v = vecs[k].to(forces_diff.dtype)
+            v_full = torch.zeros_like(coord)
+            v_full[:N] = v
+            # autograd Hv = -d(forces . v)/dcoord = d^2E/dr^2 . v
+            # (NN + short-range + dsf/simple charge-response + dftd3)
+            hv_full = -torch.autograd.grad(
+                forces_diff.flatten(),
+                coord,
+                grad_outputs=v_full.flatten(),
+                retain_graph=True,
+                allow_unused=True,
+            )[0]
+            hv = hv_full[:N]
+            if method in ("ewald", "pme") and self.external_coulomb is not None:
+                # Full-periodic fixed-position curvature (directional FD).
+                hv = hv.to(torch.float64) + self.external_coulomb._coul_nvalchemi_fd_hvp(
+                    prepared, backend=method, vec=v, step=eps
+                )
+            outs.append(hv)
+        result = torch.stack(outs, 0)
+        return result[0] if single else result
+
 
 def _add_padding_row(
     nbmat: Tensor,
