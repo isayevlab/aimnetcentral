@@ -855,6 +855,64 @@ class LRCoulomb(nn.Module):
                     hessian[:, :, j, b] = (-dF).double()
         return hessian
 
+    def _coul_nvalchemi_fd_hvp(
+        self, data: dict[str, Tensor], backend: str, vec: Tensor, *, step: float = 5e-4
+    ) -> Tensor:
+        """Directional finite-difference of the FULL periodic Coulomb forces.
+
+        Returns ``H_LR @ vec`` for the real atoms, shape ``(N, 3)`` in
+        eV/Ang^2, where ``H_LR`` is the full-periodic Coulomb Hessian block.
+        This is the matrix-free, single-direction analogue of
+        :meth:`_coul_nvalchemi_fd_hessian`: it costs 2 force evaluations
+        instead of 2*3N. ``vec`` is the displacement direction over the real
+        atoms, shape ``(N, 3)``.
+
+        Like the dense version this is a FIXED-CHARGE term (charges detached);
+        see :meth:`_coul_nvalchemi_fd_hessian` for the charge-response and
+        step/``ewald_accuracy`` caveats, which apply identically here.
+        """
+        suffix = nbops.resolve_suffix(data, ["_coulomb", "_lr"])
+        coord = data["coord"]
+        cell = data["cell"]
+        if cell is None:
+            raise ValueError("nvalchemi Coulomb requires periodic cell data")
+        if backend not in ("ewald", "pme"):
+            raise ValueError(f"backend must be 'ewald' or 'pme', got {backend!r}")
+
+        N = coord.shape[0] - 1
+        coord_real = coord[:-1].detach().double()
+        charges_real = data[self.key_in][:-1].detach().double()
+        mol_idx_real = data["mol_idx"][:-1].to(torch.int32)
+        nbmat_real = data[f"nbmat{suffix}"][:-1].to(torch.int32)
+        shifts_real = data[f"shifts{suffix}"][:-1].to(torch.int32)
+        cell_det = cell.detach().double()
+        num_systems = int(mol_idx_real.max().item()) + 1
+        is_pme = backend == "pme"
+        vec_real = vec.detach().double()
+
+        def forces_at(positions: Tensor) -> Tensor:
+            _e, f, _cg, _v = _periodic_coulomb_hybrid(
+                coord=positions,
+                cell=cell_det,
+                charges=charges_real,
+                batch_idx=mol_idx_real,
+                neighbor_matrix=nbmat_real,
+                shifts=shifts_real,
+                mask_value=N,
+                num_systems=num_systems,
+                accuracy=float(self.ewald_accuracy),
+                compute_virial=False,
+                is_pme=is_pme,
+            )
+            return f  # (N, 3) eV/Ang
+
+        with torch.no_grad():
+            fp = forces_at(coord_real + step * vec_real)
+            fm = forces_at(coord_real - step * vec_real)
+            # H_LR @ vec = d^2E/dr dr . vec = -dF/dr . vec  (directional)
+            hv = -(fp - fm) / (2.0 * step)
+        return hv  # (N, 3), float64
+
     def coul_ewald(self, data: dict[str, Tensor]) -> Tensor:
         """Per-system Ewald energy in eV. Requires ``cell`` and ``nbmat_lr``/``shifts_lr``."""
         energy, _terms = self._coul_nvalchemi(data, backend="ewald")
