@@ -1515,6 +1515,27 @@ class AIMNet2Calculator:
 
     @staticmethod
     def calculate_hessian(forces: Tensor, coord: Tensor) -> Tensor:
+        """Dense ``(N, 3, N, 3)`` Hessian of the energy w.r.t. real-atom coordinates.
+
+        Autograd contract (IMPORTANT):
+        The returned dense Hessian is a **detached value**: it carries no
+        autograd graph back to the coordinates or model parameters. This is by
+        design (it is materialized via ``torch.func.vmap`` over a vjp of the
+        already-built force graph, and the periodic Ewald/PME block is a
+        fixed-charge finite-difference term that is non-differentiable). Forces
+        DO compose with an upstream coordinate-builder graph, but the Hessian
+        does not, so you cannot backpropagate through ``eval(..., hessian=True)``.
+
+        If you need the Hessian to *compose* (e.g. ``H @ v`` that scales with /
+        differentiates through an outer computation) or to avoid forming the
+        dense ``(N, 3, N, 3)`` tensor on large systems, use the matrix-free
+        :meth:`hessian_vector_product` instead. For a fully-differentiable
+        Hessian, build one externally with
+        ``torch.autograd.functional.hessian(energy_fn, coords)`` over a closure
+        that calls the model on differentiable coordinates (note that the
+        periodic Ewald/PME long-range block remains a fixed-charge FD term in
+        either case).
+        """
         # Coord includes padding atom (shape N+1), forces only for real atoms (shape N).
         # Hessian computed only for actual atoms: (N, 3, N, 3).
         #
@@ -1572,7 +1593,10 @@ class AIMNet2Calculator:
         :meth:`aimnet.modules.lr.LRCoulomb._coul_nvalchemi_fd_hessian`). This
         mirrors the dense :meth:`calculate_hessian` assembly term-by-term, so
         ``hessian_vector_product(v)`` equals ``H.reshape(3N, 3N) @ v`` to the
-        backend's tolerance.
+        backend's tolerance. Unlike :meth:`calculate_hessian` (which returns a
+        detached dense value), this product stays in the autograd graph and so
+        can compose with an outer computation. See :meth:`calculate_hessian`
+        for the detached-Hessian contract and the fully-differentiable recipe.
 
         Integration note: the external modules run via
         ``_run_external_modules(forces=True, hessian=(method == 'dsf'))`` -- the
