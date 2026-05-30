@@ -1612,6 +1612,27 @@ class AIMNet2Calculator:
         forces equals the dense autograd Hessian block, and the directional FD
         helper adds the remaining full-periodic block -- matching the dense
         assembly term-by-term.
+
+        Dtype / differentiability / eigensolver caveats:
+
+        * Return dtype is the model dtype (typically float32) for ``simple`` and
+          ``dsf``, and **float64** for ``ewald``/``pme`` (the periodic
+          finite-difference block is accumulated in double precision, matching the
+          dense Ewald/PME Hessian).
+        * The returned product is NOT differentiable w.r.t. ``vectors`` or model
+          parameters (the periodic FD part is detached); it is a numeric operator
+          action.
+        * For ``ewald``/``pme`` the operator is symmetric only to
+          finite-difference accuracy (O(eps^2)); for Lanczos/LOBPCG
+          smallest/most-negative-eigenvalue (transition-state) work, pass all
+          probe vectors together as a single ``(K, N, 3)`` batch so the charge
+          state is frozen across the iteration, and consider symmetrizing the
+          operator or tuning ``eps``.
+        * The fixed-charge periodic approximation (and the ``dsf`` relaxed-charge
+          vs ``ewald``/``pme`` fixed-charge asymmetry) is inherited from the dense
+          Ewald/PME Hessian and can shift near-zero/negative eigenvalues for
+          strongly polar periodic systems; see
+          :meth:`aimnet.modules.lr.LRCoulomb._coul_nvalchemi_fd_hessian`.
         """
         if getattr(self, "_was_compiled", False):
             raise RuntimeError(
@@ -1628,6 +1649,10 @@ class AIMNet2Calculator:
                     "hessian_vector_product supports a single structure only (got mol_idx batch)."
                 )
 
+        # Deliberate parallel forward path: this mirrors `eval` +
+        # `_run_external_modules` but builds an autograd-differentiable energy
+        # WITHOUT the dense periodic FD Hessian. Keep it in sync if the main
+        # forward path changes.
         prepared = self.prepare_input(data, hessian=True)
         if "mol_idx" in prepared and prepared["mol_idx"][-1] > 0:
             raise NotImplementedError("hessian_vector_product supports a single structure only.")

@@ -769,6 +769,47 @@ class LRCoulomb(nn.Module):
             e_periodic = e_periodic - self.coul_simple_sr(data)
         return e_periodic, terms
 
+    def _periodic_fd_setup(self, data: dict[str, Tensor], backend: str):
+        """Shared marshalling for the periodic-Coulomb finite-difference Hessian
+        and Hessian-vector-product paths. Returns ``(forces_at, coord_real, N)``
+        where ``forces_at(positions)`` evaluates the analytic full-periodic
+        Coulomb forces (N, 3) in eV/Ang at float64, with neighbor list, cell, and
+        (detached) charges held fixed."""
+        suffix = nbops.resolve_suffix(data, ["_coulomb", "_lr"])
+        coord = data["coord"]
+        cell = data["cell"]
+        if cell is None:
+            raise ValueError("nvalchemi Coulomb requires periodic cell data")
+        if backend not in ("ewald", "pme"):
+            raise ValueError(f"backend must be 'ewald' or 'pme', got {backend!r}")
+        N = coord.shape[0] - 1
+        coord_real = coord[:-1].detach().double()
+        charges_real = data[self.key_in][:-1].detach().double()
+        mol_idx_real = data["mol_idx"][:-1].to(torch.int32)
+        nbmat_real = data[f"nbmat{suffix}"][:-1].to(torch.int32)
+        shifts_real = data[f"shifts{suffix}"][:-1].to(torch.int32)
+        cell_det = cell.detach().double()
+        num_systems = int(mol_idx_real.max().item()) + 1
+        is_pme = backend == "pme"
+
+        def forces_at(positions: Tensor) -> Tensor:
+            _e, f, _cg, _v = _periodic_coulomb_hybrid(
+                coord=positions,
+                cell=cell_det,
+                charges=charges_real,
+                batch_idx=mol_idx_real,
+                neighbor_matrix=nbmat_real,
+                shifts=shifts_real,
+                mask_value=N,
+                num_systems=num_systems,
+                accuracy=float(self.ewald_accuracy),
+                compute_virial=False,
+                is_pme=is_pme,
+            )
+            return f  # (N, 3) eV/Ang (already scaled by k_e in the helper)
+
+        return forces_at, coord_real, N
+
     def _coul_nvalchemi_fd_hessian(self, data: dict[str, Tensor], backend: str, *, step: float = 5e-4) -> Tensor:
         """Central finite-difference Hessian of the FULL periodic Coulomb energy.
 
@@ -805,40 +846,7 @@ class LRCoulomb(nn.Module):
         bound scales with ``ewald_accuracy``: loosening ``ewald_accuracy``
         raises the erfc residual at the cutoff and weakens the guarantee.
         """
-        suffix = nbops.resolve_suffix(data, ["_coulomb", "_lr"])
-        coord = data["coord"]
-        cell = data["cell"]
-        if cell is None:
-            raise ValueError("nvalchemi Coulomb requires periodic cell data")
-        if backend not in ("ewald", "pme"):
-            raise ValueError(f"backend must be 'ewald' or 'pme', got {backend!r}")
-
-        N = coord.shape[0] - 1
-        coord_real = coord[:-1].detach().double()
-        charges_real = data[self.key_in][:-1].detach().double()
-        mol_idx_real = data["mol_idx"][:-1].to(torch.int32)
-        nbmat_real = data[f"nbmat{suffix}"][:-1].to(torch.int32)
-        shifts_real = data[f"shifts{suffix}"][:-1].to(torch.int32)
-        cell_det = cell.detach().double()
-        num_systems = int(mol_idx_real.max().item()) + 1
-        is_pme = backend == "pme"
-
-        def forces_at(positions: Tensor) -> Tensor:
-            _e, f, _cg, _v = _periodic_coulomb_hybrid(
-                coord=positions,
-                cell=cell_det,
-                charges=charges_real,
-                batch_idx=mol_idx_real,
-                neighbor_matrix=nbmat_real,
-                shifts=shifts_real,
-                mask_value=N,
-                num_systems=num_systems,
-                accuracy=float(self.ewald_accuracy),
-                compute_virial=False,
-                is_pme=is_pme,
-            )
-            return f  # (N, 3) eV/Ang (already scaled by k_e in the helper)
-
+        forces_at, coord_real, N = self._periodic_fd_setup(data, backend)
         hessian = coord_real.new_zeros((N, 3, N, 3), dtype=torch.float64)
         with torch.no_grad():
             scratch = coord_real.clone()
@@ -871,41 +879,8 @@ class LRCoulomb(nn.Module):
         see :meth:`_coul_nvalchemi_fd_hessian` for the charge-response and
         step/``ewald_accuracy`` caveats, which apply identically here.
         """
-        suffix = nbops.resolve_suffix(data, ["_coulomb", "_lr"])
-        coord = data["coord"]
-        cell = data["cell"]
-        if cell is None:
-            raise ValueError("nvalchemi Coulomb requires periodic cell data")
-        if backend not in ("ewald", "pme"):
-            raise ValueError(f"backend must be 'ewald' or 'pme', got {backend!r}")
-
-        N = coord.shape[0] - 1
-        coord_real = coord[:-1].detach().double()
-        charges_real = data[self.key_in][:-1].detach().double()
-        mol_idx_real = data["mol_idx"][:-1].to(torch.int32)
-        nbmat_real = data[f"nbmat{suffix}"][:-1].to(torch.int32)
-        shifts_real = data[f"shifts{suffix}"][:-1].to(torch.int32)
-        cell_det = cell.detach().double()
-        num_systems = int(mol_idx_real.max().item()) + 1
-        is_pme = backend == "pme"
+        forces_at, coord_real, _N = self._periodic_fd_setup(data, backend)
         vec_real = vec.detach().double()
-
-        def forces_at(positions: Tensor) -> Tensor:
-            _e, f, _cg, _v = _periodic_coulomb_hybrid(
-                coord=positions,
-                cell=cell_det,
-                charges=charges_real,
-                batch_idx=mol_idx_real,
-                neighbor_matrix=nbmat_real,
-                shifts=shifts_real,
-                mask_value=N,
-                num_systems=num_systems,
-                accuracy=float(self.ewald_accuracy),
-                compute_virial=False,
-                is_pme=is_pme,
-            )
-            return f  # (N, 3) eV/Ang
-
         with torch.no_grad():
             fp = forces_at(coord_real + step * vec_real)
             fm = forces_at(coord_real - step * vec_real)

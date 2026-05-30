@@ -90,3 +90,31 @@ def test_hvp_batched_input_raises():
     v = torch.zeros(3, 3)
     with pytest.raises((NotImplementedError, ValueError)):
         calc.hessian_vector_product(data, v)
+
+
+def test_hvp_wrong_vector_shape_raises():
+    calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+    calc.external_dftd3 = None
+    data = {
+        "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+        "numbers": np.array([8, 1, 1]),
+        "charge": 0.0,
+    }
+    with pytest.raises(ValueError):
+        calc.hessian_vector_product(data, torch.zeros(5, 3))  # wrong N
+
+
+def test_hvp_periodic_returns_float64():
+    calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+    calc.external_dftd3 = None
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+        calc.set_lrcoulomb_method("ewald")
+    data = {
+        "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+        "numbers": np.array([8, 1, 1]),
+        "charge": 0.0,
+        "cell": np.eye(3) * 8.0,
+    }
+    hv = calc.hessian_vector_product(data, torch.randn(3, 3, dtype=torch.float64))
+    assert hv.dtype == torch.float64
