@@ -1127,17 +1127,129 @@ class TestNvAlchemiCoulombBackend:
         assert any(torch.isfinite(g).all() and g.abs().sum() > 0 for g in grads)
 
     @pytest.mark.parametrize("method", ["ewald", "pme"])
-    def test_hessian_raises(self, pbc_crystal_small, device, method):
-        """Ewald/PME Hessians require second coordinate derivatives not exposed by nvalchemiops."""
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, train=False)
+    def test_hessian_finite(self, pbc_crystal_small, device, method):
+        """Ewald/PME Hessians are now provided via FD over analytic forces."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True, device=device)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method(method)
+        data_calc = {
+            "coord": pbc_crystal_small["coord"].to(device),
+            "numbers": pbc_crystal_small["numbers"].to(device),
+            "cell": pbc_crystal_small["cell"].to(device),
+            "charge": 0.0,
+        }
+        res = calc(data_calc, hessian=True)
+        assert torch.isfinite(res["hessian"]).all()
+        assert res["hessian"].abs().sum() > 0
+
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_fd_hessian_matches_energy_fd(self, pbc_crystal_small, device, method):
+        """The FD-of-forces full-periodic block equals the central-FD-of-energy Hessian.
+
+        Captures the prepared PBC data (with the coulomb neighbor list/shifts) by
+        monkeypatching the module's FD-Hessian method during a calculator Hessian
+        run, then compares the analytic-force FD block against a central-difference
+        Hessian of the full periodic kernel energy over the same fixed neighbor
+        list/cell/charges. This is the core sign/assembly gate.
+        """
+        from aimnet.modules.lr import _periodic_coulomb_hybrid
+
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True, device=device)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
             calc.set_lrcoulomb_method(method)
         calc.external_dftd3 = None
 
-        data_calc = _data_calc_from_fixture(pbc_crystal_small)
-        with pytest.raises(NotImplementedError, match="Ewald/PME Coulomb"):
+        data_calc = {
+            "coord": pbc_crystal_small["coord"].to(device).double(),
+            "numbers": pbc_crystal_small["numbers"].to(device),
+            "cell": pbc_crystal_small["cell"].to(device).double(),
+            "charge": 0.0,
+        }
+
+        captured = {}
+        module = calc.external_coulomb
+        orig = module._coul_nvalchemi_fd_hessian
+
+        def capture(prepared, backend, **kw):
+            # Compute the analytic-force FD block and snapshot the fixed real-atom
+            # inputs WHILE the data dict is still fully padded/consistent (the
+            # calculator later unpads coord/charges in place).
+            result = orig(prepared, backend, **kw)
+            suffix = nbops.resolve_suffix(prepared, ["_coulomb", "_lr"])
+            captured["backend"] = backend
+            captured["H_force_fd"] = result.detach().clone()
+            captured["coord_real"] = prepared["coord"][:-1].detach().clone()
+            captured["cell"] = prepared["cell"].detach().clone()
+            captured["charges_real"] = prepared[module.key_in][:-1].detach().clone()
+            captured["mol_idx_real"] = prepared["mol_idx"][:-1].clone().to(torch.int32)
+            captured["nbmat_real"] = prepared[f"nbmat{suffix}"][:-1].clone().to(torch.int32)
+            captured["shifts_real"] = prepared[f"shifts{suffix}"][:-1].clone().to(torch.int32)
+            return result
+
+        module._coul_nvalchemi_fd_hessian = capture  # type: ignore[method-assign]
+        try:
             calc(data_calc, hessian=True)
+        finally:
+            module._coul_nvalchemi_fd_hessian = orig  # type: ignore[method-assign]
+
+        backend = captured["backend"]
+        H_force_fd = captured["H_force_fd"].double()
+        N = H_force_fd.shape[0]
+        H_force_fd = H_force_fd.reshape(3 * N, 3 * N)
+
+        coord_real = captured["coord_real"].double()
+        cell_det = captured["cell"].double()
+        charges_real = captured["charges_real"].double()
+        mol_idx_real = captured["mol_idx_real"]
+        nbmat_real = captured["nbmat_real"]
+        shifts_real = captured["shifts_real"]
+        num_systems = int(mol_idx_real.max().item()) + 1
+        is_pme = backend == "pme"
+
+        def energy_fn(coord_flat: torch.Tensor) -> torch.Tensor:
+            positions = coord_flat.reshape(N, 3)
+            energies, _f, _cg, _v = _periodic_coulomb_hybrid(
+                coord=positions,
+                cell=cell_det,
+                charges=charges_real,
+                batch_idx=mol_idx_real,
+                neighbor_matrix=nbmat_real,
+                shifts=shifts_real,
+                mask_value=N,
+                num_systems=num_systems,
+                accuracy=float(module.ewald_accuracy),
+                compute_virial=False,
+                is_pme=is_pme,
+            )
+            return energies.sum()
+
+        # Building the full (3N, 3N) energy-FD Hessian for the whole crystal is
+        # prohibitively slow, so validate the sign/assembly by probing a few
+        # coordinate columns: H[:, j] = d(grad_j E)/dr, with grad obtained by an
+        # independent energy FD (no kernel forces involved). Compare against the
+        # analytic-force FD block over the same columns.
+        coord0 = coord_real.reshape(-1)
+        ndim = coord0.numel()
+        step = 5e-3
+        eye = torch.eye(ndim, dtype=coord0.dtype, device=coord0.device)
+
+        def energy_grad(coord_flat: torch.Tensor) -> torch.Tensor:
+            grad = torch.empty(ndim, dtype=coord0.dtype, device=coord0.device)
+            for i in range(ndim):
+                ep = energy_fn(coord_flat + step * eye[i])
+                em = energy_fn(coord_flat - step * eye[i])
+                grad[i] = (ep - em) / (2.0 * step)
+            return grad
+
+        n_probe = min(2 * 3, ndim)  # first two atoms (6 dofs)
+        for j in range(n_probe):
+            gp = energy_grad(coord0 + step * eye[j])
+            gm = energy_grad(coord0 - step * eye[j])
+            col_energy = (gp - gm) / (2.0 * step)
+            col_force = H_force_fd[:, j]
+            torch.testing.assert_close(col_force, col_energy, rtol=5e-2, atol=5e-3)
 
     @pytest.mark.parametrize("method", ["ewald", "pme"])
     def test_calculator_pbc_batched(self, pbc_crystal_small, device, method):

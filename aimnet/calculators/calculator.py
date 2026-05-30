@@ -48,6 +48,7 @@ def _combine_external_terms(
     return ExternalDerivativeTerms(
         forces=_sum_optional_tensor(a.forces, b.forces),
         virial=_sum_optional_tensor(a.virial, b.virial),
+        hessian=_sum_optional_tensor(a.hessian, b.hessian),
     )
 
 
@@ -901,27 +902,18 @@ class AIMNet2Calculator:
                 "with compile_model=False."
             )
 
+        if hessian:
+            subsystems = self._split_hessian_batch(data)
+            if subsystems is not None:
+                stack = torch.as_tensor(data["coord"]).ndim == 3
+                return self._eval_hessian_batched(
+                    subsystems, forces=forces, stress=stress, validate_species=validate_species, stack=stack
+                )
+
         data = self.prepare_input(data, hessian=hessian)
 
         if hessian and "mol_idx" in data and data["mol_idx"][-1] > 0:
             raise NotImplementedError("Hessian calculation is not supported for multiple molecules")
-        if self._coulomb_method == "dsf":
-            if hessian:
-                raise NotImplementedError(
-                    "DSF Coulomb uses nvalchemiops explicit coordinate/cell derivatives and does not support "
-                    "Hessian calculations."
-                )
-            if self._train and (forces or stress):
-                raise NotImplementedError(
-                    "DSF Coulomb uses nvalchemiops explicit coordinate/cell derivatives and does not support "
-                    "force/stress training. Use 'ewald' or 'pme' for force/stress training."
-                )
-        if hessian and self._coulomb_method in ("ewald", "pme"):
-            # TODO: Add an explicit finite-difference Hessian API for PBC/LR if needed.
-            raise NotImplementedError(
-                "Ewald/PME Coulomb uses nvalchemiops explicit first derivatives and does not support "
-                "Hessian calculations."
-            )
         data = self.set_grad_tensors(data, forces=forces, stress=stress, hessian=hessian)
         if isinstance(self.model, torch.jit.ScriptModule):
             with torch.jit.optimized_execution(False):  # type: ignore
@@ -950,8 +942,8 @@ class AIMNet2Calculator:
         """
         coulomb_terms = None
         if self.external_coulomb is not None:
-            training_derivatives = hessian or (
-                self.external_coulomb.method in ("ewald", "pme")
+            training_derivatives = (
+                self.external_coulomb.method in ("ewald", "pme", "dsf")
                 and getattr(self, "_train", False)
                 and (forces or stress)
             )
@@ -959,6 +951,7 @@ class AIMNet2Calculator:
                 "compute_forces": forces,
                 "compute_virial": stress,
                 "training_derivatives": training_derivatives,
+                "hessian": hessian,
             }
             if training_derivatives and stress and self.external_coulomb.method in ("ewald", "pme"):
                 strain_inputs = getattr(self, "_external_strain_inputs", None)
@@ -1016,6 +1009,99 @@ class AIMNet2Calculator:
         data = self.mol_unflatten(data)
         data = self.keep_only(data)
         return data
+
+    def _split_hessian_batch(self, data: dict[str, Any]) -> list[dict[str, Any]] | None:
+        """Return per-structure sub-inputs for a batched Hessian request, or None
+        when the input is a single structure (handled by the normal path).
+
+        Recognized batched forms:
+          * 3D ``coord`` of shape (B, N, 3) with B > 1, and
+          * flat 2D ``coord`` with a ``mol_idx`` spanning more than one molecule.
+        """
+        coord = torch.as_tensor(data["coord"])
+        if coord.ndim == 3 and coord.shape[0] > 1:
+            return self._split_batch_dim(data, int(coord.shape[0]))
+        if coord.ndim == 2 and data.get("mol_idx") is not None:
+            mol_idx = torch.as_tensor(data["mol_idx"])
+            if mol_idx.numel() and int(mol_idx.max()) > 0:
+                return self._split_mol_idx(data, mol_idx)
+        return None
+
+    @staticmethod
+    def _select_for_structure(value: Any, index: int, n_struct: int) -> Any:
+        """Pick the per-structure slice when ``value`` is batched along structures,
+        else return it unchanged (shared across structures)."""
+        t = torch.as_tensor(value)
+        return t[index] if t.ndim >= 1 and t.shape[0] == n_struct else t
+
+    def _split_batch_dim(self, data: dict[str, Any], B: int) -> list[dict[str, Any]]:
+        """Slice a (B, ...) batched input into B single-structure dicts."""
+        subs: list[dict[str, Any]] = []
+        for b in range(B):
+            sub: dict[str, Any] = {}
+            for k, v in data.items():
+                if v is None:
+                    continue
+                if k in ("coord", "numbers"):
+                    sub[k] = torch.as_tensor(v)[b]
+                elif k in ("charge", "mult"):
+                    sub[k] = self._select_for_structure(v, b, B)
+                elif k == "cell":
+                    t = torch.as_tensor(v)
+                    sub[k] = t[b] if t.ndim == 3 else t
+                else:
+                    sub[k] = v
+            subs.append(sub)
+        return subs
+
+    def _split_mol_idx(self, data: dict[str, Any], mol_idx: Tensor) -> list[dict[str, Any]]:
+        """Split a flat, ``mol_idx``-tagged input into one dict per molecule."""
+        coord = torch.as_tensor(data["coord"])
+        numbers = torch.as_tensor(data["numbers"])
+        cell = torch.as_tensor(data["cell"]) if data.get("cell") is not None else None
+        num_molecules = int(mol_idx.max()) + 1
+        subs: list[dict[str, Any]] = []
+        for m in range(num_molecules):
+            sel = mol_idx == m
+            sub: dict[str, Any] = {"coord": coord[sel], "numbers": numbers[sel]}
+            if data.get("charge") is not None:
+                sub["charge"] = self._select_for_structure(data["charge"], m, num_molecules)
+            if data.get("mult") is not None:
+                sub["mult"] = self._select_for_structure(data["mult"], m, num_molecules)
+            if cell is not None:
+                sub["cell"] = cell[m] if cell.ndim == 3 else cell
+            subs.append(sub)
+        return subs
+
+    def _eval_hessian_batched(
+        self,
+        subsystems: list[dict[str, Any]],
+        *,
+        forces: bool,
+        stress: bool,
+        validate_species: bool,
+        stack: bool = True,
+    ) -> dict[str, Any]:
+        """Run the single-structure Hessian path on each subsystem and collect.
+
+        When ``stack`` is True and every subsystem yields the same shape for a
+        key, that key is stacked along a new leading batch dim; otherwise (ragged
+        or ``stack=False``) the per-subsystem values are returned as a list.
+        Multi-molecule (``mol_idx``) inputs always use ``stack=False`` because the
+        molecules are independent and generally ragged.
+        """
+        results = [
+            self.eval(sub, forces=forces, stress=stress, hessian=True, validate_species=validate_species)
+            for sub in subsystems
+        ]
+        out: dict[str, Any] = {}
+        for k in results[0]:
+            vals = [r[k] for r in results]
+            if stack and all(isinstance(v, Tensor) for v in vals) and all(v.shape == vals[0].shape for v in vals):
+                out[k] = torch.stack(vals, dim=0)
+            else:
+                out[k] = vals
+        return out
 
     def to_input_tensors(self, data: dict[str, Any]) -> dict[str, Tensor]:
         ret = {}
@@ -1368,7 +1454,10 @@ class AIMNet2Calculator:
                     volume = torch.linalg.det(cell).abs().unsqueeze(-1).unsqueeze(-1)  # (B, 1, 1)
                 data["stress"] = dedc / volume
         if hessian:
-            data["hessian"] = self.calculate_hessian(data["forces"], self._saved_for_grad["coord"])
+            H = self.calculate_hessian(data["forces"], self._saved_for_grad["coord"])
+            if coulomb_terms is not None and getattr(coulomb_terms, "hessian", None) is not None:
+                H = H + coulomb_terms.hessian.to(dtype=H.dtype, device=H.device)
+            data["hessian"] = H
         return data
 
     @staticmethod

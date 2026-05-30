@@ -213,54 +213,102 @@ class TestCoulombMethods:
         with pytest.raises(ValueError, match="requires a periodic 'cell'"):
             calc(data)
 
-    @pytest.mark.parametrize("kwargs", [{"forces": True}, {"stress": True}])
-    def test_dsf_train_derivative_modes_raise(self, kwargs):
-        """DSF uses explicit nvalchemiops derivatives and does not support force/stress training."""
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True, train=True)
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
-            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
-
-        data = {
-            "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
-            "numbers": np.array([8, 1, 1]),
-            "charge": 0.0,
-            "cell": np.eye(3) * 8.0,
-        }
-        with pytest.raises(NotImplementedError, match="DSF Coulomb"):
-            calc(data, **kwargs)
-
-    def test_dsf_hessian_raises(self):
-        """DSF Hessians are unsupported because nvalchemiops DSF has no coordinate autograd."""
+    def test_dsf_hessian_finite_and_symmetric(self):
+        """DSF Hessian is finite, correctly shaped, and symmetric via the torch path."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
             calc.set_lrcoulomb_method("dsf", cutoff=8.0)
-
         data = {
             "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
             "numbers": np.array([8, 1, 1]),
             "charge": 0.0,
         }
-        with pytest.raises(NotImplementedError, match="DSF Coulomb"):
-            calc(data, hessian=True)
+        res = calc(data, hessian=True)
+        H = res["hessian"]
+        assert H.shape == (3, 3, 3, 3)
+        assert torch.isfinite(H).all()
+        assert H.abs().sum() > 0
+        H_flat = H.reshape(9, 9)
+        assert (H_flat - H_flat.T).abs().max().item() < 1e-3
+
+    def test_dsf_train_forces_match_inference(self):
+        """DSF forces from the torch (train) path match the kernel (inference) path."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+        data = {
+            "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+            "numbers": np.array([8, 1, 1]),
+            "charge": 0.0,
+        }
+        calc._train = False
+        f_kernel = calc(data, forces=True)["forces"]
+        calc._train = True
+        f_torch = calc(data, forces=True)["forces"]
+        calc._train = False
+        torch.testing.assert_close(f_kernel, f_torch, rtol=1e-3, atol=1e-3)
+
+    def test_dsf_periodic_torch_forces_match_kernel(self):
+        """Periodic DSF torch path (train) matches the kernel forces, validating shift handling."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=3.0)
+        # Atoms are spread along x so the molecule spans more than L/2; this places
+        # periodic images of atoms 0 and 2 within the 3.0 A DSF cutoff (image pair
+        # distance L - span = 3.0 A), genuinely exercising the shifts @ cell handling.
+        # cutoff (3.0) == L/2 (6.0/2), satisfying the DSF minimum-image requirement.
+        data = {
+            "coord": np.array([[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [3.0, 0.0, 0.0]]),
+            "numbers": np.array([8, 1, 1]),
+            "charge": 0.0,
+            "cell": np.eye(3) * 6.0,
+        }
+        calc._train = False
+        f_kernel = calc(data, forces=True)["forces"]
+        calc._train = True
+        f_torch = calc(data, forces=True)["forces"]
+        calc._train = False
+        torch.testing.assert_close(f_kernel, f_torch, rtol=1e-3, atol=1e-3)
+
+    def test_dsf_torch_energy_matches_kernel(self):
+        """Pure-torch DSF energy (Hessian path) matches the nvalchemiops kernel energy."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=8.0)
+        data = {
+            "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+            "numbers": np.array([8, 1, 1]),
+            "charge": 0.0,
+        }
+        e_kernel = calc(data, forces=True)["energy"]
+        e_torch = calc(data, hessian=True)["energy"]
+        torch.testing.assert_close(e_kernel, e_torch, rtol=1e-4, atol=1e-5)
 
     @pytest.mark.parametrize("method", ["ewald", "pme"])
-    def test_ewald_pme_hessian_raises(self, method):
-        """Ewald/PME Hessians need second coordinate derivatives that nvalchemiops does not expose."""
+    def test_ewald_pme_hessian_finite_symmetric_sumrule(self, method):
+        """Ewald/PME Hessian is finite, symmetric, and obeys the acoustic sum rule."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
             calc.set_lrcoulomb_method(method)
-
         data = {
             "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
             "numbers": np.array([8, 1, 1]),
             "charge": 0.0,
             "cell": np.eye(3) * 8.0,
         }
-        with pytest.raises(NotImplementedError, match="Ewald/PME Coulomb"):
-            calc(data, hessian=True)
+        H = calc(data, hessian=True)["hessian"]
+        n = 3
+        assert H.shape == (n, 3, n, 3)
+        assert torch.isfinite(H).all()
+        assert H.abs().sum() > 0
+        H_flat = H.reshape(3 * n, 3 * n)
+        assert (H_flat - H_flat.T).abs().max().item() < 5e-3
+        assert H.sum(dim=2).abs().max().item() < 5e-3
 
     def test_dftd3_hessian_is_finite(self):
         """External DFT-D3 uses its differentiable fallback for Hessian calls."""
@@ -647,15 +695,72 @@ class TestDerivatives:
         res = calc(data, hessian=True)
         assert res["hessian"].shape == (2, 3, 2, 3)
 
-    def test_hessian_batched_input_raises(self):
+    def test_hessian_batched_input_stacks(self):
+        """A B>1 3D batch returns a per-structure stacked Hessian (B, N, 3, N, 3)."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=1000)
+        calc.external_dftd3 = None
         data = {
-            "coord": torch.zeros(2, 2, 3),
-            "numbers": torch.tensor([[8, 1], [8, 1]]),
-            "charge": torch.zeros(2),
+            "coord": torch.tensor(
+                [
+                    [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+                    [[0.0, 0.0, 0.0], [1.1, 0.0, 0.0], [0.0, 0.9, 0.0]],
+                ],
+                dtype=torch.float32,
+            ),
+            "numbers": torch.tensor([[8, 1, 1], [8, 1, 1]]),
+            "charge": torch.tensor([0.0, 0.0]),
         }
-        with pytest.raises(NotImplementedError, match="batched inputs with B > 1"):
-            calc(data, hessian=True)
+        res = calc(data, forces=True, hessian=True)
+        assert res["hessian"].shape == (2, 3, 3, 3, 3)
+        # Other requested per-structure quantities stack along the same batch dim.
+        assert res["forces"].shape == (2, 3, 3)
+
+    def test_hessian_batched_matches_per_structure(self):
+        """Each batched Hessian block equals the standalone single-structure Hessian."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=1000)
+        calc.external_dftd3 = None
+        c0 = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+        c1 = [[0.0, 0.0, 0.0], [1.1, 0.0, 0.0], [0.0, 0.9, 0.0]]
+        batch = {
+            "coord": torch.tensor([c0, c1], dtype=torch.float32),
+            "numbers": torch.tensor([[8, 1, 1], [8, 1, 1]]),
+            "charge": torch.tensor([0.0, 0.0]),
+        }
+        H_batched = calc(batch, hessian=True)["hessian"]
+        H0 = calc(
+            {"coord": torch.tensor(c0, dtype=torch.float32), "numbers": torch.tensor([8, 1, 1]), "charge": 0.0},
+            hessian=True,
+        )["hessian"]
+        H1 = calc(
+            {"coord": torch.tensor(c1, dtype=torch.float32), "numbers": torch.tensor([8, 1, 1]), "charge": 0.0},
+            hessian=True,
+        )["hessian"]
+        torch.testing.assert_close(H_batched[0], H0, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(H_batched[1], H1, rtol=1e-4, atol=1e-4)
+
+    def test_hessian_batched_pbc_ewald_stacks(self):
+        """Batched Hessian composes with the periodic Ewald FD-Hessian path: a 3D
+        batch with a cell + Ewald Coulomb runs per-structure and stacks the
+        per-structure (N,3,N,3) Hessians into (B,N,3,N,3)."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("ewald")
+        data = {
+            "coord": torch.tensor(
+                [
+                    [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]],
+                    [[0.0, 0.0, 0.0], [0.97, 0.0, 0.0], [-0.25, 0.94, 0.0]],
+                ],
+                dtype=torch.float32,
+            ),
+            "numbers": torch.tensor([[8, 1, 1], [8, 1, 1]]),
+            "charge": torch.tensor([0.0, 0.0]),
+            "cell": torch.eye(3) * 8.0,
+        }
+        H = calc(data, hessian=True)["hessian"]
+        assert H.shape == (2, 3, 3, 3, 3)
+        assert torch.isfinite(H).all()
 
     def test_requires_grad_false_still_works(self):
         """Backward-compat: forces=True still works when coord has no requires_grad."""
@@ -668,8 +773,8 @@ class TestDerivatives:
         res = calc(data, forces=True)
         assert "forces" in res and res["forces"].shape[-2:] == torch.Size([3, 3])
 
-    def test_hessian_multiple_molecules_raises(self):
-        """Test that Hessian with multiple molecules raises NotImplementedError."""
+    def test_hessian_multiple_molecules_returns_list(self):
+        """A flat mol_idx batch returns one Hessian per molecule (list, even when equal-size)."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
         calc.external_dftd3 = None
         data = {
@@ -681,8 +786,30 @@ class TestDerivatives:
             "mol_idx": torch.tensor([0, 0, 1, 1]),
             "charge": torch.tensor([0.0, 0.0]),
         }
-        with pytest.raises(NotImplementedError, match="Hessian calculation is not supported for multiple molecules"):
-            calc(data, hessian=True)
+        res = calc(data, hessian=True)
+        assert isinstance(res["hessian"], list)
+        assert len(res["hessian"]) == 2
+        assert res["hessian"][0].shape == (2, 3, 2, 3)
+        assert res["hessian"][1].shape == (2, 3, 2, 3)
+
+    def test_hessian_ragged_molecules_returns_list(self):
+        """Different-size molecules return a list with correct per-molecule Hessian shapes."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        calc.external_dftd3 = None
+        data = {
+            "coord": torch.tensor(
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0], [8.0, 0.0, 0.0], [8.96, 0.0, 0.0]],
+                dtype=torch.float32,
+            ),
+            "numbers": torch.tensor([8, 1, 1, 8, 1]),
+            "mol_idx": torch.tensor([0, 0, 0, 1, 1]),
+            "charge": torch.tensor([0.0, 0.0]),
+        }
+        res = calc(data, hessian=True)
+        assert isinstance(res["hessian"], list)
+        assert len(res["hessian"]) == 2
+        assert res["hessian"][0].shape == (3, 3, 3, 3)
+        assert res["hessian"][1].shape == (2, 3, 2, 3)
 
 
 class TestEnergyConsistency:
