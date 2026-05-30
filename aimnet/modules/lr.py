@@ -769,9 +769,7 @@ class LRCoulomb(nn.Module):
             e_periodic = e_periodic - self.coul_simple_sr(data)
         return e_periodic, terms
 
-    def _coul_nvalchemi_fd_hessian(
-        self, data: dict[str, Tensor], backend: str, *, step: float = 5e-4
-    ) -> Tensor:
+    def _coul_nvalchemi_fd_hessian(self, data: dict[str, Tensor], backend: str, *, step: float = 5e-4) -> Tensor:
         """Central finite-difference Hessian of the FULL periodic Coulomb energy.
 
         Differences the analytic nvalchemiops forces with the neighbor list and
