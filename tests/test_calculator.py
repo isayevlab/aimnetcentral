@@ -10,7 +10,7 @@ from conftest import CAFFEINE_FILE, load_mol
 from aimnet.calculators import AIMNet2Calculator
 
 # These are calculator integration tests: most construct and run a model.
-pytestmark = [pytest.mark.ase, pytest.mark.slow]
+pytestmark = [pytest.mark.ase]
 
 
 def test_from_zoo():
