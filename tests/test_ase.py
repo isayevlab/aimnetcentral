@@ -177,6 +177,7 @@ class TestPBC:
 class TestOptimization:
     """Tests for geometry optimization."""
 
+    @pytest.mark.slow
     def test_energy_decreases_on_optimization(self):
         """Test that energy decreases during optimization."""
         pytest.importorskip("ase", reason="ASE not installed")

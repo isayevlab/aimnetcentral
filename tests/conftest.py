@@ -1,6 +1,7 @@
 """Shared pytest fixtures for AIMNet2 tests."""
 
 import contextlib
+import functools
 import os
 import shutil
 import sys
@@ -689,3 +690,128 @@ def nacl_crystal(device) -> dict[str, Tensor]:
 def simple_periodic_system(device) -> dict[str, Tensor]:
     """Simple periodic system fixture for Ewald tests."""
     return setup_simple_periodic_system(device)
+
+
+# =============================================================================
+# Cached model loading to speed up the test suite
+# =============================================================================
+#
+# Constructing an ``AIMNet2Calculator`` / ``AIMNet2ASE`` re-runs
+# ``load_model(get_model_path(name))`` every time, which deserializes the model
+# and triggers TorchScript / Warp kernel JIT on first forward. That dominates
+# CI wall time (the ASE suite constructs a calculator per test). We memoize
+# ``load_model`` for the duration of the test session so repeated calculator
+# constructions reuse the already-loaded ``nn.Module``.
+#
+# This is safe because:
+#   * the cached object is the loaded model only; every test still builds its
+#     own calculator wrapper, so per-instance mutable state (coulomb method,
+#     external_dftd3, _saved_for_grad, ...) stays independent;
+#   * no test reloads weights (no ``load_state_dict``), flips the module into
+#     training mode, or mutates model parameters/buffers in place;
+#   * the training suite (test_train.py) does not use ``load_model`` or the
+#     calculators, so it is unaffected.
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _cache_load_model():
+    """Memoize the expensive part of ``load_model`` for the whole test session.
+
+    The dominant cost of ``load_model`` is the on-disk deserialize plus the
+    first-forward TorchScript / Warp kernel JIT. We memoize that work once per
+    ``(path, device)`` and hand each caller a fresh ``copy.deepcopy`` of the
+    cached module.
+
+    Returning a *copy* (rather than the shared instance) is required for
+    correctness: tests construct calculators in both eval (``train=False``,
+    which sets ``requires_grad=False`` on every parameter) and train
+    (``train=True``) modes, and train-mode tests run ``loss.backward()`` and
+    inspect ``param.grad``. If the module were shared, an earlier eval-mode
+    calculator would leave ``requires_grad=False`` / stale ``.grad`` on the
+    parameters and a later train-mode test in the same file would observe no
+    gradients. A deepcopy gives every calculator an independent module while
+    still skipping the disk read and kernel JIT.
+
+    Each xdist worker is a separate process with its own session, so each
+    worker pays the load cost at most once per model. ``AIMNet2Calculator``
+    does a module-level ``from aimnet.models.base import load_model``, so we
+    patch both the source module and the calculator's bound reference.
+    """
+    import copy as _copy
+
+    import aimnet.calculators.calculator as _calc
+    import aimnet.models.base as _base
+
+    _real_load_model = _base.load_model
+    _store: dict = {}
+
+    @functools.wraps(_real_load_model)
+    def _cached_load_model(path, device="cpu"):
+        key = (path, str(device))
+        if key not in _store:
+            _store[key] = _real_load_model(path, device)
+        model, metadata = _store[key]
+        # Hand back an independent module so per-calculator mutation
+        # (requires_grad toggling, accumulated .grad) never leaks across tests.
+        return _copy.deepcopy(model), metadata
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(_base, "load_model", _cached_load_model, raising=False)
+        if hasattr(_calc, "load_model"):
+            mp.setattr(_calc, "load_model", _cached_load_model, raising=False)
+        yield _cached_load_model
+
+
+@pytest.fixture(scope="session")
+def model_cache():
+    """Session-scoped loader returning fresh ``(nn.Module, metadata)`` pairs.
+
+    Usage::
+
+        module, metadata = model_cache.load("aimnet2", device="cpu")
+
+    The expensive load is memoized once per ``(name, device)``; each ``load``
+    call returns an independent ``copy.deepcopy`` of the cached module, so
+    callers may freely mutate parameters/buffers without leaking across tests.
+    """
+    import copy
+
+    from aimnet.calculators.model_registry import get_model_path
+    from aimnet.models.base import load_model as _load_model
+
+    cache: dict = {}
+
+    class _ModelCache:
+        @staticmethod
+        def load(name: str = "aimnet2", device: str = "cpu"):
+            key = (name, str(device))
+            if key not in cache:
+                cache[key] = _load_model(get_model_path(name), device)
+            model, metadata = cache[key]
+            return copy.deepcopy(model), metadata
+
+    return _ModelCache()
+
+
+@pytest.fixture
+def make_calc(model_cache):
+    """Factory building a fresh ``AIMNet2Calculator`` around a cached module."""
+    from aimnet.calculators import AIMNet2Calculator
+
+    def _make(name: str = "aimnet2", device: str = "cpu", **kwargs):
+        module, _ = model_cache.load(name, device=device)
+        return AIMNet2Calculator(module, **kwargs)
+
+    return _make
+
+
+@pytest.fixture
+def make_ase_calc(model_cache):
+    """Factory building a fresh ``AIMNet2ASE`` around a cached module."""
+    from aimnet.calculators import AIMNet2ASE
+
+    def _make(name: str = "aimnet2", device: str = "cpu", **kwargs):
+        module, _ = model_cache.load(name, device=device)
+        return AIMNet2ASE(module, **kwargs)
+
+    return _make
