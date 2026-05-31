@@ -866,6 +866,49 @@ class AIMNet2Calculator:
             self.external_dftd3.set_smoothing(cutoff, smoothing_fraction)
         self._update_lr_nblists()
 
+    def _validate_species_and_charge(self, data: dict[str, Any]) -> None:
+        """Validate input elements and net charge against model metadata.
+
+        Raises ``ValueError`` for atomic numbers outside the model's
+        ``implemented_species`` or for net-charged systems when the model
+        declares ``supports_charged_systems == False``. Silent no-op for models
+        that did not declare ``implemented_species`` (older ``.pt``, raw
+        ``nn.Module``). Shared by :meth:`eval` and
+        :meth:`hessian_vector_product` so both enforce the same contract.
+        """
+        if "numbers" not in data:
+            # Guarded so prepare_input still owns the missing-key error path with
+            # its descriptive "Missing key numbers" message.
+            return
+        impl = (self.metadata or {}).get("implemented_species") or []
+        if impl:
+            # data["numbers"] may be a raw list, ndarray, or tensor — normalize first.
+            seen = {int(z) for z in torch.as_tensor(data["numbers"]).flatten().tolist() if int(z) > 0}
+            unsupported = sorted(seen - set(impl))
+            if unsupported:
+                raise ValueError(
+                    f"Atomic numbers {unsupported} are not in this model's "
+                    f"implemented_species {sorted(impl)}. This model was trained on "
+                    f"a restricted element set; passing other elements yields undefined "
+                    f"output. For broader element coverage on equilibrium structures use "
+                    f"`isayevlab/aimnet2-wb97m-d3`; for radicals/open-shell systems use "
+                    f"`isayevlab/aimnet2-nse`. Pass validate_species=False to bypass."
+                )
+        meta = self.metadata or {}
+        if meta.get("supports_charged_systems") is False:
+            # torch.as_tensor handles scalars, lists, ndarrays, 0-d and N-d tensors
+            # uniformly so per-system charges in batched inputs (e.g. batched-NEB)
+            # don't raise the misleading "only one element tensors..." from float().
+            charge_t = torch.as_tensor(data.get("charge", 0.0))
+            if charge_t.numel() > 0 and float(charge_t.abs().max().item()) > 1e-6:
+                bad = charge_t[charge_t.abs() > 1e-6].flatten().tolist()
+                raise ValueError(
+                    f"This model does not support net-charged systems "
+                    f"(got non-zero charge(s) {bad}). Net-neutral zwitterions are supported. "
+                    f"For ions use `isayevlab/aimnet2-wb97m-d3`. "
+                    f"Pass validate_species=False to bypass."
+                )
+
     def eval(
         self, data: dict[str, Any], forces=False, stress=False, hessian=False, *, validate_species: bool = True
     ) -> dict[str, Any]:
@@ -878,39 +921,8 @@ class AIMNet2Calculator:
         for each key (molecules are independent and generally ragged).
         """
         # Species validation — opt-out via validate_species=False.
-        # Silent no-op for models that did not declare implemented_species (older .pt,
-        # raw nn.Module).
-        if validate_species and "numbers" in data:
-            # Guarded by "numbers" in data so prepare_input still owns the missing-key
-            # error path with its descriptive "Missing key numbers" message.
-            impl = (self.metadata or {}).get("implemented_species") or []
-            if impl:
-                # data["numbers"] may be a raw list, ndarray, or tensor — normalize first.
-                seen = {int(z) for z in torch.as_tensor(data["numbers"]).flatten().tolist() if int(z) > 0}
-                unsupported = sorted(seen - set(impl))
-                if unsupported:
-                    raise ValueError(
-                        f"Atomic numbers {unsupported} are not in this model's "
-                        f"implemented_species {sorted(impl)}. This model was trained on "
-                        f"a restricted element set; passing other elements yields undefined "
-                        f"output. For broader element coverage on equilibrium structures use "
-                        f"`isayevlab/aimnet2-wb97m-d3`; for radicals/open-shell systems use "
-                        f"`isayevlab/aimnet2-nse`. Pass validate_species=False to bypass."
-                    )
-            meta = self.metadata or {}
-            if meta.get("supports_charged_systems") is False:
-                # torch.as_tensor handles scalars, lists, ndarrays, 0-d and N-d tensors
-                # uniformly so per-system charges in batched inputs (e.g. batched-NEB)
-                # don't raise the misleading "only one element tensors..." from float().
-                charge_t = torch.as_tensor(data.get("charge", 0.0))
-                if charge_t.numel() > 0 and float(charge_t.abs().max().item()) > 1e-6:
-                    bad = charge_t[charge_t.abs() > 1e-6].flatten().tolist()
-                    raise ValueError(
-                        f"This model does not support net-charged systems "
-                        f"(got non-zero charge(s) {bad}). Net-neutral zwitterions are supported. "
-                        f"For ions use `isayevlab/aimnet2-wb97m-d3`. "
-                        f"Pass validate_species=False to bypass."
-                    )
+        if validate_species:
+            self._validate_species_and_charge(data)
         # Hessian + torch.compile is known to hang on the double-backward
         # path through GELU activations. Fail fast instead.
         if hessian and getattr(self, "_was_compiled", False):
@@ -1560,7 +1572,9 @@ class AIMNet2Calculator:
 
     @torch.inference_mode(False)
     @torch.enable_grad()
-    def hessian_vector_product(self, data: dict[str, Any], vectors: Tensor, *, eps: float = 5e-4) -> Tensor:
+    def hessian_vector_product(
+        self, data: dict[str, Any], vectors: Tensor, *, eps: float = 5e-4, validate_species: bool = True
+    ) -> Tensor:
         """Matrix-free Hessian-vector product(s) ``H @ v`` for one structure.
 
         Computes ``H @ v`` without forming the dense ``(N, 3, N, 3)`` Hessian,
@@ -1599,19 +1613,23 @@ class AIMNet2Calculator:
         for the detached-Hessian contract and the fully-differentiable recipe.
 
         Integration note: the external modules run via
-        ``_run_external_modules(forces=True, hessian=(method == 'dsf'))`` -- the
-        SAME force graph the dense ``eval(..., forces=True)`` path builds. The
-        ``hessian`` flag controls the dsf-vs-ewald/pme split: dsf passes
+        ``_run_external_modules(forces=False, hessian=(method == 'dsf'))`` --
+        ENERGY-GRAPH mode so every external term (DFTD3 + Coulomb) stays
+        differentiable w.r.t. ``coord`` and its curvature is captured by the
+        autograd vjp. ``forces=False`` (not ``True``) is required: with
+        ``forces=True`` the DFTD3 branch takes its detached explicit-force path
+        and its second-derivative curvature is silently dropped from ``H @ v``.
+        The ``hessian`` flag controls the dsf-vs-ewald/pme split: dsf passes
         ``hessian=True`` so ``LRCoulomb.forward`` routes through its
         differentiable closed-form torch path (``_coul_dsf_torch``), keeping the
         dsf curvature in the autograd graph (dsf has no dense FD block, so this is
         free); ewald/pme pass ``hessian=False`` so the dense O(2*3N) FD block is
         NOT computed, while the periodic energy is still added
-        differentiable-through-charges (capturing the charge-response curvature)
-        with detached position forces. The autograd vjp of the differentiable
-        forces equals the dense autograd Hessian block, and the directional FD
-        helper adds the remaining full-periodic block -- matching the dense
-        assembly term-by-term.
+        differentiable-through-charges (capturing the charge-response curvature).
+        The autograd vjp of the differentiable forces equals the dense autograd
+        Hessian block (NN + short-range + DFTD3 + Coulomb-charge-response), and
+        the directional FD helper adds the remaining full-periodic block --
+        matching the dense assembly term-by-term.
 
         Dtype / differentiability / eigensolver caveats:
 
@@ -1639,6 +1657,11 @@ class AIMNet2Calculator:
                 "hessian_vector_product is incompatible with compile_model=True "
                 "(Dynamo + double-backward through GELU hangs). Reconstruct with compile_model=False."
             )
+        # Same species/charge validation contract as `eval` (opt-out via
+        # validate_species=False); otherwise unsupported elements / charged
+        # systems would yield undefined output silently.
+        if validate_species:
+            self._validate_species_and_charge(data)
         coord_in = torch.as_tensor(data["coord"])
         if coord_in.ndim == 3 and coord_in.shape[0] > 1:
             raise NotImplementedError("hessian_vector_product supports a single structure only (got 3D batch).")
@@ -1649,6 +1672,34 @@ class AIMNet2Calculator:
                     "hessian_vector_product supports a single structure only (got mol_idx batch)."
                 )
 
+        # prepare_input / set_grad_tensors mutate instance scratch state and can
+        # persistently flip _coulomb_method / external_coulomb.method via
+        # prepare_input's simple->dsf PBC auto-switch (and overwrite
+        # _saved_for_grad). Snapshot now and restore in the finally so a single
+        # HVP call leaves the calculator unmodified -- mirrors
+        # _eval_hessian_batched. The per-vector loop reads self._saved_for_grad
+        # and self.external_coulomb, so the result must be fully computed inside
+        # the try before state is restored.
+        _saved_attrs = {
+            name: getattr(self, name, _SENTINEL)
+            for name in ("_batch", "_max_mol_size", "_saved_for_grad", "_coulomb_method")
+        }
+        _saved_ext_method = (
+            getattr(self.external_coulomb, "method", _SENTINEL) if self.external_coulomb is not None else _SENTINEL
+        )
+        try:
+            result = self._hessian_vector_product_impl(data, vectors, eps=eps)
+        finally:
+            for name, val in _saved_attrs.items():
+                if val is not _SENTINEL:
+                    setattr(self, name, val)
+            if _saved_ext_method is not _SENTINEL and self.external_coulomb is not None:
+                self.external_coulomb.method = _saved_ext_method
+        return result
+
+    def _hessian_vector_product_impl(self, data: dict[str, Any], vectors: Tensor, *, eps: float) -> Tensor:
+        """Core HVP computation; instance-state snapshot/restore is handled by
+        :meth:`hessian_vector_product`. See that method for the contract."""
         # Deliberate parallel forward path: this mirrors `eval` +
         # `_run_external_modules` but builds an autograd-differentiable energy
         # WITHOUT the dense periodic FD Hessian. Keep it in sync if the main
@@ -1664,25 +1715,39 @@ class AIMNet2Calculator:
             prepared = self.model(prepared)
 
         method = self._coulomb_method
-        # Build the SAME force graph the dense path builds. The ``hessian`` flag
-        # controls the dsf-vs-ewald/pme split:
+        # Run the external modules in ENERGY-GRAPH mode (forces=False) so every
+        # external contribution stays differentiable w.r.t. ``coord`` and its
+        # second-derivative curvature is captured by the autograd vjp below. The
+        # HVP does NOT use the explicit forces these modules can return -- it
+        # recomputes ``forces_diff = -autograd.grad(E, coord)`` itself -- so we
+        # only need the ENERGY in the graph, not the detached explicit-force path.
+        #
+        #   * DFTD3 (if attached -- the production default): with ``forces=False``
+        #     and ``coord.requires_grad=True``, ``_run_external_modules`` takes its
+        #     in-graph branch (``dftd3_energy_graph`` True), so the D3 energy is
+        #     differentiable and its curvature enters ``H @ v``. This matches the
+        #     dense path, which keeps D3 in-graph via ``hessian=True``. (With
+        #     ``forces=True`` D3 would take its DETACHED explicit-force path and its
+        #     curvature would be silently dropped from the product.)
         #   * dsf: ``hessian=True`` routes ``LRCoulomb.forward`` through its
         #     DIFFERENTIABLE closed-form torch path (``_coul_dsf_torch``), so the
         #     dsf curvature is in the autograd graph. dsf has no dense FD block, so
         #     ``hessian=True`` adds no wasteful work, and this guarantees correct
         #     routing regardless of how the (process-wide cached) model's embedded
         #     Coulomb method was last set by another caller.
-        #   * ewald/pme/simple: ``hessian=False`` so the dense O(2*3N) Ewald/PME FD
-        #     block is NOT computed. The periodic energy is still added
-        #     differentiable-through-charges (capturing the charge-response
-        #     curvature d^2E/(dq.dr)); its analytic position forces come back as a
-        #     detached ``coulomb_terms`` term, and the full-periodic fixed-position
-        #     curvature is supplied per-vector by the directional FD helper below.
-        # DFTD3 (if attached) always contributes its differentiable torch-energy
-        # curvature, captured by the vjp.
+        #   * ewald/pme/simple: ``hessian=False`` and ``forces=False`` so the dense
+        #     O(2*3N) Ewald/PME FD block is NOT computed; the periodic energy is
+        #     still added differentiable-through-charges (capturing the
+        #     charge-response curvature d^2E/(dq.dr)). The full-periodic
+        #     fixed-position curvature is supplied per-vector by the directional FD
+        #     helper below. The Coulomb branch returns just ``data`` (no terms) for
+        #     forces=False, but ``_run_external_modules`` always returns the
+        #     ``(data, terms)`` 2-tuple, so the unpacking below is safe.
+        # The autograd vjp therefore captures NN + short-range + DFTD3 +
+        # Coulomb-charge-response, matching the dense assembly term-by-term.
         external_hessian = method == "dsf"
         prepared, _coulomb_terms = self._run_external_modules(
-            prepared, forces=True, stress=False, hessian=external_hessian
+            prepared, forces=False, stress=False, hessian=external_hessian
         )
 
         coord = self._saved_for_grad["coord"]  # (N+1, 3), requires_grad

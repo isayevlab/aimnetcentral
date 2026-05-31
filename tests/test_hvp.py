@@ -104,6 +104,48 @@ def test_hvp_wrong_vector_shape_raises():
         calc.hessian_vector_product(data, torch.zeros(5, 3))  # wrong N
 
 
+@pytest.mark.parametrize("method", ["simple", "ewald"])
+def test_hvp_matches_dense_with_dftd3(method):
+    """HVP must include DFTD3 curvature (regression for dropped-D3 bug)."""
+    calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=(method != "simple"))
+    # NOTE: external_dftd3 is deliberately LEFT ATTACHED (the default).
+    assert calc.external_dftd3 is not None, "expected default DFTD3 attached"
+    if method != "simple":
+        _set_method(calc, method)
+    data = {
+        "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+        "numbers": np.array([8, 1, 1]),
+        "charge": 0.0,
+    }
+    if method != "simple":
+        data["cell"] = np.eye(3) * 8.0
+    torch.manual_seed(0)
+    v = torch.randn(3, 3, dtype=torch.float64)
+    hv = calc.hessian_vector_product(data, v)
+    ref = _dense_hessian_matmul(calc, data, v)
+    tol = {"rtol": 1e-3, "atol": 1e-3} if method == "simple" else {"rtol": 5e-2, "atol": 5e-3}
+    torch.testing.assert_close(hv.double().cpu(), ref.cpu(), **tol)
+
+
+def test_hvp_validates_unsupported_element():
+    """HVP enforces the same species validation as eval (FIX 3)."""
+    calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+    impl = (calc.metadata or {}).get("implemented_species") or []
+    if not impl:
+        pytest.skip("model did not declare implemented_species")
+    bad_z = next(z for z in range(1, 119) if z not in impl)
+    data = {
+        "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0]]),
+        "numbers": np.array([bad_z, 1]),
+        "charge": 0.0,
+    }
+    v = torch.zeros(2, 3, dtype=torch.float64)
+    with pytest.raises(ValueError):
+        calc.hessian_vector_product(data, v)
+    # Bypass must not raise on the validation path.
+    calc.hessian_vector_product(data, v, validate_species=False)
+
+
 def test_hvp_periodic_returns_float64():
     calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
     calc.external_dftd3 = None
