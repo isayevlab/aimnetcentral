@@ -59,14 +59,7 @@ Check [pytorch.org](https://pytorch.org/get-started/locally/) for other CUDA ver
 
 ### PyTorch & CUDA compatibility
 
-AIMNet2 is tested against PyTorch 2.8–2.12 (CPU API + numerics in CI; the
-GPU/kernel path is validated separately). Across this range PyTorch's default
-CUDA wheel advanced through the CUDA 12.x series to CUDA 13. Older GPUs
-(Volta/Pascal/Maxwell) may not be supported on the newest default wheels —
-consult the current [PyTorch install matrix](https://pytorch.org/get-started/locally/)
-to pick the right CUDA channel for your hardware rather than relying on the
-default. The Warp + nvalchemiops accelerated kernel path is GPU-only and is
-validated manually; it is not exercised in CPU CI.
+AIMNet2 is tested against PyTorch 2.8–2.12 (CPU API + numerics in CI; the GPU/kernel path is validated separately). Across this range PyTorch's default CUDA wheel advanced through the CUDA 12.x series to CUDA 13. Older GPUs (Volta/Pascal/Maxwell) may not be supported on the newest default wheels — consult the current [PyTorch install matrix](https://pytorch.org/get-started/locally/) to pick the right CUDA channel for your hardware rather than relying on the default. The Warp + nvalchemiops accelerated kernel path is GPU-only and is validated manually; it is not exercised in CPU CI.
 
 ## Verify Your Installation
 
