@@ -72,7 +72,7 @@ def calc_distances(data: dict[str, Tensor], suffix: str = "", pad_value: float =
         coord_j = coord_j + shifts
     r_ij = coord_j - coord_i
     r_ij = nbops.mask_ij_(r_ij, data, mask_value=pad_value, inplace=False, suffix=suffix)
-    d_ij = torch.norm(r_ij, p=2, dim=-1)
+    d_ij = torch.linalg.vector_norm(r_ij, ord=2, dim=-1)
     return d_ij, r_ij
 
 
