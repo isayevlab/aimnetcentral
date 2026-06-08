@@ -4,6 +4,7 @@ Guards the CPU-runnable numerical path changed in Phase 2 (calc_distances uses
 torch.linalg.vector_norm). The full-model energy/force golden is GPU-only
 (real model is network/ASE-gated) and lives in the GPU validation task.
 """
+
 import pytest
 import torch
 

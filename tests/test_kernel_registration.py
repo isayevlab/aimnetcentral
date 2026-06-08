@@ -5,6 +5,7 @@ device (the kernels are gated to CUDA only for *execution*, and wp.init() does
 not require a GPU), so this runs on a CPU CI runner and catches torch-version
 drift in torch.library schema inference.
 """
+
 import torch
 
 EXPECTED_OPS = {
