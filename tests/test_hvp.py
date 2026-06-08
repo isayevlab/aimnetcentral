@@ -28,6 +28,32 @@ def _dense_hessian_matmul(calc, data, v):
     return (Hmat @ v.reshape(-1).double()).reshape(n, 3)
 
 
+def _nblist_state(nblist):
+    if nblist is None:
+        return None
+    return (nblist.cutoff, nblist.max_neighbors)
+
+
+def _coulomb_state(calc):
+    ext = None
+    if calc.external_coulomb is not None:
+        ext = (
+            calc.external_coulomb.method,
+            calc.external_coulomb.dsf_alpha,
+            calc.external_coulomb.dsf_rc,
+            calc.external_coulomb.ewald_accuracy,
+        )
+    return (
+        calc._coulomb_method,
+        calc._coulomb_cutoff,
+        calc.cutoff_lr,
+        _nblist_state(calc._nblist_lr),
+        _nblist_state(calc._nblist_dftd3),
+        _nblist_state(calc._nblist_coulomb),
+        ext,
+    )
+
+
 @pytest.mark.parametrize("method", ["simple", "dsf"])
 def test_hvp_matches_dense_nonperiodic(method):
     calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=(method != "simple"))
@@ -160,3 +186,64 @@ def test_hvp_periodic_returns_float64():
     }
     hv = calc.hessian_vector_product(data, torch.randn(3, 3, dtype=torch.float64))
     assert hv.dtype == torch.float64
+
+
+def test_hvp_pbc_auto_switch_restores_full_coulomb_state():
+    calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+    calc.external_dftd3 = None
+    calc.set_lrcoulomb_method("simple")
+    before = _coulomb_state(calc)
+    data = {
+        "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+        "numbers": np.array([8, 1, 1]),
+        "charge": 0.0,
+        "cell": np.eye(3) * 8.0,
+    }
+    with pytest.warns(UserWarning, match="Switching to DSF Coulomb for PBC"):
+        calc.hessian_vector_product(data, torch.randn(3, 3, dtype=torch.float64))
+    assert _coulomb_state(calc) == before
+
+
+def test_batched_hessian_pbc_auto_switch_restores_full_coulomb_state():
+    calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+    calc.external_dftd3 = None
+    calc.set_lrcoulomb_method("simple")
+    before = _coulomb_state(calc)
+    data = {
+        "coord": torch.tensor(
+            [
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]],
+                [[0.0, 0.0, 0.0], [0.97, 0.0, 0.0], [-0.25, 0.94, 0.0]],
+            ],
+            dtype=torch.float32,
+        ),
+        "numbers": torch.tensor([[8, 1, 1], [8, 1, 1]]),
+        "charge": torch.tensor([0.0, 0.0]),
+        "cell": torch.eye(3) * 8.0,
+    }
+    with pytest.warns(UserWarning, match="Switching to DSF Coulomb for PBC"):
+        H = calc(data, hessian=True)["hessian"]
+    assert H.shape == (2, 3, 3, 3, 3)
+    assert _coulomb_state(calc) == before
+
+
+def test_hvp_create_graph_contract():
+    calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+    calc.external_dftd3 = None
+    data = {
+        "coord": torch.tensor(
+            [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]],
+            dtype=torch.float32,
+            requires_grad=True,
+        ),
+        "numbers": torch.tensor([8, 1, 1]),
+        "charge": 0.0,
+    }
+    v = torch.randn(3, 3)
+
+    hv_detached = calc.hessian_vector_product(data, v)
+    assert not hv_detached.requires_grad
+
+    hv_graph = calc.hessian_vector_product(data, v, create_graph=True)
+    assert hv_graph.requires_grad
+    assert hv_graph.grad_fn is not None

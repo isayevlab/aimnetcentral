@@ -1,3 +1,4 @@
+import copy
 import math
 import os
 import re
@@ -1117,6 +1118,48 @@ class AIMNet2Calculator:
             subs.append(sub)
         return subs
 
+    def _snapshot_eval_state(self) -> dict[str, Any]:
+        """Snapshot mutable calculator state touched by nested eval-style calls."""
+        shallow_attrs = (
+            "_batch",
+            "_max_mol_size",
+            "_saved_for_grad",
+            "_coulomb_method",
+            "_coulomb_cutoff",
+            "cutoff_lr",
+            "_external_strain_inputs",
+        )
+        copied_attrs = ("_nblist_lr", "_nblist_dftd3", "_nblist_coulomb")
+        state = {name: getattr(self, name, _SENTINEL) for name in shallow_attrs}
+        for name in copied_attrs:
+            val = getattr(self, name, _SENTINEL)
+            state[name] = _SENTINEL if val is _SENTINEL else copy.deepcopy(val)
+        if self.external_coulomb is not None:
+            state["_external_coulomb_attrs"] = {
+                name: getattr(self.external_coulomb, name, _SENTINEL)
+                for name in ("method", "dsf_alpha", "dsf_rc", "ewald_accuracy")
+            }
+        else:
+            state["_external_coulomb_attrs"] = _SENTINEL
+        return state
+
+    def _restore_eval_state(self, state: dict[str, Any]) -> None:
+        """Restore state captured by :meth:`_snapshot_eval_state`."""
+        external_attrs = state.pop("_external_coulomb_attrs", _SENTINEL)
+        for name, val in state.items():
+            if val is _SENTINEL:
+                if hasattr(self, name):
+                    delattr(self, name)
+            else:
+                setattr(self, name, val)
+        if external_attrs is not _SENTINEL and self.external_coulomb is not None:
+            for name, val in external_attrs.items():
+                if val is _SENTINEL:
+                    if hasattr(self.external_coulomb, name):
+                        delattr(self.external_coulomb, name)
+                else:
+                    setattr(self.external_coulomb, name, val)
+
     def _eval_hessian_batched(
         self,
         subsystems: list[dict[str, Any]],
@@ -1135,27 +1178,17 @@ class AIMNet2Calculator:
         molecules are independent and generally ragged.
         """
         # Recursive eval(...) mutates instance scratch state and can persistently
-        # flip _coulomb_method / external_coulomb.method via prepare_input's
+        # flip Coulomb method/cutoff/list-builder state via prepare_input's
         # simple->dsf PBC auto-switch. Snapshot and restore so a batched call
         # leaves the calculator unmodified.
-        _saved_attrs = {
-            name: getattr(self, name, _SENTINEL)
-            for name in ("_batch", "_max_mol_size", "_saved_for_grad", "_coulomb_method")
-        }
-        _saved_ext_method = (
-            getattr(self.external_coulomb, "method", _SENTINEL) if self.external_coulomb is not None else _SENTINEL
-        )
+        eval_state = self._snapshot_eval_state()
         try:
             results = [
                 self.eval(sub, forces=forces, stress=stress, hessian=True, validate_species=validate_species)
                 for sub in subsystems
             ]
         finally:
-            for name, val in _saved_attrs.items():
-                if val is not _SENTINEL:
-                    setattr(self, name, val)
-            if _saved_ext_method is not _SENTINEL and self.external_coulomb is not None:
-                self.external_coulomb.method = _saved_ext_method
+            self._restore_eval_state(eval_state)
         out: dict[str, Any] = {}
         for k in results[0]:
             vals = [r[k] for r in results]
@@ -1573,7 +1606,13 @@ class AIMNet2Calculator:
     @torch.inference_mode(False)
     @torch.enable_grad()
     def hessian_vector_product(
-        self, data: dict[str, Any], vectors: Tensor, *, eps: float = 5e-4, validate_species: bool = True
+        self,
+        data: dict[str, Any],
+        vectors: Tensor,
+        *,
+        eps: float = 5e-4,
+        validate_species: bool = True,
+        create_graph: bool = False,
     ) -> Tensor:
         """Matrix-free Hessian-vector product(s) ``H @ v`` for one structure.
 
@@ -1591,6 +1630,11 @@ class AIMNet2Calculator:
         eps : float
             Central-difference step (Angstrom) for the periodic Ewald/PME
             long-range term. Ignored for ``simple``/``dsf``.
+        create_graph : bool
+            If ``True``, keep the differentiable autograd block of the HVP in
+            the graph so it can compose with an outer loss. The Ewald/PME
+            fixed-position finite-difference block remains detached. Default
+            ``False`` preserves the numeric/detached operator-action behavior.
 
         Returns
         -------
@@ -1607,10 +1651,10 @@ class AIMNet2Calculator:
         :meth:`aimnet.modules.lr.LRCoulomb._coul_nvalchemi_fd_hessian`). This
         mirrors the dense :meth:`calculate_hessian` assembly term-by-term, so
         ``hessian_vector_product(v)`` equals ``H.reshape(3N, 3N) @ v`` to the
-        backend's tolerance. Unlike :meth:`calculate_hessian` (which returns a
-        detached dense value), this product stays in the autograd graph and so
-        can compose with an outer computation. See :meth:`calculate_hessian`
-        for the detached-Hessian contract and the fully-differentiable recipe.
+        backend's tolerance. The default return is detached; set
+        ``create_graph=True`` when the differentiable autograd block must
+        compose with an outer computation. See :meth:`calculate_hessian` for
+        the detached-Hessian contract and the fully-differentiable recipe.
 
         Integration note: the external modules run via
         ``_run_external_modules(forces=False, hessian=(method == 'dsf'))`` --
@@ -1637,9 +1681,11 @@ class AIMNet2Calculator:
           ``dsf``, and **float64** for ``ewald``/``pme`` (the periodic
           finite-difference block is accumulated in double precision, matching the
           dense Ewald/PME Hessian).
-        * The returned product is NOT differentiable w.r.t. ``vectors`` or model
-          parameters (the periodic FD part is detached); it is a numeric operator
-          action.
+        * With ``create_graph=False`` the returned product is detached numeric
+          operator action. With ``create_graph=True`` the autograd block remains
+          differentiable w.r.t. graph-attached coordinates / model parameters;
+          vectors are still treated as numeric directions, and the periodic FD
+          block remains detached.
         * For ``ewald``/``pme`` the operator is symmetric only to
           finite-difference accuracy (O(eps^2)); for Lanczos/LOBPCG
           smallest/most-negative-eigenvalue (transition-state) work, pass all
@@ -1673,31 +1719,22 @@ class AIMNet2Calculator:
                 )
 
         # prepare_input / set_grad_tensors mutate instance scratch state and can
-        # persistently flip _coulomb_method / external_coulomb.method via
-        # prepare_input's simple->dsf PBC auto-switch (and overwrite
-        # _saved_for_grad). Snapshot now and restore in the finally so a single
-        # HVP call leaves the calculator unmodified -- mirrors
-        # _eval_hessian_batched. The per-vector loop reads self._saved_for_grad
-        # and self.external_coulomb, so the result must be fully computed inside
-        # the try before state is restored.
-        _saved_attrs = {
-            name: getattr(self, name, _SENTINEL)
-            for name in ("_batch", "_max_mol_size", "_saved_for_grad", "_coulomb_method")
-        }
-        _saved_ext_method = (
-            getattr(self.external_coulomb, "method", _SENTINEL) if self.external_coulomb is not None else _SENTINEL
-        )
+        # persistently flip Coulomb method/cutoff/list-builder state via
+        # prepare_input's simple->dsf PBC auto-switch. Snapshot now and restore
+        # in the finally so a single HVP call leaves the calculator unmodified.
+        # The per-vector loop reads self._saved_for_grad and self.external_coulomb,
+        # so the result must be fully computed inside the try before state is
+        # restored.
+        eval_state = self._snapshot_eval_state()
         try:
-            result = self._hessian_vector_product_impl(data, vectors, eps=eps)
+            result = self._hessian_vector_product_impl(data, vectors, eps=eps, create_graph=create_graph)
         finally:
-            for name, val in _saved_attrs.items():
-                if val is not _SENTINEL:
-                    setattr(self, name, val)
-            if _saved_ext_method is not _SENTINEL and self.external_coulomb is not None:
-                self.external_coulomb.method = _saved_ext_method
+            self._restore_eval_state(eval_state)
         return result
 
-    def _hessian_vector_product_impl(self, data: dict[str, Any], vectors: Tensor, *, eps: float) -> Tensor:
+    def _hessian_vector_product_impl(
+        self, data: dict[str, Any], vectors: Tensor, *, eps: float, create_graph: bool
+    ) -> Tensor:
         """Core HVP computation; instance-state snapshot/restore is handled by
         :meth:`hessian_vector_product`. See that method for the contract."""
         # Deliberate parallel forward path: this mirrors `eval` +
@@ -1779,6 +1816,7 @@ class AIMNet2Calculator:
                 coord,
                 grad_outputs=v_full.flatten(),
                 retain_graph=True,
+                create_graph=create_graph,
                 allow_unused=True,
             )[0]
             hv = hv_full[:N]
