@@ -18,12 +18,20 @@ from aimnet.modules import Forces
 
 
 def enable_tf32(enable=True):
-    if enable:
-        torch.backends.cuda.matmul.allow_tf32 = True
-        torch.backends.cudnn.allow_tf32 = True
-    else:
-        torch.backends.cuda.matmul.allow_tf32 = False
-        torch.backends.cudnn.allow_tf32 = False
+    """Toggle TF32 reduced-precision float32 matmul (training-throughput knob).
+
+    NOTE: this sets *process-global* float32 matmul precision. Never call it
+    from inference/calculator code paths used for thermochemistry — those must
+    run at full precision ("highest"). The deliberate float64 energy
+    accumulation in aimnet.modules.lr is unaffected (TF32 governs float32 GEMM
+    only).
+    """
+    # set_float32_matmul_precision is the forward-compatible control; the
+    # allow_tf32 booleans are its deprecated alias from torch 2.9 onward.
+    torch.set_float32_matmul_precision("high" if enable else "highest")
+    # cudnn keeps a dedicated flag not covered by set_float32_matmul_precision.
+    if hasattr(torch.backends.cudnn, "allow_tf32"):
+        torch.backends.cudnn.allow_tf32 = enable
 
 
 def make_seed(all_reduce=True):
