@@ -59,6 +59,59 @@ jobs:
               with:
                   flags: core
 
+    # Probes torch-core API + CPU-numerics drift across the supported range.
+    # NOT a dependency-graph test: torch is reinstalled on top of the locked
+    # warp-lang/nvalchemiops (which do not pin torch), and CI is CPU-only so the
+    # Warp execution kernels never run. The warp/nvalchemiops coupling is
+    # validated on GPU (see the GPU validation task).
+    #
+    # torch.compile/inductor is DISABLED here (TORCHDYNAMO_DISABLE=1): reinstalling
+    # torch alone leaves a mismatched triton, so the inductor path cannot be tested
+    # coherently via reinstall-on-top (it breaks with `triton_key` ImportError on
+    # torch 2.8). The compile path's cross-version validation belongs in a
+    # resolver-coherent env, not this eager API/numerics probe.
+    tests-torch:
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        strategy:
+            matrix:
+                torch-version: ["2.8.*", "2.9.*", "2.10.*", "2.11.*", "2.12.*"]
+            fail-fast: false
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - name: Check out
+              uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+
+            - name: Set up the environment
+              uses: ./.github/actions/setup-uv-env
+              with:
+                  python-version: "3.11"
+                  groups: dev
+
+            - name: Override torch (CPU wheel) — desyncs from uv.lock, intentional
+              env:
+                  TORCH_VERSION: ${{ matrix.torch-version }}
+                  UV_NO_SYNC: "1"
+              run: |
+                  set -e
+                  uv pip install --python .venv/bin/python --reinstall-package torch \
+                      "torch==${TORCH_VERSION}" \
+                      --index-url https://download.pytorch.org/whl/cpu
+                  uv run --no-sync python -c "import torch; print('torch', torch.__version__)"
+
+            - name: Run core tests against torch ${{ matrix.torch-version }}
+              env:
+                  UV_NO_SYNC: "1"
+                  # Eager only: see job comment — inductor/triton can't be tested via reinstall-on-top.
+                  TORCHDYNAMO_DISABLE: "1"
+              run: |
+                  uv run --no-sync pytest tests \
+                      -m "not gpu and not network and not ase and not pysis and not train and not hf and not torch_sim and not slow"
+
     tests-ase:
         runs-on: ubuntu-latest
         timeout-minutes: 20
@@ -295,6 +348,7 @@ jobs:
             [
                 quality,
                 tests-core,
+                tests-torch,
                 tests-ase,
                 tests-train,
                 tests-pysis,

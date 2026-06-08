@@ -26,3 +26,14 @@ def test_build_model_wraps_forces_when_true():
     cfg = OmegaConf.create({"class": "torch.nn.Identity"})
     model = build_model(cfg, forces=True)
     assert isinstance(model, Forces)
+
+
+def test_state_dict_roundtrip_weights_only(tmp_path):
+    torch = pytest.importorskip("torch")
+
+    sd = {"w": torch.randn(3, 3), "b": torch.zeros(3)}
+    p = tmp_path / "sd.pt"
+    torch.save(sd, p)
+    loaded = torch.load(p, map_location="cpu", weights_only=True)
+    assert set(loaded) == {"w", "b"}
+    torch.testing.assert_close(loaded["w"], sd["w"])
