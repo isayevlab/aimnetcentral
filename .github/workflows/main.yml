@@ -7,6 +7,10 @@ on:
     pull_request:
         types: [opened, synchronize, reopened, ready_for_review]
 
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
 jobs:
     quality:
         runs-on: ubuntu-latest
@@ -51,7 +55,7 @@ jobs:
                   groups: dev
 
             - name: Run tests
-              run: uv run pytest tests -m "not gpu and not network and not ase and not pysis and not train and not hf and not torch_sim and not slow" --cov --cov-config=pyproject.toml --cov-report=xml
+              run: uv run pytest tests -m "not gpu and not network and not ase and not pysis and not train and not hf and not torch_sim and not slow" --cov --cov-config=pyproject.toml --cov-report=xml --durations=25 --durations-min=0.1
 
             - name: Upload coverage reports to Codecov with GitHub Action on Python 3.11
               uses: codecov/codecov-action@v6
@@ -110,7 +114,8 @@ jobs:
                   TORCHDYNAMO_DISABLE: "1"
               run: |
                   uv run --no-sync pytest tests \
-                      -m "not gpu and not network and not ase and not pysis and not train and not hf and not torch_sim and not slow"
+                      -m "not gpu and not network and not ase and not pysis and not train and not hf and not torch_sim and not slow" \
+                      --durations=25 --durations-min=0.1
 
     tests-ase:
         runs-on: ubuntu-latest
@@ -134,12 +139,41 @@ jobs:
                   extras: ase
 
             - name: Run ASE tests
-              run: uv run pytest tests -m "ase and not sella and not slow" --cov --cov-config=pyproject.toml --cov-report=xml
+              run: uv run pytest tests -m "ase and not gpu and not sella and not slow" --cov --cov-config=pyproject.toml --cov-report=xml --durations=25 --durations-min=0.1
 
             - name: Upload coverage reports to Codecov
               uses: codecov/codecov-action@v6
               with:
                   flags: ase
+
+    tests-pbc:
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        strategy:
+            matrix:
+                python-version: ["3.11"]
+            fail-fast: false
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - name: Check out
+              uses: actions/checkout@v6
+
+            - name: Set up the environment
+              uses: ./.github/actions/setup-uv-env
+              with:
+                  python-version: ${{ matrix.python-version }}
+                  groups: dev
+                  extras: ase
+
+            - name: Run PBC tests
+              run: uv run pytest tests/test_pbc.py -m "ase and gpu and not sella and not slow" --cov --cov-config=pyproject.toml --cov-report=xml --durations=25 --durations-min=0.1
+
+            - name: Upload coverage reports to Codecov
+              uses: codecov/codecov-action@v6
+              with:
+                  flags: pbc
 
     tests-train:
         runs-on: ubuntu-latest
@@ -165,7 +199,7 @@ jobs:
             - name: Run train-marked tests (allow empty)
               run: |
                   set -e
-                  uv run pytest tests -m train --cov --cov-config=pyproject.toml --cov-report=xml || rc=$?
+                  uv run pytest tests -m train --cov --cov-config=pyproject.toml --cov-report=xml --durations=25 --durations-min=0.1 || rc=$?
                   if [ "${rc:-0}" -eq 5 ]; then
                     echo "No train-marked tests collected; treating as success."
                     exit 0
@@ -202,7 +236,7 @@ jobs:
             - name: Run pysis-marked tests (allow empty)
               run: |
                   set -e
-                  uv run pytest tests -m pysis --cov --cov-config=pyproject.toml --cov-report=xml || rc=$?
+                  uv run pytest tests -m pysis --cov --cov-config=pyproject.toml --cov-report=xml --durations=25 --durations-min=0.1 || rc=$?
                   if [ "${rc:-0}" -eq 5 ]; then
                     echo "No pysis-marked tests collected; treating as success."
                     exit 0
@@ -239,7 +273,7 @@ jobs:
             - name: Run sella-marked tests (allow empty)
               run: |
                   set -e
-                  uv run pytest tests -m sella --cov --cov-config=pyproject.toml --cov-report=xml || rc=$?
+                  uv run pytest tests -m sella --cov --cov-config=pyproject.toml --cov-report=xml --durations=25 --durations-min=0.1 || rc=$?
                   if [ "${rc:-0}" -eq 5 ]; then
                     echo "No sella-marked tests collected; treating as success."
                     exit 0
@@ -276,7 +310,7 @@ jobs:
             - name: Run hf-marked tests (allow empty)
               run: |
                   set -e
-                  uv run pytest tests -m hf --cov --cov-config=pyproject.toml --cov-report=xml || rc=$?
+                  uv run pytest tests -m hf --cov --cov-config=pyproject.toml --cov-report=xml --durations=25 --durations-min=0.1 || rc=$?
                   if [ "${rc:-0}" -eq 5 ]; then
                     echo "No hf-marked tests collected; treating as success."
                     exit 0
@@ -313,7 +347,7 @@ jobs:
             - name: Run torch_sim-marked tests (allow empty)
               run: |
                   set -e
-                  uv run pytest tests -m torch_sim --cov --cov-config=pyproject.toml --cov-report=xml || rc=$?
+                  uv run pytest tests -m torch_sim --cov --cov-config=pyproject.toml --cov-report=xml --durations=25 --durations-min=0.1 || rc=$?
                   if [ "${rc:-0}" -eq 5 ]; then
                     echo "No torch_sim-marked tests collected; treating as success."
                     exit 0
@@ -350,6 +384,7 @@ jobs:
                 tests-core,
                 tests-torch,
                 tests-ase,
+                tests-pbc,
                 tests-train,
                 tests-pysis,
                 tests-sella,

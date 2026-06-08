@@ -1,0 +1,31 @@
+name: Slow Tests
+
+on:
+    workflow_dispatch:
+    schedule:
+        - cron: "17 7 * * *"
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    tests-slow-pbc:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - name: Check out
+              uses: actions/checkout@v6
+
+            - name: Set up the environment
+              uses: ./.github/actions/setup-uv-env
+              with:
+                  python-version: "3.11"
+                  groups: dev
+                  extras: ase
+
+            - name: Run slow PBC tests
+              run: uv run pytest tests/test_pbc.py -m "slow" --durations=25 --durations-min=0.1
