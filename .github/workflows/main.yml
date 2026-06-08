@@ -75,7 +75,7 @@ jobs:
         timeout-minutes: 20
         strategy:
             matrix:
-                torch-version: ["2.8.*", "2.9.*", "2.11.*", "2.12.*"]
+                torch-version: ["2.8.*", "2.9.*", "2.10.*", "2.11.*", "2.12.*"]
             fail-fast: false
         defaults:
             run:

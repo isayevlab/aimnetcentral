@@ -24,9 +24,11 @@ def _water_data():
 
 
 def test_calc_distances_matches_reference():
+    # rel tolerance (not exact ==) so the cross-version guard does not trip on a
+    # sub-ULP difference on a non-x86 runner while still catching real drift.
     d_ij, _ = ops.calc_distances(_water_data())
-    assert d_ij.double().sum().item() == REF_DIJ_SUM
-    assert d_ij[0, 0, 1].double().item() == REF_DIJ_01
+    assert d_ij.double().sum().item() == pytest.approx(REF_DIJ_SUM, rel=1e-12)
+    assert d_ij[0, 0, 1].double().item() == pytest.approx(REF_DIJ_01, rel=1e-12)
 
 
 def test_calc_distances_gradient_is_finite():
