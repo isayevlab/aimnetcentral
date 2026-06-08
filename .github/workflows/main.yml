@@ -348,6 +348,7 @@ jobs:
             [
                 quality,
                 tests-core,
+                tests-torch,
                 tests-ase,
                 tests-train,
                 tests-pysis,
