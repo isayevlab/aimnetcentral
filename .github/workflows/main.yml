@@ -64,6 +64,12 @@ jobs:
     # warp-lang/nvalchemiops (which do not pin torch), and CI is CPU-only so the
     # Warp execution kernels never run. The warp/nvalchemiops coupling is
     # validated on GPU (see the GPU validation task).
+    #
+    # torch.compile/inductor is DISABLED here (TORCHDYNAMO_DISABLE=1): reinstalling
+    # torch alone leaves a mismatched triton, so the inductor path cannot be tested
+    # coherently via reinstall-on-top (it breaks with `triton_key` ImportError on
+    # torch 2.8). The compile path's cross-version validation belongs in a
+    # resolver-coherent env, not this eager API/numerics probe.
     tests-torch:
         runs-on: ubuntu-latest
         timeout-minutes: 20
@@ -100,6 +106,8 @@ jobs:
             - name: Run core tests against torch ${{ matrix.torch-version }}
               env:
                   UV_NO_SYNC: "1"
+                  # Eager only: see job comment — inductor/triton can't be tested via reinstall-on-top.
+                  TORCHDYNAMO_DISABLE: "1"
               run: |
                   uv run --no-sync pytest tests \
                       -m "not gpu and not network and not ase and not pysis and not train and not hf and not torch_sim and not slow"
