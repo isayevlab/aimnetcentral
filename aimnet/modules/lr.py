@@ -68,6 +68,7 @@ class ExternalDerivativeTerms:
 
     forces: Tensor | None = None
     virial: Tensor | None = None
+    hessian: Tensor | None = None
 
 
 def _periodic_coulomb_hybrid(
@@ -249,19 +250,26 @@ class LRCoulomb(nn.Module):
     for module-specific keys (e.g., nbmat_coulomb, shifts_coulomb), falling
     back to shared _lr suffix (nbmat_lr, shifts_lr) if not found.
 
-    DSF uses ``nvalchemiops.torch.interactions.electrostatics.dsf_coulomb``.
-    Its energy is differentiable through charges, but not through positions
-    or cell; the calculator consumes explicit DSF forces/virial for inference
-    and rejects DSF force/stress training and Hessian requests.
+    DSF uses ``nvalchemiops.torch.interactions.electrostatics.dsf_coulomb``
+    for plain inference. DSF Hessian and force/stress training instead go
+    through a closed-form pure-PyTorch path (:meth:`_coul_dsf_torch`), which is
+    twice-differentiable by autograd and RELAXED-CHARGE: it differentiates
+    through the model-predicted charges, so its Hessian includes the
+    charge-response (the d^2E / (dq . dr) coupling).
 
     Ewald/PME call ``nvalchemiops`` directly. Inference uses
     ``hybrid_forces=True`` so energy remains differentiable through charges
     and fixed-charge geometry derivatives are returned as explicit terms.
     Training derivative paths use a small local ``autograd.Function`` wrapper
     because the installed nvalchemiops coordinate backward kernels do not
-    currently provide a registered backward-of-backward. Calculator Hessian
-    requests are rejected for Ewald/PME because complete Hessians require true
-    second coordinate derivatives.
+    currently provide a registered backward-of-backward. Ewald/PME Hessians are
+    provided by finite-difference of the analytic nvalchemiops forces
+    (:meth:`_coul_nvalchemi_fd_hessian`) and are FIXED-CHARGE: they omit the
+    d^2E / (dq . dr) charge-response coupling.
+
+    Because of this, DSF (relaxed-charge) and Ewald/PME (fixed-charge) Hessians
+    differ slightly for an otherwise-equivalent system, which matters when
+    comparing vibrational frequencies / IR across backends.
     """
 
     def __init__(
@@ -544,6 +552,64 @@ class LRCoulomb(nn.Module):
         energy, _terms = self._coul_dsf_nvalchemi(data)
         return energy
 
+    def _coul_dsf_torch(self, data: dict[str, Tensor]) -> Tensor:
+        """Closed-form damped-shifted-force Coulomb in pure PyTorch.
+
+        Twice differentiable by autograd, so it supports Hessians and
+        force/stress training where the nvalchemiops DSF kernel (which detaches
+        geometry) cannot. Uses the same ordered-pair neighbor matrix and
+        half-pair ``self._factor`` convention as :meth:`coul_simple`, so the two
+        share a unit system. The hard cutoff matches the kernel's ``dsf_rc``.
+
+        Because the pair term is force-shifted, energy and force are continuous
+        at ``rc`` but the second derivative is not, so the energy is only C^1
+        there; the Hessian therefore has a small discontinuity for pairs sitting
+        exactly at ``rc``. For vibrational / IR work a large ``dsf_rc`` is
+        advisable so that no chemically relevant pair sits near the cutoff where
+        this Hessian discontinuity occurs.
+
+        RELAXED-CHARGE Hessian: unlike the Ewald/PME finite-difference Hessian,
+        this DSF torch energy is fully autograd-differentiable through the
+        model-predicted charges, so its Hessian INCLUDES the charge-response
+        (the d^2E / (dq . dr) coupling). Consequently the DSF (relaxed-charge)
+        and Ewald/PME (fixed-charge long-range) Hessians differ slightly even
+        for an otherwise-equivalent system; this is relevant when comparing
+        vibrational frequencies / IR across LR backends.
+        """
+        suffix = nbops.resolve_suffix(data, ["_coulomb", "_lr"])
+        data = ops.lazy_calc_dij(data, suffix)
+        d_ij = data[f"d_ij{suffix}"]
+        q = data[self.key_in]
+        q_i, q_j = nbops.get_ij(q, data, suffix=suffix)
+        q_ij = q_i * q_j
+
+        alpha = d_ij.new_tensor(self.dsf_alpha)
+        rc = d_ij.new_tensor(self.dsf_rc)
+        two_alpha_over_sqrt_pi = d_ij.new_tensor(2.0 * float(self.dsf_alpha) / math.sqrt(math.pi))
+        alpha_over_sqrt_pi = d_ij.new_tensor(float(self.dsf_alpha) / math.sqrt(math.pi))
+        erfc_rc = torch.erfc(alpha * rc)
+        shift_val = erfc_rc / rc
+        # Fennell-Gezelter force-shift slope evaluated at rc.
+        shift_slope = erfc_rc / rc.pow(2) + two_alpha_over_sqrt_pi * torch.exp(-(alpha**2) * rc**2) / rc
+        e_pair = torch.erfc(alpha * d_ij) / d_ij - shift_val + (d_ij - rc) * shift_slope
+        within = (d_ij < rc).to(e_pair.dtype)
+        e_ij = q_ij * e_pair * within
+        e_ij = nbops.mask_ij_(e_ij, data, 0.0, suffix=suffix)
+        e_i = e_ij.sum(-1, dtype=torch.float64)
+        e = self._factor * nbops.mol_sum(e_i, data)
+        # DSF self-energy term: U_self_i = -(erfc(alpha*rc)/(2*rc) + alpha/sqrt(pi)) * q_i^2.
+        # The 0.5 is already inside self_coeff, so this uses the full k_e = 2 * self._factor.
+        self_coeff = -(shift_val / 2.0 + alpha_over_sqrt_pi)
+        # Mask the trailing padding atom locally so it contributes zero to the
+        # self-energy, mirroring how _dsf_inputs_mode0 / coul_simple mask
+        # (instead of relying on the upstream invariant that padding q is ~0).
+        q_self = nbops.mask_i_(q, data, 0.0, inplace=False)
+        e_self_i = (self_coeff * q_self.pow(2)).to(torch.float64)
+        e = e + 2.0 * self._factor * nbops.mol_sum(e_self_i, data)
+        if self.subtract_sr:
+            e = e - self.coul_simple_sr(data)
+        return e
+
     def _coul_nvalchemi(
         self,
         data: dict[str, Tensor],
@@ -703,6 +769,125 @@ class LRCoulomb(nn.Module):
             e_periodic = e_periodic - self.coul_simple_sr(data)
         return e_periodic, terms
 
+    def _periodic_fd_setup(self, data: dict[str, Tensor], backend: str):
+        """Shared marshalling for the periodic-Coulomb finite-difference Hessian
+        and Hessian-vector-product paths. Returns ``(forces_at, coord_real, N)``
+        where ``forces_at(positions)`` evaluates the analytic full-periodic
+        Coulomb forces (N, 3) in eV/Ang at float64, with neighbor list, cell, and
+        (detached) charges held fixed."""
+        suffix = nbops.resolve_suffix(data, ["_coulomb", "_lr"])
+        coord = data["coord"]
+        cell = data["cell"]
+        if cell is None:
+            raise ValueError("nvalchemi Coulomb requires periodic cell data")
+        if backend not in ("ewald", "pme"):
+            raise ValueError(f"backend must be 'ewald' or 'pme', got {backend!r}")
+        N = coord.shape[0] - 1
+        coord_real = coord[:-1].detach().double()
+        charges_real = data[self.key_in][:-1].detach().double()
+        mol_idx_real = data["mol_idx"][:-1].to(torch.int32)
+        nbmat_real = data[f"nbmat{suffix}"][:-1].to(torch.int32)
+        shifts_real = data[f"shifts{suffix}"][:-1].to(torch.int32)
+        cell_det = cell.detach().double()
+        num_systems = int(mol_idx_real.max().item()) + 1
+        is_pme = backend == "pme"
+
+        def forces_at(positions: Tensor) -> Tensor:
+            _e, f, _cg, _v = _periodic_coulomb_hybrid(
+                coord=positions,
+                cell=cell_det,
+                charges=charges_real,
+                batch_idx=mol_idx_real,
+                neighbor_matrix=nbmat_real,
+                shifts=shifts_real,
+                mask_value=N,
+                num_systems=num_systems,
+                accuracy=float(self.ewald_accuracy),
+                compute_virial=False,
+                is_pme=is_pme,
+            )
+            return f  # (N, 3) eV/Ang (already scaled by k_e in the helper)
+
+        return forces_at, coord_real, N
+
+    def _coul_nvalchemi_fd_hessian(self, data: dict[str, Tensor], backend: str, *, step: float = 5e-4) -> Tensor:
+        """Central finite-difference Hessian of the FULL periodic Coulomb energy.
+
+        Differences the analytic nvalchemiops forces with the neighbor list and
+        cell held fixed and coordinates detached. Returns the (N, 3, N, 3)
+        full-periodic block in eV/Ang^2 for the real atoms. The short-range
+        subtraction (if any) is differentiated by autograd in the calculator, so
+        only the full-periodic block is built here.
+
+        FIXED-CHARGE Hessian: the charges are detached before differencing, so
+        this long-range block does NOT include the charge-response coupling
+        (the d^2E / (dq . dr) term through the model's predicted charges). Only
+        the short-range subtraction (handled by autograd in the calculator)
+        carries any charge-response. Consequently the Ewald/PME (fixed-charge
+        long-range) Hessian differs slightly from the DSF torch (relaxed-charge,
+        fully-autograd) Hessian even for an otherwise-equivalent system; this is
+        relevant when comparing vibrational frequencies / IR across LR backends.
+
+        The finite difference is performed in float64: the detached positions,
+        cell, and charges are upcast to double so the kernel returns float64
+        forces and the ``(F(+h) - F(-h))`` cancellation happens in float64,
+        avoiding the ~3-4 digit accuracy cap of float32 subtraction.
+
+        The displacement ``step`` (default 5e-4 Ang) is fixed, so the resulting
+        Hessian accuracy is truncation-limited (the central-difference O(step^2)
+        error) and additionally coupled to ``ewald_accuracy`` through the
+        kernel-force accuracy; neither error is reduced below those limits.
+
+        The Coulomb neighbor list is built at the Ewald real-space cutoff with no
+        geometric skin, so a pair within ``step`` of the cutoff could cross during
+        the +-step displacement. This is numerically negligible because the Ewald
+        real-space term is erfc-damped to ~``ewald_accuracy`` (default 1e-6) at the
+        cutoff, bounding any discontinuity introduced by such a crossing. This
+        bound scales with ``ewald_accuracy``: loosening ``ewald_accuracy``
+        raises the erfc residual at the cutoff and weakens the guarantee.
+        """
+        forces_at, coord_real, N = self._periodic_fd_setup(data, backend)
+        hessian = coord_real.new_zeros((N, 3, N, 3), dtype=torch.float64)
+        with torch.no_grad():
+            scratch = coord_real.clone()
+            for j in range(N):
+                for b in range(3):
+                    orig = scratch[j, b].item()
+                    scratch[j, b] = orig + step
+                    fp = forces_at(scratch)
+                    scratch[j, b] = orig - step
+                    fm = forces_at(scratch)
+                    scratch[j, b] = orig
+                    # H_{ia,jb} = d^2E/dr_ia dr_jb = -dF_ia/dr_jb
+                    dF = (fp - fm) / (2.0 * step)
+                    hessian[:, :, j, b] = (-dF).double()
+        return hessian
+
+    def _coul_nvalchemi_fd_hvp(
+        self, data: dict[str, Tensor], backend: str, vec: Tensor, *, step: float = 5e-4
+    ) -> Tensor:
+        """Directional finite-difference of the FULL periodic Coulomb forces.
+
+        Returns ``H_LR @ vec`` for the real atoms, shape ``(N, 3)`` in
+        eV/Ang^2, where ``H_LR`` is the full-periodic Coulomb Hessian block.
+        This is the matrix-free, single-direction analogue of
+        :meth:`_coul_nvalchemi_fd_hessian`: it costs 2 force evaluations
+        instead of 2*3N. ``vec`` is the displacement direction over the real
+        atoms, shape ``(N, 3)``.
+
+        Like the dense version this is a FIXED-CHARGE term (charges detached);
+        see :meth:`_coul_nvalchemi_fd_hessian` for the charge-response and
+        step/``ewald_accuracy`` caveats, which apply identically here.
+        """
+        forces_at, coord_real, _N = self._periodic_fd_setup(data, backend)
+        vec_real = vec.detach().double()
+        with torch.no_grad():
+            fp = forces_at(coord_real + step * vec_real)
+            fm = forces_at(coord_real - step * vec_real)
+            # H_LR @ vec = d^2E/dr dr . vec = -dF/dr . vec  (directional)
+            hv = -(fp - fm) / (2.0 * step)
+        return hv  # (N, 3), float64
+
     def coul_ewald(self, data: dict[str, Tensor]) -> Tensor:
         """Per-system Ewald energy in eV. Requires ``cell`` and ``nbmat_lr``/``shifts_lr``."""
         energy, _terms = self._coul_nvalchemi(data, backend="ewald")
@@ -720,6 +905,7 @@ class LRCoulomb(nn.Module):
         compute_forces: bool = False,
         compute_virial: bool = False,
         training_derivatives: bool = False,
+        hessian: bool = False,
         scaling: Tensor | None = None,
         coord_unstrained: Tensor | None = None,
         cell_unstrained: Tensor | None = None,
@@ -728,35 +914,47 @@ class LRCoulomb(nn.Module):
             e = self.coul_simple(data)
             terms = None
         elif self.method == "dsf":
-            if training_derivatives:
-                raise ValueError("DSF Coulomb does not support training derivatives")
-            e, terms = self._coul_dsf_nvalchemi(
-                data,
-                compute_forces=compute_forces,
-                compute_virial=compute_virial,
-            )
+            if hessian or training_derivatives:
+                # Differentiable closed-form path: energy stays in the autograd
+                # graph so the calculator computes forces/stress/Hessian from it.
+                e = self._coul_dsf_torch(data)
+                terms = None
+            else:
+                e, terms = self._coul_dsf_nvalchemi(
+                    data,
+                    compute_forces=compute_forces,
+                    compute_virial=compute_virial,
+                )
         elif self.method == "ewald":
             e, terms = self._coul_nvalchemi(
                 data,
                 backend="ewald",
-                compute_forces=compute_forces,
+                compute_forces=compute_forces or hessian,
                 compute_virial=compute_virial,
                 training_derivatives=training_derivatives,
                 scaling=scaling,
                 coord_unstrained=coord_unstrained,
                 cell_unstrained=cell_unstrained,
             )
+            if hessian:
+                if terms is None:
+                    terms = ExternalDerivativeTerms()
+                terms.hessian = self._coul_nvalchemi_fd_hessian(data, backend="ewald")
         elif self.method == "pme":
             e, terms = self._coul_nvalchemi(
                 data,
                 backend="pme",
-                compute_forces=compute_forces,
+                compute_forces=compute_forces or hessian,
                 compute_virial=compute_virial,
                 training_derivatives=training_derivatives,
                 scaling=scaling,
                 coord_unstrained=coord_unstrained,
                 cell_unstrained=cell_unstrained,
             )
+            if hessian:
+                if terms is None:
+                    terms = ExternalDerivativeTerms()
+                terms.hessian = self._coul_nvalchemi_fd_hessian(data, backend="pme")
         else:
             raise ValueError(f"Unknown method {self.method}")
 
