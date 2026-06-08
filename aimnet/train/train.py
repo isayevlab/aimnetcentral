@@ -120,7 +120,9 @@ def run(local_rank, world_size, model_cfg, train_cfg, load, save):
     if load is not None:
         device = next(model.parameters()).device  # type: ignore[attr-defined]
         logging.info(f"Loading weights from file {load}")
-        sd = torch.load(load, map_location=device)
+        # state_dicts are pure tensors; weights_only=True matches the 2.6+ default
+        # and the rest of the repo. Full pickled checkpoints must be pre-extracted.
+        sd = torch.load(load, map_location=device, weights_only=True)
         logging.info(utils.unwrap_module(model).load_state_dict(sd, strict=False))
 
     # data loaders
