@@ -61,7 +61,11 @@ def compare(results: dict, status: dict, *, baseline: str, energy_atol: float, f
     or drifted beyond tolerance vs the baseline.
     """
     base_label = next(
-        (lbl for lbl, d in results.items() if str(d["versions"]["torch"]).startswith(baseline) or lbl == baseline),
+        (
+            lbl
+            for lbl, d in results.items()
+            if lbl == baseline or str(d["versions"]["torch"]).startswith(baseline + ".")
+        ),
         None,
     )
     if base_label is None:

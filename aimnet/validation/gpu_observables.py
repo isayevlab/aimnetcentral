@@ -101,7 +101,8 @@ def compute_observables() -> dict:
     for name, data in build_systems().items():
         res = calc(data, forces=True)
         energy = float(res["energy"].detach().double().cpu().reshape(-1)[0].item())
-        forces = res["forces"].detach().double().cpu().squeeze(0).tolist()
+        # Single-structure output is (N, 3) with no batch dim — do not squeeze.
+        forces = res["forces"].detach().double().cpu().tolist()
         out[name] = {"energy": energy, "forces": forces}
     return out
 

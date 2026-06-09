@@ -21,7 +21,7 @@ DRY_RUN=1 bash scripts/gpu_validate.sh
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `CUDA_INDEX` | `https://download.pytorch.org/whl/cu126` | Pick the channel matching your driver. torch 2.12 defaults to CUDA 13; if a `cu126` wheel is unavailable for a version, that leg reports `INSTALL-FAIL` — re-run that version with the appropriate `--index-url`. |
-| `PYTHON` | `python3.12` | 3.12 is required because `nvalchemiops`'s torch extra activates only at Python ≥ 3.12 — this is the floor where the coupling actually exists. |
+| `PYTHON` | `python3.12` | aimnet itself supports Python ≥ 3.11, but validation defaults to 3.12 because `nvalchemiops`'s torch extra activates only at Python ≥ 3.12 — i.e. 3.12+ is where the coupling under test actually engages. |
 | `TORCH_VERSIONS` | `2.8 2.9 2.10 2.11 2.12` | Space-separated minor versions. |
 | `BASELINE` | `2.9` | torch version used as the energy/force reference. |
 | `ENERGY_ATOL` | `1e-5` | Hartree. Matches the repo's `ENERGY_ATOL`. |

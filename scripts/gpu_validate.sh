@@ -30,6 +30,7 @@ DRY_RUN="${DRY_RUN:-0}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORKDIR="$(mktemp -d)"
 mkdir -p "$RESULTS"
+RESULTS="$(cd "$RESULTS" && pwd)"  # absolutize so per-venv dumps and compare agree
 STATUS="$RESULTS/status.json"
 
 # Build status.json incrementally with python (always available via base env).
@@ -52,11 +53,14 @@ echo "{}" > "$STATUS"
 for V in $TORCH_VERSIONS; do
     echo "::: torch $V :::"
     VENV="$WORKDIR/$V"
+    # `uv pip install` honors VIRTUAL_ENV; `uv run` does NOT, so execute the
+    # suite/dump via the venv's own python directly. pytest is installed into
+    # the venv explicitly (the [ase] extra does not pull the dev group).
     install_cmd="uv venv --python $PYTHON $VENV && \
         VIRTUAL_ENV=$VENV uv pip install 'torch==$V.*' --index-url $CUDA_INDEX && \
-        VIRTUAL_ENV=$VENV uv pip install -e '$REPO[ase]'"
-    suite_cmd="VIRTUAL_ENV=$VENV uv run --no-sync pytest '$REPO/tests' -m gpu"
-    dump_cmd="VIRTUAL_ENV=$VENV uv run --no-sync python -m aimnet.validation.gpu_observables --out '$RESULTS/$V.json'"
+        VIRTUAL_ENV=$VENV uv pip install -e '$REPO[ase]' pytest"
+    suite_cmd="'$VENV/bin/python' -m pytest '$REPO/tests' -m gpu"
+    dump_cmd="'$VENV/bin/python' -m aimnet.validation.gpu_observables --out '$RESULTS/$V.json'"
 
     if [ "$DRY_RUN" = "1" ]; then
         echo "  install: $install_cmd"
@@ -84,6 +88,8 @@ if [ "$DRY_RUN" = "1" ]; then
 fi
 
 echo "::: comparing against baseline $BASELINE :::"
-VIRTUAL_ENV="$WORKDIR/$BASELINE" uv run --no-sync python -m aimnet.validation.compare_observables \
-    "$RESULTS" --baseline "$BASELINE" --energy-atol "$ENERGY_ATOL" --force-atol "$FORCE_ATOL"
+# compare_observables is version-agnostic stdlib living in the aimnet package;
+# run it from the repo's own environment (always has aimnet installed).
+(cd "$REPO" && uv run --no-sync python -m aimnet.validation.compare_observables \
+    "$RESULTS" --baseline "$BASELINE" --energy-atol "$ENERGY_ATOL" --force-atol "$FORCE_ATOL")
 exit $?
