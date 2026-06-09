@@ -12,31 +12,31 @@
         <meta name="author" content="Roman Zubatyuk">
       
       
-        <link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/external/openmm/">
+        <link rel="canonical" href="https://isayevlab.github.io/aimnetcentral/gpu_validation/">
       
       
-        <link rel="prev" href="../sella/">
+        <link rel="prev" href="../cli/">
       
       
-        <link rel="next" href="../amber/">
+        <link rel="next" href="../api/">
       
       
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
     
     
       
-        <title>OpenMM (openmm-ml) - AIMNetCentral</title>
+        <title>GPU Validation - AIMNetCentral</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.618322db.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -55,9 +55,9 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -82,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#openmm-openmm-ml" class="md-skip">
+        <a href="#gpu-validation-torch-warp-lang-nvalchemiops-coupling" class="md-skip">
           Skip to content
         </a>
       
@@ -98,7 +98,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="AIMNetCentral" class="md-header__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
+    <a href=".." title="AIMNetCentral" class="md-header__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -118,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              OpenMM (openmm-ml)
+              GPU Validation
             
           </span>
         </div>
@@ -236,7 +236,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="AIMNetCentral" class="md-nav__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
+    <a href=".." title="AIMNetCentral" class="md-nav__button md-logo" aria-label="AIMNetCentral" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -266,7 +266,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -293,7 +293,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting_started/" class="md-nav__link">
+      <a href="../getting_started/" class="md-nav__link">
         
   
   
@@ -367,7 +367,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../models/guide/" class="md-nav__link">
+      <a href="../models/guide/" class="md-nav__link">
         
   
   
@@ -395,7 +395,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../models/architecture/" class="md-nav__link">
+      <a href="../models/architecture/" class="md-nav__link">
         
   
   
@@ -423,7 +423,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../models/aimnet2/" class="md-nav__link">
+      <a href="../models/aimnet2/" class="md-nav__link">
         
   
   
@@ -451,7 +451,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../models/aimnet2_b973c/" class="md-nav__link">
+      <a href="../models/aimnet2_b973c/" class="md-nav__link">
         
   
   
@@ -479,7 +479,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../models/aimnet2_2025/" class="md-nav__link">
+      <a href="../models/aimnet2_2025/" class="md-nav__link">
         
   
   
@@ -507,7 +507,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../models/aimnet2nse/" class="md-nav__link">
+      <a href="../models/aimnet2nse/" class="md-nav__link">
         
   
   
@@ -535,7 +535,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../models/aimnet2pd/" class="md-nav__link">
+      <a href="../models/aimnet2pd/" class="md-nav__link">
         
   
   
@@ -563,7 +563,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../models/aimnet2_rxn/" class="md-nav__link">
+      <a href="../models/aimnet2_rxn/" class="md-nav__link">
         
   
   
@@ -645,7 +645,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/single_point/" class="md-nav__link">
+      <a href="../tutorials/single_point/" class="md-nav__link">
         
   
   
@@ -673,7 +673,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/geometry_optimization/" class="md-nav__link">
+      <a href="../tutorials/geometry_optimization/" class="md-nav__link">
         
   
   
@@ -701,7 +701,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/molecular_dynamics/" class="md-nav__link">
+      <a href="../tutorials/molecular_dynamics/" class="md-nav__link">
         
   
   
@@ -729,7 +729,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/periodic_systems/" class="md-nav__link">
+      <a href="../tutorials/periodic_systems/" class="md-nav__link">
         
   
   
@@ -757,7 +757,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/batch_processing/" class="md-nav__link">
+      <a href="../tutorials/batch_processing/" class="md-nav__link">
         
   
   
@@ -785,7 +785,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/performance/" class="md-nav__link">
+      <a href="../tutorials/performance/" class="md-nav__link">
         
   
   
@@ -813,7 +813,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/hugging_face/" class="md-nav__link">
+      <a href="../tutorials/hugging_face/" class="md-nav__link">
         
   
   
@@ -895,7 +895,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../advanced/open_shell/" class="md-nav__link">
+      <a href="../advanced/open_shell/" class="md-nav__link">
         
   
   
@@ -923,7 +923,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../advanced/conformer_search/" class="md-nav__link">
+      <a href="../advanced/conformer_search/" class="md-nav__link">
         
   
   
@@ -951,7 +951,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../advanced/reaction_paths/" class="md-nav__link">
+      <a href="../advanced/reaction_paths/" class="md-nav__link">
         
   
   
@@ -979,7 +979,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../advanced/intermolecular_interactions/" class="md-nav__link">
+      <a href="../advanced/intermolecular_interactions/" class="md-nav__link">
         
   
   
@@ -1007,7 +1007,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../advanced/transition_metal_catalysis/" class="md-nav__link">
+      <a href="../advanced/transition_metal_catalysis/" class="md-nav__link">
         
   
   
@@ -1035,7 +1035,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../advanced/charged_systems/" class="md-nav__link">
+      <a href="../advanced/charged_systems/" class="md-nav__link">
         
   
   
@@ -1043,6 +1043,312 @@
     
   
     Charged Systems
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    External Packages
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    External Packages
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../external/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../external/ase/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ASE
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../external/pysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    pysisyphus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../external/torch-sim/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TorchSim
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../external/sella/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sella
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../external/openmm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OpenMM (openmm-ml)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../external/amber/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AMBER (torchani-amber)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../external/ams/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SCM AMS (MLPotential)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../external/orca/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ORCA (ExtOpt)
   
 
     
@@ -1080,17 +1386,17 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
-          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
             
   
   
   <span class="md-ellipsis">
     
   
-    External Packages
+    Reference
   
 
     
@@ -1101,12 +1407,12 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_6">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
-    External Packages
+    Reference
   
 
           </label>
@@ -1119,14 +1425,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../calculator/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Overview
+    Calculator API
   
 
     
@@ -1147,14 +1453,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../ase/" class="md-nav__link">
+      <a href="../long_range/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    ASE
+    Long-Range Methods
   
 
     
@@ -1175,14 +1481,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../pysis/" class="md-nav__link">
+      <a href="../model_format/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    pysisyphus
+    Model Format
   
 
     
@@ -1203,14 +1509,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../torch-sim/" class="md-nav__link">
+      <a href="../train/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    TorchSim
+    Training
   
 
     
@@ -1231,14 +1537,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../sella/" class="md-nav__link">
+      <a href="../cli/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Sella
+    CLI Tools
   
 
     
@@ -1275,7 +1581,7 @@
   <span class="md-ellipsis">
     
   
-    OpenMM (openmm-ml)
+    GPU Validation
   
 
     
@@ -1293,7 +1599,7 @@
   <span class="md-ellipsis">
     
   
-    OpenMM (openmm-ml)
+    GPU Validation
   
 
     
@@ -1319,10 +1625,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#install" class="md-nav__link">
+  <a href="#running-it" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Install
+        Running it
       
     </span>
   </a>
@@ -1330,10 +1636,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
+  <a href="#configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Quick start
+        Configuration
       
     </span>
   </a>
@@ -1341,54 +1647,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#qmmm-mixed-system" class="md-nav__link">
+  <a href="#reading-the-matrix" class="md-nav__link">
     <span class="md-ellipsis">
       
-        QM/MM (mixed system)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#charge-and-multiplicity" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Charge and multiplicity
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#periodic-systems" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Periodic systems
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#mechanism" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Mechanism
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#caveats" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Caveats
+        Reading the matrix
       
     </span>
   </a>
@@ -1399,312 +1661,6 @@
   
 </nav>
       
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../amber/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    AMBER (torchani-amber)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../ams/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    SCM AMS (MLPotential)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../orca/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    ORCA (ExtOpt)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
-        
-          
-          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Reference
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_7">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Reference
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../calculator/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Calculator API
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../long_range/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Long-Range Methods
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../model_format/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Model Format
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../train/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Training
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../cli/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    CLI Tools
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../gpu_validation/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    GPU Validation
-  
-
-    
-  </span>
-  
-  
-
-      </a>
     </li>
   
 
@@ -1771,7 +1727,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/" class="md-nav__link">
+      <a href="../api/" class="md-nav__link">
         
   
   
@@ -1799,7 +1755,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/calculators/" class="md-nav__link">
+      <a href="../api/calculators/" class="md-nav__link">
         
   
   
@@ -1827,7 +1783,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/modules/" class="md-nav__link">
+      <a href="../api/modules/" class="md-nav__link">
         
   
   
@@ -1855,7 +1811,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/data/" class="md-nav__link">
+      <a href="../api/data/" class="md-nav__link">
         
   
   
@@ -1883,7 +1839,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/config/" class="md-nav__link">
+      <a href="../api/config/" class="md-nav__link">
         
   
   
@@ -1938,10 +1894,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#install" class="md-nav__link">
+  <a href="#running-it" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Install
+        Running it
       
     </span>
   </a>
@@ -1949,10 +1905,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
+  <a href="#configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Quick start
+        Configuration
       
     </span>
   </a>
@@ -1960,54 +1916,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#qmmm-mixed-system" class="md-nav__link">
+  <a href="#reading-the-matrix" class="md-nav__link">
     <span class="md-ellipsis">
       
-        QM/MM (mixed system)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#charge-and-multiplicity" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Charge and multiplicity
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#periodic-systems" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Periodic systems
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#mechanism" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Mechanism
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#caveats" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Caveats
+        Reading the matrix
       
     </span>
   </a>
@@ -2034,50 +1946,68 @@
   
 
 
-<h1 id="openmm-openmm-ml">OpenMM (openmm-ml)<a class="headerlink" href="#openmm-openmm-ml" title="Permanent link">&para;</a></h1>
-<p><strong>Status: supported.</strong></p>
-<p><a href="https://github.com/openmm/openmm-ml"><code>openmm-ml</code></a> ships a built-in <code>AIMNet2PotentialImpl</code> that wraps <code>aimnet.calculators.AIMNet2Calculator</code> behind OpenMM's <code>MLPotential</code> API. The integration uses <code>openmm.PythonForce</code> -- a Python callback per step -- so it does <strong>not</strong> require a TorchScript export.</p>
-<h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>aimnet<span class="w"> </span>openmm<span class="w"> </span>openmmml
+<h1 id="gpu-validation-torch-warp-lang-nvalchemiops-coupling">GPU Validation (torch / warp-lang / nvalchemiops coupling)<a class="headerlink" href="#gpu-validation-torch-warp-lang-nvalchemiops-coupling" title="Permanent link">&para;</a></h1>
+<p>The CPU CI matrix verifies torch-core API and CPU numerics across PyTorch 2.8–2.12, but it cannot validate three GPU-only concerns: that <code>warp-lang</code> and <code>nvalchemiops</code> install coherently with each torch version, that the Warp custom op kernels execute, and that full-model energies/forces stay reproducible across the range. This manual tool covers them on a CUDA machine.</p>
+<h2 id="running-it">Running it<a class="headerlink" href="#running-it" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>make<span class="w"> </span>gpu-validate
 </code></pre></div>
-<p>The PyPI distribution name is <code>openmmml</code> (no hyphen). Conda-forge ships the same project as <code>openmm-ml</code>.</p>
-<h2 id="quick-start">Quick start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">openmm.app</span><span class="w"> </span><span class="kn">import</span> <span class="n">Topology</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">openmmml</span><span class="w"> </span><span class="kn">import</span> <span class="n">MLPotential</span>
-
-<span class="n">potential</span> <span class="o">=</span> <span class="n">MLPotential</span><span class="p">(</span><span class="s1">&#39;aimnet2&#39;</span><span class="p">)</span>
-<span class="n">system</span> <span class="o">=</span> <span class="n">potential</span><span class="o">.</span><span class="n">createSystem</span><span class="p">(</span><span class="n">topology</span><span class="p">)</span>
+<p>This loops over PyTorch 2.8, 2.9, 2.10, 2.11, 2.12. For each it creates a fresh virtualenv, installs a <strong>resolver-coherent</strong> environment (the matching CUDA torch wheel and its <code>triton</code>, plus <code>aimnet</code> + <code>warp-lang</code> + <code>nvalchemiops</code>), runs <code>pytest -m gpu</code>, and computes deterministic energies/forces for a fixed set of systems (water, methane, caffeine, a periodic spiro crystal). A same-run torch 2.9 baseline is then used to diff every other version.</p>
+<p>Inspect the commands without running anything:</p>
+<div class="highlight"><pre><span></span><code><span class="nv">DRY_RUN</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>bash<span class="w"> </span>scripts/gpu_validate.sh
 </code></pre></div>
-<h2 id="qmmm-mixed-system">QM/MM (mixed system)<a class="headerlink" href="#qmmm-mixed-system" title="Permanent link">&para;</a></h2>
-<p><code>createMixedSystem</code> lets you replace a subset of atoms with the AIMNet2 potential while keeping the rest of the system on a classical force field:</p>
-<div class="highlight"><pre><span></span><code><span class="n">mlAtoms</span> <span class="o">=</span> <span class="p">[</span><span class="o">...</span><span class="p">]</span>   <span class="c1"># atom indices belonging to the ML region</span>
-<span class="n">system</span> <span class="o">=</span> <span class="n">potential</span><span class="o">.</span><span class="n">createMixedSystem</span><span class="p">(</span><span class="n">topology</span><span class="p">,</span> <span class="n">mmSystem</span><span class="p">,</span> <span class="n">mlAtoms</span><span class="p">)</span>
-</code></pre></div>
-<h2 id="charge-and-multiplicity">Charge and multiplicity<a class="headerlink" href="#charge-and-multiplicity" title="Permanent link">&para;</a></h2>
-<p>Pass via the <code>MLPotential</code> arguments. They are forwarded to the AIMNet2 calculator through the <code>args</code> dict:</p>
-<div class="highlight"><pre><span></span><code><span class="n">system</span> <span class="o">=</span> <span class="n">potential</span><span class="o">.</span><span class="n">createSystem</span><span class="p">(</span><span class="n">topology</span><span class="p">,</span> <span class="n">charge</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">multiplicity</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-</code></pre></div>
-<p>Defaults: <code>charge=0</code>, <code>multiplicity=1</code>.</p>
-<p>!!! warning "Closed-shell only" <code>MLPotential('aimnet2')</code> is hard-wired upstream to the wb97m-d3 closed-shell model (<code>is_nse=False</code>). The <code>multiplicity</code> argument is silently consumed but does <strong>not</strong> select an open-shell PES -- setting <code>multiplicity=2</code> for a doublet returns the closed-shell answer. For radicals / open-shell species use the AIMNet2-NSE family directly via the in-tree <a href="../ase/"><code>AIMNet2ASE</code></a> calculator; NSE is not exposed by <code>openmmml</code> today.</p>
-<h2 id="periodic-systems">Periodic systems<a class="headerlink" href="#periodic-systems" title="Permanent link">&para;</a></h2>
-<p><code>AIMNet2PotentialImpl</code> automatically passes the periodic box vectors to the calculator when the topology has them set (<code>topology.getPeriodicBoxVectors() is not None</code>). The <code>PythonForce</code> is flagged with <code>setUsesPeriodicBoundaryConditions(True)</code> in that case.</p>
-<h2 id="mechanism">Mechanism<a class="headerlink" href="#mechanism" title="Permanent link">&para;</a></h2>
-<p>Internally:</p>
-<ol>
-<li><code>MLPotential('aimnet2')</code> constructs <code>AIMNet2Calculator('aimnet2')</code> -- the published wb97m-d3 model is hard-wired upstream.</li>
-<li>Each step OpenMM calls a Python function that:</li>
-<li>reads positions (nm) from the simulation <code>State</code>, converts to A,</li>
-<li>calls <code>model({"coord", "numbers", "charge", "mult", "cell"?}, forces=True)</code>,</li>
-<li>converts energy eV -&gt; kJ/mol and forces eV/A -&gt; kJ/mol/nm,</li>
-<li>returns <code>(energy, forces)</code>.</li>
-<li>OpenMM consumes those via <code>PythonForce</code>.</li>
-</ol>
-<p>Because this runs in Python on every MD step, performance is bounded by the same eager-mode AIMNet2 throughput you get from <a href="../ase/"><code>AIMNet2ASE</code></a>.</p>
-<h2 id="caveats">Caveats<a class="headerlink" href="#caveats" title="Permanent link">&para;</a></h2>
+<h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CUDA_INDEX</code></td>
+<td><code>https://download.pytorch.org/whl/cu126</code></td>
+<td>Pick the channel matching your driver. torch 2.12 defaults to CUDA 13; if a <code>cu126</code> wheel is unavailable for a version, that leg reports <code>INSTALL-FAIL</code> — re-run that version with the appropriate <code>--index-url</code>.</td>
+</tr>
+<tr>
+<td><code>PYTHON</code></td>
+<td><code>python3.12</code></td>
+<td>aimnet itself supports Python ≥ 3.11, but validation defaults to 3.12 because <code>nvalchemiops</code>'s torch extra activates only at Python ≥ 3.12 — i.e. 3.12+ is where the coupling under test actually engages.</td>
+</tr>
+<tr>
+<td><code>TORCH_VERSIONS</code></td>
+<td><code>2.8 2.9 2.10 2.11 2.12</code></td>
+<td>Space-separated minor versions.</td>
+</tr>
+<tr>
+<td><code>BASELINE</code></td>
+<td><code>2.9</code></td>
+<td>torch version used as the energy/force reference.</td>
+</tr>
+<tr>
+<td><code>ENERGY_ATOL</code></td>
+<td><code>1e-5</code></td>
+<td>Hartree. Matches the repo's <code>ENERGY_ATOL</code>.</td>
+</tr>
+<tr>
+<td><code>FORCE_ATOL</code></td>
+<td><code>1e-4</code></td>
+<td>Hartree/Å. Looser than <code>FORCE_ATOL=1e-5</code> to absorb legitimate cross-version GPU reduction-order variation; tighten if your hardware is stable.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="reading-the-matrix">Reading the matrix<a class="headerlink" href="#reading-the-matrix" title="Permanent link">&para;</a></h2>
+<p>Each row is one torch version with <code>install</code>, <code>gpu-suite</code>, <code>maxDE</code>, <code>maxDF</code>, and a verdict:</p>
 <ul>
-<li><strong>Model coverage in this engine</strong>: only the wb97m-d3 model is exposed upstream as <code>MLPotential('aimnet2')</code>. Other variants (B97-3c, NSE, rxn) require per-family changes upstream, not just a model-name string -- e.g. AIMNet2-rxn has <code>supports_charged_systems=False</code> and a learned energy scale that makes cross-family <code>createMixedSystem</code> energies meaningless. Exposing another variant in <code>openmmml</code> is a per-family contract, not a one-line change.</li>
-<li>Performance is the eager Python path.</li>
+<li><code>PASS</code> — installs, suite green, energies/forces within tolerance of baseline.</li>
+<li><code>BASELINE</code> — the reference version.</li>
+<li><code>INSTALL-FAIL</code> — the coherent env did not install (often the CUDA channel; sometimes a real warp/nvalchemiops-vs-torch break — the signal this tool exists to find).</li>
+<li><code>SUITE-FAIL</code> — <code>pytest -m gpu</code> failed.</li>
+<li><code>DRIFT</code> — energies or forces diverged beyond tolerance.</li>
+<li><code>NO-RESULTS</code> — installed but the observables dump did not produce output.</li>
 </ul>
+<p>A nonzero exit code means at least one leg failed. Paste the matrix into the release or PR note as the GPU-side evidence for the supported range. The real <code>aimnet2</code> model downloads from GCS on first use, so the box needs network (or a pre-populated <code>~/.cache/aimnet</code>).</p>
 
 
 
@@ -2127,12 +2057,12 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["search.highlight", "search.suggest", "content.code.copy"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["search.highlight", "search.suggest", "content.code.copy"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
       
-        <script src="../../javascripts/mathjax.js"></script>
+        <script src="../javascripts/mathjax.js"></script>
       
         <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
       
