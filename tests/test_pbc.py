@@ -1143,6 +1143,7 @@ class TestNvAlchemiCoulombBackend:
         assert torch.isfinite(res["hessian"]).all()
         assert res["hessian"].abs().sum() > 0
 
+    @pytest.mark.slow
     @pytest.mark.parametrize("method", ["ewald", "pme"])
     def test_fd_hessian_matches_energy_fd(self, pbc_crystal_small, device, method):
         """The FD-of-forces full-periodic block equals the central-FD-of-energy Hessian.
