@@ -191,3 +191,6 @@ PLANS.md
 # AIMNet Hessian/optimization run artifacts
 hess_calc_cyc_*.h5
 final_geometry.xyz
+
+# GPU validation tool output (transient)
+gpu-validation-results/

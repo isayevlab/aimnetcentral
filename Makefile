@@ -17,6 +17,10 @@ test: ## Test the code with pytest (parallel execution)
 	@echo "🚀 Testing code: Running pytest"
 	@uv run pytest -n auto -m "not gpu and not network" --cov --cov-config=pyproject.toml --cov-report=xml
 
+.PHONY: gpu-validate
+gpu-validate: ## Validate torch/warp-lang/nvalchemiops coupling across torch 2.8-2.12 on a CUDA box
+	@bash scripts/gpu_validate.sh
+
 .PHONY: typecheck
 typecheck: ## Run mypy type checking (not in CI)
 	@echo "🚀 Type checking: Running mypy"
