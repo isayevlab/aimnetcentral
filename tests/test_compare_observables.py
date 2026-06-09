@@ -71,3 +71,17 @@ def test_load_results_from_dir(tmp_path):
     (tmp_path / "status.json").write_text(json.dumps({"2.9": {"install": "ok", "gpu_suite": "ok"}}))
     loaded = C.load_results(tmp_path)
     assert "2.9" in loaded and "status" not in loaded
+
+
+def test_gpu_observables_importable_and_guards_cuda(monkeypatch, tmp_path):
+    import torch
+
+    from aimnet.validation import gpu_observables as G
+
+    # versions dict always includes torch, regardless of device
+    assert "torch" in G.resolved_versions()
+
+    # main() must refuse to run without CUDA rather than crash cryptically
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    with pytest.raises(SystemExit):
+        G.main(["--out", str(tmp_path / "x.json")])
