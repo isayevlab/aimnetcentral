@@ -72,6 +72,7 @@ AIMNet2Calculator(
     device: str | None = None,
     compile_model: bool = False,
     compile_kwargs: dict | None = None,
+    cache_static: bool = False,
     train: bool = False,
     ensemble_member: int = 0,
     revision: str | None = None,
@@ -168,6 +169,22 @@ calc = AIMNet2Calculator("aimnet2", compile_model=True, compile_kwargs={"mode": 
 ```
 
 See [torch.compile documentation](https://pytorch.org/docs/stable/generated/torch.compile.html) for available options.
+
+#### `cache_static`
+
+Opt-in cache for exact repeated static CUDA inputs. Default: `False`.
+
+When enabled, the calculator can reuse calculator-built neighbor matrices and detached external DFTD3 energy/force terms for repeated calls with the same resident CUDA `coord` and `numbers` tensors. The cache key tracks tensor identity, storage pointer, shape, stride, and PyTorch's tensor version counter, so ordinary in-place coordinate or species changes invalidate the cache.
+
+Charge and multiplicity are intentionally not part of this geometry cache key. This allows same-geometry property grids, for example AIMNet2-NSE or cDFT-style calculations over different charge or multiplicity settings, to reuse geometry-dependent work while the model still recomputes charge-dependent outputs.
+
+The cache is bypassed for CPU inputs, periodic inputs, Hessian calls, stress calls, training mode, caller-provided `mol_idx`, caller-provided `nbmat`, and host/NumPy inputs that are copied to CUDA inside the calculator. It does not cache model outputs, Coulomb terms, or moving-geometry neighbor lists.
+
+```python
+calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cache_static=True)
+result_q0 = calc({"coord": coord_cuda, "numbers": numbers_cuda, "charge": 0.0}, forces=True)
+result_q1 = calc({"coord": coord_cuda, "numbers": numbers_cuda, "charge": 1.0}, forces=True)
+```
 
 #### `train`
 
