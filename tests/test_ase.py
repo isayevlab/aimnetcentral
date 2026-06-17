@@ -1,9 +1,11 @@
 """Tests for ASE calculator interface."""
 
 import warnings
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
+import torch
 from conftest import CAFFEINE_FILE, CIF_SPIRO
 
 # All tests in this module require ASE
@@ -11,6 +13,34 @@ pytestmark = pytest.mark.ase
 
 MODELS = ("aimnet2", "aimnet2_b973c")
 NSE_MODEL = "aimnet2nse"
+
+
+class _FakeASEBaseCalc:
+    device = "cpu"
+    keys_in = {"coord": torch.float32}
+    is_nse = False
+
+    def __init__(self):
+        self.model = SimpleNamespace(_metadata=None)
+        self.calls = []
+
+    def __call__(self, data, *, forces=False, stress=False, validate_species=True):
+        self.calls.append(
+            {"forces": bool(forces), "stress": bool(stress), "validate_species": bool(validate_species)}
+        )
+        coord = data["coord"]
+        if coord.ndim == 2:
+            coord = coord.unsqueeze(0)
+        batch, natoms = coord.shape[:2]
+        result = {
+            "energy": torch.zeros(batch, dtype=torch.float64),
+            "charges": torch.zeros((batch, natoms), dtype=torch.float32),
+        }
+        if forces:
+            result["forces"] = torch.zeros((batch, natoms, 3), dtype=torch.float32)
+        if stress:
+            result["stress"] = torch.zeros((batch, 3, 3), dtype=torch.float32)
+        return result
 
 
 class TestBasicCalculator:
@@ -57,6 +87,37 @@ class TestBasicCalculator:
         dm = atoms.get_dipole_moment()
         assert dm.shape == (3,)
         assert np.isfinite(dm).all()
+
+    def test_energy_then_forces_default_runs_second_calculation(self):
+        """Default ASE energy-only requests do not precompute forces."""
+        ase = pytest.importorskip("ase", reason="ASE not installed")
+
+        from aimnet.calculators import AIMNet2ASE
+
+        base = _FakeASEBaseCalc()
+        atoms = ase.Atoms("H2O", positions=[[0, 0, 0], [0, 0, 1], [0, 1, 0]])
+        atoms.calc = AIMNet2ASE(base)
+
+        atoms.get_potential_energy()
+        atoms.get_forces()
+
+        assert [call["forces"] for call in base.calls] == [False, True]
+
+    def test_compute_forces_for_energy_serves_followup_force_request(self):
+        """Opt-in ASE force superset avoids duplicate energy->forces calculation."""
+        ase = pytest.importorskip("ase", reason="ASE not installed")
+
+        from aimnet.calculators import AIMNet2ASE
+
+        base = _FakeASEBaseCalc()
+        atoms = ase.Atoms("H2O", positions=[[0, 0, 0], [0, 0, 1], [0, 1, 0]])
+        atoms.calc = AIMNet2ASE(base, compute_forces_for_energy=True)
+
+        atoms.get_potential_energy()
+        forces = atoms.get_forces()
+
+        assert [call["forces"] for call in base.calls] == [True]
+        assert forces.shape == (len(atoms), 3)
 
 
 class TestForces:

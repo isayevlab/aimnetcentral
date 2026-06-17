@@ -2,6 +2,7 @@ import copy
 import math
 import os
 import re
+import weakref
 import warnings
 from collections.abc import Mapping
 from types import MappingProxyType
@@ -135,6 +136,8 @@ class AdaptiveNeighborList:
         pbc: Tensor | None = None,
         batch_idx: Tensor | None = None,
         fill_value: int | None = None,
+        max_atoms_per_system: int | None = None,
+        cutoff_padding: float = 0.0,
     ) -> tuple[Tensor, Tensor, Tensor | None]:
         """Compute neighbor list with automatic buffer adjustment.
 
@@ -150,6 +153,12 @@ class AdaptiveNeighborList:
             Batch index for each atom, shape (N,). None for single system.
         fill_value : int | None
             Fill value for padding. Default is N (number of atoms).
+        max_atoms_per_system : int | None
+            Host-known maximum atoms in any system. Forwarded to nvalchemiops
+            so batched neighbor-list paths can avoid recomputing this metadata.
+        cutoff_padding : float
+            Extra Angstroms added to this list's cutoff for conservative
+            Verlet-style neighbor supersets.
 
         Returns
         -------
@@ -165,35 +174,51 @@ class AdaptiveNeighborList:
         if fill_value is None:
             fill_value = N
         _pbc = cell is not None
+        effective_cutoff = self.cutoff + float(cutoff_padding)
+        fixed_single_width = (
+            not _pbc
+            and max_atoms_per_system is not None
+            and N == int(max_atoms_per_system)
+            and N <= 64
+        )
+        kwargs: dict[str, Any] = {}
+        if max_atoms_per_system is not None:
+            kwargs["max_atoms_per_system"] = int(max_atoms_per_system)
 
         while True:
+            call_max_neighbors = max(1, N - 1) if fixed_single_width else self.max_neighbors
             try:
                 if _pbc:
                     nbmat, num_neighbors, shifts = neighbor_list(
                         positions=positions,
-                        cutoff=self.cutoff,
+                        cutoff=effective_cutoff,
                         cell=cell,
                         pbc=pbc,
                         batch_idx=batch_idx,
-                        max_neighbors=self.max_neighbors,
+                        max_neighbors=call_max_neighbors,
                         half_fill=False,
                         fill_value=fill_value,
+                        **kwargs,
                     )
                 else:
                     nbmat, num_neighbors = neighbor_list(
                         positions=positions,
-                        cutoff=self.cutoff,
+                        cutoff=effective_cutoff,
                         batch_idx=batch_idx,
-                        max_neighbors=self.max_neighbors,
+                        max_neighbors=call_max_neighbors,
                         half_fill=False,
                         fill_value=fill_value,
                         method="batch_naive",
+                        **kwargs,
                     )
                     shifts = None
             except NeighborOverflowError:
                 # Increase buffer by 1.5x and retry
                 self.max_neighbors = self._round_to_16(int(self.max_neighbors * 1.5))
                 continue
+
+            if fixed_single_width:
+                return nbmat, num_neighbors, shifts
 
             # Get actual max neighbors from result
             actual_max = int(num_neighbors.max().item())
@@ -238,6 +263,20 @@ class AIMNet2Calculator:
         Whether to compile the model with torch.compile(). Default is False.
     compile_kwargs : dict | None
         Additional keyword arguments to pass to torch.compile(). Default is None.
+    cache_static : bool
+        Whether to cache calculator-built neighbor matrices and explicit
+        external DFTD3 terms for repeated static CUDA inputs. Default is False.
+        This opt-in cache is limited to exact reuse of the same non-periodic
+        2D input tensors and is bypassed for Hessian, stress, training,
+        caller-supplied ``mol_idx``, and caller-supplied ``nbmat``.
+    neighbor_skin : float
+        Verlet-style skin distance in Angstroms for reusing calculator-built
+        sparse neighbor matrices across small non-periodic CUDA coordinate
+        updates. Default is 0.0 (disabled). When enabled, neighbor lists are
+        built with ``cutoff + neighbor_skin`` and reused while every atom has
+        moved no more than ``neighbor_skin / 2`` from the rebuild geometry.
+        The path is bypassed for Hessian, stress, training, PBC,
+        caller-supplied ``mol_idx``, and caller-supplied ``nbmat``.
     train : bool
         Whether to enable training mode. Default is False (inference mode).
         When False, all model parameters have requires_grad=False, which
@@ -295,6 +334,8 @@ class AIMNet2Calculator:
         device: str | None = None,
         compile_model: bool = False,
         compile_kwargs: dict | None = None,
+        cache_static: bool = False,
+        neighbor_skin: float = 0.0,
         train: bool = False,
         ensemble_member: int = 0,
         revision: str | None = None,
@@ -444,6 +485,13 @@ class AIMNet2Calculator:
         else:
             self.cutoff_lr = None
         self.nb_threshold = nb_threshold
+        self.cache_static = bool(cache_static)
+        self.neighbor_skin = float(neighbor_skin)
+        if self.neighbor_skin < 0.0 or not math.isfinite(self.neighbor_skin):
+            raise ValueError("neighbor_skin must be a finite non-negative distance in Angstroms.")
+        self._static_nbmat_cache: dict[tuple[Any, ...], tuple[Any, Any, dict[str, Tensor]]] = {}
+        self._static_dftd3_cache: dict[tuple[Any, ...], tuple[Any, Any, dict[str, Any]]] = {}
+        self._neighbor_skin_cache: dict[str, Any] | None = None
 
         # Create adaptive neighbor list instances
         self._nblist = AdaptiveNeighborList(cutoff=self.cutoff)
@@ -469,7 +517,13 @@ class AIMNet2Calculator:
 
         # indicator if input was flattened
         self._batch: int | None = None
+        self._single_dense_batch = False
         self._max_mol_size: int = 0
+        self._nblist_max_atoms_per_system: int | None = None
+        self._mol_idx_pad_value: int | None = None
+        self._mol_sizes_host: tuple[int, ...] | None = None
+        self._static_input_cache_key: tuple[Any, ...] | None = None
+        self._static_input_cache_refs: tuple[Any, Any] | None = None
         # placeholder for tensors that require grad
         self._saved_for_grad: dict[str, Tensor] = {}
         # set flag of current Coulomb method
@@ -495,6 +549,8 @@ class AIMNet2Calculator:
                     param.requires_grad_(False)
 
         self._maybe_warn_family_mix((metadata or {}).get("family") if metadata else None)
+        if self.neighbor_skin > 0.0:
+            self._validate_neighbor_skin_supported()
 
     def __call__(self, *args, **kwargs) -> dict[str, Any]:
         return self.eval(*args, **kwargs)
@@ -561,6 +617,15 @@ class AIMNet2Calculator:
     def is_nse(self) -> bool:
         """Return True if the model supports spin-polarized charges (NSE, num_charge_channels=2)."""
         return getattr(self.model, "num_charge_channels", 1) == 2
+
+    def _validate_neighbor_skin_supported(self) -> None:
+        """Reject known unmasked neighbor consumers for cutoff+skin supersets."""
+        for module in self.model.modules():
+            if module.__class__.__name__ == "SRRep" and getattr(module, "cutoff_fn", "none") == "none":
+                raise ValueError(
+                    "neighbor_skin requires all neighbor-list consumers to mask by distance cutoff; "
+                    "found SRRep(cutoff_fn='none'), which would use cutoff+skin pairs as real interactions."
+                )
 
     @property
     def coulomb_method(self) -> str | None:
@@ -816,6 +881,7 @@ class AIMNet2Calculator:
 
         self._coulomb_method = method
         self._update_lr_nblists()
+        self._clear_static_nbmat_cache()
 
     def set_lr_cutoff(self, cutoff: float) -> None:
         """Set the unified long-range cutoff for all LR modules.
@@ -836,6 +902,7 @@ class AIMNet2Calculator:
         self._dftd3_cutoff = cutoff
         self.cutoff_lr = cutoff
         self._update_lr_nblists()
+        self._clear_static_nbmat_cache()
 
     def set_dftd3_cutoff(self, cutoff: float | None = None, smoothing_fraction: float | None = None) -> None:
         """Set DFTD3 cutoff and smoothing.
@@ -866,6 +933,7 @@ class AIMNet2Calculator:
         if self.external_dftd3 is not None:
             self.external_dftd3.set_smoothing(cutoff, smoothing_fraction)
         self._update_lr_nblists()
+        self._clear_static_nbmat_cache()
 
     def _validate_species_and_charge(self, data: dict[str, Any]) -> None:
         """Validate input elements and net charge against model metadata.
@@ -1006,19 +1074,38 @@ class AIMNet2Calculator:
             if dftd3_energy_graph:
                 data = self.external_dftd3(data, hessian=True)
             else:
-                result = self.external_dftd3(
+                cache_key = self._static_dftd3_cache_key(
                     data,
-                    compute_forces=forces,
-                    compute_virial=stress,
+                    forces=forces,
+                    stress=stress,
+                    hessian=hessian,
+                    dftd3_energy_graph=dftd3_energy_graph,
                 )
-                if forces or stress:
-                    data, dftd3_terms = result
+                cached = self._get_static_dftd3_cache(cache_key) if cache_key is not None else None
+                if cached is not None:
+                    data, dftd3_terms = self._apply_static_dftd3_cache(data, cached, forces=forces)
                 else:
-                    data = result
+                    data_before_dftd3 = dict(data)
+                    result = self.external_dftd3(
+                        data,
+                        compute_forces=forces,
+                        compute_virial=stress,
+                    )
+                    if forces or stress:
+                        data, dftd3_terms = result
+                    else:
+                        data = result
+                    if cache_key is not None:
+                        self._remember_static_dftd3(cache_key, data_before_dftd3, data, dftd3_terms)
 
         return data, _combine_external_terms(coulomb_terms, dftd3_terms)
 
     def prepare_input(self, data: dict[str, Any], *, hessian: bool = False) -> dict[str, Tensor]:
+        raw_data = data
+        self._static_input_cache_key = None
+        self._static_input_cache_refs = None
+        caller_had_mol_idx = raw_data.get("mol_idx") is not None
+        caller_had_nbmat = raw_data.get("nbmat") is not None
         data = self.to_input_tensors(data)
         data = self.mol_flatten(data, hessian=hessian)
         if data.get("cell") is not None and self._coulomb_method == "simple":
@@ -1033,14 +1120,376 @@ class AIMNet2Calculator:
         if data["coord"].ndim == 2:
             # Skip neighbor list calculation if already provided
             if "nbmat" not in data:
-                data = self.make_nbmat(data)
+                cache_key = self._static_nbmat_cache_key(
+                    raw_data,
+                    data,
+                    hessian=hessian,
+                    caller_had_mol_idx=caller_had_mol_idx,
+                    caller_had_nbmat=caller_had_nbmat,
+                )
+                self._static_input_cache_key = cache_key
+                self._static_input_cache_refs = self._static_tensor_refs(raw_data) if cache_key is not None else None
+                cached = self._get_static_nbmat_cache(cache_key, raw_data) if cache_key is not None else None
+                if cached is not None and "nbmat" in cached:
+                    data.update(cached)
+                else:
+                    skin_key = self._neighbor_skin_cache_key(
+                        raw_data,
+                        data,
+                        hessian=hessian,
+                        caller_had_mol_idx=caller_had_mol_idx,
+                        caller_had_nbmat=caller_had_nbmat,
+                    )
+                    skin_cached = self._get_neighbor_skin_cache(skin_key, data) if skin_key is not None else None
+                    if skin_cached is not None and "nbmat" in skin_cached:
+                        data.update(skin_cached)
+                    else:
+                        cutoff_padding = self.neighbor_skin if skin_key is not None else 0.0
+                        data = self.make_nbmat(data, cutoff_padding=cutoff_padding)
+                        if cache_key is not None:
+                            self._remember_static_nbmat(cache_key, raw_data, data)
+                        if skin_key is not None:
+                            self._remember_neighbor_skin_cache(skin_key, data)
             data = self.pad_input(data)
         return data
+
+    def _neighbor_skin_cache_key(
+        self,
+        raw_data: dict[str, Any],
+        data: dict[str, Tensor],
+        *,
+        hessian: bool,
+        caller_had_mol_idx: bool,
+        caller_had_nbmat: bool,
+    ) -> tuple[Any, ...] | None:
+        """Return a key for conservative moving-geometry neighbor reuse."""
+        if (
+            self.neighbor_skin <= 0.0
+            or getattr(self, "_train", False)
+            or hessian
+            or caller_had_mol_idx
+            or caller_had_nbmat
+            or data.get("cell") is not None
+            or data["coord"].ndim != 2
+            or torch.device(self.device).type != "cuda"
+            or self._max_mol_size != data["coord"].shape[0]
+        ):
+            return None
+
+        numbers_key = self._tensor_storage_key(raw_data.get("numbers")) or self._tensor_storage_key(
+            data.get("numbers")
+        )
+        if numbers_key is None:
+            return None
+
+        return (
+            "neighbor-skin-v1",
+            numbers_key,
+            int(data["coord"].shape[0]),
+            str(data["coord"].dtype),
+            str(data["coord"].device),
+            float(self.cutoff),
+            None if self.cutoff_lr is None else float(self.cutoff_lr),
+            self._coulomb_method,
+            None if self._coulomb_cutoff is None else float(self._coulomb_cutoff),
+            float(self._dftd3_cutoff),
+            float(self.neighbor_skin),
+            int(self._max_mol_size),
+            self._nblist_max_atoms_per_system,
+            self.external_coulomb is not None,
+            self.external_dftd3 is not None,
+            self._nblist_lr is not None,
+            self._nblist_coulomb is not None,
+            self._nblist_dftd3 is not None,
+        )
+
+    def _get_neighbor_skin_cache(
+        self,
+        cache_key: tuple[Any, ...],
+        data: dict[str, Tensor],
+    ) -> dict[str, Tensor] | None:
+        entry = self._neighbor_skin_cache
+        if entry is None or entry.get("key") != cache_key:
+            return None
+        ref_coord = entry.get("coord")
+        cached = entry.get("nbmat")
+        if not isinstance(ref_coord, Tensor) or not isinstance(cached, dict):
+            self._neighbor_skin_cache = None
+            return None
+        if ref_coord.shape != data["coord"].shape or ref_coord.device != data["coord"].device:
+            self._neighbor_skin_cache = None
+            return None
+        with torch.no_grad():
+            max_disp = torch.linalg.vector_norm(data["coord"] - ref_coord, dim=1).amax()
+            can_reuse = bool((max_disp <= (0.5 * self.neighbor_skin)).item())
+        if not can_reuse:
+            self._neighbor_skin_cache = None
+            return None
+        return cached
+
+    def _remember_neighbor_skin_cache(self, cache_key: tuple[Any, ...], data: dict[str, Tensor]) -> None:
+        nbmat_keys = (
+            "nbmat",
+            "shifts",
+            "nbmat_lr",
+            "shifts_lr",
+            "nbmat_coulomb",
+            "shifts_coulomb",
+            "nbmat_dftd3",
+            "shifts_dftd3",
+        )
+        cached = {key: data[key].detach() for key in nbmat_keys if isinstance(data.get(key), Tensor)}
+        if not cached:
+            return
+        self._neighbor_skin_cache = {
+            "key": cache_key,
+            "coord": data["coord"].detach().clone(),
+            "nbmat": cached,
+        }
+
+    def _static_nbmat_cache_key(
+        self,
+        raw_data: dict[str, Any],
+        data: dict[str, Tensor],
+        *,
+        hessian: bool,
+        caller_had_mol_idx: bool,
+        caller_had_nbmat: bool,
+    ) -> tuple[Any, ...] | None:
+        """Return a cache key for exact static CUDA neighbor-list reuse."""
+        if (
+            not self.cache_static
+            or hessian
+            or caller_had_mol_idx
+            or caller_had_nbmat
+            or data.get("cell") is not None
+            or data["coord"].ndim != 2
+            or torch.device(self.device).type != "cuda"
+        ):
+            return None
+
+        raw_coord = raw_data.get("coord")
+        raw_numbers = raw_data.get("numbers")
+        coord_key = self._tensor_identity_key(raw_coord)
+        numbers_key = self._tensor_identity_key(raw_numbers)
+        if coord_key is None or numbers_key is None:
+            return None
+
+        return (
+            "static-nbmat-v1",
+            coord_key,
+            numbers_key,
+            int(data["coord"].shape[0]),
+            float(self.cutoff),
+            None if self.cutoff_lr is None else float(self.cutoff_lr),
+            self._coulomb_method,
+            None if self._coulomb_cutoff is None else float(self._coulomb_cutoff),
+            float(self._dftd3_cutoff),
+            int(self._max_mol_size),
+            self._nblist_max_atoms_per_system,
+            self.external_coulomb is not None,
+            self.external_dftd3 is not None,
+            self._nblist_lr is not None,
+            self._nblist_coulomb is not None,
+            self._nblist_dftd3 is not None,
+        )
+
+    @staticmethod
+    def _tensor_identity_key(value: Any) -> tuple[Any, ...] | None:
+        if not isinstance(value, Tensor) or value.device.type != "cuda" or value.is_sparse:
+            return None
+        try:
+            version = int(value._version)
+        except RuntimeError:
+            return None
+        return (
+            id(value),
+            str(value.device),
+            str(value.dtype),
+            tuple(int(dim) for dim in value.shape),
+            tuple(int(stride) for stride in value.stride()),
+            int(value.data_ptr()),
+            int(value.storage_offset()),
+            version,
+        )
+
+    @staticmethod
+    def _tensor_storage_key(value: Any) -> tuple[Any, ...] | None:
+        if not isinstance(value, Tensor) or value.is_sparse:
+            return None
+        try:
+            version = int(value._version)
+        except RuntimeError:
+            return None
+        return (
+            "tensor-storage",
+            str(value.device),
+            str(value.dtype),
+            tuple(int(dim) for dim in value.shape),
+            tuple(int(stride) for stride in value.stride()),
+            int(value.data_ptr()),
+            int(value.storage_offset()),
+            version,
+        )
+
+    @staticmethod
+    def _static_tensor_refs(raw_data: dict[str, Any]) -> tuple[Any, Any] | None:
+        raw_coord = raw_data.get("coord")
+        raw_numbers = raw_data.get("numbers")
+        if not isinstance(raw_coord, Tensor) or not isinstance(raw_numbers, Tensor):
+            return None
+        return weakref.ref(raw_coord), weakref.ref(raw_numbers)
+
+    def _get_static_nbmat_cache(self, cache_key: tuple[Any, ...], raw_data: dict[str, Any]) -> dict[str, Tensor] | None:
+        entry = self._static_nbmat_cache.get(cache_key)
+        if entry is None:
+            return None
+        coord_ref, numbers_ref, cached = entry
+        if coord_ref() is not raw_data.get("coord") or numbers_ref() is not raw_data.get("numbers"):
+            self._static_nbmat_cache.pop(cache_key, None)
+            return None
+        return cached
+
+    def _remember_static_nbmat(
+        self,
+        cache_key: tuple[Any, ...],
+        raw_data: dict[str, Any],
+        data: dict[str, Tensor],
+    ) -> None:
+        raw_coord = raw_data.get("coord")
+        raw_numbers = raw_data.get("numbers")
+        if not isinstance(raw_coord, Tensor) or not isinstance(raw_numbers, Tensor):
+            return
+        nbmat_keys = (
+            "nbmat",
+            "shifts",
+            "nbmat_lr",
+            "shifts_lr",
+            "nbmat_coulomb",
+            "shifts_coulomb",
+            "nbmat_dftd3",
+            "shifts_dftd3",
+        )
+        cached = {key: data[key].detach() for key in nbmat_keys if isinstance(data.get(key), Tensor)}
+        if not cached:
+            return
+        if len(self._static_nbmat_cache) >= 8:
+            self._static_nbmat_cache.pop(next(iter(self._static_nbmat_cache)))
+        self._static_nbmat_cache[cache_key] = (weakref.ref(raw_coord), weakref.ref(raw_numbers), cached)
+
+    def _static_dftd3_cache_key(
+        self,
+        data: dict[str, Tensor],
+        *,
+        forces: bool,
+        stress: bool,
+        hessian: bool,
+        dftd3_energy_graph: bool,
+    ) -> tuple[Any, ...] | None:
+        if (
+            not getattr(self, "cache_static", False)
+            or getattr(self, "_train", False)
+            or stress
+            or hessian
+            or dftd3_energy_graph
+            or getattr(self, "_static_input_cache_key", None) is None
+            or getattr(self, "_static_input_cache_refs", None) is None
+            or self.external_dftd3 is None
+            or data.get("cell") is not None
+        ):
+            return None
+        return (
+            "static-dftd3-v1",
+            getattr(self, "_static_input_cache_key"),
+            bool(forces),
+            str(data["coord"].dtype),
+            str(data["coord"].device),
+            float(self.external_dftd3.s6),
+            float(self.external_dftd3.s8),
+            float(self.external_dftd3.a1),
+            float(self.external_dftd3.a2),
+            float(self.external_dftd3.smoothing_on),
+            float(self.external_dftd3.smoothing_off),
+            self.external_dftd3.key_out,
+        )
+
+    def _get_static_dftd3_cache(self, cache_key: tuple[Any, ...]) -> dict[str, Any] | None:
+        cache = getattr(self, "_static_dftd3_cache", {})
+        current_refs = getattr(self, "_static_input_cache_refs", None)
+        entry = cache.get(cache_key)
+        if entry is None or current_refs is None:
+            return None
+        coord_ref, numbers_ref, cached = entry
+        current_coord = current_refs[0]()
+        current_numbers = current_refs[1]()
+        if coord_ref() is not current_coord or numbers_ref() is not current_numbers:
+            cache.pop(cache_key, None)
+            return None
+        return cached
+
+    def _apply_static_dftd3_cache(
+        self,
+        data: dict[str, Tensor],
+        cached: dict[str, Any],
+        *,
+        forces: bool,
+    ) -> tuple[dict[str, Tensor], ExternalDerivativeTerms | None]:
+        assert self.external_dftd3 is not None
+        key_out = self.external_dftd3.key_out
+        energy_delta = cached["energy_delta"].to(device=data["coord"].device)
+        if key_out in data:
+            data[key_out] = data[key_out].double() + energy_delta.double()
+        else:
+            data[key_out] = energy_delta.double()
+
+        terms = None
+        if forces:
+            force = cached.get("forces")
+            terms = ExternalDerivativeTerms(forces=None if force is None else force.to(device=data["coord"].device))
+        return data, terms
+
+    def _remember_static_dftd3(
+        self,
+        cache_key: tuple[Any, ...],
+        data_before: dict[str, Tensor],
+        data_after: dict[str, Tensor],
+        terms: ExternalDerivativeTerms | None,
+    ) -> None:
+        current_refs = getattr(self, "_static_input_cache_refs", None)
+        if current_refs is None or self.external_dftd3 is None:
+            return
+        key_out = self.external_dftd3.key_out
+        energy_after = data_after.get(key_out)
+        if not isinstance(energy_after, Tensor):
+            return
+        energy_before = data_before.get(key_out)
+        if isinstance(energy_before, Tensor):
+            energy_delta = energy_after - energy_before.to(dtype=energy_after.dtype, device=energy_after.device)
+        else:
+            energy_delta = energy_after
+
+        cached: dict[str, Any] = {"energy_delta": energy_delta.detach()}
+        if terms is not None and isinstance(terms.forces, Tensor):
+            cached["forces"] = terms.forces.detach()
+        if len(self._static_dftd3_cache) >= 8:
+            self._static_dftd3_cache.pop(next(iter(self._static_dftd3_cache)))
+        self._static_dftd3_cache[cache_key] = (
+            current_refs[0],
+            current_refs[1],
+            cached,
+        )
+
+    def _clear_static_nbmat_cache(self) -> None:
+        self._static_nbmat_cache.clear()
+        self._static_dftd3_cache.clear()
+        self._neighbor_skin_cache = None
 
     def process_output(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         if data["coord"].ndim == 2:
             data = self.unpad_output(data)
         data = self.mol_unflatten(data)
+        if self._single_dense_batch:
+            data = self._squeeze_single_dense_output(data)
         data = self.keep_only(data)
         return data
 
@@ -1122,7 +1571,13 @@ class AIMNet2Calculator:
         """Snapshot mutable calculator state touched by nested eval-style calls."""
         shallow_attrs = (
             "_batch",
+            "_single_dense_batch",
             "_max_mol_size",
+            "_nblist_max_atoms_per_system",
+            "_mol_idx_pad_value",
+            "_mol_sizes_host",
+            "_static_input_cache_key",
+            "_static_input_cache_refs",
             "_saved_for_grad",
             "_coulomb_method",
             "_coulomb_cutoff",
@@ -1225,14 +1680,40 @@ class AIMNet2Calculator:
         """Flatten the input data for multiple molecules.
         Will not flatten for batched input and molecule size below threshold.
         """
+        self._single_dense_batch = False
+        self._nblist_max_atoms_per_system = None
+        self._mol_idx_pad_value = None
+        self._mol_sizes_host = None
         ndim = data["coord"].ndim
         if ndim == 2:
             self._batch = None
+            can_use_dense_single = (
+                not hessian
+                and "mol_idx" not in data
+                and "nbmat" not in data
+                and data.get("cell") is None
+                and torch.device(self.device).type == "cuda"
+                and self.nb_threshold > 0
+                and data["coord"].shape[0] <= self.nb_threshold
+            )
+            self._max_mol_size = data["coord"].shape[0]
+            if can_use_dense_single:
+                data["coord"] = data["coord"].unsqueeze(0)
+                data["numbers"] = data["numbers"].unsqueeze(0)
+                self._single_dense_batch = True
+                return data
             if "mol_idx" not in data:
                 data["mol_idx"] = torch.zeros(data["coord"].shape[0], dtype=torch.long, device=self.device)
-                self._max_mol_size = data["coord"].shape[0]
+                self._mol_idx_pad_value = 0
+                if "nbmat" not in data:
+                    self._mol_sizes_host = (data["coord"].shape[0],)
+                    if not hessian and data.get("cell") is None:
+                        self._nblist_max_atoms_per_system = data["coord"].shape[0]
             elif data["mol_idx"][-1] == 0:
                 self._max_mol_size = len(data["mol_idx"])
+                self._mol_idx_pad_value = 0
+                if not hessian and "nbmat" not in data and data.get("cell") is None:
+                    self._nblist_max_atoms_per_system = self._max_mol_size
             else:
                 self._max_mol_size = data["mol_idx"].unique(return_counts=True)[1].max().item()
 
@@ -1251,6 +1732,11 @@ class AIMNet2Calculator:
                 data["mol_idx"] = torch.repeat_interleave(
                     torch.arange(0, B, device=self.device), torch.full((B,), N, device=self.device)
                 )
+                self._mol_idx_pad_value = B - 1
+                if "nbmat" not in data:
+                    self._mol_sizes_host = tuple([N] * B)
+                    if not hessian and data.get("cell") is None:
+                        self._nblist_max_atoms_per_system = N
                 for k, v in data.items():
                     if k in self.atom_feature_keys:
                         data[k] = v.flatten(0, 1)
@@ -1267,7 +1753,14 @@ class AIMNet2Calculator:
                     data[k] = v.view(batch, -1, *v.shape[1:])
         return data
 
-    def make_nbmat(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+    def _squeeze_single_dense_output(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+        """Restore single-structure atom-wise shapes after internal dense batching."""
+        for k, v in data.items():
+            if k in self.atom_feature_keys and v.ndim >= 2 and v.shape[0] == 1:
+                data[k] = v.squeeze(0)
+        return data
+
+    def make_nbmat(self, data: dict[str, Tensor], *, cutoff_padding: float = 0.0) -> dict[str, Tensor]:
         assert self._max_mol_size > 0, "Molecule size is not set"
 
         # Prepare batch_idx from mol_idx
@@ -1290,6 +1783,7 @@ class AIMNet2Calculator:
         else:
             cell_batched = None
             pbc = None
+        max_atoms_per_system = None if cell is not None else self._nblist_max_atoms_per_system
 
         # Short-range neighbors (always)
         nbmat1, _, shifts1 = self._nblist(
@@ -1298,6 +1792,8 @@ class AIMNet2Calculator:
             pbc=pbc,
             batch_idx=batch_idx,
             fill_value=N,
+            max_atoms_per_system=max_atoms_per_system,
+            cutoff_padding=cutoff_padding,
         )
 
         nbmat1, shifts1 = _add_padding_row(nbmat1, shifts1, N)
@@ -1343,6 +1839,8 @@ class AIMNet2Calculator:
                 pbc=pbc,
                 batch_idx=batch_idx,
                 fill_value=N,
+                max_atoms_per_system=max_atoms_per_system,
+                cutoff_padding=cutoff_padding,
             )
             nbmat_coulomb, shifts_coulomb = _add_padding_row(nbmat_coulomb, shifts_coulomb, N)
             data["nbmat_coulomb"] = nbmat_coulomb
@@ -1359,6 +1857,8 @@ class AIMNet2Calculator:
                     pbc=pbc,
                     batch_idx=batch_idx,
                     fill_value=N,
+                    max_atoms_per_system=max_atoms_per_system,
+                    cutoff_padding=cutoff_padding,
                 )
                 nbmat_dftd3, shifts_dftd3 = _add_padding_row(nbmat_dftd3, shifts_dftd3, N)
                 data["nbmat_dftd3"] = nbmat_dftd3
@@ -1372,6 +1872,8 @@ class AIMNet2Calculator:
                     pbc=pbc,
                     batch_idx=batch_idx,
                     fill_value=N,
+                    max_atoms_per_system=max_atoms_per_system,
+                    cutoff_padding=cutoff_padding,
                 )
                 nbmat_dftd3, shifts_dftd3 = _add_padding_row(nbmat_dftd3, shifts_dftd3, N)
                 data["nbmat_dftd3"] = nbmat_dftd3
@@ -1389,6 +1891,8 @@ class AIMNet2Calculator:
                 pbc=pbc,
                 batch_idx=batch_idx,
                 fill_value=N,
+                max_atoms_per_system=max_atoms_per_system,
+                cutoff_padding=cutoff_padding,
             )
             nbmat_lr, shifts_lr = _add_padding_row(nbmat_lr, shifts_lr, N)
 
@@ -1410,6 +1914,8 @@ class AIMNet2Calculator:
                     pbc=pbc,
                     batch_idx=batch_idx,
                     fill_value=N,
+                    max_atoms_per_system=max_atoms_per_system,
+                    cutoff_padding=cutoff_padding,
                 )
                 nbmat_coulomb, shifts_coulomb = _add_padding_row(nbmat_coulomb, shifts_coulomb, N)
                 data["nbmat_coulomb"] = nbmat_coulomb
@@ -1426,6 +1932,8 @@ class AIMNet2Calculator:
                         pbc=pbc,
                         batch_idx=batch_idx,
                         fill_value=N,
+                        max_atoms_per_system=max_atoms_per_system,
+                        cutoff_padding=cutoff_padding,
                     )
                     nbmat_dftd3, shifts_dftd3 = _add_padding_row(nbmat_dftd3, shifts_dftd3, N)
                     data["nbmat_dftd3"] = nbmat_dftd3
@@ -1440,6 +1948,8 @@ class AIMNet2Calculator:
                     pbc=pbc,
                     batch_idx=batch_idx,
                     fill_value=N,
+                    max_atoms_per_system=max_atoms_per_system,
+                    cutoff_padding=cutoff_padding,
                 )
                 nbmat_dftd3, shifts_dftd3 = _add_padding_row(nbmat_dftd3, shifts_dftd3, N)
                 data["nbmat_dftd3"] = nbmat_dftd3
@@ -1452,7 +1962,12 @@ class AIMNet2Calculator:
 
     def pad_input(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         N = data["nbmat"].shape[0]
-        data["mol_idx"] = maybe_pad_dim0(data["mol_idx"], N, value=data["mol_idx"][-1].item())
+        mol_idx_pad_value = self._mol_idx_pad_value
+        if mol_idx_pad_value is None:
+            mol_idx_pad_value = data["mol_idx"][-1].item()
+        data["mol_idx"] = maybe_pad_dim0(data["mol_idx"], N, value=mol_idx_pad_value)
+        if self._mol_sizes_host is not None:
+            data["mol_sizes"] = torch.tensor(self._mol_sizes_host, dtype=torch.long, device=self.device)
         for k in ("coord", "numbers"):
             if k in data:
                 data[k] = maybe_pad_dim0(data[k], N)

@@ -72,6 +72,8 @@ AIMNet2Calculator(
     device: str | None = None,
     compile_model: bool = False,
     compile_kwargs: dict | None = None,
+    cache_static: bool = False,
+    neighbor_skin: float = 0.0,
     train: bool = False,
     ensemble_member: int = 0,
     revision: str | None = None,
@@ -111,6 +113,33 @@ The calculator uses two input modes:
 | `N < nb_threshold` and CUDA | Keep mode 0 (3D) | O(N²) fully connected |
 
 This affects memory usage and performance for batched inference. The mode=0 path uses a fully connected graph (all-pairs interactions), which scales as O(N²) but is fast for GPU. The mode=1 path uses neighbor lists, which scale linearly with system size. Fully connected mode is not used for periodic systems; PBC inputs always go through neighbor lists.
+
+#### `cache_static`
+
+Opt-in cache for calculator-built neighbor matrices and explicit external DFTD3 terms on repeated static CUDA inputs.
+Default: `False`.
+
+When enabled, the calculator can reuse neighbor matrices and detached external DFTD3 energy/force terms for exact
+repeated calls with the same resident CUDA `coord` and `numbers` tensors. The cache is bypassed for periodic inputs,
+Hessian calls, stress calls, training mode, caller-provided `mol_idx`, and caller-provided `nbmat`. Ordinary in-place
+coordinate updates invalidate the cache through PyTorch's tensor version counter.
+
+#### `neighbor_skin`
+
+Opt-in Verlet-style neighbor-list reuse for moving non-periodic CUDA systems. Default: `0.0` (disabled).
+
+When `neighbor_skin > 0`, sparse neighbor lists are built with `cutoff + neighbor_skin` and reused while every atom
+has moved at most `neighbor_skin / 2` from the rebuild geometry. The model and external DFTD3/Coulomb terms are still
+recomputed every call; only calculator-built neighbor index tensors are reused.
+
+This is intended for large geometry optimization or MD loops where neighbor-list construction is a meaningful part of
+runtime. It is bypassed for periodic inputs, Hessian calls, stress calls, training mode, caller-provided `mol_idx`, and
+caller-provided `nbmat`. Custom models that consume neighbor lists without applying their own distance cutoff must not
+use this option; the calculator rejects the known unmasked `SRRep(cutoff_fn="none")` case.
+
+```python
+calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, neighbor_skin=0.5)
+```
 
 #### `needs_coulomb`
 

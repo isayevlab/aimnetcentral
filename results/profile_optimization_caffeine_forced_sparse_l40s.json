@@ -1,0 +1,537 @@
+{
+  "timestamp": "2026-06-17T12:44:34.005318+00:00",
+  "git": {
+    "commit": "8092749f92e38d1314b8097cad030e44151c0687",
+    "short_commit": "8092749",
+    "branch": "opt/gpu-throughput",
+    "dirty": true
+  },
+  "command": [
+    "profile_execution.py",
+    "--workload",
+    "caffeine_forces",
+    "--mode",
+    "forced-sparse",
+    "--warmup",
+    "5",
+    "--repeat",
+    "30",
+    "--profile-steps",
+    "5",
+    "--device",
+    "cuda:0",
+    "--output",
+    "results/profile_optimization_caffeine_forced_sparse_l40s.json"
+  ],
+  "device": {
+    "requested": "cuda:0",
+    "type": "cuda",
+    "gpus": [
+      {
+        "index": 0,
+        "name": "NVIDIA L40S",
+        "compute_capability": "8.9",
+        "class": "ada"
+      },
+      {
+        "index": 1,
+        "name": "NVIDIA L40S",
+        "compute_capability": "8.9",
+        "class": "ada"
+      },
+      {
+        "index": 2,
+        "name": "NVIDIA L40S",
+        "compute_capability": "8.9",
+        "class": "ada"
+      },
+      {
+        "index": 3,
+        "name": "NVIDIA L40S",
+        "compute_capability": "8.9",
+        "class": "ada"
+      },
+      {
+        "index": 4,
+        "name": "NVIDIA L40S",
+        "compute_capability": "8.9",
+        "class": "ada"
+      },
+      {
+        "index": 5,
+        "name": "NVIDIA L40S",
+        "compute_capability": "8.9",
+        "class": "ada"
+      },
+      {
+        "index": 6,
+        "name": "NVIDIA L40S",
+        "compute_capability": "8.9",
+        "class": "ada"
+      },
+      {
+        "index": 7,
+        "name": "NVIDIA L40S",
+        "compute_capability": "8.9",
+        "class": "ada"
+      }
+    ],
+    "active_index": 0,
+    "name": "NVIDIA L40S",
+    "compute_capability": "8.9",
+    "class": "ada"
+  },
+  "software": {
+    "python": "3.13.12",
+    "torch": "2.9.1+cu128",
+    "cuda": "12.8",
+    "nvalchemiops": "0.3.1",
+    "warp_lang": "1.12.0",
+    "aimnet": "0.2.0.post1.dev34+g8092749f9.d20260617"
+  },
+  "model": "aimnet2",
+  "workload": "caffeine_forces",
+  "mode": "forced-sparse",
+  "execution": {
+    "nb_threshold": 0,
+    "compile_model": false,
+    "resident_input": false
+  },
+  "request": {
+    "forces": true,
+    "stress": false,
+    "hessian": false
+  },
+  "timing": {
+    "warmup": 5,
+    "repeat": 30,
+    "median_ms": 13.88992287684232,
+    "p95_ms": 14.271324966102839,
+    "min_ms": 13.782982947304845,
+    "max_ms": 14.84206598252058,
+    "input_mode": "end-to-end",
+    "resident_input": false
+  },
+  "profile": {
+    "steps": 5,
+    "trace": null,
+    "event_counts": {
+      "total_events": 19397,
+      "cuda_events": 2820,
+      "cuda_kernel_or_runtime_launch_events": 5225,
+      "cpu_cuda_launch_events": 2405,
+      "cuda_memcpy_events": 285
+    },
+    "top_cuda": [
+      {
+        "key": "nvalchemiops::dftd3_matrix",
+        "count": 5,
+        "metric_us": 563.7489999999798,
+        "self_cpu_us": 1459.7440000000443,
+        "cpu_us": 2110.5980000000072,
+        "self_cuda_us": 540.3229999999876,
+        "cuda_us": 563.7489999999798
+      },
+      {
+        "key": "_direct_forces_and_dE_dCN_kernel_matrix_2c03244c_cuda_kernel_forward",
+        "count": 5,
+        "metric_us": 442.6259999999893,
+        "self_cpu_us": 0.0,
+        "cpu_us": 0.0,
+        "self_cuda_us": 442.6259999999893,
+        "cuda_us": 442.6259999999893
+      },
+      {
+        "key": "aten::mul",
+        "count": 340,
+        "metric_us": 431.870999999961,
+        "self_cpu_us": 3715.2100000001437,
+        "cpu_us": 6039.045000000053,
+        "self_cuda_us": 431.870999999961,
+        "cuda_us": 431.870999999961
+      },
+      {
+        "key": "aten::copy_",
+        "count": 360,
+        "metric_us": 381.8550000000994,
+        "self_cpu_us": 2333.1470000001127,
+        "cpu_us": 8989.910999999916,
+        "self_cuda_us": 376.9580000000892,
+        "cuda_us": 381.8550000000994
+      },
+      {
+        "key": "aten::linear",
+        "count": 65,
+        "metric_us": 360.35500000007505,
+        "self_cpu_us": 236.56200000004173,
+        "cpu_us": 3779.948000000073,
+        "self_cuda_us": 0.0,
+        "cuda_us": 360.35500000007505
+      },
+      {
+        "key": "aten::addmm",
+        "count": 65,
+        "metric_us": 360.35500000007505,
+        "self_cpu_us": 2010.9020000000355,
+        "cpu_us": 3028.166000000032,
+        "self_cuda_us": 360.35500000007505,
+        "cuda_us": 360.35500000007505
+      },
+      {
+        "key": "aten::repeat_interleave",
+        "count": 40,
+        "metric_us": 356.73199999995086,
+        "self_cpu_us": 542.5399999999299,
+        "cpu_us": 7989.707999999989,
+        "self_cuda_us": 26.335000000000946,
+        "cuda_us": 356.73199999995086
+      },
+      {
+        "key": "autograd::engine::evaluate_function: AddmmBackward0",
+        "count": 65,
+        "metric_us": 323.5849999999191,
+        "self_cpu_us": 501.8799999999974,
+        "cpu_us": 3728.3909999999596,
+        "self_cuda_us": 0.0,
+        "cuda_us": 323.5849999999191
+      },
+      {
+        "key": "AddmmBackward0",
+        "count": 65,
+        "metric_us": 323.5849999999191,
+        "self_cpu_us": 334.17100000005667,
+        "cpu_us": 3226.510999999962,
+        "self_cuda_us": 0.0,
+        "cuda_us": 323.5849999999191
+      },
+      {
+        "key": "aten::mm",
+        "count": 65,
+        "metric_us": 323.5849999999191,
+        "self_cpu_us": 1414.208999999766,
+        "cpu_us": 2354.1499999998923,
+        "self_cuda_us": 323.5849999999191,
+        "cuda_us": 323.5849999999191
+      },
+      {
+        "key": "aten::fill_",
+        "count": 325,
+        "metric_us": 296.5129999999954,
+        "self_cpu_us": 1972.1739999998895,
+        "cpu_us": 4686.914999999955,
+        "self_cuda_us": 296.5129999999954,
+        "cuda_us": 296.5129999999954
+      },
+      {
+        "key": "aten::zero_",
+        "count": 255,
+        "metric_us": 230.0460000000462,
+        "self_cpu_us": 892.4329999999384,
+        "cpu_us": 4392.161999999868,
+        "self_cuda_us": 0.0,
+        "cuda_us": 230.0460000000462
+      },
+      {
+        "key": "aten::sum",
+        "count": 85,
+        "metric_us": 229.46400000005542,
+        "self_cpu_us": 1330.3229999998975,
+        "cpu_us": 2248.264999999972,
+        "self_cuda_us": 207.64100000007147,
+        "cuda_us": 229.46400000005542
+      },
+      {
+        "key": "ampere_sgemm_32x32_sliced1x4_tn",
+        "count": 60,
+        "metric_us": 223.17000000001917,
+        "self_cpu_us": 0.0,
+        "cpu_us": 0.0,
+        "self_cuda_us": 223.17000000001917,
+        "cuda_us": 223.17000000001917
+      },
+      {
+        "key": "aten::cat",
+        "count": 110,
+        "metric_us": 212.47699999998122,
+        "self_cpu_us": 1534.3539999999107,
+        "cpu_us": 2504.484999999935,
+        "self_cuda_us": 212.47699999998122,
+        "cuda_us": 212.47699999998122
+      }
+    ],
+    "top_self_cuda": [
+      {
+        "key": "nvalchemiops::dftd3_matrix",
+        "count": 5,
+        "metric_us": 540.3229999999876,
+        "self_cpu_us": 1459.7440000000443,
+        "cpu_us": 2110.5980000000072,
+        "self_cuda_us": 540.3229999999876,
+        "cuda_us": 563.7489999999798
+      },
+      {
+        "key": "_direct_forces_and_dE_dCN_kernel_matrix_2c03244c_cuda_kernel_forward",
+        "count": 5,
+        "metric_us": 442.6259999999893,
+        "self_cpu_us": 0.0,
+        "cpu_us": 0.0,
+        "self_cuda_us": 442.6259999999893,
+        "cuda_us": 442.6259999999893
+      },
+      {
+        "key": "aten::mul",
+        "count": 340,
+        "metric_us": 431.870999999961,
+        "self_cpu_us": 3715.2100000001437,
+        "cpu_us": 6039.045000000053,
+        "self_cuda_us": 431.870999999961,
+        "cuda_us": 431.870999999961
+      },
+      {
+        "key": "aten::copy_",
+        "count": 360,
+        "metric_us": 376.9580000000892,
+        "self_cpu_us": 2333.1470000001127,
+        "cpu_us": 8989.910999999916,
+        "self_cuda_us": 376.9580000000892,
+        "cuda_us": 381.8550000000994
+      },
+      {
+        "key": "aten::addmm",
+        "count": 65,
+        "metric_us": 360.35500000007505,
+        "self_cpu_us": 2010.9020000000355,
+        "cpu_us": 3028.166000000032,
+        "self_cuda_us": 360.35500000007505,
+        "cuda_us": 360.35500000007505
+      },
+      {
+        "key": "aten::mm",
+        "count": 65,
+        "metric_us": 323.5849999999191,
+        "self_cpu_us": 1414.208999999766,
+        "cpu_us": 2354.1499999998923,
+        "self_cuda_us": 323.5849999999191,
+        "cuda_us": 323.5849999999191
+      },
+      {
+        "key": "aten::fill_",
+        "count": 325,
+        "metric_us": 296.5129999999954,
+        "self_cpu_us": 1972.1739999998895,
+        "cpu_us": 4686.914999999955,
+        "self_cuda_us": 296.5129999999954,
+        "cuda_us": 296.5129999999954
+      },
+      {
+        "key": "ampere_sgemm_32x32_sliced1x4_tn",
+        "count": 60,
+        "metric_us": 223.17000000001917,
+        "self_cpu_us": 0.0,
+        "cpu_us": 0.0,
+        "self_cuda_us": 223.17000000001917,
+        "cuda_us": 223.17000000001917
+      },
+      {
+        "key": "aten::cat",
+        "count": 110,
+        "metric_us": 212.47699999998122,
+        "self_cpu_us": 1534.3539999999107,
+        "cpu_us": 2504.484999999935,
+        "self_cuda_us": 212.47699999998122,
+        "cuda_us": 212.47699999998122
+      },
+      {
+        "key": "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::native::FillFunctor<float>, std::array<char*, 1ul>)",
+        "count": 225,
+        "metric_us": 211.13399999996636,
+        "self_cpu_us": 0.0,
+        "cpu_us": 0.0,
+        "self_cuda_us": 211.13399999996636,
+        "cuda_us": 211.13399999996636
+      },
+      {
+        "key": "aten::bmm",
+        "count": 80,
+        "metric_us": 210.30299999996896,
+        "self_cpu_us": 1942.4140000000189,
+        "cpu_us": 2693.4260000000013,
+        "self_cuda_us": 210.30299999996896,
+        "cuda_us": 210.30299999996896
+      },
+      {
+        "key": "aten::sum",
+        "count": 85,
+        "metric_us": 207.64100000007147,
+        "self_cpu_us": 1330.3229999998975,
+        "cpu_us": 2248.264999999972,
+        "self_cuda_us": 207.64100000007147,
+        "cuda_us": 229.46400000005542
+      },
+      {
+        "key": "aten::div",
+        "count": 130,
+        "metric_us": 200.2310000000216,
+        "self_cpu_us": 1292.7239999999501,
+        "cpu_us": 2162.6369999998833,
+        "self_cuda_us": 200.2310000000216,
+        "cuda_us": 200.2310000000216
+      },
+      {
+        "key": "aten::gather",
+        "count": 95,
+        "metric_us": 185.4409999999798,
+        "self_cpu_us": 1279.7070000001622,
+        "cpu_us": 2401.94300000003,
+        "self_cuda_us": 185.4409999999798,
+        "cuda_us": 185.4409999999798
+      },
+      {
+        "key": "Memcpy DtoD (Device -> Device)",
+        "count": 170,
+        "metric_us": 173.6050000000132,
+        "self_cpu_us": 0.0,
+        "cpu_us": 0.0,
+        "self_cuda_us": 173.6050000000132,
+        "cuda_us": 173.6050000000132
+      }
+    ],
+    "top_cpu": [
+      {
+        "key": "cudaLaunchKernel",
+        "count": 2405,
+        "metric_us": 18378.360999999823,
+        "self_cpu_us": 18378.360999999823,
+        "cpu_us": 18378.360999999823,
+        "self_cuda_us": 0.0,
+        "cuda_us": 0.0
+      },
+      {
+        "key": "aten::mul",
+        "count": 340,
+        "metric_us": 3715.2100000001437,
+        "self_cpu_us": 3715.2100000001437,
+        "cpu_us": 6039.045000000053,
+        "self_cuda_us": 431.870999999961,
+        "cuda_us": 431.870999999961
+      },
+      {
+        "key": "cudaMemcpyAsync",
+        "count": 285,
+        "metric_us": 3043.542000000005,
+        "self_cpu_us": 3043.542000000005,
+        "cpu_us": 3043.542000000005,
+        "self_cuda_us": 0.0,
+        "cuda_us": 0.0
+      },
+      {
+        "key": "aten::empty",
+        "count": 495,
+        "metric_us": 3024.311999999856,
+        "self_cpu_us": 3024.311999999856,
+        "cpu_us": 3024.311999999856,
+        "self_cuda_us": 0.0,
+        "cuda_us": 0.0
+      },
+      {
+        "key": "aten::as_strided",
+        "count": 1965,
+        "metric_us": 2689.612999999848,
+        "self_cpu_us": 2689.612999999848,
+        "cpu_us": 2689.612999999848,
+        "self_cuda_us": 0.0,
+        "cuda_us": 0.0
+      },
+      {
+        "key": "aimnet::conv_sv_2d_sp_bwd",
+        "count": 15,
+        "metric_us": 2678.1550000000425,
+        "self_cpu_us": 2678.1550000000425,
+        "cpu_us": 3918.0340000000033,
+        "self_cuda_us": 133.1540000000059,
+        "cuda_us": 162.24200000001656
+      },
+      {
+        "key": "aten::copy_",
+        "count": 360,
+        "metric_us": 2333.1470000001127,
+        "self_cpu_us": 2333.1470000001127,
+        "cpu_us": 8989.910999999916,
+        "self_cuda_us": 376.9580000000892,
+        "cuda_us": 381.8550000000994
+      },
+      {
+        "key": "GeneratedBackwardFor_aimnet_conv_sv_2d_sp_fwd_default",
+        "count": 15,
+        "metric_us": 2179.9290000000356,
+        "self_cpu_us": 2179.9290000000356,
+        "cpu_us": 2921.719000000009,
+        "self_cuda_us": 90.87899999999627,
+        "cuda_us": 104.73200000000634
+      },
+      {
+        "key": "aten::addmm",
+        "count": 65,
+        "metric_us": 2010.9020000000355,
+        "self_cpu_us": 2010.9020000000355,
+        "cpu_us": 3028.166000000032,
+        "self_cuda_us": 360.35500000007505,
+        "cuda_us": 360.35500000007505
+      },
+      {
+        "key": "aten::fill_",
+        "count": 325,
+        "metric_us": 1972.1739999998895,
+        "self_cpu_us": 1972.1739999998895,
+        "cpu_us": 4686.914999999955,
+        "self_cuda_us": 296.5129999999954,
+        "cuda_us": 296.5129999999954
+      },
+      {
+        "key": "aten::bmm",
+        "count": 80,
+        "metric_us": 1942.4140000000189,
+        "self_cpu_us": 1942.4140000000189,
+        "cpu_us": 2693.4260000000013,
+        "self_cuda_us": 210.30299999996896,
+        "cuda_us": 210.30299999996896
+      },
+      {
+        "key": "aten::cat",
+        "count": 110,
+        "metric_us": 1534.3539999999107,
+        "self_cpu_us": 1534.3539999999107,
+        "cpu_us": 2504.484999999935,
+        "self_cuda_us": 212.47699999998122,
+        "cuda_us": 212.47699999998122
+      },
+      {
+        "key": "nvalchemiops::dftd3_matrix",
+        "count": 5,
+        "metric_us": 1459.7440000000443,
+        "self_cpu_us": 1459.7440000000443,
+        "cpu_us": 2110.5980000000072,
+        "self_cuda_us": 540.3229999999876,
+        "cuda_us": 563.7489999999798
+      },
+      {
+        "key": "aten::unsqueeze",
+        "count": 335,
+        "metric_us": 1437.09199999995,
+        "self_cpu_us": 1437.09199999995,
+        "cpu_us": 1871.7879999999057,
+        "self_cuda_us": 0.0,
+        "cuda_us": 0.0
+      },
+      {
+        "key": "aten::pow",
+        "count": 90,
+        "metric_us": 1424.9560000000374,
+        "self_cpu_us": 1424.9560000000374,
+        "cpu_us": 2827.09900000001,
+        "self_cuda_us": 54.61999999993168,
+        "cuda_us": 104.3179999999902
+      }
+    ]
+  }
+}

@@ -48,6 +48,7 @@ class AIMNet2ASE(Calculator):
         charge=0,
         mult=1,
         validate_species: bool = True,
+        compute_forces_for_energy: bool = False,
     ):
         if _ASE_IMPORT_ERROR is not None:
             raise ImportError(
@@ -59,6 +60,7 @@ class AIMNet2ASE(Calculator):
             base_calc = AIMNet2Calculator(base_calc)
         self.base_calc = base_calc
         self.validate_species = validate_species
+        self.compute_forces_for_energy = bool(compute_forces_for_energy)
         if self.base_calc.is_nse:
             self.__dict__["implemented_properties"] = [*self.__class__.implemented_properties, "spin_charges"]
         self.reset()
@@ -250,9 +252,14 @@ class AIMNet2ASE(Calculator):
                 _in[k] = v.unsqueeze(0)
             _unsqueezed = True
 
+        request_forces = "forces" in properties or (
+            self.compute_forces_for_energy
+            and "stress" not in properties
+            and bool({"energy", "free_energy", "charges", "dipole_moment"} & set(properties))
+        )
         results = self.base_calc(
             _in,
-            forces="forces" in properties,
+            forces=request_forces,
             stress="stress" in properties,
             validate_species=self.validate_species,
         )
@@ -266,7 +273,7 @@ class AIMNet2ASE(Calculator):
         self.results["charges"] = results["charges"]
         self.results["dipole_moment"] = self.get_dipole_moment(self.atoms)
 
-        if "forces" in properties:
+        if request_forces and "forces" in results:
             self.results["forces"] = results["forces"]
         if "stress" in properties:
             self.results["stress"] = results["stress"]

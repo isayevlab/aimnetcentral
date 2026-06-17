@@ -208,6 +208,7 @@ def _(a: Tensor, idx: Tensor, g: Tensor) -> Tensor:
     stream = _get_stream(a.device)
     device = wp.device_from_torch(a.device)
     B, A, G = a.shape
+    idx_wp = idx if idx.dtype == torch.int32 else idx.to(torch.int32)
     output = torch.zeros(B, A, G, 4, dtype=a.dtype, device=a.device)
 
     wp.launch(
@@ -217,7 +218,7 @@ def _(a: Tensor, idx: Tensor, g: Tensor) -> Tensor:
         device=device,
         inputs=(
             wp.from_torch(a.detach(), return_ctype=True),
-            wp.from_torch(idx.to(torch.int32), return_ctype=True),
+            wp.from_torch(idx_wp, return_ctype=True),
             wp.from_torch(g.detach(), return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(output, return_ctype=True, dtype=wp.vec4f),
         ),
@@ -242,6 +243,7 @@ def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor) -> list[Tensor]:
     device = wp.device_from_torch(a.device)
     B, A, G = a.shape
     B_out, M = idx.shape
+    idx_wp = idx if idx.dtype == torch.int32 else idx.to(torch.int32)
 
     grad_a = torch.zeros_like(a)
     grad_g = torch.zeros(B_out, M, G, 4, dtype=g.dtype, device=g.device)
@@ -256,7 +258,7 @@ def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor) -> list[Tensor]:
         device=device,
         inputs=(
             wp.from_torch(grad_output_contig, return_ctype=True, dtype=wp.vec4f),
-            wp.from_torch(idx.to(torch.int32), return_ctype=True),
+            wp.from_torch(idx_wp, return_ctype=True),
             wp.from_torch(g.detach(), return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(grad_a, return_ctype=True),
         ),
@@ -271,7 +273,7 @@ def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor) -> list[Tensor]:
         inputs=(
             wp.from_torch(grad_output_contig, return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(a.detach(), return_ctype=True),
-            wp.from_torch(idx.to(torch.int32), return_ctype=True),
+            wp.from_torch(idx_wp, return_ctype=True),
             wp.from_torch(grad_g, return_ctype=True, dtype=wp.vec4f),
         ),
     )
@@ -307,6 +309,7 @@ def _(
     device = wp.device_from_torch(a.device)
     B, A, G = a.shape
     B_out, M = idx.shape
+    idx_wp = idx if idx.dtype == torch.int32 else idx.to(torch.int32)
 
     grad_grad_output = torch.zeros(B, A, G, 4, dtype=a.dtype, device=a.device)
     grad_a_double = torch.zeros_like(a)
@@ -325,7 +328,7 @@ def _(
         inputs=(
             wp.from_torch(grad2_g_contig, return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(a.detach(), return_ctype=True),
-            wp.from_torch(idx.to(torch.int32), return_ctype=True),
+            wp.from_torch(idx_wp, return_ctype=True),
             wp.from_torch(grad_grad_output, return_ctype=True, dtype=wp.vec4f),
         ),
     )
@@ -339,7 +342,7 @@ def _(
         device=device,
         inputs=(
             wp.from_torch(grad2_a_contig, return_ctype=True),
-            wp.from_torch(idx.to(torch.int32), return_ctype=True),
+            wp.from_torch(idx_wp, return_ctype=True),
             wp.from_torch(g.detach(), return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(grad_output_2_a, return_ctype=True, dtype=wp.vec4f),
         ),
@@ -354,7 +357,7 @@ def _(
         device=device,
         inputs=(
             wp.from_torch(grad2_a_contig, return_ctype=True),
-            wp.from_torch(idx.to(torch.int32), return_ctype=True),
+            wp.from_torch(idx_wp, return_ctype=True),
             wp.from_torch(grad_output_contig, return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(grad_g_double, return_ctype=True, dtype=wp.vec4f),
         ),
@@ -368,7 +371,7 @@ def _(
         device=device,
         inputs=(
             wp.from_torch(grad_output_contig, return_ctype=True, dtype=wp.vec4f),
-            wp.from_torch(idx.to(torch.int32), return_ctype=True),
+            wp.from_torch(idx_wp, return_ctype=True),
             wp.from_torch(grad2_g_contig, return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(grad_a_double, return_ctype=True),
         ),

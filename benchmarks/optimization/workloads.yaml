@@ -1,0 +1,74 @@
+workloads:
+  water_forces:
+    description: Small neutral molecule force smoke test.
+    request: {forces: true, stress: false, hessian: false}
+    data:
+      coord:
+        - [0.0000, 0.0000, 0.0000]
+        - [0.9572, 0.0000, 0.0000]
+        - [-0.2390, 0.9270, 0.0000]
+      numbers: [8, 1, 1]
+      charge: 0.0
+
+  methane_forces:
+    description: Small saturated organic molecule force smoke test.
+    request: {forces: true, stress: false, hessian: false}
+    data:
+      coord:
+        - [0.000, 0.000, 0.000]
+        - [0.629, 0.629, 0.629]
+        - [-0.629, -0.629, 0.629]
+        - [-0.629, 0.629, -0.629]
+        - [0.629, -0.629, -0.629]
+      numbers: [6, 1, 1, 1, 1]
+      charge: 0.0
+
+  charged_pair_forces:
+    description: Small charged/zwitterion-like geometry for charge consistency.
+    request: {forces: true, stress: false, hessian: false}
+    data:
+      coord:
+        - [0.000, 0.000, 0.000]
+        - [1.180, 0.000, 0.000]
+        - [1.760, 0.940, 0.000]
+        - [1.760, -0.940, 0.000]
+        - [-1.120, 0.000, 0.000]
+        - [-1.640, 0.890, 0.000]
+        - [-1.640, -0.890, 0.000]
+      numbers: [7, 6, 8, 8, 6, 1, 1]
+      charge: 0.0
+
+  caffeine_forces:
+    description: Repository caffeine fixture with stored realistic organic geometry.
+    request: {forces: true, stress: false, hessian: false}
+    extxyz: tests/data/caffeine.xyz
+    charge: 0.0
+
+  pbc_water_stress:
+    description: Small periodic water-like cell for stress and long-range checks.
+    request: {forces: true, stress: true, hessian: false}
+    coulomb: {method: dsf, cutoff: 3.5}
+    data:
+      coord:
+        - [0.000, 0.000, 0.000]
+        - [0.957, 0.000, 0.000]
+        - [-0.239, 0.927, 0.000]
+        - [3.000, 3.000, 3.000]
+        - [3.957, 3.000, 3.000]
+        - [2.761, 3.927, 3.000]
+      numbers: [8, 1, 1, 8, 1, 1]
+      charge: 0.0
+      cell:
+        - [8.0, 0.0, 0.0]
+        - [0.0, 8.0, 0.0]
+        - [0.0, 0.0, 8.0]
+
+  generated_organic_128:
+    description: Deterministic generated C/N/O/H aggregate for neighbor-list and reduction scaling.
+    request: {forces: true, stress: false, hessian: false}
+    generate:
+      kind: organic_cluster
+      atoms: 128
+      seed: 17
+      box: 18.0
+      charge: 0.0

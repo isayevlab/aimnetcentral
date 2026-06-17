@@ -1,0 +1,84 @@
+workloads:
+  organic_scaling_100:
+    description: Deterministic 100-atom C/N/O/H cluster for GPU scaling crossover checks.
+    request: {forces: true, stress: false, hessian: false}
+    generate:
+      kind: organic_cluster
+      atoms: 100
+      seed: 100
+      box: 16.57
+      charge: 0.0
+
+  organic_scaling_500:
+    description: Deterministic 500-atom C/N/O/H cluster for GPU scaling crossover checks.
+    request: {forces: true, stress: false, hessian: false}
+    generate:
+      kind: organic_cluster
+      atoms: 500
+      seed: 500
+      box: 28.35
+      charge: 0.0
+
+  organic_scaling_1000:
+    description: Deterministic 1000-atom C/N/O/H cluster for GPU scaling crossover checks.
+    request: {forces: true, stress: false, hessian: false}
+    generate:
+      kind: organic_cluster
+      atoms: 1000
+      seed: 1000
+      box: 35.72
+      charge: 0.0
+
+  organic_scaling_5000:
+    description: Deterministic 5000-atom C/N/O/H cluster for GPU scaling crossover checks.
+    request: {forces: true, stress: false, hessian: false}
+    generate:
+      kind: organic_cluster
+      atoms: 5000
+      seed: 5000
+      box: 61.07
+      charge: 0.0
+
+  water_scaling_99:
+    description: Deterministic 33-water non-PBC cluster for near-100 atom scaling checks.
+    request: {forces: true, stress: false, hessian: false}
+    generate:
+      kind: water_cluster
+      molecules: 33
+      spacing: 3.2
+      jitter: 0.04
+      seed: 99
+      charge: 0.0
+
+  water_scaling_501:
+    description: Deterministic 167-water non-PBC cluster for near-500 atom scaling checks.
+    request: {forces: true, stress: false, hessian: false}
+    generate:
+      kind: water_cluster
+      molecules: 167
+      spacing: 3.2
+      jitter: 0.04
+      seed: 501
+      charge: 0.0
+
+  water_scaling_999:
+    description: Deterministic 333-water non-PBC cluster for near-1000 atom scaling checks.
+    request: {forces: true, stress: false, hessian: false}
+    generate:
+      kind: water_cluster
+      molecules: 333
+      spacing: 3.2
+      jitter: 0.04
+      seed: 999
+      charge: 0.0
+
+  water_scaling_5001:
+    description: Deterministic 1667-water non-PBC cluster for near-5000 atom scaling checks.
+    request: {forces: true, stress: false, hessian: false}
+    generate:
+      kind: water_cluster
+      molecules: 1667
+      spacing: 3.2
+      jitter: 0.04
+      seed: 5001
+      charge: 0.0

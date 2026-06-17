@@ -55,9 +55,13 @@ def calc_masks(data: dict[str, Tensor]) -> dict[str, Tensor]:
                 processed[ptr] = suffix
                 data[f"mask_ij{suffix}"] = data[nbmat_key] == data["numbers"].shape[0] - 1
         data["_input_padded"] = torch.tensor(True)
-        data["mol_sizes"] = torch.bincount(data["mol_idx"])
-        # last atom is padding
-        data["mol_sizes"][-1] -= 1
+        mol_sizes = data.get("mol_sizes")
+        if mol_sizes is None:
+            data["mol_sizes"] = torch.bincount(data["mol_idx"])
+            # last atom is padding
+            data["mol_sizes"][-1] -= 1
+        else:
+            data["mol_sizes"] = mol_sizes.to(device=data["numbers"].device, dtype=torch.long)
     elif nb_mode == 2:
         data["mask_i"] = data["numbers"] == 0
         # Track processed arrays by their data pointer to avoid redundant mask calculations
@@ -244,8 +248,13 @@ def mol_sum(x: Tensor, data: dict[str, Tensor]) -> Tensor:
             2,
         ), "Invalid tensor shape for mol_sum, ndim should be 1 or 2"
         idx = data["mol_idx"]
-        # assuming mol_idx is sorted, replace with max if not
-        out_size = int(idx[-1].item()) + 1
+        mol_sizes = data.get("mol_sizes")
+        if mol_sizes is not None:
+            out_size = mol_sizes.shape[0]
+        else:
+            # Fallback for callers that invoke mol_sum without calc_masks.
+            # Calculator/model inputs populate mol_sizes, avoiding this CUDA sync.
+            out_size = int(idx[-1].item()) + 1
 
         if x.ndim == 1:
             res = torch.zeros(out_size, device=x.device, dtype=x.dtype)

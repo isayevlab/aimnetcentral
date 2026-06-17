@@ -1,0 +1,28 @@
+{
+  "water_scaling_5001": {
+    "resident": {
+      "median_ms": 51.20599805377424,
+      "p95_ms": 51.4129139482975,
+      "last_energy": -3468986.0383603647
+    },
+    "neighbor_skin": {
+      "median_ms": 48.422786057926714,
+      "p95_ms": 48.500246135517955,
+      "last_energy": -3468986.0381963123
+    },
+    "speedup_vs_resident": 1.0574773205432264
+  },
+  "organic_scaling_5000": {
+    "resident": {
+      "median_ms": 57.09083960391581,
+      "p95_ms": 57.721920777112246,
+      "last_energy": -3482925.007865395
+    },
+    "neighbor_skin": {
+      "median_ms": 53.35665389429778,
+      "p95_ms": 55.214205058291554,
+      "last_energy": -3482925.007739753
+    },
+    "speedup_vs_resident": 1.0699853802117285
+  }
+}

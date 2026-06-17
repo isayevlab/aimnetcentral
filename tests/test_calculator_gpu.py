@@ -17,6 +17,46 @@ if not torch.cuda.is_available():
     pytest.skip("CUDA not available", allow_module_level=True)
 
 
+class _CountingNeighborList:
+    def __init__(self, wrapped):
+        self.wrapped = wrapped
+        self.calls = 0
+
+    def __getattr__(self, name):
+        return getattr(self.wrapped, name)
+
+    def __call__(self, *args, **kwargs):
+        self.calls += 1
+        return self.wrapped(*args, **kwargs)
+
+
+class _CountingExternalModule:
+    def __init__(self, wrapped):
+        self.wrapped = wrapped
+        self.calls = 0
+
+    def __getattr__(self, name):
+        return getattr(self.wrapped, name)
+
+    def __call__(self, *args, **kwargs):
+        self.calls += 1
+        return self.wrapped(*args, **kwargs)
+
+
+def _wrap_neighbor_lists(calc):
+    for attr in ("_nblist", "_nblist_lr", "_nblist_coulomb", "_nblist_dftd3"):
+        nblist = getattr(calc, attr)
+        if nblist is not None:
+            setattr(calc, attr, _CountingNeighborList(nblist))
+
+
+def _neighbor_list_calls(calc):
+    return sum(
+        getattr(getattr(calc, attr), "calls", 0)
+        for attr in ("_nblist", "_nblist_lr", "_nblist_coulomb", "_nblist_dftd3")
+    )
+
+
 class TestGPUBasics:
     """Basic GPU functionality tests."""
 
@@ -135,6 +175,38 @@ class TestCUDANeighborList:
 class TestGPUBatching:
     """Tests for GPU-specific batching behavior."""
 
+    @staticmethod
+    def _water_data():
+        return {
+            "coord": torch.tensor(
+                [[0.0, 0.0, 0.0], [0.9572, 0.0, 0.0], [-0.2390, 0.9270, 0.0]],
+                dtype=torch.float32,
+            ),
+            "numbers": torch.tensor([8, 1, 1]),
+            "charge": torch.tensor(0.0),
+        }
+
+    @classmethod
+    def _resident_water_cluster(cls, copies=4):
+        water = cls._water_data()
+        coords = []
+        for i in range(copies):
+            coords.append(water["coord"] + torch.tensor([4.0 * i, 0.0, 0.0], dtype=torch.float32))
+        return {
+            "coord": torch.cat(coords, dim=0).cuda(),
+            "numbers": water["numbers"].repeat(copies).cuda(),
+            "charge": torch.tensor(0.0, device="cuda"),
+        }
+
+    @staticmethod
+    def _assert_observables_close(res_default, res_sparse, n_atoms):
+        assert res_default["energy"].shape == res_sparse["energy"].shape == (1,)
+        assert res_default["charges"].shape == res_sparse["charges"].shape == (n_atoms,)
+        assert res_default["forces"].shape == res_sparse["forces"].shape == (n_atoms, 3)
+        torch.testing.assert_close(res_default["energy"], res_sparse["energy"], rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(res_default["charges"], res_sparse["charges"], rtol=1e-4, atol=1e-5)
+        torch.testing.assert_close(res_default["forces"], res_sparse["forces"], rtol=1e-4, atol=1e-4)
+
     @pytest.mark.ase
     def test_large_batch_on_gpu(self):
         """Test large batch processing on GPU."""
@@ -175,6 +247,221 @@ class TestGPUBatching:
         res_flat = calc_flat(data)
 
         assert torch.allclose(res_batch["energy"], res_flat["energy"], rtol=1e-5)
+
+    @pytest.mark.ase
+    @pytest.mark.parametrize("molecule", ["water", "caffeine"])
+    def test_single_structure_dense_default_matches_forced_sparse_outputs(self, molecule):
+        """Small 2D CUDA structures keep public shapes and match forced sparse outputs."""
+        data = self._water_data() if molecule == "water" else load_mol(CAFFEINE_FILE)
+        n_atoms = len(data["numbers"])
+
+        calc_default = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=n_atoms + 1)
+        calc_sparse = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
+
+        res_default = calc_default(data, forces=True)
+        res_sparse = calc_sparse(data, forces=True)
+
+        self._assert_observables_close(res_default, res_sparse, n_atoms)
+
+    def test_pbc_stress_path_matches_forced_sparse_outputs(self):
+        """Periodic stress inputs stay on the sparse path and match forced sparse outputs."""
+        data = {
+            "coord": torch.tensor(
+                [
+                    [0.000, 0.000, 0.000],
+                    [0.957, 0.000, 0.000],
+                    [-0.239, 0.927, 0.000],
+                    [3.000, 3.000, 3.000],
+                    [3.957, 3.000, 3.000],
+                    [2.761, 3.927, 3.000],
+                ],
+                dtype=torch.float32,
+            ),
+            "numbers": torch.tensor([8, 1, 1, 8, 1, 1]),
+            "charge": torch.tensor(0.0),
+            "cell": torch.eye(3, dtype=torch.float32) * 8.0,
+            "pbc": torch.tensor([True, True, True]),
+        }
+        calc_default = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=1000)
+        calc_sparse = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
+
+        res_default = calc_default(data, forces=True, stress=True)
+        res_sparse = calc_sparse(data, forces=True, stress=True)
+
+        self._assert_observables_close(res_default, res_sparse, len(data["numbers"]))
+        assert res_default["stress"].shape == res_sparse["stress"].shape == (3, 3)
+        torch.testing.assert_close(res_default["stress"], res_sparse["stress"], rtol=1e-4, atol=1e-5)
+
+    def test_caller_provided_nbmat_bypass_matches_forced_sparse_outputs(self):
+        """Caller-provided neighbor matrices bypass the dense fast path."""
+        data = self._water_data()
+        n_atoms = len(data["numbers"])
+        prep_calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
+        prepared = prep_calc.prepare_input(
+            {k: v.clone() if isinstance(v, torch.Tensor) else v for k, v in data.items()}
+        )
+        provided = {
+            k: v.detach().clone() if isinstance(v, torch.Tensor) else v
+            for k, v in prepared.items()
+            if k in AIMNet2Calculator.keys_in or k in AIMNet2Calculator.keys_in_optional
+        }
+
+        calc_default = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=1000)
+        calc_sparse = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
+
+        res_provided = calc_default(provided, forces=True)
+        res_sparse = calc_sparse(data, forces=True)
+
+        self._assert_observables_close(res_provided, res_sparse, n_atoms)
+
+    def test_hessian_path_matches_forced_sparse_outputs(self):
+        """Hessian requests keep the existing sparse path under high nb_threshold."""
+        data = self._water_data()
+        calc_default = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=1000)
+        calc_sparse = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
+        calc_default.external_dftd3 = None
+        calc_sparse.external_dftd3 = None
+
+        res_default = calc_default(data, hessian=True)
+        res_sparse = calc_sparse(data, hessian=True)
+
+        assert res_default["hessian"].shape == res_sparse["hessian"].shape == (3, 3, 3, 3)
+        torch.testing.assert_close(res_default["energy"], res_sparse["energy"], rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(res_default["charges"], res_sparse["charges"], rtol=1e-4, atol=1e-5)
+        torch.testing.assert_close(res_default["hessian"], res_sparse["hessian"], rtol=1e-3, atol=1e-3)
+
+    @pytest.mark.ase
+    def test_static_cache_reuses_neighbor_matrices_for_same_resident_tensors(self):
+        """Opt-in static cache avoids rebuilding neighbor matrices on repeated CUDA tensors."""
+        data = self._resident_water_cluster()
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cache_static=True)
+        _wrap_neighbor_lists(calc)
+
+        first = calc(data, forces=True)
+        calls_after_first = _neighbor_list_calls(calc)
+        assert calls_after_first > 0
+
+        second = calc(data, forces=True)
+        calls_after_second = _neighbor_list_calls(calc)
+        assert calls_after_second == calls_after_first
+        torch.testing.assert_close(first["energy"], second["energy"], rtol=1e-6, atol=1e-6)
+        torch.testing.assert_close(first["forces"], second["forces"], rtol=1e-6, atol=1e-6)
+
+        data["coord"][0, 0] += 0.01
+        calc(data, forces=True)
+        assert _neighbor_list_calls(calc) > calls_after_second
+
+    @pytest.mark.ase
+    def test_static_cache_is_disabled_by_default(self):
+        """Default calculator behavior rebuilds neighbor matrices every call."""
+        data = self._resident_water_cluster()
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
+        _wrap_neighbor_lists(calc)
+
+        calc(data, forces=True)
+        calls_after_first = _neighbor_list_calls(calc)
+        assert calls_after_first > 0
+        calc(data, forces=True)
+        assert _neighbor_list_calls(calc) > calls_after_first
+
+    @pytest.mark.ase
+    def test_static_cache_reuses_dftd3_terms_for_same_resident_tensors(self):
+        """Opt-in static cache avoids rerunning external DFTD3 on repeated CUDA tensors."""
+        data = self._resident_water_cluster()
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cache_static=True)
+        assert calc.external_dftd3 is not None
+        calc.external_dftd3 = _CountingExternalModule(calc.external_dftd3)
+
+        first = calc(data, forces=True)
+        assert calc.external_dftd3.calls == 1
+
+        second = calc(data, forces=True)
+        assert calc.external_dftd3.calls == 1
+        torch.testing.assert_close(first["energy"], second["energy"], rtol=1e-6, atol=1e-6)
+        torch.testing.assert_close(first["forces"], second["forces"], rtol=1e-6, atol=1e-6)
+
+        data["coord"][0, 0] += 0.01
+        calc(data, forces=True)
+        assert calc.external_dftd3.calls == 2
+
+    @pytest.mark.ase
+    def test_static_dftd3_cache_is_disabled_by_default(self):
+        """Default calculator behavior reruns external DFTD3 every call."""
+        data = self._resident_water_cluster()
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
+        assert calc.external_dftd3 is not None
+        calc.external_dftd3 = _CountingExternalModule(calc.external_dftd3)
+
+        calc(data, forces=True)
+        assert calc.external_dftd3.calls == 1
+        calc(data, forces=True)
+        assert calc.external_dftd3.calls == 2
+
+    @pytest.mark.ase
+    def test_neighbor_skin_reuses_neighbor_matrices_for_small_displacements(self):
+        """Opt-in neighbor skin reuses cutoff+skin lists until displacement exceeds half the skin."""
+        data = self._resident_water_cluster(copies=6)
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, neighbor_skin=0.5)
+        _wrap_neighbor_lists(calc)
+
+        calc(data, forces=True)
+        calls_after_first = _neighbor_list_calls(calc)
+        assert calls_after_first > 0
+
+        perturb = torch.zeros_like(data["coord"])
+        perturb[:, 0] = torch.linspace(-0.05, 0.05, data["coord"].shape[0], device="cuda")
+        data["coord"].add_(perturb)
+
+        res_skin = calc(data, forces=True)
+        assert _neighbor_list_calls(calc) == calls_after_first
+
+        calc_strict = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
+        res_strict = calc_strict(data, forces=True)
+        torch.testing.assert_close(res_skin["energy"], res_strict["energy"], rtol=1e-5, atol=2e-5)
+        torch.testing.assert_close(res_skin["charges"], res_strict["charges"], rtol=1e-4, atol=1e-5)
+        torch.testing.assert_close(res_skin["forces"], res_strict["forces"], rtol=1e-4, atol=1e-4)
+
+        data["coord"][0, 0].add_(0.34)
+        calc(data, forces=True)
+        assert _neighbor_list_calls(calc) > calls_after_first
+
+    @pytest.mark.ase
+    def test_neighbor_skin_bypasses_periodic_inputs(self):
+        """Periodic inputs rebuild normal shifted neighbor lists even when neighbor_skin is set."""
+        data = {
+            "coord": torch.tensor(
+                [
+                    [0.000, 0.000, 0.000],
+                    [0.957, 0.000, 0.000],
+                    [-0.239, 0.927, 0.000],
+                    [3.000, 3.000, 3.000],
+                    [3.957, 3.000, 3.000],
+                    [2.761, 3.927, 3.000],
+                ],
+                dtype=torch.float32,
+                device="cuda",
+            ),
+            "numbers": torch.tensor([8, 1, 1, 8, 1, 1], device="cuda"),
+            "charge": torch.tensor(0.0, device="cuda"),
+            "cell": torch.eye(3, dtype=torch.float32, device="cuda") * 8.0,
+            "pbc": torch.tensor([True, True, True], device="cuda"),
+        }
+        calc = AIMNet2Calculator(
+            "aimnet2",
+            device="cuda",
+            nb_threshold=0,
+            needs_coulomb=False,
+            needs_dispersion=False,
+            neighbor_skin=1.0,
+        )
+        _wrap_neighbor_lists(calc)
+
+        calc(data, forces=True)
+        calls_after_first = _neighbor_list_calls(calc)
+        assert calls_after_first > 0
+        data["coord"][0, 0].add_(0.01)
+        calc(data, forces=True)
+        assert _neighbor_list_calls(calc) > calls_after_first
 
 
 class TestGPUMemory:

@@ -30,6 +30,29 @@ forces = atoms.get_forces()                  # eV/A
 atoms.calc = AIMNet2ASE("aimnet2", charge=-1)
 ```
 
+## Performance knobs
+
+For drivers that request energy first and forces immediately afterward at the same geometry, use
+`compute_forces_for_energy=True` to compute and cache the force superset during the energy request:
+
+```python
+atoms.calc = AIMNet2ASE("aimnet2", compute_forces_for_energy=True)
+```
+
+Leave this disabled for energy-only screening because force computation is more expensive than an energy-only call.
+
+For large non-periodic optimization or MD runs on CUDA, configure the underlying calculator with a neighbor-list skin:
+
+```python
+from aimnet.calculators import AIMNet2Calculator, AIMNet2ASE
+
+base = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, neighbor_skin=0.5)
+atoms.calc = AIMNet2ASE(base, compute_forces_for_energy=True)
+```
+
+`neighbor_skin` reuses calculator-built sparse neighbor matrices between small geometry updates. It is disabled by
+default and bypassed for PBC, stress, Hessian, caller-provided neighbor matrices, and multi-system `mol_idx` inputs.
+
 ## Periodic systems
 
 The calculator handles PBC automatically when `atoms.pbc` is set and the cell is non-zero. Use `atoms.get_stress()` to obtain the stress tensor for periodic systems.
