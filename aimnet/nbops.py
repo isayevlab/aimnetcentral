@@ -1,6 +1,8 @@
 import torch
 from torch import Tensor
 
+from aimnet.profiling import nvtx_range
+
 
 def set_nb_mode(data: dict[str, Tensor]) -> dict[str, Tensor]:
     """Logic to guess and set the neighbor model."""
@@ -235,24 +237,25 @@ def get_i(x: Tensor, data: dict[str, Tensor]) -> Tensor:
 
 
 def mol_sum(x: Tensor, data: dict[str, Tensor]) -> Tensor:
-    nb_mode = get_nb_mode(data)
-    if nb_mode in (0, 2):
-        res = x.sum(dim=1)
-    elif nb_mode == 1:
-        assert x.ndim in (
-            1,
-            2,
-        ), "Invalid tensor shape for mol_sum, ndim should be 1 or 2"
-        idx = data["mol_idx"]
-        # assuming mol_idx is sorted, replace with max if not
-        out_size = int(idx[-1].item()) + 1
+    with nvtx_range("aimnet.reductions.mol_sum"):
+        nb_mode = get_nb_mode(data)
+        if nb_mode in (0, 2):
+            res = x.sum(dim=1)
+        elif nb_mode == 1:
+            assert x.ndim in (
+                1,
+                2,
+            ), "Invalid tensor shape for mol_sum, ndim should be 1 or 2"
+            idx = data["mol_idx"]
+            # assuming mol_idx is sorted, replace with max if not
+            out_size = int(idx[-1].item()) + 1
 
-        if x.ndim == 1:
-            res = torch.zeros(out_size, device=x.device, dtype=x.dtype)
+            if x.ndim == 1:
+                res = torch.zeros(out_size, device=x.device, dtype=x.dtype)
+            else:
+                idx = idx.unsqueeze(-1).expand(-1, x.shape[1])
+                res = torch.zeros(out_size, x.shape[1], device=x.device, dtype=x.dtype)
+            res.scatter_add_(0, idx, x)
         else:
-            idx = idx.unsqueeze(-1).expand(-1, x.shape[1])
-            res = torch.zeros(out_size, x.shape[1], device=x.device, dtype=x.dtype)
-        res.scatter_add_(0, idx, x)
-    else:
-        raise ValueError(f"Invalid neighbor mode: {nb_mode}")
-    return res
+            raise ValueError(f"Invalid neighbor mode: {nb_mode}")
+        return res

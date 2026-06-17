@@ -256,6 +256,56 @@ with torch.autocast("cuda"):
 result = calc(data, forces=True)
 ```
 
+## L40S Precision And Performance Campaign
+
+The repository includes a reproducible benchmark campaign for precision and
+execution-mode decisions:
+
+```bash
+python benchmarks/precision/bench_precision.py \
+  --model aimnet2 \
+  --modes auto \
+  --device cuda:0 \
+  --warmup 5 \
+  --repeat 20 \
+  --stability ase-geo ase-nve torchsim-static \
+  --stability-steps 10 \
+  --md-timestep-fs 0.5 \
+  --md-temperature-k 300 \
+  --output results/precision_l40s_all_workloads.jsonl
+
+python benchmarks/precision/summarize_results.py \
+  results/precision_l40s_all_workloads.jsonl \
+  --output results/precision_l40s_summary.md
+```
+
+The benchmark records GPU name, compute capability, CUDA, PyTorch, AIMNet
+version, `nb_threshold`, and `compile_model` so results can later be compared
+with A100, H100, RTX 4090, Blackwell, or other architectures.
+
+On the current NVIDIA L40S campaign, strict float32 remained the robust default:
+
+- `tf32_learned` and `bf16_learned` did not meet the 15% meaningful-speedup gate.
+- BF16 failed accuracy and/or stability gates on most workloads.
+- Reduced precision should stay opt-in and experimental until a future GPU/backend
+  run passes accuracy, ASE stability, TorchSim stability, and speedup gates.
+
+For L40S, the meaningful optimization is execution-mode selection rather than
+reduced precision. Single non-periodic CUDA structures with atom counts below
+`nb_threshold` use dense batched execution internally and preserve the legacy
+single-structure output shape. Set `nb_threshold=0` to force sparse neighbor-list
+execution for debugging or exact A/B benchmarking.
+
+Use the strict profiler to collect bottleneck evidence for one workload:
+
+```bash
+python benchmarks/precision/profile_strict.py \
+  --workload caffeine_forces \
+  --device cuda:0 \
+  --nb-threshold 120 \
+  --output results/profile_strict_caffeine_l40s.json
+```
+
 ### Do Not Set train=True for Inference
 
 The `train` parameter controls whether gradients are tracked on model parameters. Setting `train=True` for inference wastes memory and slows computation:

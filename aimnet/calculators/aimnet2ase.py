@@ -33,7 +33,7 @@ from .calculator import AIMNet2Calculator
 
 
 class AIMNet2ASE(Calculator):
-    implemented_properties: ClassVar[list[str]] = [
+    implemented_properties: ClassVar[list[str]] = [  # type: ignore[misc]
         "energy",
         "forces",
         "free_energy",

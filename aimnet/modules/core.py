@@ -6,6 +6,8 @@ from torch import Tensor, nn
 
 from aimnet import constants, nbops, ops
 from aimnet.config import get_init_module, get_module
+from aimnet.precision import PrecisionPolicy, learned_autocast_context
+from aimnet.profiling import nvtx_range
 
 
 def MLP(
@@ -118,7 +120,8 @@ class AtomicSum(nn.Module):
         return f"key_in: {self.key_in}, key_out: {self.key_out}"
 
     def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
-        data[self.key_out] = nbops.mol_sum(data[self.key_in], data)
+        with nvtx_range("aimnet.reductions.mol_sum"):
+            data[self.key_out] = nbops.mol_sum(data[self.key_in], data)
         return data
 
 
@@ -136,7 +139,12 @@ class Output(nn.Module):
         return f"key_in: {self.key_in}, key_out: {self.key_out}"
 
     def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
-        v = self.mlp(data[self.key_in]).squeeze(-1)
+        policy = cast(dict[str, Any], data).get("_precision_policy")
+        policy = policy if isinstance(policy, PrecisionPolicy) else None
+        with nvtx_range("aimnet.output"), nvtx_range("aimnet.mlp"):
+            with learned_autocast_context(policy, data[self.key_in].device.type):
+                v = self.mlp(data[self.key_in]).squeeze(-1)
+            v = v.float()
         if data["_input_padded"].item():
             v = nbops.mask_i_(v, data, mask_value=0.0)
         data[self.key_out] = v

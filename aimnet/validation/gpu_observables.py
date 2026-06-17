@@ -12,6 +12,7 @@ import json
 import os
 import sys
 from importlib.metadata import PackageNotFoundError, version
+from typing import Any, cast
 
 
 def _ver(dist: str):
@@ -74,13 +75,13 @@ def build_systems() -> dict:
     }
 
     ddir = _repo_data_dir()
-    caffeine = ase.io.read(os.path.join(ddir, "caffeine.xyz"))
+    caffeine = cast(Any, ase.io.read(os.path.join(ddir, "caffeine.xyz")))
     data["caffeine"] = {
         "coord": caffeine.get_positions().tolist(),
         "numbers": caffeine.get_atomic_numbers().tolist(),
         "charge": 0.0,
     }
-    crystal = ase.io.read(os.path.join(ddir, "2000054.cif"))
+    crystal = cast(Any, ase.io.read(os.path.join(ddir, "2000054.cif")))
     data["spiro_pbc"] = {
         "coord": crystal.get_positions().tolist(),
         "numbers": crystal.get_atomic_numbers().tolist(),

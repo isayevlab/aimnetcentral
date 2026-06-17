@@ -176,6 +176,26 @@ class TestGPUBatching:
 
         assert torch.allclose(res_batch["energy"], res_flat["energy"], rtol=1e-5)
 
+    @pytest.mark.ase
+    def test_single_structure_dense_fast_path_preserves_output_contract(self):
+        """Single 2D CUDA structures may use dense mode internally but keep legacy output shapes."""
+        data = load_mol(CAFFEINE_FILE)
+        n_atoms = len(data["numbers"])
+
+        calc_dense = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=n_atoms + 1)
+        calc_sparse = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
+
+        res_dense = calc_dense(data, forces=True)
+        res_sparse = calc_sparse(data, forces=True)
+
+        assert calc_dense._single_dense_batch is True
+        assert res_dense["energy"].shape == res_sparse["energy"].shape == (1,)
+        assert res_dense["charges"].shape == res_sparse["charges"].shape == (n_atoms,)
+        assert res_dense["forces"].shape == res_sparse["forces"].shape == (n_atoms, 3)
+        torch.testing.assert_close(res_dense["energy"], res_sparse["energy"], rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(res_dense["charges"], res_sparse["charges"], rtol=1e-4, atol=1e-5)
+        torch.testing.assert_close(res_dense["forces"], res_sparse["forces"], rtol=1e-4, atol=1e-4)
+
 
 class TestGPUMemory:
     """Tests for GPU memory management."""

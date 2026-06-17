@@ -6,6 +6,7 @@ from torch import Tensor, nn
 
 from aimnet import nbops, ops
 from aimnet.kernels import conv_sv_2d_sp
+from aimnet.profiling import nvtx_range
 
 
 class AEVSV(nn.Module):
@@ -80,14 +81,15 @@ class AEVSV(nn.Module):
         self.register_parameter("shifts" + mod, nn.Parameter(shifts, requires_grad=False))
 
     def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
-        # d_ij: distances to neighbors (..., m)
-        # r_ij: displacement vectors to neighbors (..., m, 3)
-        d_ij, r_ij = ops.calc_distances(data)
-        data["d_ij"] = d_ij
-        # Atomic environment vectors: (..., m, g, 4)
-        # 4 components = 1 scalar (radial) + 3 vector (directional)
-        g_sv = self._calc_aev(r_ij, d_ij, data)
-        data["g_sv"] = g_sv
+        with nvtx_range("aimnet.aevsv"):
+            # d_ij: distances to neighbors (..., m)
+            # r_ij: displacement vectors to neighbors (..., m, 3)
+            d_ij, r_ij = ops.calc_distances(data)
+            data["d_ij"] = d_ij
+            # Atomic environment vectors: (..., m, g, 4)
+            # 4 components = 1 scalar (radial) + 3 vector (directional)
+            g_sv = self._calc_aev(r_ij, d_ij, data)
+            data["g_sv"] = g_sv
         return data
 
     def _calc_aev(self, r_ij: Tensor, d_ij: Tensor, data: dict[str, Tensor]) -> Tensor:
@@ -153,25 +155,26 @@ class ConvSV(nn.Module):
         return n
 
     def forward(self, data: dict[str, Tensor], a: Tensor) -> Tensor:
-        g_sv = data["g_sv"]
-        mode = nbops.get_nb_mode(data)
-        if self.d2features:
-            if mode > 0 and a.device.type == "cuda":
-                avf_sv = conv_sv_2d_sp(a, data["nbmat"], g_sv)
-            elif mode > 0:
-                a_j = a.index_select(0, data["nbmat"].flatten()).unflatten(0, data["nbmat"].shape)
-                avf_sv = torch.einsum("...mag,...mgd->...agd", a_j, g_sv)
+        with nvtx_range("aimnet.convsv"):
+            g_sv = data["g_sv"]
+            mode = nbops.get_nb_mode(data)
+            if self.d2features:
+                if mode > 0 and a.device.type == "cuda":
+                    avf_sv = conv_sv_2d_sp(a, data["nbmat"], g_sv)
+                elif mode > 0:
+                    a_j = a.index_select(0, data["nbmat"].flatten()).unflatten(0, data["nbmat"].shape)
+                    avf_sv = torch.einsum("...mag,...mgd->...agd", a_j, g_sv)
+                else:
+                    avf_sv = torch.einsum("...mag,...mgd->...agd", a.unsqueeze(1), g_sv)
             else:
-                avf_sv = torch.einsum("...mag,...mgd->...agd", a.unsqueeze(1), g_sv)
-        else:
-            if mode > 0:
-                a_j = a.index_select(0, data["nbmat"].flatten()).unflatten(0, data["nbmat"].shape)
-                avf_sv = torch.einsum("...ma,...mgd->...agd", a_j, g_sv)
-            else:
-                avf_sv = torch.einsum("...ma,...mgd->...agd", a.unsqueeze(1), g_sv)
-        avf_s, avf_v = avf_sv.split([1, 3], dim=-1)
-        avf_v = torch.einsum("agh,...agd->...ahd", self.agh, avf_v).pow(2).sum(-1)
-        return torch.cat([avf_s.squeeze(-1).flatten(-2, -1), avf_v.flatten(-2, -1)], dim=-1)
+                if mode > 0:
+                    a_j = a.index_select(0, data["nbmat"].flatten()).unflatten(0, data["nbmat"].shape)
+                    avf_sv = torch.einsum("...ma,...mgd->...agd", a_j, g_sv)
+                else:
+                    avf_sv = torch.einsum("...ma,...mgd->...agd", a.unsqueeze(1), g_sv)
+            avf_s, avf_v = avf_sv.split([1, 3], dim=-1)
+            avf_v = torch.einsum("agh,...agd->...ahd", self.agh, avf_v).pow(2).sum(-1)
+            return torch.cat([avf_s.squeeze(-1).flatten(-2, -1), avf_v.flatten(-2, -1)], dim=-1)
 
 
 def _init_ahg(b: int, m: int, n: int):

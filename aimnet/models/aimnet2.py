@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 
 import torch
 from torch import Tensor, nn
@@ -7,6 +7,8 @@ from torch import Tensor, nn
 from aimnet import nbops, ops
 from aimnet.models.base import AIMNet2Base
 from aimnet.modules import AEVSV, MLP, ConvSV, Embedding
+from aimnet.precision import PrecisionPolicy, learned_autocast_context
+from aimnet.profiling import nvtx_range
 
 
 class AIMNet2(AIMNet2Base):
@@ -163,7 +165,11 @@ class AIMNet2(AIMNet2Base):
             else:
                 _in = torch.cat([self._prepare_in_a(data), self._prepare_in_q(data)], dim=-1)
 
-            _out = mlp(_in)
+            policy = cast(dict[str, Any], data).get("_precision_policy")
+            policy = policy if isinstance(policy, PrecisionPolicy) else None
+            with nvtx_range("aimnet.mlp"), learned_autocast_context(policy, _in.device.type):
+                _out = mlp(_in)
+            _out = _out.float()
             if data["_input_padded"].item():
                 _out = nbops.mask_i_(_out, data, mask_value=0.0)
 
@@ -181,7 +187,8 @@ class AIMNet2(AIMNet2Base):
             data["charges"] = data["charges"].squeeze(-1)
             data["charge"] = data["charge"].squeeze(-1)
 
-        for m in self.outputs.children():
-            data = m(data)
+        with nvtx_range("aimnet.output"):
+            for m in self.outputs.children():
+                data = m(data)
 
         return data

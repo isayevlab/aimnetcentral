@@ -1,0 +1,33 @@
+workloads:
+  water_cluster_501:
+    description: Deterministic 167-water non-PBC cluster for ~500 atom sparse-force benchmarking.
+    request: {forces: true, stress: false, hessian: false}
+    generate:
+      kind: water_cluster
+      molecules: 167
+      spacing: 3.2
+      jitter: 0.04
+      seed: 501
+      charge: 0.0
+
+  water_cluster_999:
+    description: Deterministic 333-water non-PBC cluster for ~1000 atom sparse-force benchmarking.
+    request: {forces: true, stress: false, hessian: false}
+    generate:
+      kind: water_cluster
+      molecules: 333
+      spacing: 3.2
+      jitter: 0.04
+      seed: 999
+      charge: 0.0
+
+  water_cluster_1500:
+    description: Deterministic 500-water non-PBC cluster for >1000 atom sparse-force benchmarking.
+    request: {forces: true, stress: false, hessian: false}
+    generate:
+      kind: water_cluster
+      molecules: 500
+      spacing: 3.2
+      jitter: 0.04
+      seed: 1500
+      charge: 0.0

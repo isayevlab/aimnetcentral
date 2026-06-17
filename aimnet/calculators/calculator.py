@@ -15,6 +15,13 @@ from torch import Tensor, nn
 from aimnet.models.base import load_model
 from aimnet.modules import DFTD3, LRCoulomb
 from aimnet.modules.lr import ExternalDerivativeTerms
+from aimnet.precision import (
+    PrecisionPolicy,
+    apply_model_precision_policy,
+    resolve_precision_policy,
+    torch_precision_context,
+)
+from aimnet.profiling import nvtx_range
 
 from .model_registry import get_model_path, get_registry_model_family
 
@@ -243,6 +250,8 @@ class AIMNet2Calculator:
         When False, all model parameters have requires_grad=False, which
         improves torch.compile compatibility and reduces memory usage.
         Set to True only when training the model.
+    precision : str | PrecisionPolicy | None
+        Opt-in precision policy. Defaults to strict behavior.
 
     Attributes
     ----------
@@ -299,7 +308,9 @@ class AIMNet2Calculator:
         ensemble_member: int = 0,
         revision: str | None = None,
         token: str | None = None,
+        precision: str | PrecisionPolicy | None = None,
     ):
+        self.precision = resolve_precision_policy(precision)
         # Device selection: use provided or auto-detect
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -366,6 +377,8 @@ class AIMNet2Calculator:
         if metadata is not None:
             metadata = _apply_family_defaults(metadata, registry_family)
             self.model._metadata = metadata  # type: ignore[assignment]
+
+        self.model = apply_model_precision_policy(self.model, self.precision, self.device)
 
         # Compile model if requested
         self._was_compiled = bool(compile_model)
@@ -469,6 +482,7 @@ class AIMNet2Calculator:
 
         # indicator if input was flattened
         self._batch: int | None = None
+        self._single_dense_batch = False
         self._max_mol_size: int = 0
         # placeholder for tensors that require grad
         self._saved_for_grad: dict[str, Tensor] = {}
@@ -941,7 +955,8 @@ class AIMNet2Calculator:
                     subsystems, forces=forces, stress=stress, validate_species=validate_species, stack=stack
                 )
 
-        data = self.prepare_input(data, hessian=hessian)
+        with nvtx_range("aimnet.prepare_input"):
+            data = self.prepare_input(data, hessian=hessian)
 
         if hessian and "mol_idx" in data and data["mol_idx"][-1] > 0:
             raise NotImplementedError(
@@ -949,14 +964,25 @@ class AIMNet2Calculator:
                 "pass a 3D batch or a mol_idx dict to get per-structure Hessians."
             )
         data = self.set_grad_tensors(data, forces=forces, stress=stress, hessian=hessian)
-        if isinstance(self.model, torch.jit.ScriptModule):
-            with torch.jit.optimized_execution(False):  # type: ignore
-                data = self.model(data)
-        else:
-            data = self.model(data)
+        with torch_precision_context(self.precision), nvtx_range("aimnet.model"):
+            if isinstance(self.model, torch.jit.ScriptModule):
+                with torch.jit.optimized_execution(False):  # type: ignore
+                    data = self.model(data)
+            else:
+                policy_data = cast(dict[str, Any], data)
+                policy_data["_precision_policy"] = self.precision
+                try:
+                    data = self.model(data)
+                finally:
+                    policy_data.pop("_precision_policy", None)
+                    cast(dict[str, Any], data).pop("_precision_policy", None)
         # Run external modules if present
-        data, coulomb_terms = self._run_external_modules(data, forces=forces or hessian, stress=stress, hessian=hessian)
-        data = self.get_derivatives(data, forces=forces, stress=stress, hessian=hessian, coulomb_terms=coulomb_terms)
+        with nvtx_range("aimnet.longrange.external"):
+            data, coulomb_terms = self._run_external_modules(
+                data, forces=forces or hessian, stress=stress, hessian=hessian
+            )
+        with nvtx_range("aimnet.derivatives"):
+            data = self.get_derivatives(data, forces=forces, stress=stress, hessian=hessian, coulomb_terms=coulomb_terms)
         data = self.process_output(data)
         return data
 
@@ -1041,6 +1067,8 @@ class AIMNet2Calculator:
         if data["coord"].ndim == 2:
             data = self.unpad_output(data)
         data = self.mol_unflatten(data)
+        if self._single_dense_batch:
+            data = self._squeeze_single_dense_output(data)
         data = self.keep_only(data)
         return data
 
@@ -1225,12 +1253,27 @@ class AIMNet2Calculator:
         """Flatten the input data for multiple molecules.
         Will not flatten for batched input and molecule size below threshold.
         """
+        self._single_dense_batch = False
         ndim = data["coord"].ndim
         if ndim == 2:
             self._batch = None
+            can_use_dense_single = (
+                not hessian
+                and "mol_idx" not in data
+                and "nbmat" not in data
+                and data.get("cell") is None
+                and torch.device(self.device).type == "cuda"
+                and self.nb_threshold > 0
+                and data["coord"].shape[0] <= self.nb_threshold
+            )
+            self._max_mol_size = data["coord"].shape[0]
+            if can_use_dense_single:
+                data["coord"] = data["coord"].unsqueeze(0)
+                data["numbers"] = data["numbers"].unsqueeze(0)
+                self._single_dense_batch = True
+                return data
             if "mol_idx" not in data:
                 data["mol_idx"] = torch.zeros(data["coord"].shape[0], dtype=torch.long, device=self.device)
-                self._max_mol_size = data["coord"].shape[0]
             elif data["mol_idx"][-1] == 0:
                 self._max_mol_size = len(data["mol_idx"])
             else:
@@ -1265,6 +1308,13 @@ class AIMNet2Calculator:
             for k, v in data.items():
                 if k in self.atom_feature_keys:
                     data[k] = v.view(batch, -1, *v.shape[1:])
+        return data
+
+    def _squeeze_single_dense_output(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+        """Restore single-structure atom-wise shapes after internal dense batching."""
+        for k, v in data.items():
+            if k in self.atom_feature_keys and v.ndim >= 2 and v.shape[0] == 1:
+                data[k] = v.squeeze(0)
         return data
 
     def make_nbmat(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
@@ -1550,11 +1600,12 @@ class AIMNet2Calculator:
                 data["stress"] = dedc / volume
         if hessian:
             H = self.calculate_hessian(data["forces"], self._saved_for_grad["coord"])
-            if coulomb_terms is not None and getattr(coulomb_terms, "hessian", None) is not None:
+            coulomb_hessian = None if coulomb_terms is None else coulomb_terms.hessian
+            if coulomb_hessian is not None:
                 # The LR coulomb hessian is computed in float64 via finite
                 # differences. Accumulate in that (higher) precision rather than
                 # downcasting it to H's dtype, which would discard the FD precision.
-                H = H.to(dtype=coulomb_terms.hessian.dtype, device=H.device) + coulomb_terms.hessian.to(device=H.device)
+                H = H.to(dtype=coulomb_hessian.dtype, device=H.device) + coulomb_hessian.to(device=H.device)
             data["hessian"] = H
         return data
 

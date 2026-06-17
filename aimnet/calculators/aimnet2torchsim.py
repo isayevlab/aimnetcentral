@@ -93,12 +93,12 @@ class AIMNet2TorchSim(ModelInterface):
         """Underlying model metadata, when available."""
         return self._base_calc.metadata
 
-    @ModelInterface.compute_forces.setter
+    @ModelInterface.compute_forces.setter  # type: ignore[attr-defined]
     def compute_forces(self, value: bool) -> None:
         self._compute_forces = bool(value)
         self._update_implemented_properties()
 
-    @ModelInterface.compute_stress.setter
+    @ModelInterface.compute_stress.setter  # type: ignore[attr-defined]
     def compute_stress(self, value: bool) -> None:
         self._compute_stress = bool(value)
         self._update_implemented_properties()

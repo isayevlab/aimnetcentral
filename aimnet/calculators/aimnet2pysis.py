@@ -18,7 +18,7 @@ except ImportError as exc:
     ANG2BOHR = 1.0
     AU2EV = 1.0
     BOHR2ANG = 1.0
-    ATOMIC_NUMBERS: dict[str, int] = {}
+    ATOMIC_NUMBERS: dict[str, int] = {}  # type: ignore[no-redef]
     pysisyphus = None  # type: ignore[assignment]
 else:
     _PYSIS_IMPORT_ERROR = None
