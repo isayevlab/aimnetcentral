@@ -17,6 +17,58 @@ if not torch.cuda.is_available():
     pytest.skip("CUDA not available", allow_module_level=True)
 
 
+class _CountingNeighborList:
+    def __init__(self, wrapped):
+        object.__setattr__(self, "wrapped", wrapped)
+        object.__setattr__(self, "calls", 0)
+
+    def __getattr__(self, name):
+        return getattr(self.wrapped, name)
+
+    def __setattr__(self, name, value):
+        if name in {"wrapped", "calls"}:
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self.wrapped, name, value)
+
+    def __call__(self, *args, **kwargs):
+        self.calls += 1
+        return self.wrapped(*args, **kwargs)
+
+
+class _CountingExternalModule:
+    def __init__(self, wrapped):
+        object.__setattr__(self, "wrapped", wrapped)
+        object.__setattr__(self, "calls", 0)
+
+    def __getattr__(self, name):
+        return getattr(self.wrapped, name)
+
+    def __setattr__(self, name, value):
+        if name in {"wrapped", "calls"}:
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self.wrapped, name, value)
+
+    def __call__(self, *args, **kwargs):
+        self.calls += 1
+        return self.wrapped(*args, **kwargs)
+
+
+def _wrap_neighbor_lists(calc):
+    for attr in ("_nblist", "_nblist_lr", "_nblist_coulomb", "_nblist_dftd3"):
+        nblist = getattr(calc, attr)
+        if nblist is not None:
+            setattr(calc, attr, _CountingNeighborList(nblist))
+
+
+def _neighbor_list_calls(calc):
+    return sum(
+        getattr(getattr(calc, attr), "calls", 0)
+        for attr in ("_nblist", "_nblist_lr", "_nblist_coulomb", "_nblist_dftd3")
+    )
+
+
 class TestGPUBasics:
     """Basic GPU functionality tests."""
 
@@ -135,6 +187,29 @@ class TestCUDANeighborList:
 class TestGPUBatching:
     """Tests for GPU-specific batching behavior."""
 
+    @staticmethod
+    def _water_data():
+        return {
+            "coord": torch.tensor(
+                [[0.0, 0.0, 0.0], [0.9572, 0.0, 0.0], [-0.2390, 0.9270, 0.0]],
+                dtype=torch.float32,
+            ),
+            "numbers": torch.tensor([8, 1, 1]),
+            "charge": torch.tensor(0.0),
+        }
+
+    @classmethod
+    def _resident_water_cluster(cls, copies=4):
+        water = cls._water_data()
+        coords = []
+        for i in range(copies):
+            coords.append(water["coord"] + torch.tensor([4.0 * i, 0.0, 0.0], dtype=torch.float32))
+        return {
+            "coord": torch.cat(coords, dim=0).cuda(),
+            "numbers": water["numbers"].repeat(copies).cuda(),
+            "charge": torch.tensor(0.0, device="cuda"),
+        }
+
     @pytest.mark.ase
     def test_large_batch_on_gpu(self):
         """Test large batch processing on GPU."""
@@ -175,6 +250,99 @@ class TestGPUBatching:
         res_flat = calc_flat(data)
 
         assert torch.allclose(res_batch["energy"], res_flat["energy"], rtol=1e-5)
+
+    @pytest.mark.ase
+    def test_static_cache_reuses_neighbor_matrices_for_same_resident_tensors(self):
+        """Opt-in static cache avoids rebuilding neighbor matrices on repeated CUDA tensors."""
+        data = self._resident_water_cluster()
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cache_static=True)
+        _wrap_neighbor_lists(calc)
+
+        first = calc(data, forces=True)
+        calls_after_first = _neighbor_list_calls(calc)
+        assert calls_after_first > 0
+
+        second = calc(data, forces=True)
+        calls_after_second = _neighbor_list_calls(calc)
+        assert calls_after_second == calls_after_first
+        torch.testing.assert_close(first["energy"], second["energy"], rtol=1e-6, atol=1e-6)
+        torch.testing.assert_close(first["forces"], second["forces"], rtol=1e-6, atol=1e-6)
+
+        data["coord"][0, 0] += 0.01
+        calc(data, forces=True)
+        assert _neighbor_list_calls(calc) > calls_after_second
+
+    @pytest.mark.ase
+    def test_static_cache_is_disabled_by_default(self):
+        """Default calculator behavior rebuilds neighbor matrices every call."""
+        data = self._resident_water_cluster()
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
+        _wrap_neighbor_lists(calc)
+
+        calc(data, forces=True)
+        calls_after_first = _neighbor_list_calls(calc)
+        assert calls_after_first > 0
+        calc(data, forces=True)
+        assert _neighbor_list_calls(calc) > calls_after_first
+
+    @pytest.mark.ase
+    def test_static_cache_reuses_dftd3_terms_for_same_resident_tensors(self):
+        """Opt-in static cache avoids rerunning external DFTD3 on repeated CUDA tensors."""
+        data = self._resident_water_cluster()
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cache_static=True)
+        assert calc.external_dftd3 is not None
+        calc.external_dftd3 = _CountingExternalModule(calc.external_dftd3)
+
+        first = calc(data, forces=True)
+        assert calc.external_dftd3.calls == 1
+
+        second = calc(data, forces=True)
+        assert calc.external_dftd3.calls == 1
+        torch.testing.assert_close(first["energy"], second["energy"], rtol=1e-6, atol=1e-6)
+        torch.testing.assert_close(first["forces"], second["forces"], rtol=1e-6, atol=1e-6)
+
+        data["coord"][0, 0] += 0.01
+        calc(data, forces=True)
+        assert calc.external_dftd3.calls == 2
+
+    @pytest.mark.ase
+    def test_static_dftd3_cache_is_disabled_by_default(self):
+        """Default calculator behavior reruns external DFTD3 every call."""
+        data = self._resident_water_cluster()
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
+        assert calc.external_dftd3 is not None
+        calc.external_dftd3 = _CountingExternalModule(calc.external_dftd3)
+
+        calc(data, forces=True)
+        assert calc.external_dftd3.calls == 1
+        calc(data, forces=True)
+        assert calc.external_dftd3.calls == 2
+
+    @pytest.mark.ase
+    def test_static_cache_reuses_geometry_work_across_charge_changes(self):
+        """Same resident geometry can reuse cached static work while charge-dependent outputs recompute."""
+        data_neutral = self._resident_water_cluster()
+        data_charged = dict(data_neutral)
+        data_charged["charge"] = torch.tensor(1.0, device="cuda")
+
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cache_static=True)
+        assert calc.external_dftd3 is not None
+        _wrap_neighbor_lists(calc)
+        calc.external_dftd3 = _CountingExternalModule(calc.external_dftd3)
+
+        neutral = calc(data_neutral, forces=True)
+        neighbor_calls = _neighbor_list_calls(calc)
+        dftd3_calls = calc.external_dftd3.calls
+        assert neighbor_calls > 0
+        assert dftd3_calls == 1
+
+        charged = calc(data_charged, forces=True)
+        assert _neighbor_list_calls(calc) == neighbor_calls
+        assert calc.external_dftd3.calls == dftd3_calls
+        assert torch.isfinite(charged["energy"]).all()
+        assert torch.isfinite(charged["charges"]).all()
+        assert torch.isfinite(charged["forces"]).all()
+        assert not torch.allclose(neutral["charges"], charged["charges"], rtol=1e-5, atol=1e-6)
 
 
 class TestGPUMemory:

@@ -2,6 +2,7 @@ import copy
 import math
 import os
 import re
+import weakref
 import warnings
 from collections.abc import Mapping
 from types import MappingProxyType
@@ -238,6 +239,12 @@ class AIMNet2Calculator:
         Whether to compile the model with torch.compile(). Default is False.
     compile_kwargs : dict | None
         Additional keyword arguments to pass to torch.compile(). Default is None.
+    cache_static : bool
+        Whether to cache calculator-built neighbor matrices and explicit
+        external DFTD3 terms for repeated static CUDA inputs. Default is False.
+        This opt-in cache is limited to exact reuse of the same non-periodic
+        2D input tensors and is bypassed for Hessian, stress, training,
+        caller-supplied ``mol_idx``, and caller-supplied ``nbmat``.
     train : bool
         Whether to enable training mode. Default is False (inference mode).
         When False, all model parameters have requires_grad=False, which
@@ -295,6 +302,7 @@ class AIMNet2Calculator:
         device: str | None = None,
         compile_model: bool = False,
         compile_kwargs: dict | None = None,
+        cache_static: bool = False,
         train: bool = False,
         ensemble_member: int = 0,
         revision: str | None = None,
@@ -444,6 +452,9 @@ class AIMNet2Calculator:
         else:
             self.cutoff_lr = None
         self.nb_threshold = nb_threshold
+        self.cache_static = bool(cache_static)
+        self._static_nbmat_cache: dict[tuple[Any, ...], tuple[Any, Any, dict[str, Tensor]]] = {}
+        self._static_dftd3_cache: dict[tuple[Any, ...], tuple[Any, Any, dict[str, Any]]] = {}
 
         # Create adaptive neighbor list instances
         self._nblist = AdaptiveNeighborList(cutoff=self.cutoff)
@@ -470,6 +481,8 @@ class AIMNet2Calculator:
         # indicator if input was flattened
         self._batch: int | None = None
         self._max_mol_size: int = 0
+        self._static_input_cache_key: tuple[Any, ...] | None = None
+        self._static_input_cache_refs: tuple[Any, Any] | None = None
         # placeholder for tensors that require grad
         self._saved_for_grad: dict[str, Tensor] = {}
         # set flag of current Coulomb method
@@ -816,6 +829,7 @@ class AIMNet2Calculator:
 
         self._coulomb_method = method
         self._update_lr_nblists()
+        self._clear_static_nbmat_cache()
 
     def set_lr_cutoff(self, cutoff: float) -> None:
         """Set the unified long-range cutoff for all LR modules.
@@ -836,6 +850,7 @@ class AIMNet2Calculator:
         self._dftd3_cutoff = cutoff
         self.cutoff_lr = cutoff
         self._update_lr_nblists()
+        self._clear_static_nbmat_cache()
 
     def set_dftd3_cutoff(self, cutoff: float | None = None, smoothing_fraction: float | None = None) -> None:
         """Set DFTD3 cutoff and smoothing.
@@ -866,6 +881,7 @@ class AIMNet2Calculator:
         if self.external_dftd3 is not None:
             self.external_dftd3.set_smoothing(cutoff, smoothing_fraction)
         self._update_lr_nblists()
+        self._clear_static_nbmat_cache()
 
     def _validate_species_and_charge(self, data: dict[str, Any]) -> None:
         """Validate input elements and net charge against model metadata.
@@ -1006,19 +1022,38 @@ class AIMNet2Calculator:
             if dftd3_energy_graph:
                 data = self.external_dftd3(data, hessian=True)
             else:
-                result = self.external_dftd3(
+                cache_key = self._static_dftd3_cache_key(
                     data,
-                    compute_forces=forces,
-                    compute_virial=stress,
+                    forces=forces,
+                    stress=stress,
+                    hessian=hessian,
+                    dftd3_energy_graph=dftd3_energy_graph,
                 )
-                if forces or stress:
-                    data, dftd3_terms = result
+                cached = self._get_static_dftd3_cache(cache_key) if cache_key is not None else None
+                if cached is not None:
+                    data, dftd3_terms = self._apply_static_dftd3_cache(data, cached, forces=forces)
                 else:
-                    data = result
+                    data_before_dftd3 = dict(data)
+                    result = self.external_dftd3(
+                        data,
+                        compute_forces=forces,
+                        compute_virial=stress,
+                    )
+                    if forces or stress:
+                        data, dftd3_terms = result
+                    else:
+                        data = result
+                    if cache_key is not None:
+                        self._remember_static_dftd3(cache_key, data_before_dftd3, data, dftd3_terms)
 
         return data, _combine_external_terms(coulomb_terms, dftd3_terms)
 
     def prepare_input(self, data: dict[str, Any], *, hessian: bool = False) -> dict[str, Tensor]:
+        raw_data = data
+        self._static_input_cache_key = None
+        self._static_input_cache_refs = None
+        caller_had_mol_idx = raw_data.get("mol_idx") is not None
+        caller_had_nbmat = raw_data.get("nbmat") is not None
         data = self.to_input_tensors(data)
         data = self.mol_flatten(data, hessian=hessian)
         if data.get("cell") is not None and self._coulomb_method == "simple":
@@ -1033,9 +1068,240 @@ class AIMNet2Calculator:
         if data["coord"].ndim == 2:
             # Skip neighbor list calculation if already provided
             if "nbmat" not in data:
-                data = self.make_nbmat(data)
+                cache_key = self._static_nbmat_cache_key(
+                    raw_data,
+                    data,
+                    hessian=hessian,
+                    caller_had_mol_idx=caller_had_mol_idx,
+                    caller_had_nbmat=caller_had_nbmat,
+                )
+                self._static_input_cache_key = cache_key
+                self._static_input_cache_refs = self._static_tensor_refs(raw_data) if cache_key is not None else None
+                cached = self._get_static_nbmat_cache(cache_key, raw_data) if cache_key is not None else None
+                if cached is not None and "nbmat" in cached:
+                    data.update(cached)
+                else:
+                    data = self.make_nbmat(data)
+                    if cache_key is not None:
+                        self._remember_static_nbmat(cache_key, raw_data, data)
             data = self.pad_input(data)
         return data
+
+    def _static_nbmat_cache_key(
+        self,
+        raw_data: dict[str, Any],
+        data: dict[str, Tensor],
+        *,
+        hessian: bool,
+        caller_had_mol_idx: bool,
+        caller_had_nbmat: bool,
+    ) -> tuple[Any, ...] | None:
+        """Return a cache key for exact static CUDA neighbor-list reuse."""
+        if (
+            not self.cache_static
+            or hessian
+            or caller_had_mol_idx
+            or caller_had_nbmat
+            or data.get("cell") is not None
+            or data["coord"].ndim != 2
+            or torch.device(self.device).type != "cuda"
+        ):
+            return None
+
+        raw_coord = raw_data.get("coord")
+        raw_numbers = raw_data.get("numbers")
+        coord_key = self._tensor_identity_key(raw_coord)
+        numbers_key = self._tensor_identity_key(raw_numbers)
+        if coord_key is None or numbers_key is None:
+            return None
+
+        return (
+            "static-nbmat-v1",
+            coord_key,
+            numbers_key,
+            int(data["coord"].shape[0]),
+            float(self.cutoff),
+            None if self.cutoff_lr is None else float(self.cutoff_lr),
+            self._coulomb_method,
+            None if self._coulomb_cutoff is None else float(self._coulomb_cutoff),
+            float(self._dftd3_cutoff),
+            int(self._max_mol_size),
+            self.external_coulomb is not None,
+            self.external_dftd3 is not None,
+            self._nblist_lr is not None,
+            self._nblist_coulomb is not None,
+            self._nblist_dftd3 is not None,
+        )
+
+    @staticmethod
+    def _tensor_identity_key(value: Any) -> tuple[Any, ...] | None:
+        if not isinstance(value, Tensor) or value.device.type != "cuda" or value.is_sparse:
+            return None
+        try:
+            version = int(value._version)
+        except RuntimeError:
+            return None
+        return (
+            id(value),
+            str(value.device),
+            str(value.dtype),
+            tuple(int(dim) for dim in value.shape),
+            tuple(int(stride) for stride in value.stride()),
+            int(value.data_ptr()),
+            int(value.storage_offset()),
+            version,
+        )
+
+    @staticmethod
+    def _static_tensor_refs(raw_data: dict[str, Any]) -> tuple[Any, Any] | None:
+        raw_coord = raw_data.get("coord")
+        raw_numbers = raw_data.get("numbers")
+        if not isinstance(raw_coord, Tensor) or not isinstance(raw_numbers, Tensor):
+            return None
+        return weakref.ref(raw_coord), weakref.ref(raw_numbers)
+
+    def _get_static_nbmat_cache(self, cache_key: tuple[Any, ...], raw_data: dict[str, Any]) -> dict[str, Tensor] | None:
+        entry = self._static_nbmat_cache.get(cache_key)
+        if entry is None:
+            return None
+        coord_ref, numbers_ref, cached = entry
+        if coord_ref() is not raw_data.get("coord") or numbers_ref() is not raw_data.get("numbers"):
+            self._static_nbmat_cache.pop(cache_key, None)
+            return None
+        return cached
+
+    def _remember_static_nbmat(
+        self,
+        cache_key: tuple[Any, ...],
+        raw_data: dict[str, Any],
+        data: dict[str, Tensor],
+    ) -> None:
+        raw_coord = raw_data.get("coord")
+        raw_numbers = raw_data.get("numbers")
+        if not isinstance(raw_coord, Tensor) or not isinstance(raw_numbers, Tensor):
+            return
+        nbmat_keys = (
+            "nbmat",
+            "shifts",
+            "nbmat_lr",
+            "shifts_lr",
+            "nbmat_coulomb",
+            "shifts_coulomb",
+            "nbmat_dftd3",
+            "shifts_dftd3",
+        )
+        cached = {key: data[key].detach() for key in nbmat_keys if isinstance(data.get(key), Tensor)}
+        if not cached:
+            return
+        if len(self._static_nbmat_cache) >= 8:
+            self._static_nbmat_cache.pop(next(iter(self._static_nbmat_cache)))
+        self._static_nbmat_cache[cache_key] = (weakref.ref(raw_coord), weakref.ref(raw_numbers), cached)
+
+    def _static_dftd3_cache_key(
+        self,
+        data: dict[str, Tensor],
+        *,
+        forces: bool,
+        stress: bool,
+        hessian: bool,
+        dftd3_energy_graph: bool,
+    ) -> tuple[Any, ...] | None:
+        if (
+            not getattr(self, "cache_static", False)
+            or getattr(self, "_train", False)
+            or stress
+            or hessian
+            or dftd3_energy_graph
+            or getattr(self, "_static_input_cache_key", None) is None
+            or getattr(self, "_static_input_cache_refs", None) is None
+            or self.external_dftd3 is None
+            or data.get("cell") is not None
+        ):
+            return None
+        return (
+            "static-dftd3-v1",
+            getattr(self, "_static_input_cache_key"),
+            bool(forces),
+            str(data["coord"].dtype),
+            str(data["coord"].device),
+            float(self.external_dftd3.s6),
+            float(self.external_dftd3.s8),
+            float(self.external_dftd3.a1),
+            float(self.external_dftd3.a2),
+            float(self.external_dftd3.smoothing_on),
+            float(self.external_dftd3.smoothing_off),
+            self.external_dftd3.key_out,
+        )
+
+    def _get_static_dftd3_cache(self, cache_key: tuple[Any, ...]) -> dict[str, Any] | None:
+        cache = getattr(self, "_static_dftd3_cache", {})
+        current_refs = getattr(self, "_static_input_cache_refs", None)
+        entry = cache.get(cache_key)
+        if entry is None or current_refs is None:
+            return None
+        coord_ref, numbers_ref, cached = entry
+        current_coord = current_refs[0]()
+        current_numbers = current_refs[1]()
+        if coord_ref() is not current_coord or numbers_ref() is not current_numbers:
+            cache.pop(cache_key, None)
+            return None
+        return cached
+
+    def _apply_static_dftd3_cache(
+        self,
+        data: dict[str, Tensor],
+        cached: dict[str, Any],
+        *,
+        forces: bool,
+    ) -> tuple[dict[str, Tensor], ExternalDerivativeTerms | None]:
+        assert self.external_dftd3 is not None
+        key_out = self.external_dftd3.key_out
+        energy_delta = cached["energy_delta"].to(device=data["coord"].device)
+        if key_out in data:
+            data[key_out] = data[key_out].double() + energy_delta.double()
+        else:
+            data[key_out] = energy_delta.double()
+
+        terms = None
+        if forces:
+            force = cached.get("forces")
+            terms = ExternalDerivativeTerms(forces=None if force is None else force.to(device=data["coord"].device))
+        return data, terms
+
+    def _remember_static_dftd3(
+        self,
+        cache_key: tuple[Any, ...],
+        data_before: dict[str, Tensor],
+        data_after: dict[str, Tensor],
+        terms: ExternalDerivativeTerms | None,
+    ) -> None:
+        current_refs = getattr(self, "_static_input_cache_refs", None)
+        if current_refs is None or self.external_dftd3 is None:
+            return
+        key_out = self.external_dftd3.key_out
+        energy_after = data_after.get(key_out)
+        if not isinstance(energy_after, Tensor):
+            return
+        energy_before = data_before.get(key_out)
+        if isinstance(energy_before, Tensor):
+            energy_delta = energy_after - energy_before.to(dtype=energy_after.dtype, device=energy_after.device)
+        else:
+            energy_delta = energy_after
+
+        cached: dict[str, Any] = {"energy_delta": energy_delta.detach()}
+        if terms is not None and isinstance(terms.forces, Tensor):
+            cached["forces"] = terms.forces.detach()
+        if len(self._static_dftd3_cache) >= 8:
+            self._static_dftd3_cache.pop(next(iter(self._static_dftd3_cache)))
+        self._static_dftd3_cache[cache_key] = (
+            current_refs[0],
+            current_refs[1],
+            cached,
+        )
+
+    def _clear_static_nbmat_cache(self) -> None:
+        self._static_nbmat_cache.clear()
+        self._static_dftd3_cache.clear()
 
     def process_output(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         if data["coord"].ndim == 2:
@@ -1123,6 +1389,8 @@ class AIMNet2Calculator:
         shallow_attrs = (
             "_batch",
             "_max_mol_size",
+            "_static_input_cache_key",
+            "_static_input_cache_refs",
             "_saved_for_grad",
             "_coulomb_method",
             "_coulomb_cutoff",
