@@ -2,8 +2,8 @@ import copy
 import math
 import os
 import re
-import weakref
 import warnings
+import weakref
 from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Any, ClassVar, Literal, cast
@@ -1102,6 +1102,7 @@ class AIMNet2Calculator:
             or hessian
             or caller_had_mol_idx
             or caller_had_nbmat
+            or self._batch is not None
             or data.get("cell") is not None
             or data["coord"].ndim != 2
             or torch.device(self.device).type != "cuda"
@@ -1220,7 +1221,7 @@ class AIMNet2Calculator:
             return None
         return (
             "static-dftd3-v1",
-            getattr(self, "_static_input_cache_key"),
+            self._static_input_cache_key,
             bool(forces),
             str(data["coord"].dtype),
             str(data["coord"].device),

@@ -344,6 +344,25 @@ class TestGPUBatching:
         assert torch.isfinite(charged["forces"]).all()
         assert not torch.allclose(neutral["charges"], charged["charges"], rtol=1e-5, atol=1e-6)
 
+    @pytest.mark.ase
+    def test_static_cache_bypasses_flattened_3d_batches(self):
+        """Static cache is limited to direct 2D single-system CUDA inputs."""
+        water = self._water_data()
+        data = {
+            "coord": torch.stack([water["coord"], water["coord"] + torch.tensor([4.0, 0.0, 0.0])]).cuda(),
+            "numbers": torch.stack([water["numbers"], water["numbers"]]).cuda(),
+            "charge": torch.zeros(2, device="cuda"),
+        }
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cache_static=True)
+        _wrap_neighbor_lists(calc)
+
+        calc(data, forces=True)
+        calls_after_first = _neighbor_list_calls(calc)
+        assert calls_after_first > 0
+
+        calc(data, forces=True)
+        assert _neighbor_list_calls(calc) > calls_after_first
+
 
 class TestGPUMemory:
     """Tests for GPU memory management."""
