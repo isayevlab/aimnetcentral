@@ -156,7 +156,9 @@ class ConvSV(nn.Module):
         g_sv = data["g_sv"]
         mode = nbops.get_nb_mode(data)
         if self.d2features:
-            if mode > 0 and a.device.type == "cuda":
+            # The Warp kernel is float32-only; float64 (and mixed-dtype) inputs
+            # fall through to the pure-torch einsum branch below.
+            if mode > 0 and a.device.type == "cuda" and a.dtype == torch.float32 and g_sv.dtype == torch.float32:
                 avf_sv = conv_sv_2d_sp(a, data["nbmat"], g_sv)
             elif mode > 0:
                 a_j = a.index_select(0, data["nbmat"].flatten()).unflatten(0, data["nbmat"].shape)

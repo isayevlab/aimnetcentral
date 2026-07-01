@@ -470,6 +470,67 @@ class TestMolSum:
         assert result.shape == (2, 5)  # (num_mols, features)
         assert result[0, 0].item() == 3.0  # sum of 3 atoms
 
+    def test_mol_sum_mode_1_matches_mode_0(self, device):
+        """Test that packed (mode 1) mol_sum matches dense (mode 0) result."""
+        torch.manual_seed(0)
+        sizes = [3, 2, 4]
+        B, N = len(sizes), max(sizes)
+        n_total = sum(sizes) + 1  # trailing padding atom
+
+        # dense batch (B, N) with zero-padded numbers and values
+        numbers_dense = torch.zeros((B, N), dtype=torch.long, device=device)
+        x_dense = torch.zeros((B, N), device=device)
+        for b, s in enumerate(sizes):
+            numbers_dense[b, :s] = torch.randint(1, 10, (s,), device=device)
+            x_dense[b, :s] = torch.randn(s, device=device)
+        data_dense = {"numbers": numbers_dense}
+        data_dense = nbops.set_nb_mode(data_dense)
+        data_dense = nbops.calc_masks(data_dense)
+
+        # same batch in packed layout; padding atom carries the last mol index
+        numbers_packed = torch.cat([numbers_dense[b, :s] for b, s in enumerate(sizes)])
+        numbers_packed = torch.cat([numbers_packed, torch.zeros(1, dtype=torch.long, device=device)])
+        x_packed = torch.cat([x_dense[b, :s] for b, s in enumerate(sizes)])
+        x_packed = torch.cat([x_packed, torch.zeros(1, device=device)])
+        mol_idx = torch.repeat_interleave(torch.arange(B, device=device), torch.tensor(sizes, device=device))
+        mol_idx = torch.cat([mol_idx, mol_idx[-1:]])
+        nbmat = torch.full((n_total, 2), n_total - 1, dtype=torch.long, device=device)
+        data_packed = {"numbers": numbers_packed, "mol_idx": mol_idx, "nbmat": nbmat}
+        data_packed = nbops.set_nb_mode(data_packed)
+        data_packed = nbops.calc_masks(data_packed)
+
+        res_dense = nbops.mol_sum(x_dense, data_dense)
+        res_packed = nbops.mol_sum(x_packed, data_packed)
+
+        assert res_packed.shape == res_dense.shape == (B,)
+        assert torch.allclose(res_packed, res_dense, atol=1e-6)
+
+    def test_mol_sum_mode_1_uses_cached_num_mol(self, device):
+        """Test that calc_masks caches _num_mol on CPU and mol_sum uses it."""
+        numbers = torch.tensor([6, 1, 1, 6, 1, 0], device=device)
+        mol_idx = torch.tensor([0, 0, 0, 1, 1, 1], device=device)  # padding atom in last mol
+        nbmat = torch.full((6, 2), 5, dtype=torch.long, device=device)
+
+        data = {"numbers": numbers, "mol_idx": mol_idx, "nbmat": nbmat}
+        data = nbops.set_nb_mode(data)
+        data = nbops.calc_masks(data)
+
+        # cached as a CPU tensor (same pattern as _nb_mode), so reading it
+        # in mol_sum does not sync the GPU
+        assert data["_num_mol"].device.type == "cpu"
+        assert data["_num_mol"].item() == 2
+
+        x = torch.ones(6, device=device)
+        result = nbops.mol_sum(x, data)
+        assert result.shape == (2,)
+
+        # dicts not built through calc_masks fall back to mol_idx and cache
+        bare = {"mol_idx": mol_idx, "_nb_mode": torch.tensor(1)}
+        result_bare = nbops.mol_sum(x, bare)
+        assert result_bare.shape == (2,)
+        assert bare["_num_mol"].item() == 2
+        assert torch.allclose(result_bare, result)
+
     def test_mol_sum_mode_2(self, device):
         """Test molecular summation for mode 2."""
         B, N = 2, 3
