@@ -90,6 +90,14 @@ Repository = "https://github.com/isayevlab/aimnetcentral"
 
 [tool.hatch.build.targets.wheel]
 packages = ["aimnet"]
+# Package data (model YAMLs, registry, .pt tensors) ships via globs so new
+# assets are picked up automatically; the VCS-ignored download cache under
+# aimnet/calculators/assets/ stays excluded.
+include = [
+    "aimnet/**/*.py",
+    "aimnet/**/*.yaml",
+    "aimnet/**/*.pt",
+]
 
 [tool.hatch.version]
 source = "vcs"
@@ -101,14 +109,6 @@ include = [
     "aimnet/**/*.yaml",
     "aimnet/**/*.pt",
 ]
-
-[tool.hatch.build.targets.wheel.force-include]
-"aimnet/dftd3_data.pt" = "aimnet/dftd3_data.pt"
-"aimnet/calculators/model_registry.yaml" = "aimnet/calculators/model_registry.yaml"
-"aimnet/models/aimnet2.yaml" = "aimnet/models/aimnet2.yaml"
-"aimnet/models/aimnet2_dftd3_wb97m.yaml" = "aimnet/models/aimnet2_dftd3_wb97m.yaml"
-"aimnet/models/aimnet2_rxn.yaml" = "aimnet/models/aimnet2_rxn.yaml"
-"aimnet/train/default_train.yaml" = "aimnet/train/default_train.yaml"
 
 # UV configuration
 [tool.uv]

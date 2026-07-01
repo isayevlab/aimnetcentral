@@ -176,6 +176,73 @@ class TestCoulombMethods:
         assert calc._coulomb_method == "dsf"
         assert calc.cutoff_lr == 12.0
 
+    @staticmethod
+    def _water_gas_and_pbc():
+        gas = {
+            "coord": torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+            "numbers": torch.tensor([8, 1, 1]),
+            "charge": torch.tensor(0.0),
+        }
+        pbc = {**gas, "cell": torch.eye(3) * 8.0}
+        return gas, pbc
+
+    def test_pbc_dsf_auto_switch_scoped_to_periodic_eval(self):
+        """The automatic simple->dsf PBC switch must not persist: after a periodic
+        eval the calculator returns to the trained "simple" full Coulomb, so
+        gas-phase results do not depend on call history."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+        assert calc._coulomb_method == "simple"
+        gas, pbc = self._water_gas_and_pbc()
+
+        e_before = calc(gas)["energy"].item()
+        with pytest.warns(UserWarning, match="Switching to DSF Coulomb for PBC"):
+            res_pbc = calc(pbc)
+        assert torch.isfinite(res_pbc["energy"]).all()
+        # The auto-switch is scoped to the periodic evaluation.
+        assert calc._coulomb_method == "simple"
+        assert calc.coulomb_method == "simple"
+        assert calc._coulomb_cutoff == float("inf")
+        assert calc.external_coulomb.method == "simple"
+        e_after = calc(gas)["energy"].item()
+        assert e_after == pytest.approx(e_before, abs=1e-6)
+
+        # Repeated periodic evals reuse the memoized DSF-side state and restore too.
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Switching to DSF Coulomb", category=UserWarning)
+            calc(pbc)
+        assert calc._coulomb_method == "simple"
+
+    def test_pbc_dsf_auto_switch_restores_on_error(self):
+        """State is restored even when the eval raises after the auto-switch."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+        _, pbc = self._water_gas_and_pbc()
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("boom")
+
+        calc.set_grad_tensors = boom
+        with pytest.raises(RuntimeError, match="boom"), warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Switching to DSF Coulomb", category=UserWarning)
+            calc(pbc)
+        assert calc._coulomb_method == "simple"
+        assert calc._coulomb_cutoff == float("inf")
+
+    def test_explicit_set_lrcoulomb_method_persists_across_evals(self):
+        """An explicit set_lrcoulomb_method() call is persistent — it survives
+        both gas-phase and periodic evaluations (no auto-restore)."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
+        gas, pbc = self._water_gas_and_pbc()
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("dsf", cutoff=12.0)
+
+        calc(gas)
+        assert calc._coulomb_method == "dsf"
+        # Already periodic-capable: no auto-switch, no restore.
+        calc(pbc)
+        assert calc._coulomb_method == "dsf"
+        assert calc.external_coulomb.dsf_rc == 12.0
+
     @pytest.mark.parametrize("method", ["ewald", "pme"])
     def test_set_coulomb_ewald_pme_default_accuracy(self, method):
         """Default ``ewald_accuracy`` is 1e-6 and applies to both ewald and pme."""
@@ -1569,6 +1636,88 @@ def test_calculator_charge_guard_handles_batched_charges():
     data = {"coord": coords, "numbers": numbers, "charge": torch.tensor([0.0, -1.0])}
 
     with pytest.raises(ValueError, match=r"net-charged systems"):
+        calc(data)
+
+
+def test_mult_ignored_warns_once_on_closed_shell_model():
+    """mult != 1 on a num_charge_channels=1 model warns once per calculator
+    instance (not per MD step); mult=1 never warns."""
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    assert calc.is_nse is False
+    data = {
+        "coord": torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+        "numbers": torch.tensor([8, 1, 1]),
+        "charge": torch.tensor(0.0),
+        "mult": torch.tensor(1.0),
+    }
+
+    # mult=1 (closed shell) matches the model: no warning.
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        calc(data)
+    assert [w for w in caught if "is ignored" in str(w.message)] == []
+
+    # mult=2 is silently unusable by this model: warn on the first eval...
+    data["mult"] = torch.tensor(2.0)
+    with pytest.warns(UserWarning, match=r"mult=\[2\.0\] is ignored"):
+        calc(data)
+
+    # ...and only once per calculator instance.
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        calc(data)
+    assert [w for w in caught if "is ignored" in str(w.message)] == []
+
+
+def test_mult_not_warned_for_nse_models(monkeypatch):
+    """NSE models consume mult, so no ignored-multiplicity warning is emitted."""
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    monkeypatch.setattr(AIMNet2Calculator, "is_nse", property(lambda self: True))
+    data = {
+        "coord": torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+        "numbers": torch.tensor([8, 1, 1]),
+        "charge": torch.tensor(0.0),
+        "mult": torch.tensor(2.0),
+    }
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        calc(data)
+    assert [w for w in caught if "is ignored" in str(w.message)] == []
+
+
+def test_species_validation_cached_for_repeated_numbers_tensor(monkeypatch):
+    """Repeated evals with the same numbers tensor skip the D2H revalidation;
+    a different tensor or an in-place mutation revalidates."""
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    coord = torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]])
+    numbers = torch.tensor([8, 1, 1])
+    data = {"coord": coord, "numbers": numbers, "charge": torch.tensor(0.0)}
+
+    calls = []
+    original = AIMNet2Calculator._validate_numbers
+
+    def spy(self, numbers, impl):
+        calls.append(numbers)
+        return original(self, numbers, impl)
+
+    monkeypatch.setattr(AIMNet2Calculator, "_validate_numbers", spy)
+
+    calc(data)
+    assert len(calls) == 1
+    # Same tensor object, unchanged (MD/optimization loop): cache hit.
+    calc(data)
+    assert len(calls) == 1
+    # A different tensor (even with the same contents) must revalidate.
+    data["numbers"] = numbers.clone()
+    calc(data)
+    assert len(calls) == 2
+    # In-place mutation bumps _version and must revalidate too.
+    data["numbers"][0] = 6
+    calc(data)
+    assert len(calls) == 3
+    # Unsupported elements still raise on the recheck.
+    data["numbers"][0] = 92
+    with pytest.raises(ValueError, match=r"implemented_species"):
         calc(data)
 
 

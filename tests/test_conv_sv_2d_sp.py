@@ -21,8 +21,10 @@
 """
 Tests for conv_sv_2d_sp Warp kernels.
 
-These tests directly call the warp kernel functions (not through ConvSV dispatch)
-to enable testing on both CPU and CUDA devices.
+TestConvSV2dSP directly calls the warp kernel functions (not through ConvSV
+dispatch) to enable testing on both CPU and CUDA devices. TestConvSVDispatch
+covers the ConvSV.forward dtype/device dispatch: the Warp kernel for CUDA
+float32, and the pure-torch einsum fallback otherwise (e.g. CUDA float64).
 """
 
 import pytest
@@ -386,3 +388,85 @@ class TestConvSV2dSP:
         ref = call_kernel(grad_output[0])
         assert torch.allclose(batched[0][0], ref[0], atol=1e-5, rtol=1e-4)
         assert torch.allclose(batched[1][0], ref[1], atol=1e-5, rtol=1e-4)
+
+
+@pytest.mark.skipif(not WARP_AVAILABLE, reason="Warp not available")
+class TestConvSVDispatch:
+    """Tests for the ConvSV.forward Warp-kernel/einsum dispatch."""
+
+    @pytest.fixture
+    def convsv_data(self):
+        """Mode-1 (padded flat) inputs for ConvSV.forward on CUDA.
+
+        The last atom row is padding: its neighbor row is all sentinels and
+        g_sv is zeroed at padded neighbor slots, matching the AEVSV masking
+        contract (nbops.mask_ij_ zeroes the cutoff envelope there).
+        """
+        if not torch.cuda.is_available():
+            pytest.skip("CUDA not available")
+
+        torch.manual_seed(0)
+        device = "cuda"
+        B, C, G, M = 8, 5, 12, 10  # M >= B to ensure padding sentinel works
+
+        idx = generate_valid_neighbor_idx(B, M, num_neighbors=6, device=device)
+        idx[-1] = B - 1  # padding atom has no neighbors
+        a = torch.randn(B, C, G, device=device, dtype=torch.float32)
+        g_sv = torch.randn(B, M, G, 4, device=device, dtype=torch.float32)
+        g_sv = g_sv * (idx < B - 1).view(B, M, 1, 1)
+        return a, idx, g_sv
+
+    def test_forward_float32_uses_warp_kernel(self, convsv_data, monkeypatch):
+        """CUDA float32 dispatches to the Warp kernel; float64 must not."""
+        from aimnet import nbops
+        from aimnet.modules import aev
+
+        a, idx, g_sv = convsv_data
+        conv = aev.ConvSV(nshifts_s=g_sv.shape[2], nchannel=a.shape[1], d2features=True).cuda()
+
+        calls = []
+        orig_kernel = aev.conv_sv_2d_sp
+
+        def spy(*args, **kwargs):
+            calls.append(1)
+            return orig_kernel(*args, **kwargs)
+
+        monkeypatch.setattr(aev, "conv_sv_2d_sp", spy)
+
+        data = nbops.set_nb_mode({"g_sv": g_sv, "nbmat": idx})
+        out_fp32 = conv(data, a)
+        assert len(calls) == 1, "CUDA float32 must dispatch to the Warp kernel"
+
+        # float64 reference on the same module goes through the einsum fallback
+        conv = conv.double()
+        data64 = nbops.set_nb_mode({"g_sv": g_sv.double(), "nbmat": idx})
+        out_fp64 = conv(data64, a.double())
+        assert len(calls) == 1, "CUDA float64 must not dispatch to the Warp kernel"
+
+        assert out_fp32.dtype == torch.float32
+        assert torch.allclose(out_fp32, out_fp64.float(), atol=1e-4, rtol=1e-3), (
+            f"Warp/einsum dispatch parity failed. Max diff: {torch.max(torch.abs(out_fp32 - out_fp64.float()))}"
+        )
+
+    def test_forward_float64_cuda_falls_back_to_einsum(self, convsv_data):
+        """CUDA float64 must not raise and must match the CPU float64 einsum result."""
+        from aimnet import nbops
+        from aimnet.modules.aev import ConvSV
+
+        a, idx, g_sv = convsv_data
+        conv = ConvSV(nshifts_s=g_sv.shape[2], nchannel=a.shape[1], d2features=True).double()
+
+        # CPU float64 einsum reference
+        data_cpu = nbops.set_nb_mode({"g_sv": g_sv.double().cpu(), "nbmat": idx.cpu()})
+        out_cpu = conv(data_cpu, a.double().cpu())
+
+        # CUDA float64: the Warp kernel is float32-only, so this must take the
+        # einsum fallback instead of raising TypeError
+        conv = conv.cuda()
+        data_cuda = nbops.set_nb_mode({"g_sv": g_sv.double(), "nbmat": idx})
+        out_cuda = conv(data_cuda, a.double())
+
+        assert out_cuda.dtype == torch.float64
+        assert torch.allclose(out_cuda.cpu(), out_cpu, atol=1e-10, rtol=1e-10), (
+            f"CUDA float64 einsum fallback parity failed. Max diff: {torch.max(torch.abs(out_cuda.cpu() - out_cpu))}"
+        )
