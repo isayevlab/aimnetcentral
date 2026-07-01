@@ -1729,6 +1729,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#serialization-abi" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Serialization ABI
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#quick-links" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1944,6 +1955,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#serialization-abi" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Serialization ABI
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#quick-links" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2043,6 +2065,8 @@
 </tbody>
 </table>
 <p>The <code>aimnet.ops</code>, <code>aimnet.nbops</code>, <code>aimnet.kernels</code>, <code>aimnet.train</code>, and <code>aimnet.cli</code> modules are importable but are primarily advanced or internal extension points. Their contracts may be narrower than the calculator and model APIs.</p>
+<h2 id="serialization-abi">Serialization ABI<a class="headerlink" href="#serialization-abi" title="Permanent link">&para;</a></h2>
+<p>Released model files embed a YAML configuration with fully qualified class paths (for example <code>aimnet.models.AIMNet2</code>, <code>aimnet.modules.Output</code>, <code>torch.nn.GELU</code>). Loading a checkpoint resolves these strings by import, so every class name and location reachable from <code>aimnet.models</code> and <code>aimnet.modules</code> is a frozen serialization contract: renaming or moving one of these classes breaks every published checkpoint that references it. Renames require a deprecation alias at the old import path plus a model-format migration; <code>tests/test_serialization_abi.py</code> pins the currently frozen names.</p>
 <h2 id="quick-links">Quick Links<a class="headerlink" href="#quick-links" title="Permanent link">&para;</a></h2>
 <h3 id="calculators">Calculators<a class="headerlink" href="#calculators" title="Permanent link">&para;</a></h3>
 <p>The main entry points for using AIMNet2:</p>
