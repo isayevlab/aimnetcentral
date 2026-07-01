@@ -346,6 +346,56 @@ class TestNSE:
         q_total = q.sum(dim=-2)
         assert q_total.item() == pytest.approx(1.0, abs=1e-5)
 
+    @pytest.mark.parametrize("k", [1, 2])
+    def test_nse_packed_matches_dense(self, device, k):
+        """Test that packed (nb_mode=1) NSE matches dense (nb_mode=0) NSE."""
+        torch.manual_seed(42)
+        sizes = [3, 2, 4]
+        B, N = len(sizes), max(sizes)
+        n_total = sum(sizes) + 1  # trailing padding atom
+
+        # dense batch (B, N) with zero-padded numbers
+        numbers_dense = torch.zeros((B, N), dtype=torch.long, device=device)
+        for b, s in enumerate(sizes):
+            numbers_dense[b, :s] = torch.randint(1, 10, (s,), device=device)
+        data_dense = {"numbers": numbers_dense}
+        data_dense = nbops.set_nb_mode(data_dense)
+        data_dense = nbops.calc_masks(data_dense)
+
+        # same batch in packed layout; padding atom carries the last mol index
+        numbers_packed = torch.cat([numbers_dense[b, :s] for b, s in enumerate(sizes)])
+        numbers_packed = torch.cat([numbers_packed, torch.zeros(1, dtype=torch.long, device=device)])
+        mol_idx = torch.repeat_interleave(torch.arange(B, device=device), torch.tensor(sizes, device=device))
+        mol_idx = torch.cat([mol_idx, mol_idx[-1:]])
+        nbmat = torch.full((n_total, 2), n_total - 1, dtype=torch.long, device=device)
+        data_packed = {"numbers": numbers_packed, "mol_idx": mol_idx, "nbmat": nbmat}
+        data_packed = nbops.set_nb_mode(data_packed)
+        data_packed = nbops.calc_masks(data_packed)
+
+        # unconstrained charges / flexibilities, zeroed at padding positions
+        # (models mask them upstream before nse)
+        pad = data_dense["mask_i"].unsqueeze(-1)
+        q_u_dense = torch.randn((B, N, k), device=device).masked_fill(pad, 0.0)
+        f_u_dense = torch.rand((B, N, k), device=device).masked_fill(pad, 0.0)
+        q_u_packed = torch.cat([q_u_dense[b, :s] for b, s in enumerate(sizes)])
+        q_u_packed = torch.cat([q_u_packed, torch.zeros((1, k), device=device)])
+        f_u_packed = torch.cat([f_u_dense[b, :s] for b, s in enumerate(sizes)])
+        f_u_packed = torch.cat([f_u_packed, torch.zeros((1, k), device=device)])
+        Q = torch.randn((B, k), device=device)
+
+        q_dense = ops.nse(Q, q_u_dense, f_u_dense, data_dense)
+        q_packed = ops.nse(Q, q_u_packed, f_u_packed, data_packed)
+
+        # per-atom charges match between layouts
+        q_dense_flat = torch.cat([q_dense[b, :s] for b, s in enumerate(sizes)])
+        assert torch.allclose(q_packed[:-1], q_dense_flat, atol=1e-6)
+        # padding atom must stay at zero charge
+        assert q_packed[-1].abs().max().item() == 0.0
+
+        # total charge per molecule is conserved in both layouts
+        assert torch.allclose(nbops.mol_sum(q_packed, data_packed), Q, atol=1e-5)
+        assert torch.allclose(nbops.mol_sum(q_dense, data_dense), Q, atol=1e-5)
+
     def test_nse_gradient(self, device):
         """Test gradient flow through NSE."""
         coord = torch.rand((1, 3, 3), device=device)

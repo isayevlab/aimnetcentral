@@ -127,10 +127,23 @@ def nse(
         F_u = F_u.unsqueeze(-2)
         dQ = dQ.unsqueeze(-2)
     elif nb_mode == 1:
-        data["mol_sizes"][-1] += 1
-        F_u = torch.repeat_interleave(F_u, data["mol_sizes"], dim=0)
-        dQ = torch.repeat_interleave(dQ, data["mol_sizes"], dim=0)
-        data["mol_sizes"][-1] -= 1
+        if torch.compiler.is_compiling():
+            # under torch.compile keep the repeat_interleave formulation: the
+            # index_select gather below fuses with mol_sum's scatter into one
+            # graph and trips inductor's CPU codegen
+            data["mol_sizes"][-1] += 1
+            F_u = torch.repeat_interleave(F_u, data["mol_sizes"], dim=0)
+            dQ = torch.repeat_interleave(dQ, data["mol_sizes"], dim=0)
+            data["mol_sizes"][-1] -= 1
+        else:
+            # broadcast per-molecule values to atoms with a gather on mol_idx;
+            # equivalent to repeat_interleave over mol_sizes (mol_idx is sorted)
+            # but stays on-device. The trailing padding atom picks up the value
+            # for its own mol_idx entry, exactly as repeat_interleave with the
+            # padding-inclusive mol_sizes did before.
+            mol_idx = data["mol_idx"]
+            F_u = torch.index_select(F_u, 0, mol_idx)
+            dQ = torch.index_select(dQ, 0, mol_idx)
     else:
         raise ValueError(f"Invalid neighbor mode: {nb_mode}")
     f = f_u / F_u

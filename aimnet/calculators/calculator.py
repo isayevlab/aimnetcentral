@@ -455,6 +455,10 @@ class AIMNet2Calculator:
         self.cache_static = bool(cache_static)
         self._static_nbmat_cache: dict[tuple[Any, ...], tuple[Any, Any, dict[str, Tensor]]] = {}
         self._static_dftd3_cache: dict[tuple[Any, ...], tuple[Any, Any, dict[str, Any]]] = {}
+        # Identity of the last species-validated `numbers` tensor, so repeated
+        # evals on the same buffer (MD/optimization loops) skip the per-step
+        # D2H tolist() + set-diff in _validate_species_and_charge.
+        self._species_validation_cache: tuple[tuple[Any, ...], Any, Any] | None = None
 
         # Create adaptive neighbor list instances
         self._nblist = AdaptiveNeighborList(cutoff=self.cutoff)
@@ -492,6 +496,15 @@ class AIMNet2Calculator:
         elif self._has_embedded_coulomb():
             # Legacy models have embedded Coulomb with "simple" method
             self._coulomb_method = "simple"
+        # Bookkeeping for the per-evaluation simple->dsf PBC auto-switch:
+        # prepare_input stores the pre-switch Coulomb state here and eval()
+        # restores it in its finally block.
+        self._pbc_coulomb_restore: dict[str, Any] | None = None
+        # Memoized DSF-side state from the auto-switch (incl. warmed-up adaptive
+        # neighbor lists) so repeated periodic evals don't rebuild it every step.
+        self._auto_dsf_state: dict[str, Any] | None = None
+        # One-shot flag for the ignored-multiplicity warning (eval fires inside MD loops).
+        self._mult_ignored_checked = False
 
         # Set training mode (default False for inference)
         self._train = train
@@ -546,6 +559,41 @@ class AIMNet2Calculator:
                 f"(e.g. rxn uses a learned shifted-electronic scale, while wb97m-d3 "
                 f"and b973c-d3 use different DFT targets). Do not mix or compare "
                 f"energies across families.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+    def _maybe_warn_mult_ignored(self, data: dict[str, Any]) -> None:
+        """Warn once per instance if ``mult`` != 1 is passed to a closed-shell model.
+
+        ``num_charge_channels=1`` models (e.g. the default aimnet2/wb97m-d3)
+        never read ``mult``, while the ASE/pysisyphus/torch-sim wrappers pass it
+        unconditionally — without this warning a user requesting an open-shell
+        state would silently get the closed-shell result. NSE models
+        (num_charge_channels=2) consume ``mult`` and skip the check.
+
+        Use Python's standard warnings filters if this warning needs to be silenced.
+        """
+        if self._mult_ignored_checked or self.is_nse:
+            return
+        mult = data.get("mult")
+        if mult is None:
+            return
+        if isinstance(mult, Tensor) and mult.device.type != "cpu":
+            # Inspecting a GPU tensor forces a D2H sync; do it at most once per
+            # calculator instance (mult is invariant within MD/optimization loops).
+            self._mult_ignored_checked = True
+            mult_t = mult.detach()
+        else:
+            mult_t = torch.as_tensor(mult)
+        if bool((mult_t != 1).any()):
+            self._mult_ignored_checked = True
+            warnings.warn(
+                f"Input mult={mult_t.flatten().tolist()} is ignored: this model is "
+                f"closed-shell (num_charge_channels=1) and does not use spin "
+                f"multiplicity, so the result corresponds to the closed-shell state. "
+                f"For radicals/open-shell systems use an NSE model, e.g. "
+                f"`isayevlab/aimnet2-nse`.",
                 UserWarning,
                 stacklevel=2,
             )
@@ -828,6 +876,8 @@ class AIMNet2Calculator:
             self.cutoff_lr = self._dftd3_cutoff if self.external_dftd3 is not None else None
 
         self._coulomb_method = method
+        # Method/cutoff changed; the memoized auto-switch DSF state is stale.
+        self._auto_dsf_state = None
         self._update_lr_nblists()
         self._clear_static_nbmat_cache()
 
@@ -849,6 +899,8 @@ class AIMNet2Calculator:
             self._coulomb_cutoff = cutoff
         self._dftd3_cutoff = cutoff
         self.cutoff_lr = cutoff
+        # Cutoffs changed; the memoized auto-switch DSF state is stale.
+        self._auto_dsf_state = None
         self._update_lr_nblists()
         self._clear_static_nbmat_cache()
 
@@ -880,6 +932,8 @@ class AIMNet2Calculator:
         self._dftd3_cutoff = cutoff
         if self.external_dftd3 is not None:
             self.external_dftd3.set_smoothing(cutoff, smoothing_fraction)
+        # Cutoffs changed; the memoized auto-switch DSF state is stale.
+        self._auto_dsf_state = None
         self._update_lr_nblists()
         self._clear_static_nbmat_cache()
 
@@ -892,6 +946,10 @@ class AIMNet2Calculator:
         that did not declare ``implemented_species`` (older ``.pt``, raw
         ``nn.Module``). Shared by :meth:`eval` and
         :meth:`hessian_vector_product` so both enforce the same contract.
+
+        The species part costs a D2H tolist() per call, so it is skipped when
+        the same ``numbers`` tensor was already validated (identity + ``_version``
+        cache); the charge part inspects per-call values and always runs.
         """
         if "numbers" not in data:
             # Guarded so prepare_input still owns the missing-key error path with
@@ -899,18 +957,24 @@ class AIMNet2Calculator:
             return
         impl = (self.metadata or {}).get("implemented_species") or []
         if impl:
-            # data["numbers"] may be a raw list, ndarray, or tensor — normalize first.
-            seen = {int(z) for z in torch.as_tensor(data["numbers"]).flatten().tolist() if int(z) > 0}
-            unsupported = sorted(seen - set(impl))
-            if unsupported:
-                raise ValueError(
-                    f"Atomic numbers {unsupported} are not in this model's "
-                    f"implemented_species {sorted(impl)}. This model was trained on "
-                    f"a restricted element set; passing other elements yields undefined "
-                    f"output. For broader element coverage on equilibrium structures use "
-                    f"`isayevlab/aimnet2-wb97m-d3`; for radicals/open-shell systems use "
-                    f"`isayevlab/aimnet2-nse`. Pass validate_species=False to bypass."
-                )
+            numbers = data["numbers"]
+            cache_key = self._numbers_validation_key(numbers)
+            cached = self._species_validation_cache
+            cache_hit = (
+                cache_key is not None
+                and cached is not None
+                and cached[0] == cache_key
+                and cached[1]() is numbers
+                and cached[2] is impl
+            )
+            if not cache_hit:
+                self._validate_numbers(numbers, impl)
+                if cache_key is not None:
+                    # The weakref guards a recycled id()/data_ptr() at the same
+                    # address; _version in the key guards in-place mutation of a
+                    # kept-alive buffer. impl is compared by identity to catch
+                    # metadata swaps between calls.
+                    self._species_validation_cache = (cache_key, weakref.ref(numbers), impl)
         meta = self.metadata or {}
         if meta.get("supports_charged_systems") is False:
             # torch.as_tensor handles scalars, lists, ndarrays, 0-d and N-d tensors
@@ -926,6 +990,47 @@ class AIMNet2Calculator:
                     f"Pass validate_species=False to bypass."
                 )
 
+    def _validate_numbers(self, numbers: Any, impl: Any) -> None:
+        """Raise for atomic numbers outside ``implemented_species`` (costs a D2H sync)."""
+        # numbers may be a raw list, ndarray, or tensor — normalize first.
+        seen = {int(z) for z in torch.as_tensor(numbers).flatten().tolist() if int(z) > 0}
+        unsupported = sorted(seen - set(impl))
+        if unsupported:
+            raise ValueError(
+                f"Atomic numbers {unsupported} are not in this model's "
+                f"implemented_species {sorted(impl)}. This model was trained on "
+                f"a restricted element set; passing other elements yields undefined "
+                f"output. For broader element coverage on equilibrium structures use "
+                f"`isayevlab/aimnet2-wb97m-d3`; for radicals/open-shell systems use "
+                f"`isayevlab/aimnet2-nse`. Pass validate_species=False to bypass."
+            )
+
+    @staticmethod
+    def _numbers_validation_key(value: Any) -> tuple[Any, ...] | None:
+        """Identity key for skipping repeated species validation of one tensor.
+
+        Unlike :meth:`_tensor_identity_key` (CUDA-only, static nbmat cache),
+        this accepts any dense tensor — CPU inputs also pay the per-step
+        tolist() + set-diff otherwise. ``_version`` in the key guards in-place
+        mutation of a reused buffer.
+        """
+        if not isinstance(value, Tensor) or value.is_sparse:
+            return None
+        try:
+            version = int(value._version)
+        except RuntimeError:
+            return None
+        return (
+            id(value),
+            str(value.device),
+            str(value.dtype),
+            tuple(int(dim) for dim in value.shape),
+            tuple(int(stride) for stride in value.stride()),
+            int(value.data_ptr()),
+            int(value.storage_offset()),
+            version,
+        )
+
     def eval(
         self, data: dict[str, Any], forces=False, stress=False, hessian=False, *, validate_species: bool = True
     ) -> dict[str, Any]:
@@ -940,6 +1045,8 @@ class AIMNet2Calculator:
         # Species validation — opt-out via validate_species=False.
         if validate_species:
             self._validate_species_and_charge(data)
+        # Warn once if the caller requests an open-shell `mult` this model ignores.
+        self._maybe_warn_mult_ignored(data)
         # Hessian + torch.compile is known to hang on the double-backward
         # path through GELU activations. Fail fast instead.
         if hessian and getattr(self, "_was_compiled", False):
@@ -957,24 +1064,42 @@ class AIMNet2Calculator:
                     subsystems, forces=forces, stress=stress, validate_species=validate_species, stack=stack
                 )
 
-        data = self.prepare_input(data, hessian=hessian)
+        # The simple->dsf PBC auto-switch in prepare_input is scoped to this
+        # evaluation: any pending restore is consumed in the finally block, so
+        # an exception mid-eval cannot leave the calculator on the switched method.
+        self._pbc_coulomb_restore = None
+        try:
+            data = self.prepare_input(data, hessian=hessian)
 
-        if hessian and "mol_idx" in data and data["mol_idx"][-1] > 0:
-            raise NotImplementedError(
-                "In-call Hessian for hand-flattened multi-molecule input is not supported; "
-                "pass a 3D batch or a mol_idx dict to get per-structure Hessians."
-            )
-        data = self.set_grad_tensors(data, forces=forces, stress=stress, hessian=hessian)
-        if isinstance(self.model, torch.jit.ScriptModule):
-            with torch.jit.optimized_execution(False):  # type: ignore
+            if hessian and "mol_idx" in data and data["mol_idx"][-1] > 0:
+                raise NotImplementedError(
+                    "In-call Hessian for hand-flattened multi-molecule input is not supported; "
+                    "pass a 3D batch or a mol_idx dict to get per-structure Hessians."
+                )
+            data = self.set_grad_tensors(data, forces=forces, stress=stress, hessian=hessian)
+            if isinstance(self.model, torch.jit.ScriptModule):
+                with torch.jit.optimized_execution(False):  # type: ignore
+                    data = self.model(data)
+            else:
                 data = self.model(data)
-        else:
-            data = self.model(data)
-        # Run external modules if present
-        data, coulomb_terms = self._run_external_modules(data, forces=forces or hessian, stress=stress, hessian=hessian)
-        data = self.get_derivatives(data, forces=forces, stress=stress, hessian=hessian, coulomb_terms=coulomb_terms)
-        data = self.process_output(data)
-        return data
+            # Run external modules if present
+            data, coulomb_terms = self._run_external_modules(
+                data, forces=forces or hessian, stress=stress, hessian=hessian
+            )
+            data = self.get_derivatives(
+                data, forces=forces, stress=stress, hessian=hessian, coulomb_terms=coulomb_terms
+            )
+            data = self.process_output(data)
+            return data
+        finally:
+            restore = self._pbc_coulomb_restore
+            if restore is not None:
+                self._pbc_coulomb_restore = None
+                # Keep the DSF-side state (incl. warmed-up adaptive neighbor
+                # lists) for the next periodic call before flipping back to the
+                # pre-switch method.
+                self._auto_dsf_state = self._snapshot_coulomb_state()
+                self._restore_coulomb_state(restore)
 
     def _run_external_modules(
         self,
@@ -1057,8 +1182,24 @@ class AIMNet2Calculator:
         data = self.to_input_tensors(data)
         data = self.mol_flatten(data, hessian=hessian)
         if data.get("cell") is not None and self._coulomb_method == "simple":
-            warnings.warn("Switching to DSF Coulomb for PBC", stacklevel=1)
-            self.set_lrcoulomb_method("dsf")
+            warnings.warn(
+                "Switching to DSF Coulomb for PBC for this evaluation; "
+                "call set_lrcoulomb_method() to select a periodic method persistently.",
+                stacklevel=1,
+            )
+            # Scope the auto-switch to the current evaluation: eval() restores
+            # this snapshot in its finally block, so one periodic call does not
+            # permanently flip a gas-phase calculator off its trained "simple"
+            # full Coulomb. Explicit set_lrcoulomb_method() calls stay persistent.
+            prev_coulomb_state = self._snapshot_coulomb_state()
+            if self._auto_dsf_state is not None:
+                # Reuse the DSF-side state (incl. warmed-up adaptive neighbor
+                # lists) from the previous auto-switch instead of rebuilding it
+                # on every periodic step.
+                self._restore_coulomb_state(self._auto_dsf_state)
+            else:
+                self.set_lrcoulomb_method("dsf")
+            self._pbc_coulomb_restore = prev_coulomb_state
         if self._coulomb_method in ("ewald", "pme") and data.get("cell") is None:
             raise ValueError(
                 f"Coulomb method '{self._coulomb_method}' requires a periodic 'cell' "
@@ -1385,6 +1526,55 @@ class AIMNet2Calculator:
             subs.append(sub)
         return subs
 
+    def _snapshot_coulomb_state(self) -> dict[str, Any]:
+        """Snapshot the Coulomb-method state mutated by :meth:`set_lrcoulomb_method`.
+
+        Used to scope the automatic simple->dsf PBC switch to a single
+        evaluation. Neighbor-list objects are captured by reference (not
+        copied), so swapping states back and forth preserves their adaptive
+        ``max_neighbors`` warm-up on both sides.
+        """
+        attrs = (
+            "_coulomb_method",
+            "_coulomb_cutoff",
+            "cutoff_lr",
+            "_nblist_lr",
+            "_nblist_dftd3",
+            "_nblist_coulomb",
+        )
+        state: dict[str, Any] = {name: getattr(self, name, _SENTINEL) for name in attrs}
+        if self.external_coulomb is not None:
+            state["_external_coulomb_attrs"] = {
+                name: getattr(self.external_coulomb, name, _SENTINEL)
+                for name in ("method", "dsf_alpha", "dsf_rc", "ewald_accuracy")
+            }
+        else:
+            state["_external_coulomb_attrs"] = _SENTINEL
+        return state
+
+    def _restore_coulomb_state(self, state: dict[str, Any]) -> None:
+        """Apply state captured by :meth:`_snapshot_coulomb_state`.
+
+        Non-destructive on ``state`` — the memoized DSF-side snapshot is
+        re-applied on every periodic call.
+        """
+        external_attrs = state.get("_external_coulomb_attrs", _SENTINEL)
+        for name, val in state.items():
+            if name == "_external_coulomb_attrs":
+                continue
+            if val is _SENTINEL:
+                if hasattr(self, name):
+                    delattr(self, name)
+            else:
+                setattr(self, name, val)
+        if external_attrs is not _SENTINEL and self.external_coulomb is not None:
+            for name, val in external_attrs.items():
+                if val is _SENTINEL:
+                    if hasattr(self.external_coulomb, name):
+                        delattr(self.external_coulomb, name)
+                else:
+                    setattr(self.external_coulomb, name, val)
+
     def _snapshot_eval_state(self) -> dict[str, Any]:
         """Snapshot mutable calculator state touched by nested eval-style calls."""
         shallow_attrs = (
@@ -1446,10 +1636,10 @@ class AIMNet2Calculator:
         Multi-molecule (``mol_idx``) inputs always use ``stack=False`` because the
         molecules are independent and generally ragged.
         """
-        # Recursive eval(...) mutates instance scratch state and can persistently
-        # flip Coulomb method/cutoff/list-builder state via prepare_input's
-        # simple->dsf PBC auto-switch. Snapshot and restore so a batched call
-        # leaves the calculator unmodified.
+        # Recursive eval(...) mutates instance scratch state (_batch, cache
+        # keys, _saved_for_grad, ...). Each inner eval scopes the simple->dsf
+        # PBC auto-switch itself; snapshot and restore the rest so a batched
+        # call leaves the calculator unmodified.
         eval_state = self._snapshot_eval_state()
         try:
             results = [
@@ -1977,6 +2167,8 @@ class AIMNet2Calculator:
         # systems would yield undefined output silently.
         if validate_species:
             self._validate_species_and_charge(data)
+        # Warn once if the caller requests an open-shell `mult` this model ignores.
+        self._maybe_warn_mult_ignored(data)
         coord_in = torch.as_tensor(data["coord"])
         if coord_in.ndim == 3 and coord_in.shape[0] > 1:
             raise NotImplementedError("hessian_vector_product supports a single structure only (got 3D batch).")
@@ -1999,6 +2191,9 @@ class AIMNet2Calculator:
             result = self._hessian_vector_product_impl(data, vectors, eps=eps, create_graph=create_graph)
         finally:
             self._restore_eval_state(eval_state)
+            # _restore_eval_state already undid any PBC auto-switch from
+            # prepare_input; drop the (now-redundant) pending restore marker.
+            self._pbc_coulomb_restore = None
         return result
 
     def _hessian_vector_product_impl(

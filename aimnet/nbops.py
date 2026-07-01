@@ -58,6 +58,13 @@ def calc_masks(data: dict[str, Tensor]) -> dict[str, Tensor]:
         data["mol_sizes"] = torch.bincount(data["mol_idx"])
         # last atom is padding
         data["mol_sizes"][-1] -= 1
+        # cache number of molecules as a CPU tensor (same pattern as _nb_mode),
+        # so mol_sum does not need a device-to-host sync on every call. Not
+        # cached under torch.compile: materializing bincount's data-dependent
+        # shape as a tensor inside the traced graph trips inductor codegen,
+        # and compiled mol_sum does not read the cache.
+        if not torch.compiler.is_compiling():
+            data["_num_mol"] = torch.tensor(data["mol_sizes"].shape[0])
     elif nb_mode == 2:
         data["mask_i"] = data["numbers"] == 0
         # Track processed arrays by their data pointer to avoid redundant mask calculations
@@ -244,8 +251,20 @@ def mol_sum(x: Tensor, data: dict[str, Tensor]) -> Tensor:
             2,
         ), "Invalid tensor shape for mol_sum, ndim should be 1 or 2"
         idx = data["mol_idx"]
-        # assuming mol_idx is sorted, replace with max if not
-        out_size = int(idx[-1].item()) + 1
+        if torch.compiler.is_compiling():
+            # under torch.compile, read the molecule count directly: dynamo
+            # handles the .item() graph break, while routing it through a
+            # cached scalar tensor trips inductor codegen
+            # assuming mol_idx is sorted, replace with max if not
+            out_size = int(idx[-1].item()) + 1
+        else:
+            # number of molecules is cached by calc_masks as a CPU tensor, so
+            # reading it does not sync the GPU; compute and cache it here for
+            # data dicts that were not built through calc_masks
+            if "_num_mol" not in data:
+                # assuming mol_idx is sorted, replace with max if not
+                data["_num_mol"] = torch.tensor(int(idx[-1].item()) + 1)
+            out_size = int(data["_num_mol"].item())
 
         if x.ndim == 1:
             res = torch.zeros(out_size, device=x.device, dtype=x.dtype)

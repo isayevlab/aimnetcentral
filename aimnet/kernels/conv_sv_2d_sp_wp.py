@@ -57,6 +57,7 @@ def _conv_sv_2d_sp_kernel(
     for _m in range(M):
         _idx = idx[_b, _m]
         if _idx >= padding_value:
+            # packed-padding contract: sentinels are contiguous at the row end (see conv_sv_2d_sp docstring)
             break
         a_val = a[_idx, _a, _g]
         g_val = g[_b, _m, _g]
@@ -81,6 +82,7 @@ def _conv_sv_2d_sp_backward_a_kernel(
     for _m in range(M):
         _idx = idx[_b, _m]
         if _idx >= padding_value:
+            # packed-padding contract: sentinels are contiguous at the row end (see conv_sv_2d_sp docstring)
             break
         g_val = g[_b, _m, _g]
         val = wp.dot(grad_out, g_val)
@@ -160,6 +162,7 @@ def _conv_sv_2d_sp_double_backward_g_contrib_kernel(
     for _m in range(M):
         _idx = idx[_b, _m]
         if _idx >= padding_value:
+            # packed-padding contract: sentinels are contiguous at the row end (see conv_sv_2d_sp docstring)
             break
         a_val = a[_idx, _a, _g]
         grad2_g_val = grad2_g[_b, _m, _g]
@@ -185,6 +188,7 @@ def _conv_sv_2d_sp_double_backward_a_contrib_kernel(
     for _m in range(M):
         _idx = idx[_b, _m]
         if _idx >= padding_value:
+            # packed-padding contract: sentinels are contiguous at the row end (see conv_sv_2d_sp docstring)
             break
         grad2_a_val = grad2_a[_idx, _a, _g]
         g_val = g[_b, _m, _g]
@@ -576,6 +580,14 @@ def conv_sv_2d_sp(a: Tensor, idx: Tensor, g: Tensor) -> Tensor:
 
     Notes
     -----
+    ``idx`` rows must follow the packed-padding contract: real neighbor indices
+    come first and padding sentinels (values >= B-1, the padding row) are
+    contiguous at the end of each row. The Warp kernels stop scanning a row at
+    the first sentinel, so interleaved padding would silently drop real
+    neighbors. ``nvalchemiops.torch.neighbors.neighbor_list`` produces this
+    layout. The contract is not checked at runtime: validating ``idx`` values
+    would require a device-to-host sync on the hot path.
+
     Only the first- and second-order backward primitives are vmap-registered.
     `torch.func.vmap` directly over the forward (e.g. vmap over a non-vjp
     closure that calls this function) will raise `Batching rule not implemented
