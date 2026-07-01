@@ -17,9 +17,7 @@ from aimnet.models.base import load_model
 from aimnet.modules import DFTD3, LRCoulomb
 from aimnet.modules.lr import ExternalDerivativeTerms
 
-from .model_registry import get_model_path, get_registry_model_family
-
-_WB97M_D3_PARAMS = {"s6": 1.0, "s8": 0.3908, "a1": 0.566, "a2": 3.128}
+from .model_registry import get_family_policy, get_model_path, get_registry_model_family
 
 # Sentinel for "attribute did not exist" when snapshotting/restoring instance state.
 _SENTINEL = object()
@@ -70,17 +68,22 @@ def _apply_family_defaults(metadata: Mapping[str, Any], registry_family: str | N
                 f"'{metadata_family}'. Refusing to load ambiguous energy scale."
             )
 
-    if metadata.get("family") == "rxn":
+    policy = get_family_policy(metadata.get("family"))
+
+    if policy.supports_charged_systems is not None:
         supports_charged = metadata.get("supports_charged_systems")
         if supports_charged is None:
-            metadata["supports_charged_systems"] = False
-        elif supports_charged is not False:
-            raise ValueError("aimnet2-rxn models must declare supports_charged_systems=False.")
+            metadata["supports_charged_systems"] = policy.supports_charged_systems
+        elif supports_charged is not policy.supports_charged_systems:
+            raise ValueError(
+                f"aimnet2-{policy.family} models must declare "
+                f"supports_charged_systems={policy.supports_charged_systems}."
+            )
 
-        if not metadata.get("has_embedded_d3ts", False):
-            metadata["needs_dispersion"] = True
-            if metadata.get("d3_params") is None:
-                metadata["d3_params"] = dict(_WB97M_D3_PARAMS)
+    if policy.posthoc_d3_params is not None and not metadata.get("has_embedded_d3ts", False):
+        metadata["needs_dispersion"] = True
+        if metadata.get("d3_params") is None:
+            metadata["d3_params"] = dict(policy.posthoc_d3_params)
 
     return metadata
 

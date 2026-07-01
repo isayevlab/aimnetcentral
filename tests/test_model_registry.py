@@ -1,7 +1,9 @@
 import yaml
 
 from aimnet.calculators.model_registry import (
+    FamilyPolicy,
     get_cache_dir,
+    get_family_policy,
     get_registry_model_family,
     load_model_registry,
     resolve_registry_model_name,
@@ -170,3 +172,68 @@ def test_registry_sha256_entries_are_valid_hex():
             continue
         assert len(digest) == 64, key
         int(digest, 16)
+
+
+def test_every_yaml_family_resolves_to_a_policy():
+    """Every family block in the registry YAML must resolve via get_family_policy
+    to a non-neutral policy that carries its own tag and at least one member."""
+    registry = load_model_registry()
+    for family in registry["families"]:
+        policy = get_family_policy(family)
+        assert policy.family == family
+        assert policy.members, f"family {family!r} has no registry members"
+
+
+def test_unknown_family_returns_neutral_policy():
+    """Unknown or undeclared families must get the neutral policy, not raise —
+    raw nn.Module loads and third-party checkpoints rely on this."""
+    for family in ("no-such-family", None):
+        policy = get_family_policy(family)
+        assert policy == FamilyPolicy()
+        assert policy.family is None
+        assert policy.supports_charged_systems is None
+        assert policy.posthoc_d3_params is None
+        assert policy.members == ()
+
+
+def test_every_registry_model_has_a_family_policy_block():
+    """Every model entry must declare a family that names a block under `families:`,
+    and get_registry_model_family must return exactly that declared tag."""
+    registry = load_model_registry()
+    for key, entry in registry["models"].items():
+        family = entry.get("family")
+        assert family is not None, f"model {key!r} does not declare a family"
+        assert family in registry["families"], f"model {key!r} family {family!r} has no policy block"
+        assert get_registry_model_family(key) == family
+
+
+def test_family_policy_members_are_in_ensemble_order():
+    """FamilyPolicy.members must list the family's registry keys in member order,
+    so ensemble_member indices map onto the correct checkpoints."""
+    registry = load_model_registry()
+    for family in registry["families"]:
+        members = get_family_policy(family).members
+        expected = tuple(k for k, v in registry["models"].items() if v.get("family") == family)
+        assert members == expected
+        for i, member in enumerate(members):
+            assert member.endswith(f"_{i}"), f"{member} is not ensemble member {i}"
+
+
+def test_rxn_family_policy_pins_posthoc_wb97m_d3():
+    """The rxn family policy must carry the AIMNet2 wB97M D3(BJ) parameters and the
+    charged-systems restriction previously hardcoded in the calculator."""
+    policy = get_family_policy("rxn")
+    assert policy.supports_charged_systems is False
+    assert policy.posthoc_d3_params == {"s6": 1.0, "s8": 0.3908, "a1": 0.566, "a2": 3.128}
+
+
+def test_non_rxn_family_policies_are_permissive():
+    """All non-rxn released families carry their policy inside the .pt metadata:
+    no charge restriction and no post-hoc dispersion defaults."""
+    registry = load_model_registry()
+    for family in registry["families"]:
+        if family == "rxn":
+            continue
+        policy = get_family_policy(family)
+        assert policy.supports_charged_systems is None, family
+        assert policy.posthoc_d3_params is None, family
