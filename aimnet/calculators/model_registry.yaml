@@ -2,88 +2,142 @@
 # Convention for `models:` keys:  aimnet2-<family>_<ensemble-member>
 #   - dash separates "aimnet2" from the family tag and is the only separator inside the family tag
 #   - trailing `_<int>` is reserved for the ensemble member index
-#   - family tags must NOT contain `_` and must NOT end in `_<int>` (so `key.rsplit("_", 1)`
-#     unambiguously yields (family, member))
-#   - convention applies to entries under `models:` only; entries under `aliases:` are not parsed
+#   - the key convention is documentation only: the family tag is never parsed from the
+#     key — every entry declares an explicit `family:` field, which must name a block
+#     under `families:` below
+#   - entries under `aliases:` are not parsed and carry no fields
 # File names on the GCS bucket are unchanged; the key→file mapping below absorbs
 # the historical naming so consumers never need to track the bucket layout.
+
+# Per-family calculator policy, consumed by
+# aimnet.calculators.model_registry.get_family_policy(). Recognized keys:
+#   supports_charged_systems: required charge-support declaration for the family;
+#       the calculator defaults undeclared model metadata to this value and rejects
+#       conflicting declarations.
+#   posthoc_d3_params: DFT-D3(BJ) parameters the calculator applies post-hoc when the
+#       model does not embed dispersion (forces needs_dispersion=true and provides
+#       default d3_params).
+# A family with an empty block carries all of its policy inside the .pt metadata.
+# Models not in the registry (raw nn.Module loads, third-party checkpoints) get a
+# neutral policy: no defaults applied.
+families:
+    wb97m-d3: {}
+    b973c-d3: {}
+    b973c-2025-d3: {}
+    nse: {}
+    pd: {}
+    rxn:
+        supports_charged_systems: false
+        # AIMNet2 wB97M D3(BJ) parameters — rxn models are trained on a dispersion-free
+        # wB97M energy scale, so the calculator adds this correction post-hoc unless the
+        # model embeds D3TS dispersion.
+        posthoc_d3_params:
+            s6: 1.0
+            s8: 0.3908
+            a1: 0.566
+            a2: 3.128
+
 models:
     aimnet2-wb97m-d3_0:
+        family: wb97m-d3
         file: aimnet2_wb97m_d3_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_0.pt
         sha256: f0f7c054539ad3261bd36f9b11c56d12f87cb723e25bea7521755bbd3ec24e28
     aimnet2-wb97m-d3_1:
+        family: wb97m-d3
         file: aimnet2_wb97m_d3_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_1.pt
     aimnet2-wb97m-d3_2:
+        family: wb97m-d3
         file: aimnet2_wb97m_d3_2.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_2.pt
     aimnet2-wb97m-d3_3:
+        family: wb97m-d3
         file: aimnet2_wb97m_d3_3.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_wb97m_d3_3.pt
     aimnet2-b973c-d3_0:
+        family: b973c-d3
         file: aimnet2_b973c_d3_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_0.pt
         sha256: 7ec7a3db67bd3a393ad59647d4020398deeb041c07dba1c9cf212d226268e549
     aimnet2-b973c-d3_1:
+        family: b973c-d3
         file: aimnet2_b973c_d3_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_1.pt
     aimnet2-b973c-d3_2:
+        family: b973c-d3
         file: aimnet2_b973c_d3_2.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_2.pt
     aimnet2-b973c-d3_3:
+        family: b973c-d3
         file: aimnet2_b973c_d3_3.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_b973c_d3_3.pt
     aimnet2-b973c-2025-d3_0:
+        family: b973c-2025-d3
         file: aimnet2_2025_b973c_d3_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_0.pt
         sha256: 043ed5418a104e31f79462f8e5ebeca64a2d24422174f5d29f894d32271981b5
     aimnet2-b973c-2025-d3_1:
+        family: b973c-2025-d3
         file: aimnet2_2025_b973c_d3_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_1.pt
     aimnet2-b973c-2025-d3_2:
+        family: b973c-2025-d3
         file: aimnet2_2025_b973c_d3_2.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_2.pt
     aimnet2-b973c-2025-d3_3:
+        family: b973c-2025-d3
         file: aimnet2_2025_b973c_d3_3.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_3.pt
     aimnet2-nse_0:
+        family: nse
         file: aimnet2nse_wb97m_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_0.pt
         sha256: b98b3449b2a3765de6a188edff9344a38cc72df75f9d9bf68f4b898a253c5864
     aimnet2-nse_1:
+        family: nse
         file: aimnet2nse_wb97m_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_1.pt
     aimnet2-nse_2:
+        family: nse
         file: aimnet2nse_wb97m_2.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_2.pt
     aimnet2-nse_3:
+        family: nse
         file: aimnet2nse_wb97m_3.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2NSE/aimnet2nse_wb97m_3.pt
     aimnet2-pd_0:
+        family: pd
         file: aimnet2-pd_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2Pd/aimnet2-pd_0.pt
         sha256: 93f10dd5522e187d7d6aaf3b18d54c07746f5452c2e8063cf77fd0420dc39ebd
     aimnet2-pd_1:
+        family: pd
         file: aimnet2-pd_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2Pd/aimnet2-pd_1.pt
     aimnet2-pd_2:
+        family: pd
         file: aimnet2-pd_2.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2Pd/aimnet2-pd_2.pt
     aimnet2-pd_3:
+        family: pd
         file: aimnet2-pd_3.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2Pd/aimnet2-pd_3.pt
     aimnet2-rxn_0:
+        family: rxn
         file: aimnet2_rxn_0.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_0.pt
         sha256: ce8bc2a4cc6fcb5ebaa1bc8897fcd75104e5a00fe86e9d5fc6a020d572174894
     aimnet2-rxn_1:
+        family: rxn
         file: aimnet2_rxn_1.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_1.pt
     aimnet2-rxn_2:
+        family: rxn
         file: aimnet2_rxn_2.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_2.pt
     aimnet2-rxn_3:
+        family: rxn
         file: aimnet2_rxn_3.pt
         url: https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2rxn/aimnet2_rxn_3.pt
 

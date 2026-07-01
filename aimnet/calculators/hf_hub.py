@@ -116,20 +116,18 @@ def _fetch_pt_metadata_from_registry(
     if member_names and ensemble_member < len(member_names):
         member_name = member_names[ensemble_member]
     else:
-        # Best-effort: derive from family_name or repo slug
+        # Best-effort: derive from family_name or repo slug via the registry's
+        # family policy (repo slugs carry the "aimnet2-" prefix, family tags don't).
         family_name = config.get("family_name") or Path(repo_id_or_path).name
         member_name = None
-        try:
-            from aimnet.calculators.model_registry import load_model_registry
+        from aimnet.calculators.model_registry import get_family_policy
 
-            registry = load_model_registry()
-            family_slug = family_name.replace("-", "_")
-            all_models = list(registry.get("models", {}).keys())
-            candidates = [k for k in all_models if family_slug in k]
-            if candidates:
-                member_name = candidates[ensemble_member] if ensemble_member < len(candidates) else candidates[0]
-        except (ImportError, KeyError, IndexError):
-            pass
+        policy = get_family_policy(family_name)
+        if not policy.members:
+            policy = get_family_policy(family_name.removeprefix("aimnet2-"))
+        candidates = policy.members
+        if candidates:
+            member_name = candidates[ensemble_member] if ensemble_member < len(candidates) else candidates[0]
         if member_name is None:
             raise ValueError(
                 f"config.json in '{repo_id_or_path}' has no 'model_yaml' field and "
