@@ -2,6 +2,7 @@ import logging
 import os
 import shutil
 import tempfile
+from dataclasses import dataclass, field
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,62 @@ import requests
 import yaml
 
 logging.basicConfig(level=logging.INFO)
+
+
+@dataclass(frozen=True)
+class FamilyPolicy:
+    """Calculator-side policy for a released model family.
+
+    Sourced from the ``families:`` section of ``model_registry.yaml``. The neutral
+    policy (all fields None/empty) applies no defaults and is returned for unknown
+    or undeclared families, so raw ``nn.Module`` loads and third-party checkpoints
+    are unaffected.
+
+    Attributes
+    ----------
+    family : str | None
+        Canonical family tag, or None for the neutral policy.
+    supports_charged_systems : bool | None
+        Required charge-support declaration for the family. The calculator defaults
+        undeclared model metadata to this value and rejects conflicting declarations.
+        None means the family imposes no constraint.
+    posthoc_d3_params : dict[str, float] | None
+        DFT-D3(BJ) parameters applied post-hoc when the model does not embed
+        dispersion. None means no post-hoc dispersion policy.
+    members : tuple[str, ...]
+        Registry model keys belonging to the family, in ensemble-member order.
+    """
+
+    family: str | None = None
+    supports_charged_systems: bool | None = None
+    posthoc_d3_params: dict[str, float] | None = None
+    members: tuple[str, ...] = field(default_factory=tuple)
+
+
+_NEUTRAL_FAMILY_POLICY = FamilyPolicy()
+
+
+def get_family_policy(family: str | None) -> FamilyPolicy:
+    """Return the calculator-side policy for a model family.
+
+    Unknown or missing families return the neutral policy (no defaults applied)
+    rather than raising, so calculators built from raw ``nn.Module`` inputs or
+    third-party checkpoints keep working.
+    """
+    if family is None:
+        return _NEUTRAL_FAMILY_POLICY
+    model_registry = load_model_registry()
+    block = model_registry.get("families", {}).get(family)
+    if block is None:
+        return _NEUTRAL_FAMILY_POLICY
+    members = tuple(name for name, cfg in model_registry["models"].items() if cfg.get("family") == family)
+    posthoc_d3_params = block.get("posthoc_d3_params")
+    return FamilyPolicy(
+        family=family,
+        supports_charged_systems=block.get("supports_charged_systems"),
+        posthoc_d3_params=dict(posthoc_d3_params) if posthoc_d3_params is not None else None,
+        members=members,
+    )
 
 
 def load_model_registry(registry_file: str | None = None) -> dict[str, Any]:
@@ -48,10 +105,11 @@ def resolve_registry_model_name(model_name: str) -> str:
 def get_registry_model_family(model_name: str) -> str:
     """Return the canonical family tag for a registered model name or alias."""
     model_name = resolve_registry_model_name(model_name)
-    family_key, member = model_name.rsplit("_", 1)
-    if not member.isdigit() or not family_key.startswith("aimnet2-"):
-        raise ValueError(f"Model {model_name} does not follow the canonical registry naming convention.")
-    return family_key.removeprefix("aimnet2-")
+    model_registry = load_model_registry()
+    family = model_registry["models"][model_name].get("family")
+    if family is None:
+        raise ValueError(f"Model {model_name} does not declare a family in the registry.")
+    return family
 
 
 def get_registry_model_path(model_name: str) -> str:
@@ -59,7 +117,7 @@ def get_registry_model_path(model_name: str) -> str:
     create_assets_dir()
     model_name = resolve_registry_model_name(model_name)
     cfg = model_registry["models"][model_name]  # type: ignore
-    model_path = _maybe_download_asset(**cfg)  # type: ignore
+    model_path = _maybe_download_asset(file=cfg["file"], url=cfg["url"], sha256=cfg.get("sha256"))
     return model_path
 
 
