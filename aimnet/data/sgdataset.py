@@ -82,9 +82,6 @@ class DataGroup:
     def __len__(self):
         return len(next(iter(self.values()))) if self._data else 0
 
-    def to_dict(self):
-        return self._data
-
     def items(self):
         return self._data.items()
 
@@ -96,9 +93,6 @@ class DataGroup:
 
     def pop(self, key):
         return self._data.pop(key)
-
-    def rename_key(self, old, new):
-        self[new] = self.pop(old)
 
     def sample(self, idx, keys=None) -> "DataGroup":
         """Return a new `DataGroup` with the data indexed by `idx`."""
@@ -159,19 +153,6 @@ class DataGroup:
             keys = self.keys()
         for idx in idxs:
             yield {k: v[idx] for k, v in self.items() if k in keys}
-
-    def merge(self, other, strict=True):
-        if strict:
-            if set(self.keys()) != set(other.keys()):
-                raise ValueError("Data keys do not match between the datasets.")
-            keys = self.keys()
-        else:
-            keys = set(self.keys()) & set(other.keys())
-        for k in list(self.keys()):
-            if k in keys:
-                self._data[k] = np.concatenate([self[k], other[k]], axis=0)
-            else:
-                self.pop(k)
 
     def apply_peratom_shift(self, sap_dict, key_in="energy", key_out="energy", numbers_key="numbers"):
         ntyp = max(sap_dict.keys()) + 1
@@ -276,35 +257,9 @@ class SizeGroupedDataset:
     def __contains__(self, value):
         return value in self.keys()
 
-    def rename_datakey(self, old, new):
-        for g in self.groups:
-            g.rename_key(old, new)
-
     def apply(self, fn):
         for grp in self.groups:
             fn(grp)
-
-    def merge(self, other, strict=True):
-        if not isinstance(other, self.__class__):
-            other = self.__class__(other)
-        if strict:
-            if set(other.datakeys()) != set(self.datakeys()):
-                raise ValueError("Data keys do not match between the datasets.")
-        else:
-            keys = set(other.datakeys()) & set(self.datakeys())
-            for k in list(self.datakeys()):
-                if k not in keys:
-                    for g in self.groups:
-                        g.pop(k)
-            for k in list(other.datakeys()):
-                if k not in keys:
-                    for g in other.groups:
-                        g.pop(k)
-        for k in other:
-            if k in self:
-                self[k].cat(other[k])  # type: ignore[attr-defined]
-            else:
-                self[k] = other[k]  # type: ignore[attr-defined]
 
     def random_split(self, *fractions, seed=None):
         splitted_groups = {}
