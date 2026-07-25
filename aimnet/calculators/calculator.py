@@ -14,42 +14,16 @@ from torch import Tensor, nn
 from aimnet.modules import DFTD3, LRCoulomb
 from aimnet.modules.lr import ExternalDerivativeTerms
 
+from . import derivatives
 from .resolve import resolve_model
 
 # Sentinel for "attribute did not exist" when snapshotting/restoring instance state.
 _SENTINEL = object()
 
 
-def _sum_optional_tensor(x: Tensor | None, y: Tensor | None) -> Tensor | None:
-    """Elementwise sum of two ``Optional[Tensor]`` operands."""
-    if x is None:
-        return y
-    if y is None:
-        return x
-    return x + y.to(dtype=x.dtype, device=x.device)
-
-
-def _combine_external_terms(
-    a: ExternalDerivativeTerms | None,
-    b: ExternalDerivativeTerms | None,
-) -> ExternalDerivativeTerms | None:
-    """Sum forces and virials of two external derivative terms.
-
-    Both inputs follow the calculator-side contract used by
-    :meth:`AIMNet2Calculator.get_derivatives`: ``forces`` add to the
-    autograd-derived forces and ``virial`` enters as ``dedc -= virial.mT``.
-    DSF Coulomb and DFTD3 both publish detached terms in this convention, so
-    combining them is a per-system elementwise sum.
-    """
-    if a is None:
-        return b
-    if b is None:
-        return a
-    return ExternalDerivativeTerms(
-        forces=_sum_optional_tensor(a.forces, b.forces),
-        virial=_sum_optional_tensor(a.virial, b.virial),
-        hessian=_sum_optional_tensor(a.hessian, b.hessian),
-    )
+# Backwards-compatible aliases; the implementations live in derivatives.py.
+_sum_optional_tensor = derivatives.sum_optional_tensor
+_combine_external_terms = derivatives.combine_external_terms
 
 
 class AdaptiveNeighborList:
@@ -1846,37 +1820,9 @@ class AIMNet2Calculator:
         return data
 
     def set_grad_tensors(self, data: dict[str, Tensor], forces=False, stress=False, hessian=False) -> dict[str, Tensor]:
-        self._saved_for_grad = {}
-        self._external_strain_inputs = None
-        if forces or hessian:
-            data["coord"].requires_grad_(True)
-            self._saved_for_grad["coord"] = data["coord"]
-        if stress:
-            assert "cell" in data and data["cell"] is not None, "Stress calculation requires cell"
-            coord_unstrained = data["coord"]
-            cell = data["cell"]
-            cell_unstrained = cell
-            if cell.ndim == 2:
-                # Single system: (3, 3) scaling
-                scaling = torch.eye(3, requires_grad=True, dtype=cell.dtype, device=cell.device)
-                data["coord"] = data["coord"] @ scaling
-                data["cell"] = cell @ scaling
-            else:
-                # Batched systems: (B, 3, 3) scaling - each system gets independent scaling
-                B = cell.shape[0]
-                scaling = torch.eye(3, dtype=cell.dtype, device=cell.device).unsqueeze(0).expand(B, -1, -1)
-                scaling.requires_grad_(True)
-                mol_idx = data["mol_idx"]
-                # Apply per-atom scaling: coord[i] @ scaling[mol_idx[i]]
-                atom_scaling = torch.index_select(scaling, 0, mol_idx)  # (N_total, 3, 3)
-                data["coord"] = (data["coord"].unsqueeze(1) @ atom_scaling).squeeze(1)
-                data["cell"] = cell @ scaling
-            self._saved_for_grad["scaling"] = scaling
-            self._external_strain_inputs = {
-                "coord_unstrained": coord_unstrained,
-                "cell_unstrained": cell_unstrained,
-                "scaling": scaling,
-            }
+        data, self._saved_for_grad, self._external_strain_inputs = derivatives.set_grad_tensors(
+            data, forces=forces, stress=stress, hessian=hessian
+        )
         return data
 
     def keep_only(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
@@ -1894,94 +1840,18 @@ class AIMNet2Calculator:
         hessian: bool = False,
         coulomb_terms: ExternalDerivativeTerms | None = None,
     ) -> dict[str, Tensor]:
-        # Use stored train mode for create_graph decision
-        _create_graph = hessian or self._train
-        x = []
-        if hessian:
-            forces = True
-        if forces and ("forces" not in data or (_create_graph and not data["forces"].requires_grad)):
-            forces = True
-            x.append(self._saved_for_grad["coord"])
-        if stress:
-            x.append(self._saved_for_grad["scaling"])
-        if x:
-            tot_energy = data["energy"].sum()
-            deriv = torch.autograd.grad(tot_energy, x, create_graph=_create_graph)
-            if forces:
-                force = -deriv[0]
-                if coulomb_terms is not None and coulomb_terms.forces is not None:
-                    force = force + coulomb_terms.forces.to(dtype=force.dtype, device=force.device)
-                data["forces"] = force
-            if stress:
-                dedc = deriv[0] if not forces else deriv[1]
-                if coulomb_terms is not None and coulomb_terms.virial is not None:
-                    virial = coulomb_terms.virial.to(dtype=dedc.dtype, device=dedc.device)
-                    if dedc.ndim == 2 and virial.ndim == 3:
-                        virial = virial.sum(dim=0)
-                    # nvalchemiops virial convention is W = -dE/dstrain.
-                    # AIMNet applies row-vector strain as coord @ scaling,
-                    # so the stress numerator contribution is -W.T.
-                    dedc = dedc - virial.mT
-                cell = data["cell"].detach()
-                if cell.ndim == 2:
-                    volume = cell.det().abs()
-                else:
-                    volume = torch.linalg.det(cell).abs().unsqueeze(-1).unsqueeze(-1)  # (B, 1, 1)
-                data["stress"] = dedc / volume
-        if hessian:
-            H = self.calculate_hessian(data["forces"], self._saved_for_grad["coord"])
-            if coulomb_terms is not None and getattr(coulomb_terms, "hessian", None) is not None:
-                # The LR coulomb hessian is computed in float64 via finite
-                # differences. Accumulate in that (higher) precision rather than
-                # downcasting it to H's dtype, which would discard the FD precision.
-                H = H.to(dtype=coulomb_terms.hessian.dtype, device=H.device) + coulomb_terms.hessian.to(device=H.device)
-            data["hessian"] = H
-        return data
+        return derivatives.get_derivatives(
+            data,
+            forces=forces,
+            stress=stress,
+            hessian=hessian,
+            coulomb_terms=coulomb_terms,
+            saved_for_grad=self._saved_for_grad,
+            # Use stored train mode for create_graph decision
+            create_graph=hessian or self._train,
+        )
 
-    @staticmethod
-    def calculate_hessian(forces: Tensor, coord: Tensor) -> Tensor:
-        """Dense ``(N, 3, N, 3)`` Hessian of the energy w.r.t. real-atom coordinates.
-
-        Autograd contract (IMPORTANT):
-        The returned dense Hessian is a **detached value**: it carries no
-        autograd graph back to the coordinates or model parameters. This is by
-        design (it is materialized via ``torch.func.vmap`` over a vjp of the
-        already-built force graph, and the periodic Ewald/PME block is a
-        fixed-charge finite-difference term that is non-differentiable). Forces
-        DO compose with an upstream coordinate-builder graph, but the Hessian
-        does not, so you cannot backpropagate through ``eval(..., hessian=True)``.
-
-        If you need the Hessian to *compose* (e.g. ``H @ v`` that scales with /
-        differentiates through an outer computation) or to avoid forming the
-        dense ``(N, 3, N, 3)`` tensor on large systems, use the matrix-free
-        :meth:`hessian_vector_product` instead. For a fully-differentiable
-        Hessian, build one externally with
-        ``torch.autograd.functional.hessian(energy_fn, coords)`` over a closure
-        that calls the model on differentiable coordinates (note that the
-        periodic Ewald/PME long-range block remains a fixed-charge FD term in
-        either case).
-        """
-        # Coord includes padding atom (shape N+1), forces only for real atoms (shape N).
-        # Hessian computed only for actual atoms: (N, 3, N, 3).
-        #
-        # vmap-over-vjp form (not is_grads_batched=True or autograd.functional.hessian):
-        # torch.library.register_vmap on aimnet::conv_sv_2d_sp_{bwd,bwd_bwd} is consulted
-        # ONLY by the functorch dispatch (torch.func.vmap). The legacy batching dispatch
-        # would still raise "Batching rule not implemented."
-        n = forces.numel()
-        eye = torch.eye(n, device=forces.device, dtype=forces.dtype)
-
-        def vjp(go: Tensor) -> Tensor:
-            return torch.autograd.grad(
-                forces.flatten(),
-                coord,
-                grad_outputs=go,
-                retain_graph=True,
-                allow_unused=True,
-            )[0]
-
-        hessian = -torch.func.vmap(vjp, 0)(eye)
-        return hessian.view(-1, 3, coord.shape[0], 3)[:-1, :, :-1, :]
+    calculate_hessian = staticmethod(derivatives.calculate_hessian)
 
     @torch.inference_mode(False)
     @torch.enable_grad()
