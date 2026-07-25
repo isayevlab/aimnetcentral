@@ -68,17 +68,6 @@ class Embedding(nn.Embedding):
                 self.weight[self.padding_idx].fill_(0)
 
 
-class DSequential(nn.Module):
-    def __init__(self, *modules):
-        super().__init__()
-        self.module = nn.ModuleList(modules)
-
-    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
-        for m in self.module:
-            data = m(data)
-        return data
-
-
 class AtomicShift(nn.Module):
     def __init__(
         self,

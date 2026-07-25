@@ -13,6 +13,7 @@ from aimnet.calculators import AIMNet2Calculator
 pytestmark = [pytest.mark.ase]
 
 
+@pytest.mark.slow
 def test_from_zoo():
     """Test basic model loading and inference from model registry."""
     pytest.importorskip("ase", reason="ASE not installed. Install with: pip install aimnet[ase]")
@@ -340,6 +341,7 @@ class TestCoulombMethods:
         calc._train = False
         torch.testing.assert_close(f_kernel, f_torch, rtol=1e-3, atol=1e-3)
 
+    @pytest.mark.slow
     def test_dsf_torch_energy_matches_kernel(self):
         """Pure-torch DSF energy (Hessian path) matches the nvalchemiops kernel energy."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
@@ -355,6 +357,7 @@ class TestCoulombMethods:
         e_torch = calc(data, hessian=True)["energy"]
         torch.testing.assert_close(e_kernel, e_torch, rtol=1e-4, atol=1e-5)
 
+    @pytest.mark.slow
     @pytest.mark.parametrize("method", ["ewald", "pme"])
     def test_ewald_pme_hessian_finite_symmetric_sumrule(self, method):
         """Ewald/PME Hessian is finite, symmetric, and obeys the acoustic sum rule."""
@@ -377,6 +380,7 @@ class TestCoulombMethods:
         assert (H_flat - H_flat.T).abs().max().item() < 5e-3
         assert H.sum(dim=2).abs().max().item() < 5e-3
 
+    @pytest.mark.slow
     def test_dftd3_hessian_is_finite(self):
         """External DFT-D3 uses its differentiable fallback for Hessian calls."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
@@ -652,6 +656,7 @@ class TestDerivatives:
         force_sum = res["forces"].sum(dim=-2)
         assert force_sum.abs().max().item() < 1e-4
 
+    @pytest.mark.slow
     def test_hessian_shape(self):
         """Test that Hessian has correct shape."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
@@ -709,6 +714,7 @@ class TestDerivatives:
         assert g is not None, "Autograd graph was broken — coord gradient is None"
         assert g.shape == coords.shape
 
+    @pytest.mark.slow
     def test_external_hessian_nonzero(self):
         """External Hessian via torch.autograd.functional.hessian must be non-zero.
 
@@ -729,6 +735,7 @@ class TestDerivatives:
         H = torch.autograd.functional.hessian(energy_fn, coords)
         assert H.abs().max().item() > 0, "External Hessian is all-zeros — autograd graph broken"
 
+    @pytest.mark.slow
     def test_external_hessian_matches_internal(self, device):
         """External Hessian must agree with the calculator's own hessian=True output."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0, device=device)
@@ -762,6 +769,7 @@ class TestDerivatives:
         res = calc(data, hessian=True)
         assert res["hessian"].shape == (2, 3, 2, 3)
 
+    @pytest.mark.slow
     def test_hessian_batched_input_stacks(self):
         """A B>1 3D batch returns a per-structure stacked Hessian (B, N, 3, N, 3)."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=1000)
@@ -782,6 +790,7 @@ class TestDerivatives:
         # Other requested per-structure quantities stack along the same batch dim.
         assert res["forces"].shape == (2, 3, 3)
 
+    @pytest.mark.slow
     def test_hessian_batched_matches_per_structure(self):
         """Each batched Hessian block equals the standalone single-structure Hessian."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=1000)
@@ -805,6 +814,7 @@ class TestDerivatives:
         torch.testing.assert_close(H_batched[0], H0, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(H_batched[1], H1, rtol=1e-4, atol=1e-4)
 
+    @pytest.mark.slow
     def test_hessian_batched_pbc_ewald_stacks(self):
         """Batched Hessian composes with the periodic Ewald FD-Hessian path: a 3D
         batch with a cell + Ewald Coulomb runs per-structure and stacks the
@@ -840,6 +850,7 @@ class TestDerivatives:
         res = calc(data, forces=True)
         assert "forces" in res and res["forces"].shape[-2:] == torch.Size([3, 3])
 
+    @pytest.mark.slow
     def test_hessian_multiple_molecules_returns_list(self):
         """A flat mol_idx batch returns one Hessian per molecule (list, even when equal-size)."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
@@ -859,6 +870,7 @@ class TestDerivatives:
         assert res["hessian"][0].shape == (2, 3, 2, 3)
         assert res["hessian"][1].shape == (2, 3, 2, 3)
 
+    @pytest.mark.slow
     def test_hessian_ragged_molecules_returns_list(self):
         """Different-size molecules return a list with correct per-molecule Hessian shapes."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
@@ -1051,6 +1063,7 @@ class TestBatchCorrectness:
         np.testing.assert_allclose(res_batch["energy"][0].item(), e1, atol=1e-5)
         np.testing.assert_allclose(res_batch["energy"][1].item(), e2, atol=1e-5)
 
+    @pytest.mark.slow
     def test_forces_batch_vs_individual(self):
         """Verify forces match for batched vs individual inference."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
@@ -1225,6 +1238,7 @@ class TestTorchCompile:
         assert "energy" in res
         assert torch.isfinite(res["energy"]).all()
 
+    @pytest.mark.slow
     @pytest.mark.skipif(not hasattr(torch, "compile"), reason="torch.compile requires PyTorch 2.0+")
     def test_torch_compile_with_gradients(self):
         """Test that gradients work through compiled model."""
@@ -1278,6 +1292,7 @@ class TestTorchCompile:
         res = calc(data)
         assert res["energy"].device.type == "cpu"
 
+    @pytest.mark.slow
     @pytest.mark.skipif(not hasattr(torch, "compile"), reason="torch.compile requires PyTorch 2.0+")
     def test_compile_model_parameter(self):
         """Test compile_model constructor parameter."""
@@ -1513,6 +1528,7 @@ class TestCutoffConfiguration:
         assert torch.isfinite(res["energy"]).all()
 
 
+@pytest.mark.slow
 def test_relative_path_with_slash_loads_correctly(tmp_path, monkeypatch):
     """Relative two-segment paths like 'subdir/model.pt' must not be misrouted to HF."""
     import shutil
@@ -1798,7 +1814,7 @@ def test_registry_family_metadata_mismatch_raises(monkeypatch):
     from torch import nn
 
     from aimnet.calculators import AIMNet2Calculator
-    from aimnet.calculators import calculator as calculator_mod
+    from aimnet.calculators import resolve as resolve_mod
 
     class DummyModel(nn.Module):
         pass
@@ -1816,8 +1832,8 @@ def test_registry_family_metadata_mismatch_raises(monkeypatch):
         model._metadata = metadata
         return model, metadata
 
-    monkeypatch.setattr(calculator_mod, "get_model_path", lambda _model: "/fake/model.pt")
-    monkeypatch.setattr(calculator_mod, "load_model", fake_load_model)
+    monkeypatch.setattr(resolve_mod, "get_model_path", lambda _model: "/fake/model.pt")
+    monkeypatch.setattr(resolve_mod, "load_model", fake_load_model)
 
     with pytest.raises(ValueError, match=r"Registry family 'wb97m-d3'"):
         AIMNet2Calculator("aimnet2", device="cpu")
@@ -1950,3 +1966,15 @@ def test_aimnet2rxn_alias_calculator_e2e():
     assert calc.external_dftd3 is not None
     assert calc.metadata.get("implemented_species") == [1, 6, 7, 8]
     assert abs(calc.metadata.get("cutoff") - 5.0) < 1e-6
+
+
+def test_set_lr_cutoff_updates_lr_state(water_molecule):
+    calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+    e_before = calc(dict(water_molecule))["energy"]
+    calc.set_lr_cutoff(12.0)
+    assert calc.cutoff_lr == 12.0
+    assert calc.dftd3_cutoff == 12.0
+    e_after = calc(dict(water_molecule))["energy"]
+    assert torch.isfinite(e_after).all()
+    # Water is far smaller than either cutoff, so the energy must not change.
+    assert torch.allclose(e_before, e_after)
