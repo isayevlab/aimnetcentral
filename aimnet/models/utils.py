@@ -290,23 +290,6 @@ def has_d3ts_in_config(config: dict) -> bool:
     return "d3ts" in outputs
 
 
-def has_dftd3_in_config(config: dict) -> bool:
-    """Check if YAML config contains DFTD3 or D3BJ module.
-
-    Parameters
-    ----------
-    config : dict
-        Model YAML configuration dictionary.
-
-    Returns
-    -------
-    bool
-        True if DFTD3 or D3BJ is in the outputs section.
-    """
-    outputs = config.get("kwargs", {}).get("outputs", {})
-    return "dftd3" in outputs or "d3bj" in outputs
-
-
 # --- State dict key validation ---
 
 

@@ -54,6 +54,7 @@ def _coulomb_state(calc):
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("method", ["simple", "dsf"])
 def test_hvp_matches_dense_nonperiodic(method):
     calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=(method != "simple"))
@@ -72,6 +73,7 @@ def test_hvp_matches_dense_nonperiodic(method):
     torch.testing.assert_close(hv.double().cpu(), ref.cpu(), rtol=1e-3, atol=1e-3)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("method", ["ewald", "pme"])
 def test_hvp_matches_dense_periodic(method):
     calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
@@ -90,6 +92,7 @@ def test_hvp_matches_dense_periodic(method):
     torch.testing.assert_close(hv.double().cpu(), ref.cpu(), rtol=5e-2, atol=5e-3)
 
 
+@pytest.mark.slow
 def test_hvp_multiple_vectors_shape():
     calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
     calc.external_dftd3 = None
@@ -130,6 +133,7 @@ def test_hvp_wrong_vector_shape_raises():
         calc.hessian_vector_product(data, torch.zeros(5, 3))  # wrong N
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("method", ["simple", "ewald"])
 def test_hvp_matches_dense_with_dftd3(method):
     """HVP must include DFTD3 curvature (regression for dropped-D3 bug)."""
@@ -172,6 +176,7 @@ def test_hvp_validates_unsupported_element():
     calc.hessian_vector_product(data, v, validate_species=False)
 
 
+@pytest.mark.slow
 def test_hvp_periodic_returns_float64():
     calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
     calc.external_dftd3 = None
@@ -204,6 +209,7 @@ def test_hvp_pbc_auto_switch_restores_full_coulomb_state():
     assert _coulomb_state(calc) == before
 
 
+@pytest.mark.slow
 def test_batched_hessian_pbc_auto_switch_restores_full_coulomb_state():
     calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
     calc.external_dftd3 = None
@@ -227,6 +233,7 @@ def test_batched_hessian_pbc_auto_switch_restores_full_coulomb_state():
     assert _coulomb_state(calc) == before
 
 
+@pytest.mark.slow
 def test_hvp_create_graph_contract():
     calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
     calc.external_dftd3 = None

@@ -39,11 +39,13 @@ def test_validate_state_dict_keys_ignores_legacy_dipole_mass_buffers():
     assert real_unexpected == ["outputs.energy_mlp.mlp.0.weight"]
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("model_def", model_defs)
 def test_model_from_yaml(model_def):
     build_model(model_def)
 
 
+@pytest.mark.slow
 @pytest.mark.ase
 def test_aimnet2():
     """Test building model from YAML and loading weights from zoo model.
@@ -94,6 +96,7 @@ def test_aimnet2():
 class TestFromFile:
     """Tests for load_model() model loading."""
 
+    @pytest.mark.slow
     def test_from_file_returns_module(self):
         """Test that loading model returns nn.Module."""
         p = get_model_path("aimnet2")
@@ -102,6 +105,7 @@ class TestFromFile:
         # Should return an nn.Module
         assert isinstance(model, nn.Module)
 
+    @pytest.mark.slow
     def test_from_file_preserves_rxn_atomic_shift_precision(self, tmp_path):
         """load_model must preserve float64 rxn SAE values from the state dict."""
         from pathlib import Path
@@ -153,6 +157,7 @@ class TestFromFile:
         torch.testing.assert_close(actual[species, 0], expected, rtol=0.0, atol=0.0)
         assert metadata["family"] == "rxn"
 
+    @pytest.mark.slow
     def test_from_file_metadata(self):
         """Test that model returns correct metadata."""
         p = get_model_path("aimnet2")
@@ -199,6 +204,7 @@ class TestFromFile:
         assert abs(d3["a1"] - 0.566) < 0.001
         assert abs(d3["a2"] - 3.128) < 0.001
 
+    @pytest.mark.slow
     def test_from_file_legacy_jit_extracts_species(self):
         """Test that implemented species are extracted from legacy JIT model."""
         p = get_model_path("aimnet2")
@@ -213,6 +219,7 @@ class TestFromFile:
         assert 7 in species  # N
         assert 8 in species  # O
 
+    @pytest.mark.slow
     def test_from_file_model_inference(self):
         """Test that load_model returns working model with correct metadata.
 
@@ -294,6 +301,7 @@ class TestNewFormat:
         torch.save(new_format, model_path)
         return str(model_path)
 
+    @pytest.mark.slow
     def test_from_file_new_format_loads(self, new_format_model):
         """Test that new format model loads correctly."""
         model, _metadata = load_model(new_format_model, device="cpu")
@@ -302,6 +310,7 @@ class TestNewFormat:
         assert isinstance(model, nn.Module)
         assert not isinstance(model, torch.jit.ScriptModule)
 
+    @pytest.mark.slow
     def test_from_file_new_format_metadata(self, new_format_model):
         """Test that new format model returns correct metadata."""
         _, metadata = load_model(new_format_model, device="cpu")
@@ -317,6 +326,7 @@ class TestNewFormat:
         assert metadata["d3_params"] is not None
         assert metadata["implemented_species"] == [1, 6, 7, 8, 9, 16, 17]
 
+    @pytest.mark.slow
     def test_from_file_new_format_d3_params(self, new_format_model):
         """Test that D3 parameters are correctly returned in metadata."""
         _, metadata = load_model(new_format_model, device="cpu")
@@ -327,6 +337,7 @@ class TestNewFormat:
         assert abs(d3["a1"] - 0.566) < 0.001
         assert abs(d3["a2"] - 3.128) < 0.001
 
+    @pytest.mark.slow
     def test_calculator_attaches_external_coulomb(self, new_format_model):
         """Test that calculator attaches external LRCoulomb for new format models."""
         from aimnet.calculators import AIMNet2Calculator
@@ -338,6 +349,7 @@ class TestNewFormat:
         assert calc.external_coulomb.method == "simple"
         assert calc.external_coulomb.subtract_sr is False
 
+    @pytest.mark.slow
     def test_calculator_attaches_external_dftd3(self, new_format_model):
         """Test that calculator attaches external DFTD3 for new format models."""
         from aimnet.calculators import AIMNet2Calculator
@@ -348,6 +360,7 @@ class TestNewFormat:
         assert calc.external_dftd3 is not None
         assert abs(calc.external_dftd3.s8 - 0.3908) < 0.001
 
+    @pytest.mark.slow
     def test_set_dftd3_cutoff_method(self, new_format_model):
         """Test set_dftd3_cutoff() method on calculator."""
         from aimnet.calculators import AIMNet2Calculator
@@ -396,6 +409,7 @@ class TestNewFormat:
         torch.save(new_format, model_path)
         return str(model_path)
 
+    @pytest.mark.slow
     def test_calculator_no_external_modules_when_not_needed(self, new_format_no_coulomb):
         """Test that calculator doesn't attach external modules when not needed."""
         from aimnet.calculators import AIMNet2Calculator
@@ -433,6 +447,7 @@ class TestNewFormat:
         assert "energy" in result
         assert result["energy"].shape == (1,)
 
+    @pytest.mark.slow
     def test_export_load_roundtrip(self, tmp_path):
         """Test export -> load -> inference produces valid results.
 
@@ -586,6 +601,7 @@ def test_model_metadata_typeddict_includes_family_and_charge_fields():
     assert "supports_charged_systems" in hints, "ModelMetadata missing 'supports_charged_systems' field"
 
 
+@pytest.mark.slow
 def test_load_model_propagates_family_and_charge_fields(tmp_path):
     """load_model must include family/supports_charged_systems in metadata when present in .pt."""
     import torch
@@ -607,6 +623,7 @@ def test_load_model_propagates_family_and_charge_fields(tmp_path):
     assert metadata.get("supports_charged_systems") is False
 
 
+@pytest.mark.slow
 def test_load_v1_model_species_override_nan_pads_other_rows():
     """load_v1_model with implemented_species override must NaN-pad AFV rows
     for elements outside the supported set, write family/supports_charged_systems
@@ -652,6 +669,7 @@ def test_load_v1_model_species_override_nan_pads_other_rows():
     assert model.outputs.atomic_shift.shifts.weight.dtype == torch.float64
 
 
+@pytest.mark.slow
 def test_load_v1_model_without_overrides_is_backward_compatible():
     """Existing four families' conversions must still work when the new kwargs are omitted."""
     from pathlib import Path
@@ -672,6 +690,7 @@ def test_load_v1_model_without_overrides_is_backward_compatible():
     assert metadata.get("supports_charged_systems") is None
 
 
+@pytest.mark.slow
 def test_aimnet2_rxn_yaml_builds():
     """The architecture YAML for aimnet2-rxn must be loadable and produce a real AIMNet2 module."""
     import importlib.resources
