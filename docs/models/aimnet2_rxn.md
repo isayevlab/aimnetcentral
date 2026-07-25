@@ -35,6 +35,12 @@ Runtime corrections and safeguards fire regardless of `validate_species`:
 
 A separate one-time `UserWarning` fires if the same Python process constructs calculators from two different AIMNet2 families (rxn vs. wb97m-d3 etc.), because their absolute energy scales are not comparable.
 
+## Dipole origin convention
+
+The rxn models compute dipole and quadrupole outputs with `center_coord=False`, i.e. moments are taken about the laboratory-frame origin. This is origin-independent for every input the family accepts: the calculator rejects non-zero net charge (see above), and for net-neutral systems — including zwitterions — the dipole does not depend on the choice of origin. The released model YAML is intentionally left unchanged, since editing it would alter the published model artifacts.
+
+The invariant to preserve going forward: any future model family that supports net-charged systems must ship its `Dipole`/`Quadrupole` outputs with `center_coord=True` (center-of-mass origin), because for charged systems the laboratory-frame moment is origin-dependent. The only bypass of the neutrality check is `validate_species=False`, which is unsupported for production use.
+
 ## Canonical model card
 
 Full content (energy convention, training data details, full limitations list, citation) lives at the Hugging Face model card:
