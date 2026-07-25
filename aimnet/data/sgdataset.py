@@ -120,9 +120,10 @@ class DataGroup:
         splits = []
         for icv in range(cv):
             val = parts[icv]
-            _idx = [_i for _i in range(cv) if _i != icv]
-            train = parts[_idx[0]]
-            train.cat(*[parts[_i] for _i in _idx[1:]])
+            train_parts = [parts[_i] for _i in range(cv) if _i != icv]
+            # Build a fresh DataGroup: cat() mutates its receiver in place, which
+            # would corrupt the shared parts for the remaining folds.
+            train = self.__class__({k: np.concatenate([p[k] for p in train_parts], axis=0) for k in self.keys()})
             splits.append((train, val))
         return splits
 

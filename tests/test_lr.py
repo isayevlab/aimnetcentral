@@ -1198,3 +1198,12 @@ class TestLRCoulombTraining:
 
         assert charges.grad is not None
         assert torch.isfinite(charges.grad).all()
+
+
+def test_lrcoulomb_rejects_unknown_method_and_envelope():
+    from aimnet.modules import LRCoulomb
+
+    with pytest.raises(ValueError, match="Unknown method"):
+        LRCoulomb(method="not-a-method")
+    with pytest.raises(ValueError, match="Unknown envelope"):
+        LRCoulomb(envelope="not-an-envelope")

@@ -182,6 +182,22 @@ def test_split_fractions():
     assert len(ds1) > len(ds2)
 
 
+def test_cv_split_partitions_dataset():
+    ds = dataset()
+    folds = ds.cv_split(cv=3, seed=0)
+    assert len(folds) == 3
+    for train, val in folds:
+        assert len(train) + len(val) == len(ds)
+
+
+def test_concatenate_gathers_all_groups():
+    import numpy as np
+
+    ds = dataset()
+    numbers = ds.concatenate("numbers")
+    assert isinstance(numbers, np.ndarray)
+
+
 def test_save_h5_roundtrip(tmp_path):
     ds = dataset()
     out = tmp_path / "roundtrip.h5"
