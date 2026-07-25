@@ -615,3 +615,22 @@ class TestVectorizedHessian:
         assert H_func.shape == (3, 3, 3, 3)
         assert torch.isfinite(H_func).all()
         assert (H_internal - H_func).abs().max().item() < 5e-3
+
+
+class TestDeterministicMode:
+    @pytest.mark.ase
+    def test_batched_evals_bitwise_reproducible(self):
+        """deterministic=True makes repeated identical batched evals bitwise equal."""
+        water = TestGPUBatching._water_data()
+        B = 8
+        data = {
+            "coord": water["coord"].unsqueeze(0).expand(B, -1, -1).contiguous().cuda(),
+            "numbers": water["numbers"].unsqueeze(0).expand(B, -1).contiguous().cuda(),
+            "charge": torch.zeros(B, device="cuda"),
+        }
+        calc = AIMNet2Calculator("aimnet2", deterministic=True)
+        out0 = calc(dict(data), forces=True)
+        for _ in range(6):
+            out = calc(dict(data), forces=True)
+            assert torch.equal(out["energy"], out0["energy"])
+            assert torch.equal(out["forces"], out0["forces"])

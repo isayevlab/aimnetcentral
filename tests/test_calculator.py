@@ -1978,3 +1978,20 @@ def test_set_lr_cutoff_updates_lr_state(water_molecule):
     assert torch.isfinite(e_after).all()
     # Water is far smaller than either cutoff, so the energy must not change.
     assert torch.allclose(e_before, e_after)
+
+
+class TestDeterministicMode:
+    def test_deterministic_matches_default_numerics(self, water_molecule):
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, device="cpu")
+        calc_det = AIMNet2Calculator("aimnet2", nb_threshold=0, device="cpu", deterministic=True)
+        r = calc(dict(water_molecule), forces=True)
+        rd = calc_det(dict(water_molecule), forces=True)
+        assert torch.allclose(r["energy"].double(), rd["energy"].double(), atol=1e-6)
+        assert torch.allclose(r["forces"].double(), rd["forces"].double(), atol=1e-5)
+
+    def test_deterministic_warns_for_ewald(self, water_molecule):
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, device="cpu", deterministic=True)
+        calc.set_lrcoulomb_method("ewald")
+        cell = torch.eye(3) * 20.0
+        with pytest.warns(UserWarning, match="Ewald/PME"):
+            calc({**water_molecule, "cell": cell}, forces=True)

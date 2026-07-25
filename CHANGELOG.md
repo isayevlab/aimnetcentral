@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Added `deterministic=True` calculator option: routes external DFT-D3 and DSF Coulomb through their differentiable pure-torch paths, making repeated identical evaluations bitwise reproducible on the same machine/build (issue #93). Ewald/PME kernels are not covered and warn once.
+
 ### Changed
 
 - Bumped `nvalchemi-toolkit-ops` to `>=0.4.0` and `warp-lang` to `>=1.13,<2` (installs 1.15). Energies, charges, and Hessians are bit-identical to 0.3.1; explicit force/virial outputs shift within float32 accumulation noise (max 6.7e-05 eV/A on a periodic system, 40x inside the project's cross-version acceptance of 1e-4 Hartree/A). The 0.4.0 direct-output flags used by the Ewald/PME path (`compute_forces`/`compute_virial`) are deprecated upstream and now emit `DeprecationWarning`; migrating to the autograd-based API is tracked as follow-up work.
