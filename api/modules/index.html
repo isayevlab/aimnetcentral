@@ -2054,28 +2054,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#aimnet.modules.lr.LRCoulomb.coul_ewald" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        coul_ewald
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#aimnet.modules.lr.LRCoulomb.coul_pme" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        coul_pme
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#aimnet.modules.lr.LRCoulomb.coul_simple" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2675,28 +2653,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#aimnet.modules.lr.LRCoulomb.coul_ewald" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        coul_ewald
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#aimnet.modules.lr.LRCoulomb.coul_pme" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        coul_pme
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#aimnet.modules.lr.LRCoulomb.coul_simple" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2989,20 +2945,20 @@
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>aimnet/modules/core.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">209</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
 <span class="normal">210</span>
-<span class="normal">211</span>
-<span class="normal">212</span>
-<span class="normal">213</span>
-<span class="normal">214</span>
-<span class="normal">215</span>
-<span class="normal">216</span>
-<span class="normal">217</span>
-<span class="normal">218</span>
-<span class="normal">219</span>
-<span class="normal">220</span>
-<span class="normal">221</span>
-<span class="normal">222</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key_out</span><span class="o">=</span><span class="s2">&quot;e_rep&quot;</span><span class="p">,</span> <span class="n">cutoff_fn</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="n">rc</span><span class="o">=</span><span class="mf">5.2</span><span class="p">,</span> <span class="n">reduce_sum</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="normal">211</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key_out</span><span class="o">=</span><span class="s2">&quot;e_rep&quot;</span><span class="p">,</span> <span class="n">cutoff_fn</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="n">rc</span><span class="o">=</span><span class="mf">5.2</span><span class="p">,</span> <span class="n">reduce_sum</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
     <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_gfn1_rep</span>
 
@@ -3466,16 +3422,16 @@ ncomb_v : Optional[int], optional
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>aimnet/modules/lr.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1101</span>
-<span class="normal">1102</span>
-<span class="normal">1103</span>
-<span class="normal">1104</span>
-<span class="normal">1105</span>
-<span class="normal">1106</span>
-<span class="normal">1107</span>
-<span class="normal">1108</span>
-<span class="normal">1109</span>
-<span class="normal">1110</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">a1</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">a2</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">s8</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">s6</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">key_in</span><span class="o">=</span><span class="s2">&quot;disp_param&quot;</span><span class="p">,</span> <span class="n">key_out</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">):</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1091</span>
+<span class="normal">1092</span>
+<span class="normal">1093</span>
+<span class="normal">1094</span>
+<span class="normal">1095</span>
+<span class="normal">1096</span>
+<span class="normal">1097</span>
+<span class="normal">1098</span>
+<span class="normal">1099</span>
+<span class="normal">1100</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">a1</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">a2</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">s8</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">s6</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">key_in</span><span class="o">=</span><span class="s2">&quot;disp_param&quot;</span><span class="p">,</span> <span class="n">key_out</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">):</span>
     <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">r4r2</span><span class="p">:</span> <span class="n">Tensor</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;r4r2&quot;</span><span class="p">,</span> <span class="n">constants</span><span class="o">.</span><span class="n">get_r4r2</span><span class="p">())</span>
@@ -3574,7 +3530,17 @@ to shared _lr suffix (nbmat_lr, shifts_lr) if not found.</p>
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>aimnet/modules/lr.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1367</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1357</span>
+<span class="normal">1358</span>
+<span class="normal">1359</span>
+<span class="normal">1360</span>
+<span class="normal">1361</span>
+<span class="normal">1362</span>
+<span class="normal">1363</span>
+<span class="normal">1364</span>
+<span class="normal">1365</span>
+<span class="normal">1366</span>
+<span class="normal">1367</span>
 <span class="normal">1368</span>
 <span class="normal">1369</span>
 <span class="normal">1370</span>
@@ -3603,17 +3569,7 @@ to shared _lr suffix (nbmat_lr, shifts_lr) if not found.</p>
 <span class="normal">1393</span>
 <span class="normal">1394</span>
 <span class="normal">1395</span>
-<span class="normal">1396</span>
-<span class="normal">1397</span>
-<span class="normal">1398</span>
-<span class="normal">1399</span>
-<span class="normal">1400</span>
-<span class="normal">1401</span>
-<span class="normal">1402</span>
-<span class="normal">1403</span>
-<span class="normal">1404</span>
-<span class="normal">1405</span>
-<span class="normal">1406</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+<span class="normal">1396</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">s8</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">a1</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
@@ -3695,7 +3651,17 @@ strain gradient (the same path DSF uses). FD-validated against
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/modules/lr.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1643</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1633</span>
+<span class="normal">1634</span>
+<span class="normal">1635</span>
+<span class="normal">1636</span>
+<span class="normal">1637</span>
+<span class="normal">1638</span>
+<span class="normal">1639</span>
+<span class="normal">1640</span>
+<span class="normal">1641</span>
+<span class="normal">1642</span>
+<span class="normal">1643</span>
 <span class="normal">1644</span>
 <span class="normal">1645</span>
 <span class="normal">1646</span>
@@ -3846,17 +3812,7 @@ strain gradient (the same path DSF uses). FD-validated against
 <span class="normal">1791</span>
 <span class="normal">1792</span>
 <span class="normal">1793</span>
-<span class="normal">1794</span>
-<span class="normal">1795</span>
-<span class="normal">1796</span>
-<span class="normal">1797</span>
-<span class="normal">1798</span>
-<span class="normal">1799</span>
-<span class="normal">1800</span>
-<span class="normal">1801</span>
-<span class="normal">1802</span>
-<span class="normal">1803</span>
-<span class="normal">1804</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span>
+<span class="normal">1794</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">],</span>
     <span class="o">*</span><span class="p">,</span>
@@ -4048,21 +4004,21 @@ smoothing_fraction : float
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/modules/lr.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1408</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1398</span>
+<span class="normal">1399</span>
+<span class="normal">1400</span>
+<span class="normal">1401</span>
+<span class="normal">1402</span>
+<span class="normal">1403</span>
+<span class="normal">1404</span>
+<span class="normal">1405</span>
+<span class="normal">1406</span>
+<span class="normal">1407</span>
+<span class="normal">1408</span>
 <span class="normal">1409</span>
 <span class="normal">1410</span>
 <span class="normal">1411</span>
-<span class="normal">1412</span>
-<span class="normal">1413</span>
-<span class="normal">1414</span>
-<span class="normal">1415</span>
-<span class="normal">1416</span>
-<span class="normal">1417</span>
-<span class="normal">1418</span>
-<span class="normal">1419</span>
-<span class="normal">1420</span>
-<span class="normal">1421</span>
-<span class="normal">1422</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_smoothing</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">smoothing_fraction</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">1412</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_smoothing</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">smoothing_fraction</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Update smoothing parameters based on new cutoff and fraction.</span>
 
 <span class="sd">    Parameters</span>
@@ -4297,64 +4253,6 @@ comparing vibrational frequencies / IR across backends.</p>
 <div class="doc doc-object doc-function">
 
 
-<h4 id="aimnet.modules.lr.LRCoulomb.coul_ewald" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">coul_ewald</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></code>
-
-<a href="#aimnet.modules.lr.LRCoulomb.coul_ewald" class="headerlink" title="Permanent link">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Per-system Ewald energy in eV. Requires <code>cell</code> and <code>nbmat_lr</code>/<code>shifts_lr</code>.</p>
-
-
-            <details class="mkdocstrings-source">
-              <summary>Source code in <code>aimnet/modules/lr.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">891</span>
-<span class="normal">892</span>
-<span class="normal">893</span>
-<span class="normal">894</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">coul_ewald</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Per-system Ewald energy in eV. Requires ``cell`` and ``nbmat_lr``/``shifts_lr``.&quot;&quot;&quot;</span>
-    <span class="n">energy</span><span class="p">,</span> <span class="n">_terms</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_coul_nvalchemi</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;ewald&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">energy</span>
-</code></pre></div></td></tr></table></div>
-            </details>
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h4 id="aimnet.modules.lr.LRCoulomb.coul_pme" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">coul_pme</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></code>
-
-<a href="#aimnet.modules.lr.LRCoulomb.coul_pme" class="headerlink" title="Permanent link">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Per-system PME energy in eV. Requires <code>cell</code> and <code>nbmat_lr</code>/<code>shifts_lr</code>.</p>
-
-
-            <details class="mkdocstrings-source">
-              <summary>Source code in <code>aimnet/modules/lr.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">896</span>
-<span class="normal">897</span>
-<span class="normal">898</span>
-<span class="normal">899</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">coul_pme</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Per-system PME energy in eV. Requires ``cell`` and ``nbmat_lr``/``shifts_lr``.&quot;&quot;&quot;</span>
-    <span class="n">energy</span><span class="p">,</span> <span class="n">_terms</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_coul_nvalchemi</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;pme&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">energy</span>
-</code></pre></div></td></tr></table></div>
-            </details>
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
 <h4 id="aimnet.modules.lr.LRCoulomb.coul_simple" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">coul_simple</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></code>
 
@@ -4465,22 +4363,22 @@ envelope : str
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>aimnet/modules/lr.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 990</span>
-<span class="normal"> 991</span>
-<span class="normal"> 992</span>
-<span class="normal"> 993</span>
-<span class="normal"> 994</span>
-<span class="normal"> 995</span>
-<span class="normal"> 996</span>
-<span class="normal"> 997</span>
-<span class="normal"> 998</span>
-<span class="normal"> 999</span>
-<span class="normal">1000</span>
-<span class="normal">1001</span>
-<span class="normal">1002</span>
-<span class="normal">1003</span>
-<span class="normal">1004</span>
-<span class="normal">1005</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">980</span>
+<span class="normal">981</span>
+<span class="normal">982</span>
+<span class="normal">983</span>
+<span class="normal">984</span>
+<span class="normal">985</span>
+<span class="normal">986</span>
+<span class="normal">987</span>
+<span class="normal">988</span>
+<span class="normal">989</span>
+<span class="normal">990</span>
+<span class="normal">991</span>
+<span class="normal">992</span>
+<span class="normal">993</span>
+<span class="normal">994</span>
+<span class="normal">995</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">rc</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">4.6</span><span class="p">,</span>
     <span class="n">key_in</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;charges&quot;</span><span class="p">,</span>
@@ -4528,16 +4426,16 @@ envelope : str
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/modules/lr.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1007</span>
-<span class="normal">1008</span>
-<span class="normal">1009</span>
-<span class="normal">1010</span>
-<span class="normal">1011</span>
-<span class="normal">1012</span>
-<span class="normal">1013</span>
-<span class="normal">1014</span>
-<span class="normal">1015</span>
-<span class="normal">1016</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 997</span>
+<span class="normal"> 998</span>
+<span class="normal"> 999</span>
+<span class="normal">1000</span>
+<span class="normal">1001</span>
+<span class="normal">1002</span>
+<span class="normal">1003</span>
+<span class="normal">1004</span>
+<span class="normal">1005</span>
+<span class="normal">1006</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Subtract short-range Coulomb from energy.&quot;&quot;&quot;</span>
     <span class="n">e_sr</span> <span class="o">=</span> <span class="n">_calc_coulomb_sr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">envelope</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">key_in</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_factor</span><span class="p">)</span>
 
