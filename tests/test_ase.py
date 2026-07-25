@@ -95,6 +95,7 @@ class TestForces:
 class TestPBC:
     """Tests for periodic boundary conditions."""
 
+    @pytest.mark.slow
     def test_pbc_energy(self):
         """Test energy calculation for periodic system."""
         pytest.importorskip("ase", reason="ASE not installed")
@@ -114,6 +115,7 @@ class TestPBC:
         assert isinstance(e, float)
         assert np.isfinite(e)
 
+    @pytest.mark.slow
     def test_pbc_forces(self):
         """Test force calculation for periodic system."""
         pytest.importorskip("ase", reason="ASE not installed")
@@ -133,6 +135,7 @@ class TestPBC:
         assert f.shape == (len(atoms), 3)
         assert np.isfinite(f).all()
 
+    @pytest.mark.slow
     def test_pbc_stress_tensor(self):
         """Test stress tensor calculation for periodic system."""
         pytest.importorskip("ase", reason="ASE not installed")
@@ -153,6 +156,7 @@ class TestPBC:
         assert stress.shape == (6,)
         assert np.isfinite(stress).all()
 
+    @pytest.mark.slow
     def test_pbc_stress_volume_normalized(self):
         """Test that stress is volume normalized (units are pressure)."""
         pytest.importorskip("ase", reason="ASE not installed")
@@ -411,6 +415,7 @@ class TestAtomsInfoChargeSpin:
         assert float(atoms.calc._t_mult) == pytest.approx(2.0)
         assert abs(atoms.calc.get_spin_charges().sum() - 1.0) < 1e-3
 
+    @pytest.mark.slow
     def test_robustness_with_tensors_in_info(self):
         """Dictionary comparison must not crash when info contains complex types like Tensors or Arrays."""
         pytest.importorskip("ase", reason="ASE not installed")
@@ -444,6 +449,7 @@ class TestAtomsInfoChargeSpin:
 class TestHessian:
     """Hessian property — used by Sella analytic-Hessian callback."""
 
+    @pytest.mark.slow
     def test_hessian_shape_and_finite(self):
         pytest.importorskip("ase", reason="ASE not installed")
         from ase.io import read
@@ -458,6 +464,7 @@ class TestHessian:
         assert H.shape == (3 * N, 3 * N)
         assert np.isfinite(H).all()
 
+    @pytest.mark.slow
     def test_hessian_symmetric(self):
         pytest.importorskip("ase", reason="ASE not installed")
         from ase.io import read
@@ -473,6 +480,7 @@ class TestHessian:
         # |H|_max would still catch a real index transposition bug.
         assert np.max(np.abs(H - H.T)) / np.max(np.abs(H)) < 1e-3
 
+    @pytest.mark.slow
     def test_hessian_callback_signature(self):
         """Must be usable as Sella's hessian_function=callable callback."""
         pytest.importorskip("ase", reason="ASE not installed")
@@ -489,6 +497,7 @@ class TestHessian:
         assert H.shape == (9, 9)
         assert isinstance(H, np.ndarray)
 
+    @pytest.mark.slow
     def test_hessian_default_atoms(self):
         """get_hessian() with no argument should use the attached atoms."""
         pytest.importorskip("ase", reason="ASE not installed")
@@ -534,6 +543,7 @@ class TestHessian:
         with pytest.raises(PropertyNotImplementedError, match="attached"):
             calc.get_hessian()
 
+    @pytest.mark.slow
     def test_hessian_species_swap_invalidates_cache(self):
         """get_hessian() must rebuild _t_numbers when called with different species at same N."""
         pytest.importorskip("ase", reason="ASE not installed")
@@ -563,6 +573,7 @@ class TestHessian:
         cached = calc._t_numbers.detach().cpu().tolist()
         assert cached == hcn.numbers.tolist()
 
+    @pytest.mark.slow
     def test_hessian_nse_open_shell(self):
         """NSE (open-shell) Hessian must run on a doublet without exception."""
         pytest.importorskip("ase", reason="ASE not installed")
