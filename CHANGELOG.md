@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Marked the expensive tail of the test suite (~60 test nodes ≥2 s each: torch.compile, model-format roundtrips, dense-Hessian/HVP comparisons, multi-model ASE runs) with the `slow` marker; the default CPU test run now completes in under two minutes. Run `pytest -m slow` for the marked tail. The cheapest representative of each critical path (dense Hessian, HVP correctness, legacy `.jpt` loading, torch.compile smoke) stays in the default set.
+
 ### Removed
 
 - Removed unused `DataGroup.to_dict`, `DataGroup.merge`, `DataGroup.rename_key`, `SizeGroupedDataset.merge`, and `SizeGroupedDataset.rename_datakey` (no callers in-repo or in downstream projects).
