@@ -888,16 +888,6 @@ class LRCoulomb(nn.Module):
             hv = -(fp - fm) / (2.0 * step)
         return hv  # (N, 3), float64
 
-    def coul_ewald(self, data: dict[str, Tensor]) -> Tensor:
-        """Per-system Ewald energy in eV. Requires ``cell`` and ``nbmat_lr``/``shifts_lr``."""
-        energy, _terms = self._coul_nvalchemi(data, backend="ewald")
-        return energy
-
-    def coul_pme(self, data: dict[str, Tensor]) -> Tensor:
-        """Per-system PME energy in eV. Requires ``cell`` and ``nbmat_lr``/``shifts_lr``."""
-        energy, _terms = self._coul_nvalchemi(data, backend="pme")
-        return energy
-
     def forward(
         self,
         data: dict[str, Tensor],

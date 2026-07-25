@@ -74,6 +74,7 @@ def test_validate_model_yaml_blocks_untrusted():
         _validate_model_yaml(yaml_str)
 
 
+@pytest.mark.slow
 @pytest.mark.hf
 def test_load_from_hf_repo_local(fake_hf_repo):
     """Test loading model from a local directory mimicking HF repo structure."""
@@ -83,6 +84,7 @@ def test_load_from_hf_repo_local(fake_hf_repo):
     assert len(metadata["implemented_species"]) > 0
 
 
+@pytest.mark.slow
 @pytest.mark.hf
 def test_calculator_with_hf_repo(fake_hf_repo):
     """Test that AIMNet2Calculator accepts a local HF-style directory."""
@@ -144,6 +146,7 @@ def fake_hf_repo_with_family(tmp_path):
     return tmp_path
 
 
+@pytest.mark.slow
 @pytest.mark.hf
 def test_load_from_hf_repo_propagates_family_and_charge_fields(fake_hf_repo_with_family):
     _, metadata = load_from_hf_repo(str(fake_hf_repo_with_family), ensemble_member=0, device="cpu")

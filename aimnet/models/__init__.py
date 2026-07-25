@@ -6,7 +6,6 @@ from .utils import (  # noqa: F401
     extract_species,
     has_d3ts,
     has_d3ts_in_config,
-    has_dftd3_in_config,
     has_dispersion,
     has_externalizable_dftd3,
     has_lrcoulomb,
