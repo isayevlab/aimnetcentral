@@ -1798,7 +1798,7 @@ def test_registry_family_metadata_mismatch_raises(monkeypatch):
     from torch import nn
 
     from aimnet.calculators import AIMNet2Calculator
-    from aimnet.calculators import calculator as calculator_mod
+    from aimnet.calculators import resolve as resolve_mod
 
     class DummyModel(nn.Module):
         pass
@@ -1816,8 +1816,8 @@ def test_registry_family_metadata_mismatch_raises(monkeypatch):
         model._metadata = metadata
         return model, metadata
 
-    monkeypatch.setattr(calculator_mod, "get_model_path", lambda _model: "/fake/model.pt")
-    monkeypatch.setattr(calculator_mod, "load_model", fake_load_model)
+    monkeypatch.setattr(resolve_mod, "get_model_path", lambda _model: "/fake/model.pt")
+    monkeypatch.setattr(resolve_mod, "load_model", fake_load_model)
 
     with pytest.raises(ValueError, match=r"Registry family 'wb97m-d3'"):
         AIMNet2Calculator("aimnet2", device="cpu")
