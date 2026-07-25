@@ -647,6 +647,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dipole-origin-convention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dipole origin convention
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#canonical-model-card" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1916,6 +1927,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dipole-origin-convention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dipole origin convention
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#canonical-model-card" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1975,6 +1997,9 @@
 <li><strong>Hessian + <code>torch.compile</code></strong>: setting both raises <code>RuntimeError</code> (Dynamo + double-backward through GELU is known to hang). Reconstruct with <code>compile_model=False</code> for TS / IRC / vibrational work.</li>
 </ul>
 <p>A separate one-time <code>UserWarning</code> fires if the same Python process constructs calculators from two different AIMNet2 families (rxn vs. wb97m-d3 etc.), because their absolute energy scales are not comparable.</p>
+<h2 id="dipole-origin-convention">Dipole origin convention<a class="headerlink" href="#dipole-origin-convention" title="Permanent link">&para;</a></h2>
+<p>The rxn models compute dipole and quadrupole outputs with <code>center_coord=False</code>, i.e. moments are taken about the laboratory-frame origin. This is origin-independent for every input the family accepts: the calculator rejects non-zero net charge (see above), and for net-neutral systems — including zwitterions — the dipole does not depend on the choice of origin. The released model YAML is intentionally left unchanged, since editing it would alter the published model artifacts.</p>
+<p>The invariant to preserve going forward: any future model family that supports net-charged systems must ship its <code>Dipole</code>/<code>Quadrupole</code> outputs with <code>center_coord=True</code> (center-of-mass origin), because for charged systems the laboratory-frame moment is origin-dependent. The only bypass of the neutrality check is <code>validate_species=False</code>, which is unsupported for production use.</p>
 <h2 id="canonical-model-card">Canonical model card<a class="headerlink" href="#canonical-model-card" title="Permanent link">&para;</a></h2>
 <p>Full content (energy convention, training data details, full limitations list, citation) lives at the Hugging Face model card:</p>
 <p><a href="https://huggingface.co/isayevlab/aimnet2-rxn">https://huggingface.co/isayevlab/aimnet2-rxn</a></p>
