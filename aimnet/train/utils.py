@@ -1,5 +1,4 @@
 import logging
-import os
 import re
 from collections.abc import Callable
 
@@ -32,14 +31,6 @@ def enable_tf32(enable=True):
     # cudnn keeps a dedicated flag not covered by set_float32_matmul_precision.
     if hasattr(torch.backends.cudnn, "allow_tf32"):
         torch.backends.cudnn.allow_tf32 = enable
-
-
-def make_seed(all_reduce=True):
-    # create seed
-    seed = int.from_bytes(os.urandom(2), "big")
-    if all_reduce and idist.get_world_size() > 1:
-        seed = idist.all_reduce(seed)
-    return seed
 
 
 def _to_config_dict(cfg: omegaconf.DictConfig, name: str) -> dict:

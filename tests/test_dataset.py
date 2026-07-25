@@ -180,3 +180,13 @@ def test_split_fractions():
     ds1, ds2 = ds.random_split(0.8, 0.2)
     assert len(ds1) + len(ds2) == len(ds)
     assert len(ds1) > len(ds2)
+
+
+def test_save_h5_roundtrip(tmp_path):
+    ds = dataset()
+    out = tmp_path / "roundtrip.h5"
+    ds.save_h5(str(out))
+    ds2 = SizeGroupedDataset(str(out))
+    assert sorted(ds2.keys()) == sorted(ds.keys())
+    assert len(ds2) == len(ds)
+    assert sorted(ds2.datakeys()) == sorted(ds.datakeys())
