@@ -27,6 +27,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added unit tests for the public `SizeGroupedDataset.save_h5`, `AIMNet2Calculator.set_lr_cutoff`, and `aimnet.train.loss.mse_loss_fn` APIs, which are kept.
 - Added targeted unit tests for previously untested code: `RegMultiMetric`/`regression_stats`, the `aimnet export` helper functions (`load_sae`, `bake_sae_into_model`, `mask_not_implemented_species`), `SizeGroupedDataset.cv_split`/`concatenate`, `train.utils` config/parameter helpers, and `LRCoulomb` constructor validation.
 
+### Documentation
+
+- Documented the rxn dipole origin convention: `center_coord=False` is origin-safe because the family is net-neutral-only; any future charged-system family must ship `center_coord=True`.
+
 ## [0.2.0] - 2026-05-03
 
 ### Added
