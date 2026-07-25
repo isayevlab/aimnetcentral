@@ -1814,7 +1814,7 @@ def test_registry_family_metadata_mismatch_raises(monkeypatch):
     from torch import nn
 
     from aimnet.calculators import AIMNet2Calculator
-    from aimnet.calculators import calculator as calculator_mod
+    from aimnet.calculators import resolve as resolve_mod
 
     class DummyModel(nn.Module):
         pass
@@ -1832,8 +1832,8 @@ def test_registry_family_metadata_mismatch_raises(monkeypatch):
         model._metadata = metadata
         return model, metadata
 
-    monkeypatch.setattr(calculator_mod, "get_model_path", lambda _model: "/fake/model.pt")
-    monkeypatch.setattr(calculator_mod, "load_model", fake_load_model)
+    monkeypatch.setattr(resolve_mod, "get_model_path", lambda _model: "/fake/model.pt")
+    monkeypatch.setattr(resolve_mod, "load_model", fake_load_model)
 
     with pytest.raises(ValueError, match=r"Registry family 'wb97m-d3'"):
         AIMNet2Calculator("aimnet2", device="cpu")
@@ -1966,3 +1966,15 @@ def test_aimnet2rxn_alias_calculator_e2e():
     assert calc.external_dftd3 is not None
     assert calc.metadata.get("implemented_species") == [1, 6, 7, 8]
     assert abs(calc.metadata.get("cutoff") - 5.0) < 1e-6
+
+
+def test_set_lr_cutoff_updates_lr_state(water_molecule):
+    calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+    e_before = calc(dict(water_molecule))["energy"]
+    calc.set_lr_cutoff(12.0)
+    assert calc.cutoff_lr == 12.0
+    assert calc.dftd3_cutoff == 12.0
+    e_after = calc(dict(water_molecule))["energy"]
+    assert torch.isfinite(e_after).all()
+    # Water is far smaller than either cutoff, so the energy must not change.
+    assert torch.allclose(e_before, e_after)

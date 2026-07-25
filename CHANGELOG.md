@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Marked the expensive tail of the test suite (~60 test nodes ≥2 s each: torch.compile, model-format roundtrips, dense-Hessian/HVP comparisons, multi-model ASE runs) with the `slow` marker; the default CPU test run now completes in under two minutes. Run `pytest -m slow` for the marked tail. The cheapest representative of each critical path (dense Hessian, HVP correctness, legacy `.jpt` loading, torch.compile smoke) stays in the default set.
 
+### Removed
+
+- Removed unused `DataGroup.to_dict`, `DataGroup.merge`, `DataGroup.rename_key`, `SizeGroupedDataset.merge`, and `SizeGroupedDataset.rename_datakey` (no callers in-repo or in downstream projects).
+- Removed unused `aimnet.train.utils.make_seed` and `aimnet.ops.lazy_calc_dij_lr`.
+- Removed unused `LRCoulomb.coul_ewald` and `LRCoulomb.coul_pme` convenience wrappers; use `LRCoulomb.forward` with `method="ewald"`/`"pme"`.
+- Removed unused `aimnet.modules.core.DSequential` and `aimnet.constants.get_dftd3_param`.
+- Removed unused `aimnet.models.utils.has_dftd3_in_config` (and its `aimnet.models` re-export).
+
+### Added
+
+- Added unit tests for the public `SizeGroupedDataset.save_h5`, `AIMNet2Calculator.set_lr_cutoff`, and `aimnet.train.loss.mse_loss_fn` APIs, which are kept.
+
 ## [0.2.0] - 2026-05-03
 
 ### Added

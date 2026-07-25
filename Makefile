@@ -35,6 +35,11 @@ build: clean-build ## Build wheel file using uv
 clean-build: ## clean build artifacts
 	@rm -rf dist
 
+.PHONY: clean
+clean: clean-build ## Remove run artifacts and tool caches
+	@rm -f calculator.log optimizer.log pysisyphus.log hess_calc_cyc_*.h5 final_geometry.xyz coverage.xml .coverage .coverage.*
+	@rm -rf qm_calcs .pytest_cache .mypy_cache .ruff_cache
+
 .PHONY: publish
 publish: ## publish a release to pypi.
 	@echo "🚀 Publishing: Dry run."
