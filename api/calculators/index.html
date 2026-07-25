@@ -4069,8 +4069,9 @@ preconditioning on large systems.</p>
 vectors : Tensor
     Direction(s), shape <code>(N, 3)</code> or <code>(K, N, 3)</code> over the real atoms.
 eps : float
-    Central-difference step (Angstrom) for the periodic Ewald/PME
-    long-range term. Ignored for <code>simple</code>/<code>dsf</code>.
+    Central-difference step (Angstrom) for the periodic PME
+    long-range term. Ignored for <code>simple</code>/<code>dsf</code>/<code>ewald</code>
+    (their products are exact reverse-mode autograd).
 create_graph : bool
     If <code>True</code>, keep the differentiable autograd block of the HVP in
     the graph so it can compose with an outer loss. The Ewald/PME
@@ -4269,7 +4270,8 @@ matching the dense assembly term-by-term.</p>
 <span class="normal">2015</span>
 <span class="normal">2016</span>
 <span class="normal">2017</span>
-<span class="normal">2018</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@torch</span><span class="o">.</span><span class="n">inference_mode</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+<span class="normal">2018</span>
+<span class="normal">2019</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@torch</span><span class="o">.</span><span class="n">inference_mode</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
 <span class="nd">@torch</span><span class="o">.</span><span class="n">enable_grad</span><span class="p">()</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">hessian_vector_product</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
@@ -4294,8 +4296,9 @@ matching the dense assembly term-by-term.</p>
 <span class="sd">    vectors : Tensor</span>
 <span class="sd">        Direction(s), shape ``(N, 3)`` or ``(K, N, 3)`` over the real atoms.</span>
 <span class="sd">    eps : float</span>
-<span class="sd">        Central-difference step (Angstrom) for the periodic Ewald/PME</span>
-<span class="sd">        long-range term. Ignored for ``simple``/``dsf``.</span>
+<span class="sd">        Central-difference step (Angstrom) for the periodic PME</span>
+<span class="sd">        long-range term. Ignored for ``simple``/``dsf``/``ewald``</span>
+<span class="sd">        (their products are exact reverse-mode autograd).</span>
 <span class="sd">    create_graph : bool</span>
 <span class="sd">        If ``True``, keep the differentiable autograd block of the HVP in</span>
 <span class="sd">        the graph so it can compose with an outer loss. The Ewald/PME</span>
