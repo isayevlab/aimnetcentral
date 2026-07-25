@@ -74,6 +74,7 @@ AIMNet2Calculator(
     compile_kwargs: dict | None = None,
     cache_static: bool = False,
     train: bool = False,
+    deterministic: bool = False,
     ensemble_member: int = 0,
     revision: str | None = None,
     token: str | None = None,
@@ -196,6 +197,23 @@ Whether to put the model in training mode. Default: `False`.
 | `True` | Training mode: model set to `.train()`, parameters keep `requires_grad` |
 
 For ordinary energy/force/charge inference (including external autograd through the calculator), leave this `False`. Set `True` only when using the calculator inside a training loop where model parameters need gradients.
+
+#### `deterministic`
+
+Route external DFT-D3 (and DSF Coulomb) through their differentiable pure-torch paths instead of the atomics-based nvalchemiops CUDA kernels. Default: `False`.
+
+The kernel defaults accumulate pairwise terms with atomic adds, so repeated identical evaluations differ at the float32 rounding level (~1e-7 eV in energies). That noise is physically negligible but is amplified chaotically by iterative optimizers: batched geometry optimizations from byte-identical inputs can follow different trajectories. With `deterministic=True`, identical inputs give bitwise-identical energies and forces on the same machine and build, at negligible cost for typical batched workloads.
+
+```python
+calc = AIMNet2Calculator("aimnet2", deterministic=True)
+```
+
+Notes:
+
+- Covers external D3 and `simple`/`dsf` Coulomb. Ewald/PME kernels are not covered; a one-time `UserWarning` fires if combined.
+- The pure-torch paths materialize pairwise tensors, so for very large single systems the kernel defaults are faster; benchmark before enabling in large-system MD.
+- Reproducibility holds per machine/build; a different GPU or PyTorch build still shifts results at rounding level.
+- The `cache_static` DFTD3 term cache does not apply in this mode.
 
 #### `ensemble_member`
 
