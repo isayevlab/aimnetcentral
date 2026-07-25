@@ -1,5 +1,3 @@
-import os
-
 import torch
 
 # from ase.units
@@ -450,18 +448,3 @@ def get_r4r2(device="cpu"):
 
     r4r2 = (0.5 * torch.tensor(sqrt_z_r4_over_r2) * torch.arange(len(sqrt_z_r4_over_r2)).sqrt()).sqrt()
     return r4r2.to(device)
-
-
-def get_dftd3_param(device="cpu"):
-    """Collection of parameters for DFT-D3 model"""
-    dirname = os.path.dirname(__file__)
-    filename = os.path.join(dirname, "dftd3_data.pt")
-    if not os.path.exists(filename):
-        raise FileNotFoundError(f"dftd3_data.pt not found in {dirname}.")
-    param = torch.load(filename, map_location=device, weights_only=True)
-    assert isinstance(param, dict)
-    assert "c6ab" in param
-    assert "r4r2" in param
-    assert "rcov" in param
-    assert "cnmax" in param
-    return param

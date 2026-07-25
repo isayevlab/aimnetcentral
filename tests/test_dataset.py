@@ -180,3 +180,29 @@ def test_split_fractions():
     ds1, ds2 = ds.random_split(0.8, 0.2)
     assert len(ds1) + len(ds2) == len(ds)
     assert len(ds1) > len(ds2)
+
+
+def test_cv_split_partitions_dataset():
+    ds = dataset()
+    folds = ds.cv_split(cv=3, seed=0)
+    assert len(folds) == 3
+    for train, val in folds:
+        assert len(train) + len(val) == len(ds)
+
+
+def test_concatenate_gathers_all_groups():
+    import numpy as np
+
+    ds = dataset()
+    numbers = ds.concatenate("numbers")
+    assert isinstance(numbers, np.ndarray)
+
+
+def test_save_h5_roundtrip(tmp_path):
+    ds = dataset()
+    out = tmp_path / "roundtrip.h5"
+    ds.save_h5(str(out))
+    ds2 = SizeGroupedDataset(str(out))
+    assert sorted(ds2.keys()) == sorted(ds.keys())
+    assert len(ds2) == len(ds)
+    assert sorted(ds2.datakeys()) == sorted(ds.datakeys())
