@@ -13,9 +13,14 @@ check: ## Run code quality tools.
 	@uv run deptry .
 
 .PHONY: test
-test: ## Test the code with pytest (parallel execution)
+test: ## Test the code with pytest (parallel CPU execution)
 	@echo "🚀 Testing code: Running pytest"
-	@uv run pytest -n auto -m "not gpu and not network" --cov --cov-config=pyproject.toml --cov-report=xml
+	@CUDA_VISIBLE_DEVICES="" OMP_NUM_THREADS=1 uv run pytest -n auto -m "not gpu and not network" --cov --cov-config=pyproject.toml --cov-report=xml
+
+.PHONY: test-gpu
+test-gpu: ## Run GPU-marked tests serially on CUDA
+	@echo "🚀 Testing code: Running GPU-marked pytest serially"
+	@uv run pytest -m gpu
 
 .PHONY: gpu-validate
 gpu-validate: ## Validate torch/warp-lang/nvalchemiops coupling across torch 2.8-2.12 on a CUDA box
