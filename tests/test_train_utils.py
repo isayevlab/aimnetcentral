@@ -138,6 +138,7 @@ def test_train_utils_param_helpers():
     inner = torch.nn.Linear(2, 2)
     assert unwrap_module(Forces(inner)) is inner
 
+
 def test_mse_loss_fn_matches_torch_mse():
     torch = pytest.importorskip("torch")
     from aimnet.train.loss import mse_loss_fn

@@ -197,6 +197,7 @@ def test_concatenate_gathers_all_groups():
     numbers = ds.concatenate("numbers")
     assert isinstance(numbers, np.ndarray)
 
+
 def test_save_h5_roundtrip(tmp_path):
     ds = dataset()
     out = tmp_path / "roundtrip.h5"
