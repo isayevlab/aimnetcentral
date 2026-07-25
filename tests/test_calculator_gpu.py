@@ -266,7 +266,9 @@ class TestGPUBatching:
         calls_after_second = _neighbor_list_calls(calc)
         assert calls_after_second == calls_after_first
         torch.testing.assert_close(first["energy"], second["energy"], rtol=1e-6, atol=1e-6)
-        torch.testing.assert_close(first["forces"], second["forces"], rtol=1e-6, atol=1e-6)
+        # GPU float32 kernels are not run-to-run deterministic; repeated identical
+        # evals differ by up to ~1e-6 in forces, so 1e-6 tolerance flakes.
+        torch.testing.assert_close(first["forces"], second["forces"], rtol=1e-5, atol=1e-5)
 
         data["coord"][0, 0] += 0.01
         calc(data, forces=True)
@@ -299,7 +301,9 @@ class TestGPUBatching:
         second = calc(data, forces=True)
         assert calc.external_dftd3.calls == 1
         torch.testing.assert_close(first["energy"], second["energy"], rtol=1e-6, atol=1e-6)
-        torch.testing.assert_close(first["forces"], second["forces"], rtol=1e-6, atol=1e-6)
+        # GPU float32 kernels are not run-to-run deterministic; repeated identical
+        # evals differ by up to ~1e-6 in forces, so 1e-6 tolerance flakes.
+        torch.testing.assert_close(first["forces"], second["forces"], rtol=1e-5, atol=1e-5)
 
         data["coord"][0, 0] += 0.01
         calc(data, forces=True)
