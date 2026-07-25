@@ -191,6 +191,15 @@ class AIMNet2Calculator:
         When False, all model parameters have requires_grad=False, which
         improves torch.compile compatibility and reduces memory usage.
         Set to True only when training the model.
+    deterministic : bool
+        Route external DFT-D3 (and DSF Coulomb) through their differentiable
+        pure-torch paths instead of the atomics-based nvalchemiops CUDA
+        kernels, making repeated identical evaluations bitwise reproducible
+        (same machine, same build). Default is False. The kernel defaults are
+        faster on large systems but accumulate in nondeterministic order,
+        giving run-to-run noise of ~1e-7 eV that iterative optimizers can
+        amplify. Ewald/PME Coulomb is not covered (a one-time warning fires);
+        the static DFTD3 cache does not apply in this mode.
 
     Attributes
     ----------
@@ -245,6 +254,7 @@ class AIMNet2Calculator:
         compile_kwargs: dict | None = None,
         cache_static: bool = False,
         train: bool = False,
+        deterministic: bool = False,
         ensemble_member: int = 0,
         revision: str | None = None,
         token: str | None = None,
@@ -403,6 +413,11 @@ class AIMNet2Calculator:
 
         # Set training mode (default False for inference)
         self._train = train
+        # Deterministic LR mode: route external D3 (and DSF Coulomb) through
+        # their differentiable pure-torch paths, whose reductions are run-to-run
+        # deterministic, instead of the atomics-based nvalchemiops kernels.
+        self._deterministic = bool(deterministic)
+        self._warned_deterministic_lr = False
         self.model.train(train)
         if not train:
             # Disable gradients on all parameters for inference mode
@@ -1011,12 +1026,25 @@ class AIMNet2Calculator:
         wrapper for force/stress training.
         """
         coulomb_terms = None
+        deterministic = getattr(self, "_deterministic", False)
         if self.external_coulomb is not None:
             training_derivatives = (
                 self.external_coulomb.method in ("ewald", "pme", "dsf")
                 and getattr(self, "_train", False)
                 and (forces or stress)
             )
+            if deterministic:
+                if self.external_coulomb.method == "dsf":
+                    # Torch DSF path: deterministic reductions, energy stays in
+                    # the autograd graph so forces/stress come from autograd.
+                    training_derivatives = True
+                elif self.external_coulomb.method in ("ewald", "pme") and not self._warned_deterministic_lr:
+                    warnings.warn(
+                        "deterministic=True does not cover the Ewald/PME Coulomb kernels; "
+                        "their outputs remain subject to run-to-run float32 accumulation noise.",
+                        stacklevel=2,
+                    )
+                    self._warned_deterministic_lr = True
             kwargs: dict[str, Any] = {
                 "compute_forces": forces,
                 "compute_virial": stress,
@@ -1036,8 +1064,10 @@ class AIMNet2Calculator:
         dftd3_terms = None
         if self.external_dftd3 is not None:
             coord = data.get("coord")
-            dftd3_energy_graph = hessian or (
-                not forces and not stress and isinstance(coord, Tensor) and coord.requires_grad
+            dftd3_energy_graph = (
+                hessian
+                or deterministic
+                or (not forces and not stress and isinstance(coord, Tensor) and coord.requires_grad)
             )
             if dftd3_energy_graph:
                 data = self.external_dftd3(data, hessian=True)
