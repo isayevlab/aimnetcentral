@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Fixed `DataGroup.cv_split` corrupting cross-validation folds: building each fold's train split mutated the shared parts in place via `cat()`, so later folds contained duplicated samples and validation splits larger than the dataset. Folds are now built without mutating the shared parts.
+
+### Added
+
+- Added targeted unit tests for previously untested code: `RegMultiMetric`/`regression_stats`, the `aimnet export` helper functions (`load_sae`, `bake_sae_into_model`, `mask_not_implemented_species`), `SizeGroupedDataset.cv_split`/`concatenate`, `train.utils` config/parameter helpers, and `LRCoulomb` constructor validation.
+
 ## [0.2.0] - 2026-05-03
 
 ### Added
