@@ -6,12 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security
+
+- Upgraded transitive lockfile dependencies to patched versions for all open Dependabot alerts with available fixes (GitPython, Mako, Pillow, cryptography, idna, msgpack, pymdown-extensions, setuptools, tornado, urllib3). Remaining open alerts: paramiko (no patch released) and two low-severity torch advisories fixed only in torch 2.13, outside the supported 2.8-2.12 matrix.
+
 ### Added
 
 - Added `deterministic=True` calculator option: routes external DFT-D3 and DSF Coulomb through their differentiable pure-torch paths, making repeated identical evaluations bitwise reproducible on the same machine/build (issue #93). Ewald/PME kernels are not covered and warn once.
 
 ### Changed
 
+- Hardened `make test`: the parallel run now hides CUDA and caps per-worker threads (`CUDA_VISIBLE_DEVICES="" OMP_NUM_THREADS=1`); previously xdist workers either all initialized the first GPU (OOM on CUDA boxes) or oversubscribed the CPU with per-worker torch thread pools. A new `make test-gpu` target runs the GPU-marked tests serially on CUDA.
 - Bumped `nvalchemi-toolkit-ops` to `>=0.4.0` and `warp-lang` to `>=1.13,<2` (installs 1.15). Energies, charges, and Hessians are bit-identical to 0.3.1; explicit force/virial outputs shift within float32 accumulation noise (max 6.7e-05 eV/A on a periodic system, 40x inside the project's cross-version acceptance of 1e-4 Hartree/A). The 0.4.0 direct-output flags used by the Ewald/PME path (`compute_forces`/`compute_virial`) are deprecated upstream and now emit `DeprecationWarning`; migrating to the autograd-based API is tracked as follow-up work.
 
 - Marked the expensive tail of the test suite (~60 test nodes ≥2 s each: torch.compile, model-format roundtrips, dense-Hessian/HVP comparisons, multi-model ASE runs) with the `slow` marker; the default CPU test run now completes in under two minutes. Run `pytest -m slow` for the marked tail. The cheapest representative of each critical path (dense Hessian, HVP correctness, legacy `.jpt` loading, torch.compile smoke) stays in the default set.
