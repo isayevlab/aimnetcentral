@@ -153,8 +153,9 @@ def calculate_hessian(forces: Tensor, coord: Tensor) -> Tensor:
     The returned dense Hessian is a **detached value**: it carries no
     autograd graph back to the coordinates or model parameters. This is by
     design (it is materialized via ``torch.func.vmap`` over a vjp of the
-    already-built force graph, and the periodic Ewald/PME block is a
-    fixed-charge finite-difference term that is non-differentiable). Forces
+    already-built force graph, and the periodic PME block is a fixed-charge
+    finite-difference term that is non-differentiable; Ewald is a full
+    relaxed-charge autograd term since the 0.4 energy-graph migration). Forces
     DO compose with an upstream coordinate-builder graph, but the Hessian
     does not, so you cannot backpropagate through ``eval(..., hessian=True)``.
 

@@ -1028,10 +1028,10 @@ class AIMNet2Calculator:
         coulomb_terms = None
         deterministic = getattr(self, "_deterministic", False)
         if self.external_coulomb is not None:
+            # Ewald is always energy-in-graph now; the flag selects the DSF
+            # closed-form torch path or the legacy PME training wrapper.
             training_derivatives = (
-                self.external_coulomb.method in ("ewald", "pme", "dsf")
-                and getattr(self, "_train", False)
-                and (forces or stress)
+                self.external_coulomb.method in ("pme", "dsf") and getattr(self, "_train", False) and (forces or stress)
             )
             if deterministic:
                 if self.external_coulomb.method == "dsf":
@@ -1051,7 +1051,7 @@ class AIMNet2Calculator:
                 "training_derivatives": training_derivatives,
                 "hessian": hessian,
             }
-            if training_derivatives and stress and self.external_coulomb.method in ("ewald", "pme"):
+            if training_derivatives and stress and self.external_coulomb.method == "pme":
                 strain_inputs = getattr(self, "_external_strain_inputs", None)
                 if strain_inputs is not None:
                     kwargs.update(strain_inputs)
@@ -1908,8 +1908,9 @@ class AIMNet2Calculator:
         vectors : Tensor
             Direction(s), shape ``(N, 3)`` or ``(K, N, 3)`` over the real atoms.
         eps : float
-            Central-difference step (Angstrom) for the periodic Ewald/PME
-            long-range term. Ignored for ``simple``/``dsf``.
+            Central-difference step (Angstrom) for the periodic PME
+            long-range term. Ignored for ``simple``/``dsf``/``ewald``
+            (their products are exact reverse-mode autograd).
         create_graph : bool
             If ``True``, keep the differentiable autograd block of the HVP in
             the graph so it can compose with an outer loss. The Ewald/PME
@@ -2105,11 +2106,17 @@ class AIMNet2Calculator:
                 allow_unused=True,
             )[0]
             hv = hv_full[:N]
-            if method in ("ewald", "pme") and self.external_coulomb is not None:
+            if method == "pme" and self.external_coulomb is not None:
                 # Full-periodic fixed-position curvature (directional FD).
+                # Ewald needs no FD block: its energy is in the autograd graph
+                # and the vjp above captures the full periodic curvature.
                 hv = hv.to(torch.float64) + self.external_coulomb._coul_nvalchemi_fd_hvp(
                     prepared, backend=method, vec=v, step=eps
                 )
+            elif method == "ewald":
+                # Preserve the documented float64 return contract for periodic
+                # systems (established by the former FD block).
+                hv = hv.to(torch.float64)
             outs.append(hv)
         result = torch.stack(outs, 0)
         return result[0] if single else result

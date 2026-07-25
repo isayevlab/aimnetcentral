@@ -257,19 +257,23 @@ class LRCoulomb(nn.Module):
     through the model-predicted charges, so its Hessian includes the
     charge-response (the d^2E / (dq . dr) coupling).
 
-    Ewald/PME call ``nvalchemiops`` directly. Inference uses
-    ``hybrid_forces=True`` so energy remains differentiable through charges
-    and fixed-charge geometry derivatives are returned as explicit terms.
-    Training derivative paths use a small local ``autograd.Function`` wrapper
-    because the installed nvalchemiops coordinate backward kernels do not
-    currently provide a registered backward-of-backward. Ewald/PME Hessians are
-    provided by finite-difference of the analytic nvalchemiops forces
-    (:meth:`_coul_nvalchemi_fd_hessian`) and are FIXED-CHARGE: they omit the
-    d^2E / (dq . dr) charge-response coupling.
+    Ewald calls ``nvalchemiops`` (>=0.4) energy-only with positions,
+    charges, and cell left in the autograd graph: forces, stress, dense
+    Hessians, and HVPs come from the calculator's total-energy autograd and
+    are RELAXED-CHARGE (they include the d^2E / (dq . dr) charge-response
+    coupling), directly comparable with the DSF torch path.
 
-    Because of this, DSF (relaxed-charge) and Ewald/PME (fixed-charge) Hessians
-    differ slightly for an otherwise-equivalent system, which matters when
-    comparing vibrational frequencies / IR across backends.
+    PME remains on the legacy path for now: inference uses
+    ``hybrid_forces=True`` (energy differentiable through charges,
+    fixed-charge geometry derivatives as explicit terms), training uses the
+    local ``_PeriodicCoulombFunction`` wrapper, and Hessians come from
+    finite-difference of the analytic forces
+    (:meth:`_coul_nvalchemi_fd_hessian`) and are FIXED-CHARGE. The PME
+    energy-graph route is blocked on a charge-gradient backward anomaly that
+    appears only inside the full calculator graph under
+    ``create_graph=True``; see the migration tracking issue. Until then, PME
+    Hessians differ slightly from DSF/Ewald relaxed-charge Hessians, which
+    matters when comparing vibrational frequencies / IR across backends.
     """
 
     def __init__(
@@ -669,6 +673,39 @@ class LRCoulomb(nn.Module):
         num_systems = int(mol_idx_real.max().item()) + 1
         fn = particle_mesh_ewald if backend == "pme" else ewald_summation
 
+        if backend == "ewald":
+            # nvalchemiops >=0.4 energy-graph contract (Ewald only for now):
+            # a single energy-only call with positions, charges, and cell left
+            # in the autograd graph. Forces, stress, charge-relaxation, dense
+            # Hessians, and HVPs all flow through the calculator's
+            # total-energy autograd; when stress is requested the strained
+            # coord/cell from set_grad_tensors carry the strain gradients.
+            # PME intentionally stays on the legacy explicit-terms path below:
+            # its charge-gradient backward misbehaves inside the full
+            # calculator graph under create_graph=True (train mode), see the
+            # migration notes in docs and the tracking issue.
+            energies_per_atom = fn(
+                positions=coord_real,
+                charges=charges_real,
+                cell=cell,
+                batch_idx=mol_idx_real,
+                neighbor_matrix=nbmat_real,
+                neighbor_matrix_shifts=shifts_real,
+                mask_value=N,
+                accuracy=float(self.ewald_accuracy),
+            )
+            ke = constants.Hartree * constants.Bohr
+            energies_per_system = torch.zeros(num_systems, dtype=torch.float64, device=coord.device)
+            e_periodic = energies_per_system.scatter_add(
+                0,
+                mol_idx_real.to(torch.int64),
+                (energies_per_atom * ke).double(),
+            )
+            if self.subtract_sr:
+                data = ops.lazy_calc_dij(data, "")
+                e_periodic = e_periodic - self.coul_simple_sr(data)
+            return e_periodic, None
+
         if training_derivatives:
             is_pme = backend == "pme"
             needs_strain_grad = scaling is not None and scaling.requires_grad
@@ -916,20 +953,9 @@ class LRCoulomb(nn.Module):
                     compute_virial=compute_virial,
                 )
         elif self.method == "ewald":
-            e, terms = self._coul_nvalchemi(
-                data,
-                backend="ewald",
-                compute_forces=compute_forces or hessian,
-                compute_virial=compute_virial,
-                training_derivatives=training_derivatives,
-                scaling=scaling,
-                coord_unstrained=coord_unstrained,
-                cell_unstrained=cell_unstrained,
-            )
-            if hessian:
-                if terms is None:
-                    terms = ExternalDerivativeTerms()
-                terms.hessian = self._coul_nvalchemi_fd_hessian(data, backend="ewald")
+            # Energy stays in the autograd graph; all derivatives come from
+            # the calculator's autograd (nvalchemiops >=0.4).
+            e, terms = self._coul_nvalchemi(data, backend="ewald")
         elif self.method == "pme":
             e, terms = self._coul_nvalchemi(
                 data,
