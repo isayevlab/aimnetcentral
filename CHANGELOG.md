@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+
+- Removed unused `DataGroup.to_dict`, `DataGroup.merge`, `DataGroup.rename_key`, `SizeGroupedDataset.merge`, and `SizeGroupedDataset.rename_datakey` (no callers in-repo or in downstream projects).
+- Removed unused `aimnet.train.utils.make_seed` and `aimnet.ops.lazy_calc_dij_lr`.
+- Removed unused `LRCoulomb.coul_ewald` and `LRCoulomb.coul_pme` convenience wrappers; use `LRCoulomb.forward` with `method="ewald"`/`"pme"`.
+- Removed unused `aimnet.modules.core.DSequential` and `aimnet.constants.get_dftd3_param`.
+- Removed unused `aimnet.models.utils.has_dftd3_in_config` (and its `aimnet.models` re-export).
+
+### Added
+
+- Added unit tests for the public `SizeGroupedDataset.save_h5`, `AIMNet2Calculator.set_lr_cutoff`, and `aimnet.train.loss.mse_loss_fn` APIs, which are kept.
+
 ## [0.2.0] - 2026-05-03
 
 ### Added
