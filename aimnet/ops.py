@@ -6,16 +6,6 @@ from torch import Tensor
 from aimnet import nbops
 
 
-def lazy_calc_dij_lr(data: dict[str, Tensor]) -> dict[str, Tensor]:
-    if "d_ij_lr" not in data:
-        nb_mode = nbops.get_nb_mode(data)
-        if nb_mode == 0:
-            data["d_ij_lr"] = data["d_ij"]
-        else:
-            data["d_ij_lr"] = calc_distances(data, suffix="_lr")[0]
-    return data
-
-
 def lazy_calc_dij(data: dict[str, Tensor], suffix: str) -> dict[str, Tensor]:
     """Lazily calculate distances for a given suffix.
 
