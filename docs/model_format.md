@@ -368,12 +368,9 @@ Load model from file with automatic format detection.
 
 Registry protection depends on preserving source information:
 
-- `resolve_model("aimnet2")` and `AIMNet2Calculator("aimnet2")` recognize
-  registry names and aliases.
-- Hugging Face configurations without `model_yaml` retain registry provenance
-  when they fall back to registry metadata.
-- `load_model(get_model_path("aimnet2"))` receives only a file path and
-  therefore treats the file as a direct artifact.
+- `resolve_model("aimnet2")` and `AIMNet2Calculator("aimnet2")` recognize registry names and aliases.
+- Hugging Face configurations without `model_yaml` retain registry provenance when they fall back to registry metadata.
+- `load_model(get_model_path("aimnet2"))` receives only a file path and therefore treats the file as a direct artifact.
 
 **Returns:**
 

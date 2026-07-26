@@ -97,7 +97,9 @@ def test_rejects_invalid_import_path_collections(paths: object) -> None:
 def test_replace_isolated_and_extend_noop() -> None:
     validate_model_yaml("class: tests.custom_models.CustomAIMNet", model_import_paths={"tests.custom_models.*"})
     with pytest.raises(ValueError, match="Untrusted"):
-        validate_model_yaml("class: aimnet.models.AIMNet2", model_import_mode="replace", model_import_paths={"tests.custom_models.*"})
+        validate_model_yaml(
+            "class: aimnet.models.AIMNet2", model_import_mode="replace", model_import_paths={"tests.custom_models.*"}
+        )
     validate_model_yaml("class: torch.nn.Linear", model_import_mode="replace", model_import_paths={"torch.nn.*"})
     validate_model_yaml("class: aimnet.models.AIMNet2", model_import_mode="extend", model_import_paths=())
 
@@ -109,7 +111,9 @@ def test_invalid_mode_combinations(mode: object) -> None:
     with pytest.raises(ValueError, match="non-empty"):
         validate_model_yaml("class: aimnet.models.AIMNet2", model_import_mode="replace")
     with pytest.raises(ValueError, match="unsafe"):
-        validate_model_yaml("class: aimnet.models.AIMNet2", model_import_mode="unsafe", model_import_paths={"pkg.Class"})
+        validate_model_yaml(
+            "class: aimnet.models.AIMNet2", model_import_mode="unsafe", model_import_paths={"pkg.Class"}
+        )
 
 
 def test_unsafe_bypasses_only_known_path_matching() -> None:
@@ -349,9 +353,7 @@ def test_jpt_routes_only_to_torch_jit_load(monkeypatch: pytest.MonkeyPatch, tmp_
     torch_load.assert_not_called()
 
 
-def test_pt_torchscript_archive_does_not_route_to_legacy(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_pt_torchscript_archive_does_not_route_to_legacy(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from aimnet.models import base
 
     load = Mock(side_effect=RuntimeError("not a restricted archive"))
@@ -408,15 +410,14 @@ sidecar: {sidecar}
     )
 
     model, _ = base.load_model.__wrapped__(
-        str(path), model_import_mode="unsafe",
+        str(path),
+        model_import_mode="unsafe",
     )
 
     assert isinstance(model, torch.nn.Identity)
 
 
-def test_local_pt_custom_import_paths_reach_construction(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_local_pt_custom_import_paths_reach_construction(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from aimnet.models import base
 
     model = torch.nn.Linear(2, 2)
@@ -466,8 +467,8 @@ def test_unsafe_local_load_keeps_restricted_deserialization_and_sidecar_suppress
 def test_obsolete_policy_objects_are_not_exported() -> None:
     import aimnet.models
 
-    assert not hasattr(aimnet.models, "Model" "ImportPolicy")
-    assert not hasattr(aimnet.models, "custom_model_" "import_policy")
+    assert not hasattr(aimnet.models, "ModelImportPolicy")
+    assert not hasattr(aimnet.models, "custom_model_import_policy")
 
 
 def test_allows_frozen_model_paths() -> None:
@@ -509,9 +510,7 @@ def test_registry_load_rejects_custom_import_settings(
 
 
 @pytest.mark.parametrize("model_name", ["aimnet2", "aimnet2-wb97m-d3_0"])
-def test_registry_names_and_aliases_use_strict_loader(
-    monkeypatch: pytest.MonkeyPatch, model_name: str
-) -> None:
+def test_registry_names_and_aliases_use_strict_loader(monkeypatch: pytest.MonkeyPatch, model_name: str) -> None:
     from aimnet.calculators import resolve
 
     model = torch.nn.Identity()

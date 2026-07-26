@@ -75,9 +75,7 @@ calc = AIMNet2Calculator("/path/to/local/repo")
 
 ## Mixing HF and Registry Models
 
-Hugging Face repository IDs and registry aliases use separate loading paths and
-can be used in the same script. Optional HF dependencies are imported only
-when an HF source is detected:
+Hugging Face repository IDs and registry aliases use separate loading paths and can be used in the same script. Optional HF dependencies are imported only when an HF source is detected:
 
 ```python
 # Loads from Hugging Face (requires aimnet[hf]):
