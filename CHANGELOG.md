@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Security
 
 - Upgraded transitive lockfile dependencies to patched versions for all open Dependabot alerts with available fixes (GitPython, Mako, Pillow, cryptography, idna, msgpack, pymdown-extensions, setuptools, tornado, urllib3). Remaining open alerts: paramiko (no patch released) and two low-severity torch advisories fixed only in torch 2.13, outside the supported 2.8-2.12 matrix.
+- Verified official model-registry downloads and cached artifacts against their SHA-256 digests before loading. Registry names and aliases now take precedence over same-named implicit local paths, preventing unverified local files from shadowing registry models.
+- Restricted v2 `.pt` artifact deserialization to weights and basic data. Legacy `.jpt` files are loaded only through the TorchScript loader and must come from a trusted source.
+- Validated Python class and function references in model YAML against a default trusted set. Direct local and Hugging Face artifacts can extend or replace that set, or explicitly select unsafe loading for trusted custom code; registry models always use the fixed default set.
 
 ### Added
 

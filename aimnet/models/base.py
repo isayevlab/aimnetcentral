@@ -2,13 +2,21 @@ from __future__ import annotations
 
 import contextlib
 import warnings
-from typing import ClassVar, Final, NotRequired, TypedDict
+from collections.abc import Collection
+from pathlib import Path
+from typing import ClassVar, Final, Literal, NotRequired, TypedDict
 
 import torch
 from torch import Tensor, nn
 
 from aimnet import nbops
 from aimnet.config import build_module
+from aimnet.models.artifact_validation import (
+    _REGISTRY_IMPORT_POLICY,
+    _ModelImportPolicy,
+    _resolve_user_import_policy,
+    _validate_v2_artifact,
+)
 from aimnet.models.utils import (
     extract_d3_params,
     extract_species,
@@ -50,117 +58,124 @@ class ModelMetadata(TypedDict):
     # which conflates D3TS with SRCoulomb — see _has_embedded_dispersion)
 
 
-def load_model(path: str, device: str = "cpu") -> tuple[nn.Module, ModelMetadata]:
-    """Load model from file, supporting both new and legacy formats.
+def load_legacy_jit(path: str, device: str = "cpu") -> tuple[torch.jit.ScriptModule, ModelMetadata]:
+    """Load a legacy TorchScript model from a trusted ``.jpt`` source.
 
-    Automatically detects format:
-    - New format: state dict with embedded YAML config and metadata
-    - Legacy format: JIT-compiled TorchScript model
+    TorchScript is format-specific but is not a sandbox. Only load ``.jpt``
+    files from sources whose code and provenance the caller trusts.
+    """
+    model = torch.jit.load(path, map_location=device)
+    legacy_metadata: ModelMetadata = {
+        "format_version": 1,
+        "cutoff": float(model.cutoff),
+        "needs_coulomb": False,
+        "needs_dispersion": False,
+        "coulomb_mode": "full_embedded",
+        "d3_params": extract_d3_params(model) if has_externalizable_dftd3(model) else None,
+        "implemented_species": extract_species(model),
+    }
+
+    with contextlib.suppress(AttributeError, RuntimeError):
+        model._metadata = legacy_metadata  # type: ignore[attr-defined]
+
+    return model, legacy_metadata
+
+
+def load_model(
+    path: str,
+    device: str = "cpu",
+    *,
+    model_import_paths: Collection[str] | None = None,
+    model_import_mode: Literal["extend", "replace", "unsafe"] = "extend",
+) -> tuple[nn.Module, ModelMetadata]:
+    """Load a v2 model or explicitly routed legacy ``.jpt`` model.
+
+    Files ending in ``.jpt`` (case-insensitive) are loaded with
+    :func:`torch.jit.load` and therefore must come from a trusted source.
+    Every other suffix is loaded exactly once with restricted
+    ``torch.load(weights_only=True)``.
 
     Parameters
     ----------
     path : str
-        Path to the model file (.pt or .jpt).
+        Path to a v2 ``.pt`` or trusted legacy ``.jpt`` model.
     device : str
-        Device to load the model on. Default is "cpu".
+        Device on which to load the model.
+    model_import_paths : Collection[str] | None
+        Python imports trusted when loading a v2 file. Entries are exact dotted
+        paths or namespaces ending in ``.*``, such as
+        ``{"my_package.models.CustomModel", "my_package.layers.*"}``.
+    model_import_mode : {"extend", "replace", "unsafe"}
+        ``extend`` adds ``model_import_paths`` to the default trusted paths;
+        ``replace`` requires a nonempty collection and uses only those paths.
+        ``unsafe`` cannot be combined with paths and permits arbitrary imported
+        constructors. No mode relaxes restricted deserialization or artifact
+        validation.
 
     Returns
     -------
     model : nn.Module
         The loaded model with weights.
     metadata : ModelMetadata
-        Dictionary containing model metadata. See ModelMetadata TypedDict for fields.
+        Validated model metadata.
 
-    Notes
-    -----
-    For legacy JIT models (format_version=1), `needs_coulomb` and `needs_dispersion`
-    are False because LR modules are already embedded in the TorchScript model.
+    Use ``unsafe`` only for locally trusted artifacts. Legacy ``.jpt`` files
+    accept only ``model_import_paths=None`` and ``model_import_mode="extend"``.
     """
-    import yaml
+    policy = _resolve_user_import_policy(model_import_paths, model_import_mode)
+    if Path(path).suffix.lower() == ".jpt":
+        if model_import_paths is not None or model_import_mode != "extend":
+            raise ValueError("Import settings are not supported for .jpt sources.")
+        return load_legacy_jit(path, device)
+    return _load_v2_model(path, device, policy)
 
-    # Try weights_only=True first (secure for new .pt format).
-    # Falls back to weights_only=False for legacy TorchScript .jpt archives,
-    # which require full deserialization to load the frozen computation graph.
-    try:
-        data = torch.load(path, map_location=device, weights_only=True)
-    except Exception:
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", ".*looks like a TorchScript archive.*")
-            data = torch.load(path, map_location=device, weights_only=False)
 
-    # Check result type to determine format
-    if isinstance(data, dict) and "model_yaml" in data:
-        # New state dict format
-        model_config = yaml.safe_load(data["model_yaml"])
-        model = build_module(model_config)
-        if not isinstance(model, nn.Module):
-            raise TypeError("Built model configuration did not produce an nn.Module.")
+def _load_v2_model(path: str, device: str, policy: _ModelImportPolicy) -> tuple[nn.Module, ModelMetadata]:
+    data = torch.load(path, map_location=device, weights_only=True)
+    model_config, state_dict = _validate_v2_artifact(data, policy)
+    model = build_module(model_config, allow_file_references=False)
+    if not isinstance(model, nn.Module):
+        raise TypeError("Built model configuration did not produce an nn.Module.")
 
-        # Atomic shifts store SAE/reference-energy values and may be float64 in
-        # the file. Cast before load_state_dict so copy_ does not truncate them
-        # into the default float32 embedding.
-        if hasattr(model, "outputs") and hasattr(model.outputs, "atomic_shift"):
-            model.outputs.atomic_shift.double()
+    # Atomic shifts store SAE/reference-energy values and may be float64 in
+    # the file. Cast before load_state_dict so copy_ does not truncate them
+    # into the default float32 embedding.
+    if hasattr(model, "outputs") and hasattr(model.outputs, "atomic_shift"):
+        model.outputs.atomic_shift.double()
 
-        # Use strict=False because modules may differ between formats
-        load_result = model.load_state_dict(data["state_dict"], strict=False)
+    load_result = model.load_state_dict(state_dict, strict=False)
+    real_missing, real_unexpected = validate_state_dict_keys(load_result.missing_keys, load_result.unexpected_keys)
+    if real_missing or real_unexpected:
+        msg_parts = []
+        if real_missing:
+            msg_parts.append(f"Missing keys: {real_missing}")
+        if real_unexpected:
+            msg_parts.append(f"Unexpected keys: {real_unexpected}")
+        warnings.warn(f"State dict mismatch during model loading. {'; '.join(msg_parts)}", stacklevel=2)
 
-        # Check for unexpected missing/extra keys
-        real_missing, real_unexpected = validate_state_dict_keys(load_result.missing_keys, load_result.unexpected_keys)
-        if real_missing or real_unexpected:
-            msg_parts = []
-            if real_missing:
-                msg_parts.append(f"Missing keys: {real_missing}")
-            if real_unexpected:
-                msg_parts.append(f"Unexpected keys: {real_unexpected}")
-            warnings.warn(f"State dict mismatch during model loading. {'; '.join(msg_parts)}", stacklevel=2)
+    model = model.to(device)
+    metadata: ModelMetadata = {
+        "format_version": data.get("format_version", 2),
+        "cutoff": data["cutoff"],
+        "needs_coulomb": data.get("needs_coulomb", False),
+        "needs_dispersion": data.get("needs_dispersion", False),
+        "coulomb_mode": data.get("coulomb_mode", "none"),
+        "coulomb_sr_rc": data.get("coulomb_sr_rc"),
+        "coulomb_sr_envelope": data.get("coulomb_sr_envelope"),
+        "d3_params": data.get("d3_params"),
+        "has_embedded_lr": data.get("has_embedded_lr", False),
+        "implemented_species": data.get("implemented_species", []),
+        "family": data.get("family"),
+        "supports_charged_systems": data.get("supports_charged_systems"),
+        "has_embedded_d3ts": data.get("has_embedded_d3ts", False),
+    }
+    model._metadata = metadata  # type: ignore[assignment]
+    return model, metadata
 
-        model = model.to(device)
 
-        metadata: ModelMetadata = {
-            "format_version": data.get("format_version", 2),  # Default 2 for early v2 files without version
-            "cutoff": data["cutoff"],
-            "needs_coulomb": data.get("needs_coulomb", False),
-            "needs_dispersion": data.get("needs_dispersion", False),
-            "coulomb_mode": data.get("coulomb_mode", "none"),
-            "coulomb_sr_rc": data.get("coulomb_sr_rc"),
-            "coulomb_sr_envelope": data.get("coulomb_sr_envelope"),
-            "d3_params": data.get("d3_params"),
-            "has_embedded_lr": data.get("has_embedded_lr", False),
-            "implemented_species": data.get("implemented_species", []),
-            "family": data.get("family"),
-            "supports_charged_systems": data.get("supports_charged_systems"),
-            "has_embedded_d3ts": data.get("has_embedded_d3ts", False),
-        }
-
-        # Attach metadata to model for easy access
-        model._metadata = metadata  # type: ignore[assignment]
-
-        return model, metadata
-
-    elif isinstance(data, torch.jit.ScriptModule):
-        # Legacy JIT format - LR modules are already embedded in the TorchScript model
-        model = data
-        legacy_metadata: ModelMetadata = {
-            "format_version": 1,  # Legacy .jpt format is v1
-            "cutoff": float(model.cutoff),
-            # Legacy models have LR modules embedded - don't add external ones
-            "needs_coulomb": False,
-            "needs_dispersion": False,
-            "coulomb_mode": "full_embedded",
-            # No coulomb_sr_rc/envelope for legacy (full Coulomb is embedded)
-            "d3_params": extract_d3_params(model) if has_externalizable_dftd3(model) else None,
-            "implemented_species": extract_species(model),
-        }
-
-        # Attempt metadata assignment; silently fails for JIT models
-        with contextlib.suppress(AttributeError, RuntimeError):
-            model._metadata = legacy_metadata  # type: ignore[attr-defined]
-
-        return model, legacy_metadata
-
-    else:
-        raise ValueError(f"Unknown model format: {type(data)}")
+def _load_registry_model(path: str, device: str = "cpu") -> tuple[nn.Module, ModelMetadata]:
+    """Load a registry artifact with its immutable import policy."""
+    return _load_v2_model(path, device, _REGISTRY_IMPORT_POLICY)
 
 
 class AIMNet2Base(nn.Module):

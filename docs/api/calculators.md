@@ -109,6 +109,20 @@ print(results[0]["potential_energy"], results[0]["forces"])
 
 Utilities for loading pre-trained models. Models are automatically downloaded from the remote repository to the local model cache (`AIMNET_CACHE_DIR` when set, otherwise `~/.cache/aimnet/`) upon first use.
 
+Every registry download and cache hit is verified against its SHA-256 digest.
+A mismatch raises `ValueError`; see
+[Model cache recovery](../cli.md#model-cache-recovery).
+
+Bare registry names and aliases take precedence over same-named implicit local
+files or directories, preventing a local shadow from bypassing verification.
+Use an explicit path such as `./aimnet2` or an absolute path when a local
+artifact is intended.
+
+Only direct local v2 artifacts and complete Hugging Face repositories accept
+custom import settings. See
+[Model YAML import policy](../model_format.md#model-yaml-import-policy) for
+supported paths, modes, and security boundaries.
+
 ### CLI Command
 
 You can clear the local model cache using the CLI:

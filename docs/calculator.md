@@ -78,6 +78,9 @@ AIMNet2Calculator(
     ensemble_member: int = 0,
     revision: str | None = None,
     token: str | None = None,
+    *,
+    model_import_paths: Collection[str] | None = None,
+    model_import_mode: Literal["extend", "replace", "unsafe"] = "extend",
 )
 ```
 
@@ -96,6 +99,16 @@ Model to use for inference.
 | `torch.nn.Module` | Uses provided module directly |
 
 For `torch.nn.Module`, metadata is read from `model.metadata` attribute if available (v2 models).
+
+### Custom serialized models
+
+Direct local v2 files and complete Hugging Face repositories can extend or replace the trusted model-YAML import paths, or use unsafe loading for locally trusted artifacts. See [Model YAML import policy](model_format.md#model-yaml-import-policy) for the default allowlist, modes, examples, and security boundaries.
+
+For a legacy TorchScript file, use `AIMNet2Calculator.from_legacy_jit()` when you want the trusted-code boundary to be explicit:
+
+```python
+calc = AIMNet2Calculator.from_legacy_jit("trusted-model.jpt", device="cpu")
+```
 
 #### `nb_threshold`
 
@@ -234,6 +247,15 @@ HF API token for accessing private or gated repositories. Default: `None`.
 Set via environment variable `HF_TOKEN` as an alternative to passing it directly.
 
 Only applies when `model` is a HF repo ID.
+
+#### `model_import_paths` and `model_import_mode`
+
+These settings apply only to direct local v2 artifacts and complete Hugging
+Face repositories with their own `model_yaml`. Registry names, registry
+fallback, raw `nn.Module` inputs, and `.jpt` files reject non-default settings.
+
+See [Model YAML import policy](model_format.md#model-yaml-import-policy) for
+supported paths, modes, examples, and security boundaries.
 
 ### Metadata Resolution
 

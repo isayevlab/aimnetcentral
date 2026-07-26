@@ -1,15 +1,22 @@
 """Test Hugging Face Hub integration."""
 
 import json
-import warnings
+from unittest.mock import Mock
 
 import pytest
 import torch
 
 pytest.importorskip("safetensors")
+from safetensors import torch as safetensors_torch
 from safetensors.torch import save_file
 
-from aimnet.calculators.hf_hub import _validate_model_yaml, is_hf_repo_id, load_from_hf_repo
+from aimnet.calculators import hf_hub
+from aimnet.calculators.hf_hub import (
+    _fetch_pt_metadata_from_registry,
+    is_hf_repo_id,
+    load_from_hf_repo,
+)
+from aimnet.models.artifact_validation import validate_model_yaml
 
 
 @pytest.fixture
@@ -23,9 +30,7 @@ def fake_hf_repo(tmp_path):
 
     pt_path = get_model_path("aimnet2")
 
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", ".*weights_only.*")
-        raw_data = torch.load(pt_path, map_location="cpu", weights_only=False)
+    raw_data = torch.load(pt_path, map_location="cpu", weights_only=True)
 
     state_dict = raw_data["state_dict"]
     save_file(state_dict, str(tmp_path / "ensemble_0.safetensors"))
@@ -63,15 +68,244 @@ def test_is_hf_repo_id():
 def test_validate_model_yaml_allows_aimnet():
     """Test that aimnet classes are allowed."""
     yaml_str = "class: aimnet.models.AIMNet2\nkwargs:\n  outputs:\n    energy:\n      class: aimnet.modules.Output\n"
-    _validate_model_yaml(yaml_str)  # Should not raise
+    validate_model_yaml(yaml_str)  # Should not raise
 
 
 @pytest.mark.hf
 def test_validate_model_yaml_blocks_untrusted():
     """Test that non-aimnet classes are blocked."""
     yaml_str = "class: os.system\nkwargs: {}"
-    with pytest.raises(ValueError, match="Untrusted class"):
-        _validate_model_yaml(yaml_str)
+    with pytest.raises(ValueError, match="Untrusted import path"):
+        validate_model_yaml(yaml_str)
+
+
+@pytest.mark.hf
+def test_hf_metadata_fallback_accepts_registry_names_only(monkeypatch, tmp_path):
+    from aimnet.calculators import hf_hub
+
+    local_path = str(tmp_path / "attacker.pt")
+    registry_path = Mock(side_effect=ValueError("not a registry model"))
+    monkeypatch.setattr(hf_hub, "get_registry_model_path", registry_path)
+
+    with pytest.raises(ValueError, match="not a registry model"):
+        _fetch_pt_metadata_from_registry(
+            {"member_names": [local_path]},
+            "attacker/repository",
+            0,
+        )
+
+    registry_path.assert_called_once_with(local_path)
+
+
+@pytest.mark.hf
+def test_hf_rejects_malicious_yaml_before_build_module(monkeypatch, tmp_path):
+    from aimnet.calculators import hf_hub
+
+    save_file({}, str(tmp_path / "ensemble_0.safetensors"))
+    (tmp_path / "config.json").write_text(
+        json.dumps({"model_yaml": "class: os.system", "cutoff": 5.0, "format_version": 2})
+    )
+    build_module = Mock(side_effect=AssertionError("build_module must not be called"))
+    monkeypatch.setattr(hf_hub, "build_module", build_module)
+
+    with pytest.raises(ValueError, match="Untrusted import path"):
+        load_from_hf_repo(str(tmp_path))
+
+    build_module.assert_not_called()
+
+
+@pytest.mark.hf
+def test_hf_rejects_invalid_format_version(tmp_path):
+    save_file({}, str(tmp_path / "ensemble_0.safetensors"))
+    (tmp_path / "config.json").write_text(
+        json.dumps({"model_yaml": "class: aimnet.models.AIMNet2", "cutoff": 5.0, "format_version": "2"})
+    )
+
+    with pytest.raises(ValueError, match="format_version"):
+        load_from_hf_repo(str(tmp_path))
+
+
+@pytest.mark.parametrize(
+    ("model_import_paths", "model_import_mode"),
+    [
+        ({"my_package.CustomAIMNet"}, "extend"),
+        (None, "replace"),
+        (None, "unsafe"),
+    ],
+)
+def test_hf_registry_fallback_rejects_custom_import_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    model_import_paths,
+    model_import_mode,
+):
+    (tmp_path / "config.json").write_text(json.dumps({"member_names": ["aimnet2"]}))
+    fetch = Mock(side_effect=AssertionError("registry fetch must not be called"))
+    monkeypatch.setattr("aimnet.calculators.hf_hub._fetch_pt_metadata_from_registry", fetch)
+
+    with pytest.raises(ValueError, match=r"registry HF fallback|replace|unsafe"):
+        load_from_hf_repo(
+            str(tmp_path),
+            model_import_paths=model_import_paths,
+            model_import_mode=model_import_mode,
+        )
+    fetch.assert_not_called()
+
+
+def test_hf_registry_fallback_uses_shared_allowlist(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    from aimnet.calculators import hf_hub
+
+    pt_path = tmp_path / "registry.pt"
+    torch.save(
+        {
+            "model_yaml": "class: torch.hub.load",
+            "state_dict": {},
+            "cutoff": 5.0,
+            "format_version": 2,
+        },
+        pt_path,
+    )
+    monkeypatch.setattr(hf_hub, "get_registry_model_path", lambda _: str(pt_path))
+    with pytest.raises(ValueError, match="Untrusted import path"):
+        _fetch_pt_metadata_from_registry({"member_names": ["aimnet2"]}, "repo", 0)
+
+
+def test_hf_rejects_invalid_metadata_before_weights_or_construction(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    save_file({}, str(tmp_path / "ensemble_0.safetensors"))
+    (tmp_path / "config.json").write_text(
+        json.dumps({
+            "model_yaml": "class: aimnet.models.AIMNet2",
+            "cutoff": 5.0,
+            "format_version": 2,
+            "needs_dispersion": True,
+        })
+    )
+    load_file = Mock(side_effect=AssertionError("weights must not be loaded"))
+    build_module = Mock(side_effect=AssertionError("model must not be built"))
+    monkeypatch.setattr(safetensors_torch, "load_file", load_file)
+    monkeypatch.setattr(hf_hub, "build_module", build_module)
+
+    with pytest.raises(ValueError, match="d3_params"):
+        load_from_hf_repo(str(tmp_path))
+
+    load_file.assert_not_called()
+    build_module.assert_not_called()
+
+
+def test_hf_fallback_uses_validated_registry_cutoff(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    save_file({}, str(tmp_path / "ensemble_0.safetensors"))
+    (tmp_path / "config.json").write_text(json.dumps({"member_names": ["aimnet2"]}))
+    monkeypatch.setattr(
+        hf_hub,
+        "_fetch_pt_metadata_from_registry",
+        Mock(
+            return_value=(
+                {
+                    "model_yaml": "class: torch.nn.Identity",
+                    "cutoff": 5.0,
+                    "format_version": 2,
+                },
+                {"class": "torch.nn.Identity"},
+            )
+        ),
+    )
+    model = torch.nn.Identity()
+    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=model))
+
+    loaded, metadata = load_from_hf_repo(str(tmp_path))
+
+    assert loaded is model
+    assert metadata["cutoff"] == 5.0
+
+
+def test_hf_rejects_non_mapping_config_root(tmp_path):
+    (tmp_path / "config.json").write_text("[]")
+
+    with pytest.raises(TypeError, match="mapping"):
+        load_from_hf_repo(str(tmp_path))
+
+
+def test_hf_remote_weights_wait_for_config_validation(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    (tmp_path / "config.json").write_text(
+        json.dumps({"model_yaml": "class: os.system", "cutoff": 5.0, "format_version": 2})
+    )
+    snapshot_download = Mock(return_value=str(tmp_path))
+    monkeypatch.setattr("huggingface_hub.snapshot_download", snapshot_download)
+
+    with pytest.raises(ValueError, match="Untrusted import path"):
+        load_from_hf_repo("org/repository")
+
+    snapshot_download.assert_called_once()
+    assert snapshot_download.call_args.kwargs["allow_patterns"] == ["config.json"]
+
+
+def test_hf_rejects_non_module_construction(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    save_file({}, str(tmp_path / "ensemble_0.safetensors"))
+    (tmp_path / "config.json").write_text(
+        json.dumps({"model_yaml": "class: torch.nn.Identity", "cutoff": 5.0, "format_version": 2})
+    )
+    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=object()))
+
+    with pytest.raises(TypeError, match=r"nn\.Module"):
+        load_from_hf_repo(str(tmp_path))
+
+
+@pytest.mark.parametrize(
+    ("model_import_paths", "model_import_mode"),
+    [
+        ({"my_package.CustomAIMNet"}, "extend"),
+        ({"my_package.CustomAIMNet"}, "replace"),
+        (None, "unsafe"),
+    ],
+)
+def test_hf_forwards_direct_import_options(
+    monkeypatch: pytest.MonkeyPatch, tmp_path, model_import_paths, model_import_mode
+):
+    from aimnet.calculators import hf_hub
+
+    save_file({}, str(tmp_path / "ensemble_0.safetensors"))
+    (tmp_path / "config.json").write_text(
+        json.dumps({"model_yaml": "class: my_package.CustomAIMNet", "cutoff": 5.0, "format_version": 2})
+    )
+    validate = Mock(return_value={"class": "my_package.CustomAIMNet"})
+    model = torch.nn.Identity()
+    monkeypatch.setattr(hf_hub, "validate_model_yaml", validate)
+    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=model))
+
+    loaded, _ = load_from_hf_repo(
+        str(tmp_path),
+        model_import_paths=model_import_paths,
+        model_import_mode=model_import_mode,
+    )
+
+    assert loaded is model
+    assert validate.call_args.kwargs == {
+        "model_import_paths": model_import_paths,
+        "model_import_mode": model_import_mode,
+    }
+
+
+@pytest.mark.hf
+def test_hf_custom_model_does_not_expand_sidecar_yaml(tmp_path):
+    sidecar = tmp_path / "sidecar.yaml"
+    sidecar.write_text("class: os.system\n", encoding="utf-8")
+    save_file({}, str(tmp_path / "ensemble_0.safetensors"))
+    (tmp_path / "config.json").write_text(
+        json.dumps({
+            "model_yaml": f"class: torch.nn.Identity\nsidecar: {sidecar}\n",
+            "cutoff": 5.0,
+            "format_version": 2,
+            "implemented_species": [],
+        })
+    )
+
+    model, metadata = load_from_hf_repo(
+        str(tmp_path),
+        model_import_mode="extend",
+    )
+
+    assert isinstance(model, torch.nn.Identity)
+    assert metadata["format_version"] == 2
 
 
 @pytest.mark.slow
@@ -116,9 +350,7 @@ def fake_hf_repo_with_family(tmp_path):
     from aimnet.calculators.model_registry import get_model_path
 
     pt_path = get_model_path("aimnet2")
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", ".*weights_only.*")
-        raw = torch.load(pt_path, map_location="cpu", weights_only=False)
+    raw = torch.load(pt_path, map_location="cpu", weights_only=True)
 
     state_dict = raw["state_dict"]
     save_file(state_dict, str(tmp_path / "ensemble_0.safetensors"))
@@ -131,6 +363,7 @@ def fake_hf_repo_with_family(tmp_path):
         "cutoff": float(raw["cutoff"]),
         "needs_coulomb": raw.get("needs_coulomb", False),
         "needs_dispersion": raw.get("needs_dispersion", False),
+        "d3_params": raw.get("d3_params"),
         "coulomb_mode": raw.get("coulomb_mode", "none"),
         "implemented_species": raw.get("implemented_species", []),
         "model_yaml": raw["model_yaml"],
@@ -138,6 +371,7 @@ def fake_hf_repo_with_family(tmp_path):
         "coulomb_sr_rc": raw.get("coulomb_sr_rc"),
         "coulomb_sr_envelope": raw.get("coulomb_sr_envelope"),
         "has_embedded_lr": raw.get("has_embedded_lr", False),
+        "has_embedded_d3ts": raw.get("has_embedded_d3ts", False),
         # NEW fields under test:
         "family": "test-family",
         "supports_charged_systems": False,

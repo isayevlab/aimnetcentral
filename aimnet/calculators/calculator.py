@@ -2,15 +2,16 @@ import copy
 import math
 import warnings
 import weakref
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from types import MappingProxyType
-from typing import Any, ClassVar, Literal, cast
+from typing import Any, ClassVar, Literal, Self, cast
 
 import torch
 from nvalchemiops.neighbors import NeighborOverflowError
 from nvalchemiops.torch.neighbors import neighbor_list
 from torch import Tensor, nn
 
+from aimnet.models.base import load_legacy_jit
 from aimnet.modules import DFTD3, LRCoulomb
 from aimnet.modules.lr import ExternalDerivativeTerms
 
@@ -200,6 +201,25 @@ class AIMNet2Calculator:
         giving run-to-run noise of ~1e-7 eV that iterative optimizers can
         amplify. Ewald/PME Coulomb is not covered (a one-time warning fires);
         the static DFTD3 cache does not apply in this mode.
+    ensemble_member : int
+        Zero-based member selected from a Hugging Face ensemble.
+    revision : str | None
+        Hugging Face repository revision, branch, or tag.
+    token : str | None
+        Hugging Face access token for private repositories.
+    model_import_paths : Collection[str] | None
+        Python imports trusted for a direct local v2 artifact or complete
+        Hugging Face repository. Each entry is an exact dotted path or a
+        namespace ending in ``.*``, for example
+        ``{"my_package.models.CustomModel", "my_package.layers.*"}``.
+    model_import_mode : {"extend", "replace", "unsafe"}
+        ``extend`` adds ``model_import_paths`` to the default trusted paths;
+        ``replace`` requires a nonempty collection and uses only those paths.
+        ``unsafe`` cannot be combined with paths and permits arbitrary imported
+        constructors, so use it only for locally trusted artifacts. Registry
+        names and aliases, registry HF fallback, raw modules, and ``.jpt``
+        files accept only the default settings. No mode relaxes artifact or
+        metadata validation.
 
     Attributes
     ----------
@@ -258,6 +278,9 @@ class AIMNet2Calculator:
         ensemble_member: int = 0,
         revision: str | None = None,
         token: str | None = None,
+        *,
+        model_import_paths: Collection[str] | None = None,
+        model_import_mode: Literal["extend", "replace", "unsafe"] = "extend",
     ):
         # Device selection: use provided or auto-detect
         if device is None:
@@ -278,6 +301,8 @@ class AIMNet2Calculator:
             ensemble_member=ensemble_member,
             revision=revision,
             token=token,
+            model_import_paths=model_import_paths,
+            model_import_mode=model_import_mode,
         )
 
         # Compile model if requested
@@ -431,6 +456,32 @@ class AIMNet2Calculator:
                     param.requires_grad_(False)
 
         self._maybe_warn_family_mix((metadata or {}).get("family") if metadata else None)
+
+    @classmethod
+    def from_legacy_jit(
+        cls,
+        path: str,
+        *,
+        device: str | None = None,
+        **calculator_kwargs: Any,
+    ) -> Self:
+        """Construct a calculator from a trusted legacy TorchScript model.
+
+        ``path`` must point to a trusted ``.jpt`` source. Additional keyword
+        arguments are forwarded to :class:`AIMNet2Calculator`; ``model`` is
+        rejected because the model is supplied by ``path``.
+        """
+        if "model" in calculator_kwargs:
+            raise TypeError("from_legacy_jit() does not accept a model keyword argument.")
+        if (
+            calculator_kwargs.get("model_import_paths") is not None
+            or calculator_kwargs.get("model_import_mode", "extend") != "extend"
+        ):
+            raise ValueError("Import settings are not supported for .jpt sources.")
+        resolved_device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        resolved_device = str(torch.device(resolved_device))
+        loaded_model, _ = load_legacy_jit(path, resolved_device)
+        return cls(model=loaded_model, device=resolved_device, **calculator_kwargs)
 
     def __call__(self, *args, **kwargs) -> dict[str, Any]:
         return self.eval(*args, **kwargs)
