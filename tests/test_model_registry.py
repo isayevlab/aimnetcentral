@@ -1,3 +1,10 @@
+import hashlib
+import re
+from unittest.mock import Mock
+from urllib.parse import urlparse
+
+import pytest
+import requests
 import yaml
 
 from aimnet.calculators.model_registry import (
@@ -111,7 +118,7 @@ def test_legacy_member_aliases_resolve_via_loader(monkeypatch):
     monkeypatch.setattr(
         mr,
         "_maybe_download_asset",
-        lambda file, url, sha256=None: f"/assets/{file}",
+        lambda file, url, expected_sha256: f"/assets/{file}",
     )
 
     registry = mr.load_model_registry()
@@ -172,6 +179,140 @@ def test_registry_sha256_entries_are_valid_hex():
             continue
         assert len(digest) == 64, key
         int(digest, 16)
+
+
+def test_every_registry_model_has_sha256():
+    registry = load_model_registry()
+    assert len(registry["models"]) == 24
+    for key, entry in registry["models"].items():
+        digest = entry.get("sha256")
+        assert isinstance(digest, str), key
+        assert re.fullmatch(r"[0-9a-f]{64}", digest), key
+
+
+@pytest.mark.parametrize("digest", [None, "", 12, "A" * 64, "0" * 63, "g" * 64])
+def test_get_registry_model_path_rejects_missing_or_invalid_sha256(monkeypatch, tmp_path, digest):
+    from aimnet.calculators import model_registry as mr
+
+    registry = {
+        "aliases": {},
+        "models": {"custom": {"file": "custom.pt", "url": "https://example.invalid/custom.pt", "sha256": digest}},
+    }
+    monkeypatch.setattr(mr, "load_model_registry", lambda registry_file=None: registry)
+    download = Mock(side_effect=AssertionError("download must not be attempted"))
+    monkeypatch.setattr(mr, "_maybe_download_asset", download)
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setenv("AIMNET_CACHE_DIR", str(cache_dir))
+
+    with pytest.raises(ValueError, match="SHA-256"):
+        mr.get_registry_model_path("custom")
+
+    download.assert_not_called()
+    assert not cache_dir.exists()
+
+
+def test_cache_hit_revalidates_sha256(monkeypatch, tmp_path):
+    from aimnet.calculators import model_registry as mr
+
+    content = b"corrupt cache"
+    expected = "0" * 64
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    (cache_dir / "custom.pt").write_bytes(content)
+    registry = {
+        "aliases": {},
+        "models": {"custom": {"file": "custom.pt", "url": "https://example.invalid/custom.pt", "sha256": expected}},
+    }
+    monkeypatch.setattr(mr, "load_model_registry", lambda registry_file=None: registry)
+    monkeypatch.setenv("AIMNET_CACHE_DIR", str(cache_dir))
+
+    with pytest.raises(ValueError, match=f"expected {expected}"):
+        mr.get_registry_model_path("custom")
+
+    assert (cache_dir / "custom.pt").read_bytes() == content
+
+
+def test_atomic_download_rejects_bad_sha256(monkeypatch, tmp_path):
+    from aimnet.calculators import model_registry as mr
+
+    response = Mock()
+    response.__enter__ = Mock(return_value=response)
+    response.__exit__ = Mock(return_value=None)
+    response.iter_content.return_value = [b"downloaded bytes"]
+    monkeypatch.setattr(mr.requests, "get", Mock(return_value=response))
+    target = tmp_path / "custom.pt"
+
+    with pytest.raises(ValueError, match="Checksum mismatch"):
+        mr._download_asset_atomic(str(target), "https://example.invalid/custom.pt", "0" * 64)
+
+    assert not target.exists()
+    assert not list(tmp_path.glob(".download-*.tmp"))
+
+
+def test_atomic_download_installs_verified_bytes(monkeypatch, tmp_path):
+    from aimnet.calculators import model_registry as mr
+
+    content = b"verified bytes"
+    response = Mock()
+    response.__enter__ = Mock(return_value=response)
+    response.__exit__ = Mock(return_value=None)
+    response.iter_content.return_value = [content]
+    monkeypatch.setattr(mr.requests, "get", Mock(return_value=response))
+    target = tmp_path / "custom.pt"
+
+    mr._download_asset_atomic(str(target), "https://example.invalid/custom.pt", hashlib.sha256(content).hexdigest())
+
+    assert target.read_bytes() == content
+
+
+def test_registry_alias_takes_precedence_over_implicit_local_path(monkeypatch, tmp_path):
+    from aimnet.calculators import model_registry as mr
+
+    content = b"registered artifact"
+    digest = hashlib.sha256(content).hexdigest()
+    registry = {
+        "aliases": {"alias": "canonical"},
+        "models": {
+            "canonical": {
+                "family": "custom",
+                "file": "alias",
+                "url": "https://example.invalid/alias",
+                "sha256": digest,
+            }
+        },
+    }
+    monkeypatch.setattr(mr, "load_model_registry", lambda registry_file=None: registry)
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setenv("AIMNET_CACHE_DIR", str(cache_dir))
+    downloaded = tmp_path / "downloaded"
+    downloaded.write_bytes(content)
+    monkeypatch.setattr(mr, "_maybe_download_asset", lambda **kwargs: str(downloaded))
+
+    implicit = tmp_path / "alias"
+    implicit.write_bytes(b"shadowing local file")
+    monkeypatch.chdir(tmp_path)
+    assert mr.get_model_path("alias") == str(downloaded)
+    assert mr.get_model_path("./alias") == "./alias"
+
+
+@pytest.mark.network
+def test_registry_digests_match():
+    registry = load_model_registry()
+    for name, entry in registry["models"].items():
+        digest = hashlib.sha256()
+        with requests.get(entry["url"], stream=True, timeout=(10, 120)) as response:
+            response.raise_for_status()
+            for item in [*response.history, response]:
+                url = urlparse(item.url)
+                assert (
+                    url.scheme == "https"
+                    and url.hostname == "storage.googleapis.com"
+                    and url.path.startswith("/aimnetcentral/")
+                ), f"{name} redirected to unexpected origin: {item.url}"
+            for chunk in response.iter_content(1024 * 1024):
+                if chunk:
+                    digest.update(chunk)
+        assert digest.hexdigest() == entry["sha256"], f"{name}: {entry['url']}"
 
 
 def test_every_yaml_family_resolves_to_a_policy():

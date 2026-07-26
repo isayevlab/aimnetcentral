@@ -7,14 +7,20 @@ plus the family-policy reconciliation applied to the resolved metadata.
 
 import os
 import re
-from collections.abc import Mapping
-from typing import Any, cast
+from collections.abc import Collection, Mapping
+from typing import Any, Literal, cast
 
 from torch import nn
 
-from aimnet.models.base import load_model
+from aimnet.models.artifact_validation import _resolve_user_import_policy
+from aimnet.models.base import _load_registry_model, load_model
 
-from .model_registry import get_family_policy, get_model_path, get_registry_model_family
+from .model_registry import (
+    get_family_policy,
+    get_model_path,
+    get_registry_model_family,
+    try_resolve_registry_model_name,
+)
 
 # Inline org/name pattern — exactly one slash, both segments alphanumeric+._-
 # This avoids importing optional HF deps for ordinary file paths containing slashes.
@@ -61,50 +67,104 @@ def resolve_model(
     ensemble_member: int = 0,
     revision: str | None = None,
     token: str | None = None,
+    model_import_paths: Collection[str] | None = None,
+    model_import_mode: Literal["extend", "replace", "unsafe"] = "extend",
 ) -> tuple[nn.Module, Mapping[str, Any] | None, float]:
-    """Resolve a model spec to ``(module_on_device, metadata, cutoff)``.
+    """Resolve a model source and move the resulting module to ``device``.
 
-    ``metadata`` has family-policy defaults applied and, when not ``None``,
-    is also attached to the returned module as ``_metadata``.
+    Parameters
+    ----------
+    model
+        Registry name or alias, local model path, Hugging Face repository or
+        local HF-format directory, or an existing module.
+    device
+        Device on which to place the model.
+    ensemble_member
+        Zero-based member selected from a Hugging Face ensemble.
+    revision
+        Hugging Face repository revision, branch, or tag.
+    token
+        Hugging Face access token for private repositories.
+    model_import_paths, model_import_mode
+        Import settings for a direct local v2 artifact or a complete Hugging
+        Face repository. Path syntax and modes match
+        :func:`aimnet.models.base.load_model`.
+
+    Returns
+    -------
+    tuple
+        ``(module, metadata, cutoff)`` with family defaults applied. Registry
+        names and aliases, registry HF fallback, raw modules, and ``.jpt``
+        files accept only ``model_import_paths=None`` and
+        ``model_import_mode="extend"``.
     """
+    _resolve_user_import_policy(model_import_paths, model_import_mode)
+    customized = model_import_paths is not None or model_import_mode != "extend"
     metadata: Mapping[str, Any] | None = None
     registry_family: str | None = None
     if isinstance(model, str):
-        # Check for HF repo ID or local HF-style directory
-        # (lazy import to keep safetensors/huggingface_hub optional)
-        _is_hf_dir = os.path.isdir(model)
-        _looks_like_hf = bool(_HF_ID_RE.match(model))
-        if _looks_like_hf or _is_hf_dir:
-            try:
-                from aimnet.calculators.hf_hub import is_hf_repo_id, load_from_hf_repo
-            except ImportError:
-                raise ImportError(
-                    f"Loading from HF repo '{model}' requires optional dependencies. "
-                    "Install with: pip install aimnet[hf]"
-                ) from None
-            if is_hf_repo_id(model) or _is_hf_dir:
-                module, metadata = load_from_hf_repo(
+        if model.lower().endswith(".jpt") and customized:
+            raise ValueError("Import settings are not supported for .jpt sources.")
+        explicit_local = os.path.isabs(model) or model.startswith("./") or model.startswith("../")
+        registry_name = None if explicit_local else try_resolve_registry_model_name(model)
+        if registry_name is not None:
+            if customized:
+                raise ValueError("Custom import settings are forbidden for registry models.")
+            registry_family = get_registry_model_family(registry_name)
+            p = get_model_path(registry_name)
+            module, metadata = _load_registry_model(p, device=device)
+            cutoff = metadata["cutoff"]
+        else:
+            _is_hf_dir = os.path.isdir(model)
+            if explicit_local and not _is_hf_dir:
+                module, metadata = load_model(
                     model,
-                    ensemble_member=ensemble_member,
                     device=device,
-                    revision=revision,
-                    token=token,
+                    model_import_paths=model_import_paths,
+                    model_import_mode=model_import_mode,
                 )
                 cutoff = metadata["cutoff"]
+            elif (not explicit_local and bool(_HF_ID_RE.match(model))) or _is_hf_dir:
+                # Check for HF repo ID or local HF-style directory.
+                # (lazy import to keep optional HF dependencies optional)
+                try:
+                    from aimnet.calculators.hf_hub import is_hf_repo_id, load_from_hf_repo
+                except ImportError:
+                    raise ImportError(
+                        f"Loading from HF repo '{model}' requires optional dependencies. "
+                        "Install with: pip install aimnet[hf]"
+                    ) from None
+                if is_hf_repo_id(model) or _is_hf_dir:
+                    module, metadata = load_from_hf_repo(
+                        model,
+                        ensemble_member=ensemble_member,
+                        device=device,
+                        revision=revision,
+                        token=token,
+                        model_import_paths=model_import_paths,
+                        model_import_mode=model_import_mode,
+                    )
+                    cutoff = metadata["cutoff"]
+                else:
+                    module, metadata = load_model(
+                        model,
+                        device=device,
+                        model_import_paths=model_import_paths,
+                        model_import_mode=model_import_mode,
+                    )
+                    cutoff = metadata["cutoff"]
             else:
-                # _looks_like_hf matched but it's a local file path — fall through
-                if not os.path.isfile(model):
-                    registry_family = get_registry_model_family(model)
                 p = get_model_path(model)
-                module, metadata = load_model(p, device=device)
+                module, metadata = load_model(
+                    p,
+                    device=device,
+                    model_import_paths=model_import_paths,
+                    model_import_mode=model_import_mode,
+                )
                 cutoff = metadata["cutoff"]
-        else:
-            if not os.path.isfile(model):
-                registry_family = get_registry_model_family(model)
-            p = get_model_path(model)
-            module, metadata = load_model(p, device=device)
-            cutoff = metadata["cutoff"]
     elif isinstance(model, nn.Module):
+        if customized:
+            raise ValueError("Import settings are not supported for raw nn.Module sources.")
         module = model.to(device)
         cutoff = getattr(module, "cutoff", 5.0)
         metadata = cast(Mapping[str, Any] | None, getattr(module, "metadata", None))

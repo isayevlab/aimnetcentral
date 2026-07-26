@@ -52,6 +52,7 @@ def load_yaml(
     hyperpar: dict[str, Any] | str | None = None,
     *,
     basedir: str | None = None,
+    allow_file_references: bool = True,
 ) -> dict[str, Any] | list:
     """
     Load a YAML configuration file and apply optional hyperparameters.
@@ -59,6 +60,14 @@ def load_yaml(
     Args:
         config (Union[str, List, Dict]): The YAML configuration file path or a YAML object.
         hyperpar (Optional[Union[Dict, str, None]]): Optional hyperparameters to apply to the configuration.
+        basedir (Optional[str]): Base directory used to resolve relative YAML
+            file references. Defaults to the directory containing ``config``
+            when ``config`` is a file path.
+        allow_file_references (bool): Whether string values ending in
+            ``.yml`` or ``.yaml`` are expanded as nested YAML files. Keep this
+            enabled for trusted training/plugin configurations; production
+            artifact loaders disable it to prevent sidecar YAML expansion.
+            Defaults to ``True``.
 
     Returns:
         Union[List, Dict]: The loaded and processed configuration.
@@ -68,7 +77,7 @@ def load_yaml(
 
     """
     if isinstance(hyperpar, str):
-        hyperpar = load_yaml(hyperpar)  # type: ignore[assignment]
+        hyperpar = load_yaml(hyperpar, allow_file_references=allow_file_references)  # type: ignore[assignment]
         if not isinstance(hyperpar, dict):
             raise TypeError("Loaded hyperpar must be a dict")
     if isinstance(config, (list, dict)):
@@ -84,12 +93,13 @@ def load_yaml(
         if hyperpar:
             config = Template(config).render(**hyperpar)
         config = yaml.load(config, Loader=yaml.FullLoader)  # noqa: S506
-    # plugin yaml configs
-    for d, k, v in _iter_rec_bottomup(config):  # type: ignore[arg-type]
-        if isinstance(v, str) and any(v.endswith(x) for x in (".yml", ".yaml")):
-            if not os.path.isfile(v) and basedir is not None:
-                v = os.path.join(basedir, v)
-            d[k] = load_yaml(v, hyperpar)  # type: ignore[assignment, index]
+    if allow_file_references:
+        # Plugin YAML configs are supported for trusted source/training files.
+        for d, k, v in _iter_rec_bottomup(config):  # type: ignore[arg-type]
+            if isinstance(v, str) and any(v.endswith(x) for x in (".yml", ".yaml")):
+                if not os.path.isfile(v) and basedir is not None:
+                    v = os.path.join(basedir, v)
+                d[k] = load_yaml(v, hyperpar, allow_file_references=True)  # type: ignore[assignment, index]
     return config  # type: ignore[return-value]
 
 
@@ -108,7 +118,12 @@ def _iter_rec_bottomup(
         yield d, k, v
 
 
-def build_module(config: str | dict | list, hyperpar: str | dict | None = None) -> Any:
+def build_module(
+    config: str | dict | list,
+    hyperpar: str | dict | None = None,
+    *,
+    allow_file_references: bool = True,
+) -> Any:
     """
     Build a module based on the provided configuration.
     Every (possibly nested) dictionary with a 'class' key will be replaced by an instance initialized with
@@ -117,6 +132,10 @@ def build_module(config: str | dict | list, hyperpar: str | dict | None = None) 
     Args:
         config (Union[str, Dict, List]): The configuration for building the module.
         hyperpar (Union[str, Dict, None], optional): The hyperparameters for the module. Defaults to None.
+        allow_file_references (bool): Whether nested YAML file references are
+            expanded before constructing modules. Defaults to ``True``.
+            Production artifact loading passes ``False`` so untrusted artifact
+            contents cannot redirect construction to a sidecar file.
 
     Returns:
         Union[List, Dict, Callable]: The built module.
@@ -126,10 +145,10 @@ def build_module(config: str | dict | list, hyperpar: str | dict | None = None) 
 
     """
     if isinstance(hyperpar, str):
-        hyperpar = load_yaml(hyperpar)  # type: ignore[assignment]
+        hyperpar = load_yaml(hyperpar, allow_file_references=allow_file_references)  # type: ignore[assignment]
     if hyperpar and not isinstance(hyperpar, dict):
         raise TypeError("Hyperpar must be a dictionary")
-    config = load_yaml(config, hyperpar)
+    config = load_yaml(config, hyperpar, allow_file_references=allow_file_references)
     for d, k, v in _iter_rec_bottomup(config):
         if isinstance(v, dict) and "class" in v:
             d[k] = get_init_module(  # type: ignore[index]

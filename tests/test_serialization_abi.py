@@ -4,9 +4,9 @@ Released AIMNet2 model files (.pt) embed a YAML document (``model_yaml``) with
 fully qualified class paths such as ``aimnet.models.aimnet2.AIMNet2``,
 ``aimnet.modules.Output``, and ``torch.nn.GELU``. At load time,
 ``aimnet.config.build_module`` resolves these strings with
-``importlib.import_module`` (aimnet/config.py), and the Hugging Face loader
-allowlists the ``aimnet.`` prefix (aimnet/calculators/hf_hub.py). Every dotted
-path reachable this way is therefore a serialization ABI shared with all
+``importlib.import_module`` (aimnet/config.py), and the loader applies a
+shared import policy (aimnet/models/artifact_validation.py). Every
+dotted path reachable this way is therefore a serialization ABI shared with all
 released checkpoints: renaming or moving one of these classes breaks every
 published .pt file that references it.
 
@@ -27,7 +27,7 @@ import yaml
 
 import aimnet
 from aimnet import config
-from aimnet.calculators.hf_hub import _validate_model_yaml
+from aimnet.models.artifact_validation import ALLOWED_MODEL_IMPORT_PATHS, validate_model_yaml
 
 _PACKAGE_ROOT = Path(aimnet.__file__).parent
 _ASSETS_DIR = _PACKAGE_ROOT / "calculators" / "assets"
@@ -181,6 +181,35 @@ class TestFrozenSerializationAbi:
 _ASSET_FILES = sorted(_ASSETS_DIR.glob("*.pt")) if _ASSETS_DIR.is_dir() else []
 
 
+def test_allowed_model_import_paths_are_shared_and_immutable():
+    """The reviewed registry allowlist is one immutable set for every import key."""
+    expected = {
+        "aimnet.models.AIMNet2",
+        "aimnet.models.aimnet2.AIMNet2",
+        "aimnet.modules.AtomicShift",
+        "aimnet.modules.AtomicSum",
+        "aimnet.modules.Dipole",
+        "aimnet.modules.Output",
+        "aimnet.modules.Quadrupole",
+        "aimnet.modules.SRCoulomb",
+        "torch.nn.*",
+    }
+    assert frozenset(expected) == ALLOWED_MODEL_IMPORT_PATHS
+    assert isinstance(ALLOWED_MODEL_IMPORT_PATHS, frozenset)
+    assert [path for path in ALLOWED_MODEL_IMPORT_PATHS if path.endswith(".*")] == ["torch.nn.*"]
+
+
+@pytest.mark.parametrize("path", ["torch.nn.Linear", "torch.nn.init.xavier_normal_"])
+def test_allowed_model_import_paths_cover_torch_nn_namespace(path):
+    validate_model_yaml(f"class: {path}")
+
+
+def test_registry_allowlist_is_flat_across_import_keys():
+    for key in ("class", "activation_fn", "weight_init_fn"):
+        path = "torch.nn.init.xavier_normal_" if key == "weight_init_fn" else "torch.nn.ReLU"
+        validate_model_yaml(f"{key}: {path}")
+
+
 class TestBundledAssetEmbeddedYaml:
     """The model YAML embedded in each bundled .pt asset must resolve offline."""
 
@@ -195,7 +224,7 @@ class TestBundledAssetEmbeddedYaml:
 
         model_yaml = data["model_yaml"]
         # Released YAML must stay within the HF loader allowlist (hf_hub.py).
-        _validate_model_yaml(model_yaml)
+        validate_model_yaml(model_yaml)
 
         entries = list(_iter_import_paths(yaml.safe_load(model_yaml)))
         assert any(key == "class" for key, _ in entries), f"{asset.name}: no 'class' entries in embedded YAML"

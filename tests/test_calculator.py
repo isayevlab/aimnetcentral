@@ -1,6 +1,8 @@
 """Tests for AIMNet2Calculator."""
 
+import inspect
 import warnings
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -8,6 +10,53 @@ import torch
 from conftest import CAFFEINE_FILE, load_mol
 
 from aimnet.calculators import AIMNet2Calculator
+
+
+class TinyLegacyModel(torch.nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.cutoff = 5.0
+        self.weight = torch.nn.Parameter(torch.ones(1))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x * self.weight
+
+
+def test_calculator_import_options_are_keyword_only():
+    signature = inspect.signature(AIMNet2Calculator)
+    assert signature.parameters["model_import_paths"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["model_import_mode"].kind is inspect.Parameter.KEYWORD_ONLY
+
+
+def test_calculator_forwards_import_options(monkeypatch: pytest.MonkeyPatch):
+    from aimnet.calculators import calculator as calculator_module
+
+    model = torch.nn.Identity()
+    resolve_model = Mock(return_value=(model, None, 5.0))
+    monkeypatch.setattr(calculator_module, "resolve_model", resolve_model)
+
+    AIMNet2Calculator(
+        "custom.pt",
+        device="cpu",
+        model_import_paths={"my_package.models.*"},
+        model_import_mode="replace",
+    )
+
+    assert resolve_model.call_args.kwargs["model_import_paths"] == {"my_package.models.*"}
+    assert resolve_model.call_args.kwargs["model_import_mode"] == "replace"
+
+
+def test_from_legacy_jit_rejects_import_settings_before_loading(monkeypatch: pytest.MonkeyPatch):
+    from aimnet.calculators import calculator as calculator_module
+
+    load_legacy_jit = Mock(side_effect=AssertionError("legacy loader must not be called"))
+    monkeypatch.setattr(calculator_module, "load_legacy_jit", load_legacy_jit)
+
+    with pytest.raises(ValueError, match=r"\.jpt"):
+        AIMNet2Calculator.from_legacy_jit("trusted.jpt", model_import_mode="unsafe")
+
+    load_legacy_jit.assert_not_called()
+
 
 # These are calculator integration tests: most construct and run a model.
 pytestmark = [pytest.mark.ase]
@@ -1819,7 +1868,7 @@ def test_registry_family_metadata_mismatch_raises(monkeypatch):
     class DummyModel(nn.Module):
         pass
 
-    def fake_load_model(_path, device="cpu"):
+    def fake_load_registry_model(_path, device="cpu"):
         model = DummyModel()
         metadata = {
             "cutoff": 5.0,
@@ -1833,7 +1882,7 @@ def test_registry_family_metadata_mismatch_raises(monkeypatch):
         return model, metadata
 
     monkeypatch.setattr(resolve_mod, "get_model_path", lambda _model: "/fake/model.pt")
-    monkeypatch.setattr(resolve_mod, "load_model", fake_load_model)
+    monkeypatch.setattr(resolve_mod, "_load_registry_model", fake_load_registry_model)
 
     with pytest.raises(ValueError, match=r"Registry family 'wb97m-d3'"):
         AIMNet2Calculator("aimnet2", device="cpu")
@@ -1995,3 +2044,55 @@ class TestDeterministicMode:
         cell = torch.eye(3) * 20.0
         with pytest.warns(UserWarning, match="Ewald/PME"):
             calc({**water_molecule, "cell": cell}, forces=True)
+
+
+def test_legacy_jpt_constructor_routes_once(tmp_path, monkeypatch):
+    """The ordinary constructor routes a real .jpt path through JIT exactly once."""
+    from aimnet.models import base
+
+    source = torch.jit.script(TinyLegacyModel())
+    path = tmp_path / "legacy.jpt"
+    torch.jit.save(source, str(path))
+    original_jit_load = base.torch.jit.load
+    jit_load = Mock(wraps=original_jit_load)
+    torch_load = Mock(side_effect=AssertionError("torch.load must not be called"))
+    monkeypatch.setattr(base.torch.jit, "load", jit_load)
+    monkeypatch.setattr(base.torch, "load", torch_load)
+    monkeypatch.setattr(base, "extract_species", lambda _: [1, 6])
+    monkeypatch.setattr(base, "has_externalizable_dftd3", lambda _: False)
+
+    calc = AIMNet2Calculator(str(path), device="cpu", nb_threshold=0)
+
+    assert calc.metadata is not None
+    assert calc.metadata["format_version"] == 1
+    assert next(calc.model.parameters()).device.type == "cpu"
+    jit_load.assert_called_once_with(str(path), map_location="cpu")
+    torch_load.assert_not_called()
+
+
+def test_from_legacy_jit_routes_once(monkeypatch):
+    """The convenience constructor loads once and forwards calculator kwargs."""
+    import aimnet.calculators.calculator as calculator_module
+
+    model = TinyLegacyModel()
+    metadata = {
+        "format_version": 1,
+        "cutoff": 5.0,
+        "needs_coulomb": False,
+        "needs_dispersion": False,
+        "coulomb_mode": "full_embedded",
+        "implemented_species": [1, 6],
+    }
+    model._metadata = metadata
+    legacy_load = Mock(return_value=(model, metadata))
+    monkeypatch.setattr(calculator_module, "load_legacy_jit", legacy_load)
+
+    calc = AIMNet2Calculator.from_legacy_jit("custom.jpt", device="cpu", nb_threshold=7)
+
+    legacy_load.assert_called_once_with("custom.jpt", "cpu")
+    assert calc.metadata is not None
+    assert calc.metadata["format_version"] == 1
+    assert calc.nb_threshold == 7
+
+    with pytest.raises(TypeError, match="model"):
+        AIMNet2Calculator.from_legacy_jit("custom.jpt", model=model)

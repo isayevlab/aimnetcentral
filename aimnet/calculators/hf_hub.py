@@ -3,24 +3,33 @@
 Enables loading models from HF repos containing safetensors weights + config.json.
 Supports both local directories and HF repo IDs (e.g. "isayevlab/aimnet2-wb97m-d3").
 
-Security: model_yaml in config.json is validated against an allowlist of aimnet
-class names before calling build_module() to prevent arbitrary code execution.
+Security: model_yaml in config.json is validated before construction. Direct
+repositories may customize the import set; registry fallback always uses the
+shared immutable set.
 """
 
 from __future__ import annotations
 
+import copy
 import json
 import re
+import warnings
+from collections.abc import Collection, Mapping
 from pathlib import Path
+from typing import Literal
 
 import torch
 from torch import nn
 
+from aimnet.calculators.model_registry import get_family_policy, get_registry_model_path
 from aimnet.config import build_module
+from aimnet.models.artifact_validation import (
+    _resolve_user_import_policy,
+    _validate_registry_v2_artifact,
+    validate_model_metadata,
+    validate_model_yaml,
+)
 from aimnet.models.base import ModelMetadata
-
-# Allowlist of class prefixes permitted in model_yaml.
-_ALLOWED_CLASS_PREFIXES = ("aimnet.",)
 
 
 def is_hf_repo_id(model: str) -> bool:
@@ -38,41 +47,12 @@ def is_hf_repo_id(model: str) -> bool:
     return not Path(model).exists()
 
 
-def _validate_model_yaml(model_yaml: str) -> None:
-    """Validate that all class references in model_yaml are in the allowlist."""
-    import yaml
+def _extract_sr_coulomb_from_config(config: Mapping[str, object]) -> tuple[float | None, str | None]:
+    """Extract coulomb_sr_rc and coulomb_sr_envelope from parsed model config.
 
-    config = yaml.safe_load(model_yaml)
-    _check_classes_recursive(config)
-
-
-def _check_classes_recursive(obj) -> None:
-    """Recursively check 'class' keys in nested config dict."""
-    if isinstance(obj, dict):
-        if "class" in obj:
-            cls_name = obj["class"]
-            if not any(cls_name.startswith(prefix) for prefix in _ALLOWED_CLASS_PREFIXES):
-                raise ValueError(
-                    f"Untrusted class in model config: '{cls_name}'. "
-                    f"Only classes starting with {_ALLOWED_CLASS_PREFIXES} are allowed."
-                )
-        for v in obj.values():
-            _check_classes_recursive(v)
-    elif isinstance(obj, list):
-        for item in obj:
-            _check_classes_recursive(item)
-
-
-def _extract_sr_coulomb_from_yaml(model_yaml: str) -> tuple[float | None, str | None]:
-    """Extract coulomb_sr_rc and coulomb_sr_envelope from model_yaml.
-
-    Looks for an SRCoulomb module definition in the model config YAML and
+    Looks for an SRCoulomb module definition in the parsed model config and
     returns its rc and envelope kwargs. Returns (None, None) if not found.
     """
-    import yaml
-
-    config = yaml.safe_load(model_yaml)
-    # Walk the config tree looking for SRCoulomb class entries
     return _find_srcoulomb_params(config)
 
 
@@ -100,18 +80,17 @@ def _fetch_pt_metadata_from_registry(
     config: dict,
     repo_id_or_path: str,
     ensemble_member: int,
-) -> dict:
-    """Fetch the full .pt metadata dict from the GCS model registry as a fallback.
+) -> tuple[dict, dict[str, object]]:
+    """Fetch full ``.pt`` metadata from the model registry as a fallback.
 
     Used when the HF repo's config.json (family-level schema v1) was uploaded
     without fields like model_yaml, d3_params, coulomb_sr_rc, etc. The member
-    name is looked up from the config's member_names list, then the GCS .pt
-    file is loaded to extract all metadata.
+    name is looked up from the config's member_names list, then the registry
+    artifact is loaded to extract all metadata.
 
-    Returns the full .pt data dict (everything except state_dict).
+    Returns the full .pt metadata dict (everything except state_dict) and the
+    already validated parsed model configuration.
     """
-    import warnings
-
     member_names = config.get("member_names")
     if member_names and ensemble_member < len(member_names):
         member_name = member_names[ensemble_member]
@@ -120,8 +99,6 @@ def _fetch_pt_metadata_from_registry(
         # family policy (repo slugs carry the "aimnet2-" prefix, family tags don't).
         family_name = config.get("family_name") or Path(repo_id_or_path).name
         member_name = None
-        from aimnet.calculators.model_registry import get_family_policy
-
         policy = get_family_policy(family_name)
         if not policy.members:
             policy = get_family_policy(family_name.removeprefix("aimnet2-"))
@@ -137,22 +114,20 @@ def _fetch_pt_metadata_from_registry(
 
     warnings.warn(
         f"config.json in '{repo_id_or_path}' is missing fields (model_yaml, d3_params, etc.). "
-        f"Falling back to GCS model registry for member '{member_name}'. "
+        f"Falling back to the model registry for member '{member_name}'. "
         "Re-upload the HF repo with a complete config.json to avoid this.",
         UserWarning,
         stacklevel=5,
     )
 
-    from aimnet.calculators.model_registry import get_model_path
-
-    pt_path = get_model_path(member_name)
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", ".*weights_only.*")
-        data = torch.load(pt_path, map_location="cpu", weights_only=False)
-    if "model_yaml" not in data:
-        raise ValueError(f"GCS .pt file for '{member_name}' also lacks 'model_yaml'. Cannot reconstruct model.")
+    pt_path = get_registry_model_path(member_name)
+    data = torch.load(pt_path, map_location="cpu", weights_only=True)
+    try:
+        model_config, _ = _validate_registry_v2_artifact(data)
+    except ValueError as exc:
+        raise ValueError(f"Invalid registry .pt file for '{member_name}': {exc}") from exc
     # Return everything except state_dict
-    return {k: v for k, v in data.items() if k != "state_dict"}
+    return ({k: v for k, v in data.items() if k != "state_dict"}, model_config)
 
 
 def load_from_hf_repo(
@@ -161,21 +136,31 @@ def load_from_hf_repo(
     device: str = "cpu",
     revision: str | None = None,
     token: str | None = None,
+    *,
+    model_import_paths: Collection[str] | None = None,
+    model_import_mode: Literal["extend", "replace", "unsafe"] = "extend",
 ) -> tuple[nn.Module, ModelMetadata]:
-    """Load an AIMNet2 model from a Hugging Face repo or local directory.
+    """Load an AIMNet2 model from a Hugging Face repo or HF-format directory.
 
     Parameters
     ----------
     repo_id_or_path : str
-        Either a HF repo ID ("isayevlab/aimnet2-wb97m-d3") or local directory path.
+        Repository ID, such as ``"isayevlab/aimnet2-wb97m-d3"``, or a local
+        directory containing ``config.json`` and safetensors weights.
     ensemble_member : int
-        Which ensemble member to load (0-3). Default: 0.
+        Zero-based ensemble member to load.
     device : str
-        Device to load model on. Default: "cpu".
+        Device on which to load the model.
     revision : str, optional
-        HF repo revision/branch.
+        Repository revision, branch, or tag.
     token : str, optional
-        HF API token for private repos.
+        Hugging Face access token for private repositories.
+    model_import_paths : Collection[str] | None, optional
+        Trusted imports for a complete repository containing ``model_yaml``.
+    model_import_mode : {"extend", "replace", "unsafe"}, optional
+        How to combine trusted imports; see
+        :func:`aimnet.models.base.load_model`. Registry fallback accepts only
+        ``model_import_paths=None`` and ``model_import_mode="extend"``.
 
     Returns
     -------
@@ -184,20 +169,50 @@ def load_from_hf_repo(
     metadata : ModelMetadata
         Model metadata dictionary.
     """
-    import copy
-    import warnings
-
-    import yaml
-
-    local_dir = _resolve_repo(repo_id_or_path, ensemble_member, revision, token)
+    _resolve_user_import_policy(model_import_paths, model_import_mode)
+    customized = model_import_paths is not None or model_import_mode != "extend"
+    local_dir = _resolve_repo(repo_id_or_path, ensemble_member, revision, token, include_weights=False)
 
     # Load config.json
     config_path = local_dir / "config.json"
     if not config_path.exists():
         raise FileNotFoundError(f"config.json not found in {local_dir}")
     config = json.loads(config_path.read_text())
+    if not isinstance(config, Mapping):
+        raise TypeError("config.json root must be a mapping.")
+    validate_model_metadata(config)
 
-    # Load safetensors weights
+    # Validate model_yaml imports before build_module().
+    # Family-level configs (config_schema_version=1 uploaded to HF) may not
+    # include model_yaml or other per-member fields. Fall back to loading them
+    # from the registry artifact.
+    _pt_meta: dict | None = None
+    model_config: dict[str, object]
+    model_yaml = config.get("model_yaml")
+    if model_yaml is None:
+        if customized:
+            raise ValueError("Custom import settings are forbidden for registry HF fallback.")
+        _pt_meta, model_config = _fetch_pt_metadata_from_registry(config, repo_id_or_path, ensemble_member)
+        config = {**_pt_meta, **config}
+        model_yaml = config["model_yaml"]
+        metadata_config = config
+    else:
+        metadata_config = config
+        model_config = validate_model_yaml(
+            model_yaml,
+            model_import_paths=model_import_paths,
+            model_import_mode=model_import_mode,
+        )
+    validate_model_metadata(
+        metadata_config,
+        require_cutoff=True,
+        require_cross_field_consistency=True,
+    )
+
+    # Fetch remote weights only after config, model YAML, and metadata pass.
+    local_dir = _resolve_repo(repo_id_or_path, ensemble_member, revision, token, include_weights=True)
+
+    # Load safetensors only after config and model YAML validation.
     from safetensors.torch import load_file
 
     st_name = f"ensemble_{ensemble_member}.safetensors"
@@ -206,20 +221,10 @@ def load_from_hf_repo(
         raise FileNotFoundError(f"{st_name} not found in {local_dir}")
     state_dict = load_file(str(st_path), device=device)
 
-    # Validate model_yaml against allowlist before build_module()
-    # Family-level configs (config_schema_version=1 uploaded to HF) may not
-    # include model_yaml or other per-member fields. Fall back to loading them
-    # from the GCS .pt file via the model registry.
-    _pt_meta: dict | None = None
-    model_yaml = config.get("model_yaml")
-    if model_yaml is None:
-        _pt_meta = _fetch_pt_metadata_from_registry(config, repo_id_or_path, ensemble_member)
-        model_yaml = _pt_meta["model_yaml"]
-    _validate_model_yaml(model_yaml)
-
     # Rebuild model from config's model_yaml
-    model_config = yaml.safe_load(model_yaml)
-    model = build_module(copy.deepcopy(model_config))
+    model = build_module(copy.deepcopy(model_config), allow_file_references=False)
+    if not isinstance(model, nn.Module):
+        raise TypeError("Built model configuration did not produce an nn.Module.")
 
     # Load state dict with key validation (not silent strict=False)
     from aimnet.models.utils import validate_state_dict_keys
@@ -259,7 +264,7 @@ def load_from_hf_repo(
     coulomb_sr_envelope = _cfg("coulomb_sr_envelope")
     # If still None, try extracting from model_yaml (SRCoulomb module kwargs)
     if coulomb_sr_rc is None or coulomb_sr_envelope is None:
-        _sr_rc, _sr_env = _extract_sr_coulomb_from_yaml(model_yaml)
+        _sr_rc, _sr_env = _extract_sr_coulomb_from_config(model_config)
         if coulomb_sr_rc is None:
             coulomb_sr_rc = _sr_rc
         if coulomb_sr_envelope is None:
@@ -281,6 +286,7 @@ def load_from_hf_repo(
         "supports_charged_systems": _cfg("supports_charged_systems"),
         "has_embedded_d3ts": _cfg("has_embedded_d3ts", False),
     }
+    validate_model_metadata(metadata, require_cutoff=True, require_cross_field_consistency=True)
 
     model._metadata = metadata
     return model, metadata
@@ -291,6 +297,8 @@ def _resolve_repo(
     ensemble_member: int,
     revision: str | None,
     token: str | None,
+    *,
+    include_weights: bool = True,
 ) -> Path:
     """Resolve a HF repo ID to a local directory (downloading if needed).
 
@@ -302,9 +310,12 @@ def _resolve_repo(
 
     from huggingface_hub import snapshot_download
 
+    allow_patterns = ["config.json"]
+    if include_weights:
+        allow_patterns.append(f"ensemble_{ensemble_member}.safetensors")
     local_dir = snapshot_download(
         repo_id=repo_id_or_path,
-        allow_patterns=["config.json", f"ensemble_{ensemble_member}.safetensors"],
+        allow_patterns=allow_patterns,
         revision=revision,
         token=token,
     )

@@ -75,13 +75,15 @@ calc = AIMNet2Calculator("/path/to/local/repo")
 
 ## Mixing HF and Registry Models
 
-HF loading and the built-in GCS registry are independent. You can use both in the same script without any conflicts — HF extras are only imported when an HF repo ID is detected:
+Hugging Face repository IDs and registry aliases use separate loading paths and
+can be used in the same script. Optional HF dependencies are imported only
+when an HF source is detected:
 
 ```python
 # Loads from Hugging Face (requires aimnet[hf]):
 calc_hf = AIMNet2Calculator("isayevlab/aimnet2-wb97m-d3")
 
-# Loads from GCS registry (no extra deps needed):
+# Loads from the official registry (no HF dependencies needed):
 calc_registry = AIMNet2Calculator("aimnet2")
 ```
 
@@ -101,20 +103,25 @@ ensemble_3.safetensors      # weights for member 3
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `cutoff` | yes | Neighbor list cutoff in Å |
+| `cutoff` | yes\* | Neighbor list cutoff in Å |
 | `model_yaml` | yes\* | YAML string of the full model architecture |
 | `needs_coulomb` | no | Whether external Coulomb correction is needed |
 | `needs_dispersion` | no | Whether external D3 dispersion is needed |
 | `coulomb_mode` | no | `"none"`, `"sr_embedded"`, or `"full_embedded"` |
 | `implemented_species` | no | List of supported atomic numbers |
 
-\*If `model_yaml` is absent, the loader falls back to the GCS registry using `member_names` (a list of registry keys) — useful for family-level uploads. A warning is issued in this case.
+_For complete configs, `cutoff` is required. If `model_yaml` is absent, the loader falls back to the official registry using `member_names` (a list of registry keys) and uses the validated registry metadata. A warning is issued in this case._
 
-!!! note "Security"
+!!! note "Custom architectures"
 
-    All `class:` entries in `model_yaml` are validated against an allowlist of `aimnet.*`
-    classes before `build_module()` is called. Configs referencing arbitrary Python classes
-    are rejected to prevent code execution via crafted `config.json` files.
+    `model_yaml` may name Python classes or functions that are imported during
+    model construction. AIMNet validates those references before loading
+    weights or constructing the model.
+
+    Repositories with their own `model_yaml` may use custom import settings.
+    Registry fallback uses the immutable registry policy and rejects
+    customization. See
+    [Model YAML import policy](../model_format.md#model-yaml-import-policy).
 
 ## Interactive Demo
 

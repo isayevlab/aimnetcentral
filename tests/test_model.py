@@ -113,6 +113,13 @@ class TestFromFile:
         model_def = Path(__file__).resolve().parents[1] / "aimnet" / "models" / "aimnet2_rxn.yaml"
         source_model = build_module(str(model_def))
         state_dict = source_model.state_dict()
+        import yaml
+
+        from aimnet.models.utils import strip_lr_modules_from_yaml
+
+        model_config = yaml.safe_load(model_def.read_text())
+        model_config = strip_lr_modules_from_yaml(model_config, state_dict)[0]
+        model_yaml = yaml.dump(model_config, default_flow_style=False, sort_keys=False)
 
         # Reference self-atomic energies for H/C/N/O in eV.
         species = torch.tensor([1, 6, 7, 8])
@@ -133,7 +140,7 @@ class TestFromFile:
         torch.save(
             {
                 "format_version": 2,
-                "model_yaml": model_def.read_text(),
+                "model_yaml": model_yaml,
                 "state_dict": state_dict,
                 "cutoff": 5.0,
                 "needs_coulomb": True,
@@ -185,8 +192,8 @@ class TestFromFile:
         # Cutoff should be extracted from model
         assert metadata["cutoff"] == 5.0
 
-    def test_from_file_legacy_jit_extracts_d3_params(self):
-        """Test that D3 parameters are extracted from legacy JIT model."""
+    def test_from_file_v2_extracts_d3_params(self):
+        """Test that D3 parameters are extracted from a v2 artifact."""
         p = get_model_path("aimnet2")
         _, metadata = load_model(p, device="cpu")
 
@@ -205,8 +212,8 @@ class TestFromFile:
         assert abs(d3["a2"] - 3.128) < 0.001
 
     @pytest.mark.slow
-    def test_from_file_legacy_jit_extracts_species(self):
-        """Test that implemented species are extracted from legacy JIT model."""
+    def test_from_file_v2_extracts_species(self):
+        """Test that implemented species are extracted from a v2 artifact."""
         p = get_model_path("aimnet2")
         _, metadata = load_model(p, device="cpu")
 
@@ -257,7 +264,7 @@ class TestFromFile:
         # Create a file with invalid format (just a tensor, not a model)
         with temp_file(suffix=".pt") as path:
             torch.save({"invalid": "data"}, str(path))
-            with pytest.raises(ValueError, match="Unknown model format"):
+            with pytest.raises(ValueError, match="model_yaml"):
                 load_model(str(path))
 
 
@@ -279,6 +286,10 @@ class TestNewFormat:
         with open(aimnet2_d3_def, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
+        from aimnet.models.utils import strip_lr_modules_from_yaml
+
+        config = strip_lr_modules_from_yaml(config, state_dict)[0]
+
         # Serialize config as YAML string
         model_yaml = yaml.dump(config, default_flow_style=False, sort_keys=False)
 
@@ -292,6 +303,7 @@ class TestNewFormat:
             "coulomb_mode": "sr_embedded",
             "coulomb_sr_rc": 4.6,
             "coulomb_sr_envelope": "exp",
+            "has_embedded_lr": True,
             "d3_params": {"s6": 1.0, "s8": 0.3908, "a1": 0.566, "a2": 3.128},
             "implemented_species": [1, 6, 7, 8, 9, 16, 17],
             "state_dict": state_dict,
@@ -388,6 +400,9 @@ class TestNewFormat:
         with open(aimnet2_d3_def, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
+        from aimnet.models.utils import strip_lr_modules_from_yaml
+
+        config = strip_lr_modules_from_yaml(config, state_dict)[0]
         model_yaml = yaml.dump(config, default_flow_style=False, sort_keys=False)
 
         # No external Coulomb/DFTD3
@@ -424,8 +439,8 @@ class TestNewFormat:
     def test_new_format_inference(self):
         """Test that new format model can run inference via calculator.
 
-        This test uses a legacy model loaded via from_file to verify
-        the loading and inference pipeline works.
+        This test uses the standard v2 registry artifact to verify the
+        loading and inference pipeline works.
         """
         pytest.importorskip("ase")
         from aimnet.calculators import AIMNet2Calculator
@@ -501,6 +516,7 @@ class TestNewFormat:
             "coulomb_mode": coulomb_mode,
             "coulomb_sr_rc": coulomb_sr_rc if needs_coulomb else None,
             "coulomb_sr_envelope": coulomb_sr_envelope if needs_coulomb else None,
+            "has_embedded_lr": needs_coulomb,
             "d3_params": d3_params if needs_dispersion else None,
             "implemented_species": [1, 6, 7, 8],
             "state_dict": core_sd,  # Use state dict from core model
@@ -611,7 +627,7 @@ def test_load_model_propagates_family_and_charge_fields(tmp_path):
 
     # Take the existing aimnet2 .pt as a template; add the new fields; save; reload.
     src = get_model_path("aimnet2")
-    raw = torch.load(src, map_location="cpu", weights_only=False)
+    raw = torch.load(src, map_location="cpu", weights_only=True)
     raw["family"] = "test-family"
     raw["supports_charged_systems"] = False
 

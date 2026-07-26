@@ -13,10 +13,14 @@ AIMNet2 supports two model formats:
 
 ### Format Detection
 
-When loading a model via `load_model()`, the format is automatically detected:
+When loading a model via `load_model()`, the suffix determines the loader:
 
-- **New format**: Dictionary containing `"model_yaml"` key
-- **Legacy format**: `torch.jit.ScriptModule` instance
+- **`.jpt` (case-insensitive)**: `torch.jit.load()` through `load_legacy_jit()`
+- **Every other suffix, including `.pt`**: exactly one restricted `torch.load(..., weights_only=True)` call, followed by v2 envelope and YAML validation
+
+A TorchScript archive named `.pt` is not a legacy model for dispatch purposes: rename it to `.jpt` or convert it to v2. A v2 dictionary named `.jpt` is sent to `torch.jit.load()` and is not retried with pickle loading.
+
+`.jpt` loading is a trusted-code boundary. TorchScript is not a sandbox, so load only files whose source and embedded code you trust.
 
 ## Metadata Structure
 
@@ -279,12 +283,60 @@ print(metadata["needs_coulomb"])
 print(metadata["coulomb_mode"])
 ```
 
+For a trusted legacy model, use the explicit loader:
+
+```python
+from aimnet.models import load_legacy_jit
+
+model, metadata = load_legacy_jit("legacy.jpt", device="cpu")
+```
+
 ### Loading Behavior
 
-- New format: Parses YAML, builds model, loads state dict
-- Legacy format: Returns JIT model directly
+- New format: Restricted-loads the envelope, validates the schema and model YAML, then builds the model and loads its state dict
+- Legacy format: Only a `.jpt` suffix routes to `torch.jit.load()`
 - Metadata always returned as `ModelMetadata` dict
 - `atomic_shift` converted to float64 after loading (precision)
+
+### Model YAML import policy
+
+Model YAML keys like `class` and `activation_fn` contain dotted references to Python classes or functions. AIMNet validates these references against the public `aimnet.models.ALLOWED_MODEL_IMPORT_PATHS` set:
+
+```python
+ALLOWED_MODEL_IMPORT_PATHS = frozenset({
+    "aimnet.models.AIMNet2",
+    "aimnet.models.aimnet2.AIMNet2",
+    "aimnet.modules.AtomicShift",
+    "aimnet.modules.AtomicSum",
+    "aimnet.modules.Dipole",
+    "aimnet.modules.Output",
+    "aimnet.modules.Quadrupole",
+    "aimnet.modules.SRCoulomb",
+    "torch.nn.*",
+})
+```
+
+The `torch.nn.*` entry allows paths below that namespace, such as `torch.nn.Linear`, `torch.nn.GELU`, and `torch.nn.init.xavier_normal_`. It does not allow other PyTorch namespaces such as `torch.hub` or `torch.utils`. Training-only keys such as `fn`, `trainer`, and `evaluator` are rejected in inference artifacts.
+
+Direct local v2 files and complete Hugging Face repositories support three import modes:
+
+- `extend` (default): trust `ALLOWED_MODEL_IMPORT_PATHS` plus `model_import_paths`.
+- `replace`: trust only `model_import_paths`, which must be nonempty.
+- `unsafe`: skip import-path checks. `model_import_paths` must be `None`. This can execute arbitrary imported code during model construction, so use it only for locally trusted artifacts.
+
+Caller-supplied entries may be exact dotted paths or namespace patterns ending in `.*`. For example:
+
+```python
+from aimnet.models import load_model
+
+model, metadata = load_model(
+    "custom.pt",
+    model_import_paths={"my_package.models.*"},
+    model_import_mode="extend",
+)
+```
+
+`unsafe` does not relax restricted deserialization, YAML parsing, metadata validation, or state-dict validation. Official registry names, registry metadata fallbacks, raw `nn.Module` inputs, and `.jpt` files accept only the default import settings.
 
 ## Metadata Behavior Summary
 
@@ -303,7 +355,7 @@ print(metadata["coulomb_mode"])
 
 ## API Reference
 
-### `load_model(path, device="cpu")`
+### `load_model(path, device="cpu", *, model_import_paths=None, model_import_mode="extend")`
 
 Load model from file with automatic format detection.
 
@@ -311,6 +363,17 @@ Load model from file with automatic format detection.
 
 - `path` (`str`): Path to model file (`.pt` or `.jpt`)
 - `device` (`str`): Device to load model on
+- `model_import_paths` (`Collection[str] | None`): Python import paths trusted for a direct v2 artifact. Entries may be exact dotted paths or namespaces ending in `.*`; each entry applies to every supported model-YAML import field.
+- `model_import_mode` (`"extend" | "replace" | "unsafe"`): `extend` adds caller paths to the defaults, `replace` uses only caller paths, and `unsafe` skips import-path checks. See [Model YAML import policy](#model-yaml-import-policy).
+
+Registry protection depends on preserving source information:
+
+- `resolve_model("aimnet2")` and `AIMNet2Calculator("aimnet2")` recognize
+  registry names and aliases.
+- Hugging Face configurations without `model_yaml` retain registry provenance
+  when they fall back to registry metadata.
+- `load_model(get_model_path("aimnet2"))` receives only a file path and
+  therefore treats the file as a direct artifact.
 
 **Returns:**
 

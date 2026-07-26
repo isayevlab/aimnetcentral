@@ -1,5 +1,8 @@
 from .aimnet2 import AIMNet2  # noqa: F401
-from .base import AIMNet2Base, load_model  # noqa: F401
+from .artifact_validation import (  # noqa: F401
+    ALLOWED_MODEL_IMPORT_PATHS,
+)
+from .base import AIMNet2Base, load_legacy_jit, load_model  # noqa: F401
 from .utils import (  # noqa: F401
     extract_coulomb_rc,
     extract_d3_params,

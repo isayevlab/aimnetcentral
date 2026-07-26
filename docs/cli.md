@@ -2,6 +2,16 @@
 
 AIMNet2 provides command-line tools for training, model export, conversion, and data preprocessing.
 
+## Model cache recovery
+
+Official registry downloads are verified against the SHA-256 digest committed with each registry entry. Cache hits are re-hashed, and a failed download is never installed as the final cache file. If a cached artifact is corrupt or the upstream artifact has been replaced, remove the cache and retry:
+
+```bash
+aimnet clear_model_cache
+```
+
+Do not replace a registry digest to work around a mismatch; investigate the artifact provenance and publish a new immutable filename when bytes change.
+
 ## Installation
 
 The `aimnet` entry point is installed with the core package. Training, export, and self-atomic-energy commands require the `train` extra:
