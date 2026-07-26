@@ -17,19 +17,17 @@ from typing import Any, Literal
 import yaml
 from torch import Tensor
 
-ALLOWED_MODEL_IMPORT_PATHS = frozenset(
-    {
-        "aimnet.models.AIMNet2",
-        "aimnet.models.aimnet2.AIMNet2",
-        "aimnet.modules.AtomicShift",
-        "aimnet.modules.AtomicSum",
-        "aimnet.modules.Dipole",
-        "aimnet.modules.Output",
-        "aimnet.modules.Quadrupole",
-        "aimnet.modules.SRCoulomb",
-        "torch.nn.*",
-    }
-)
+ALLOWED_MODEL_IMPORT_PATHS = frozenset({
+    "aimnet.models.AIMNet2",
+    "aimnet.models.aimnet2.AIMNet2",
+    "aimnet.modules.AtomicShift",
+    "aimnet.modules.AtomicSum",
+    "aimnet.modules.Dipole",
+    "aimnet.modules.Output",
+    "aimnet.modules.Quadrupole",
+    "aimnet.modules.SRCoulomb",
+    "torch.nn.*",
+})
 
 _MODEL_IMPORT_KEYS = frozenset({"class", "activation_fn", "weight_init_fn"})
 _ALWAYS_FORBIDDEN_IMPORT_KEYS = frozenset({"fn", "trainer", "evaluator"})
@@ -238,14 +236,11 @@ def validate_model_metadata(
         raise ValueError("model metadata requires a 'cutoff' field.")
     if "cutoff" in metadata:
         cutoff = metadata["cutoff"]
-        if (
-            isinstance(cutoff, bool)
-            or not isinstance(cutoff, Real)
-            or not math.isfinite(float(cutoff))
-            or cutoff <= 0
-        ):
+        if isinstance(cutoff, bool) or not isinstance(cutoff, Real) or not math.isfinite(float(cutoff)) or cutoff <= 0:
             raise ValueError("model metadata field 'cutoff' must be a finite positive real number.")
-    if "format_version" in metadata and (type(metadata["format_version"]) is not int or metadata["format_version"] != 2):
+    if "format_version" in metadata and (
+        type(metadata["format_version"]) is not int or metadata["format_version"] != 2
+    ):
         raise ValueError("model metadata field 'format_version' must be integer 2.")
 
     for key in ("needs_coulomb", "needs_dispersion", "has_embedded_lr", "has_embedded_d3ts"):

@@ -250,12 +250,9 @@ Only applies when `model` is a HF repo ID.
 
 #### `model_import_paths` and `model_import_mode`
 
-These settings apply only to direct local v2 artifacts and complete Hugging
-Face repositories with their own `model_yaml`. Registry names, registry
-fallback, raw `nn.Module` inputs, and `.jpt` files reject non-default settings.
+These settings apply only to direct local v2 artifacts and complete Hugging Face repositories with their own `model_yaml`. Registry names, registry fallback, raw `nn.Module` inputs, and `.jpt` files reject non-default settings.
 
-See [Model YAML import policy](model_format.md#model-yaml-import-policy) for
-supported paths, modes, examples, and security boundaries.
+See [Model YAML import policy](model_format.md#model-yaml-import-policy) for supported paths, modes, examples, and security boundaries.
 
 ### Metadata Resolution
 

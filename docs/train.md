@@ -111,12 +111,9 @@ The export command creates a self-contained `.pt` file with:
 - Trained weights with SAE baked into atomic shifts
 - Metadata for Coulomb and dispersion handling
 
-**Output format:** `aimnet export` writes a v2 `.pt` artifact containing model
-YAML, weights, and runtime metadata. See [Model Format](model_format.md) for
-the artifact structure, metadata fields, suffix routing, and import policy.
+**Output format:** `aimnet export` writes a v2 `.pt` artifact containing model YAML, weights, and runtime metadata. See [Model Format](model_format.md) for the artifact structure, metadata fields, suffix routing, and import policy.
 
-For inference-time Coulomb and dispersion settings, see the
-[Calculator](calculator.md) guide.
+For inference-time Coulomb and dispersion settings, see the [Calculator](calculator.md) guide.
 
 ### Converting Legacy JIT Models
 
@@ -126,8 +123,7 @@ To convert an existing `.jpt` model:
 $ aimnet convert model.jpt config.yaml model_new.pt
 ```
 
-See [Converting Legacy Models](model_format.md#converting-legacy-models) for
-the complete conversion and validation workflow.
+See [Converting Legacy Models](model_format.md#converting-legacy-models) for the complete conversion and validation workflow.
 
 ### Publishing Registry Artifacts
 
@@ -148,8 +144,7 @@ Maintainers publishing a registry artifact must:
 
    The validation script compares energies and forces between formats and reports any discrepancies.
 
-3. **Publish the final artifact** to approved registry storage and record its
-   public HTTPS download URL.
+3. **Publish the final artifact** to approved registry storage and record its public HTTPS download URL.
 
 4. **Update `model_registry.yaml`:**
 
