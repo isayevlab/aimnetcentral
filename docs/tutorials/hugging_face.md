@@ -106,7 +106,15 @@ ensemble_3.safetensors      # weights for member 3
 | `needs_coulomb` | no | Whether external Coulomb correction is needed |
 | `needs_dispersion` | no | Whether external D3 dispersion is needed |
 | `coulomb_mode` | no | `"none"`, `"sr_embedded"`, or `"full_embedded"` |
+| `format_version` | no | Artifact metadata version; defaults to `2` for early v2 configs |
+| `coulomb_sr_rc` | no | Short-range Coulomb cutoff when `coulomb_mode="sr_embedded"` |
+| `coulomb_sr_envelope` | no | Short-range Coulomb envelope, `"exp"` or `"cosine"` |
+| `d3_params` | no | External DFTD3 parameters when `needs_dispersion` is true |
 | `implemented_species` | no | List of supported atomic numbers |
+| `has_embedded_lr` | no | Whether long-range behavior is embedded |
+| `has_embedded_d3ts` | no | Whether D3TS dispersion is embedded |
+| `family` | no | Released model family tag |
+| `supports_charged_systems` | no | Whether charged systems are supported |
 
 _For complete configs, `cutoff` is required. If `model_yaml` is absent, the loader falls back to the official registry using `member_names` (a list of registry keys) and uses the validated registry metadata. A warning is issued in this case._
 
@@ -120,6 +128,10 @@ _For complete configs, `cutoff` is required. If `model_yaml` is absent, the load
     Registry fallback uses the immutable registry policy and rejects
     customization. See
     [Model YAML import policy](../model_format.md#model-yaml-import-policy).
+
+    Missing real state-dict keys are fatal. Unexpected keys warn for complete
+    custom repositories and fail for registry fallback. Weights are loaded on
+    CPU, and the finished model is moved to the requested device once.
 
 ## Interactive Demo
 

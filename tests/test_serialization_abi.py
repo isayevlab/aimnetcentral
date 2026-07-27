@@ -27,7 +27,12 @@ import yaml
 
 import aimnet
 from aimnet import config
-from aimnet.models.artifact_validation import ALLOWED_MODEL_IMPORT_PATHS, validate_model_yaml
+from aimnet.calculators.model_registry import get_registry_model_path, load_model_registry
+from aimnet.models.artifact_validation import (
+    ALLOWED_MODEL_IMPORT_PATHS,
+    validate_model_yaml,
+    validate_registry_v2_artifact,
+)
 
 _PACKAGE_ROOT = Path(aimnet.__file__).parent
 _ASSETS_DIR = _PACKAGE_ROOT / "calculators" / "assets"
@@ -182,7 +187,7 @@ _ASSET_FILES = sorted(_ASSETS_DIR.glob("*.pt")) if _ASSETS_DIR.is_dir() else []
 
 
 def test_allowed_model_import_paths_are_shared_and_immutable():
-    """The reviewed registry allowlist is one immutable set for every import key."""
+    """The reviewed registry allowlist is immutable and contains exact paths."""
     expected = {
         "aimnet.models.AIMNet2",
         "aimnet.models.aimnet2.AIMNet2",
@@ -192,22 +197,69 @@ def test_allowed_model_import_paths_are_shared_and_immutable():
         "aimnet.modules.Output",
         "aimnet.modules.Quadrupole",
         "aimnet.modules.SRCoulomb",
-        "torch.nn.*",
+        "torch.nn.GELU",
+        "torch.nn.init.xavier_normal_",
     }
     assert frozenset(expected) == ALLOWED_MODEL_IMPORT_PATHS
     assert isinstance(ALLOWED_MODEL_IMPORT_PATHS, frozenset)
-    assert [path for path in ALLOWED_MODEL_IMPORT_PATHS if path.endswith(".*")] == ["torch.nn.*"]
+    assert not any(path.endswith(".*") for path in ALLOWED_MODEL_IMPORT_PATHS)
 
 
-@pytest.mark.parametrize("path", ["torch.nn.Linear", "torch.nn.init.xavier_normal_"])
-def test_allowed_model_import_paths_cover_torch_nn_namespace(path):
-    validate_model_yaml(f"class: {path}")
+def test_allowed_model_import_paths_cover_exact_torch_paths():
+    validate_model_yaml("activation_fn: torch.nn.GELU")
+    validate_model_yaml("weight_init_fn: torch.nn.init.xavier_normal_")
 
 
-def test_registry_allowlist_is_flat_across_import_keys():
-    for key in ("class", "activation_fn", "weight_init_fn"):
-        path = "torch.nn.init.xavier_normal_" if key == "weight_init_fn" else "torch.nn.ReLU"
-        validate_model_yaml(f"{key}: {path}")
+def test_registry_allowlist_is_role_specific():
+    with pytest.raises(ValueError, match="Untrusted"):
+        validate_model_yaml("class: torch.nn.GELU")
+    with pytest.raises(ValueError, match="Untrusted"):
+        validate_model_yaml("activation_fn: torch.nn.init.xavier_normal_")
+    with pytest.raises(ValueError, match="Untrusted"):
+        validate_model_yaml("weight_init_fn: torch.nn.GELU")
+
+
+@pytest.mark.network
+def test_digest_verified_registry_yaml_uses_exact_role_defaults():
+    role_by_key = {
+        "class": "class",
+        "activation_fn": "activation",
+        "weight_init_fn": "initializer",
+    }
+    paths = {role: set() for role in role_by_key.values()}
+
+    def visit(value: object) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                role = role_by_key.get(key)
+                if role is not None and isinstance(child, str):
+                    paths[role].add(child)
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    registry = load_model_registry()
+    for name in sorted(registry["models"]):
+        path = get_registry_model_path(name)
+        data = torch.load(path, map_location="cpu", weights_only=True)
+        model_yaml, _ = validate_registry_v2_artifact(data)
+        visit(model_yaml)
+
+    paths["initializer"].add("torch.nn.init.xavier_normal_")
+    expected_classes = {
+        "aimnet.models.AIMNet2",
+        "aimnet.models.aimnet2.AIMNet2",
+        "aimnet.modules.AtomicShift",
+        "aimnet.modules.AtomicSum",
+        "aimnet.modules.Dipole",
+        "aimnet.modules.Output",
+        "aimnet.modules.Quadrupole",
+        "aimnet.modules.SRCoulomb",
+    }
+    assert paths["class"] <= expected_classes
+    assert paths["activation"] == {"torch.nn.GELU"}
+    assert paths["initializer"] == {"torch.nn.init.xavier_normal_"}
 
 
 class TestBundledAssetEmbeddedYaml:

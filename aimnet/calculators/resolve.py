@@ -12,7 +12,7 @@ from typing import Any, Literal, cast
 
 from torch import nn
 
-from aimnet.models.artifact_validation import _resolve_user_import_policy
+from aimnet.models.artifact_validation import resolve_model_import_policy
 from aimnet.models.base import _load_registry_model, load_model
 
 from .model_registry import (
@@ -98,7 +98,7 @@ def resolve_model(
         files accept only ``model_import_paths=None`` and
         ``model_import_mode="extend"``.
     """
-    _resolve_user_import_policy(model_import_paths, model_import_mode)
+    resolve_model_import_policy(model_import_paths, model_import_mode)
     customized = model_import_paths is not None or model_import_mode != "extend"
     metadata: Mapping[str, Any] | None = None
     registry_family: str | None = None
