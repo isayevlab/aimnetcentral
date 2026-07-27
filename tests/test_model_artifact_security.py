@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+import threading
+import warnings
 from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 import torch
 
+from aimnet import config
+from aimnet.calculators import hf_hub
+from aimnet.models import base as model_base
+from aimnet.models import utils as model_utils
 from aimnet.models.artifact_validation import (
     ALLOWED_MODEL_IMPORT_PATHS,
     validate_model_yaml,
     validate_v2_artifact,
 )
+from aimnet.modules import AtomicShift
 
 
 def _v2_data(model_yaml: str, **overrides: object) -> dict[str, object]:
@@ -26,17 +35,66 @@ def _v2_data(model_yaml: str, **overrides: object) -> dict[str, object]:
     return data
 
 
-def test_default_extend_allows_official_and_torch_nn_paths() -> None:
-    config = validate_model_yaml(
+def test_default_extend_allows_official_and_exact_torch_paths() -> None:
+    parsed = validate_model_yaml(
         """
-class: torch.nn.Linear
+class: aimnet.models.AIMNet2
 kwargs:
   in_features: 2
   out_features: 2
-activation_fn: torch.nn.ReLU
+activation_fn: torch.nn.GELU
+weight_init_fn: torch.nn.init.xavier_normal_
 """,
     )
-    assert config["class"] == "torch.nn.Linear"
+    assert parsed["class"] == "aimnet.models.AIMNet2"
+
+
+@pytest.mark.parametrize("path", ["torch.nn.Linear", "torch.nn.ReLU", "torch.nn.init.uniform_"])
+def test_default_extend_rejects_unlisted_torch_paths(path: str) -> None:
+    with pytest.raises(ValueError, match="Untrusted"):
+        validate_model_yaml(f"class: {path}")
+
+
+def test_custom_torch_paths_can_be_explicitly_extended() -> None:
+    validate_model_yaml("class: torch.nn.Linear", model_import_paths={"torch.nn.Linear"})
+
+
+def test_default_import_paths_are_role_specific() -> None:
+    with pytest.raises(ValueError, match="Untrusted"):
+        validate_model_yaml("class: torch.nn.GELU")
+    with pytest.raises(ValueError, match="Untrusted"):
+        validate_model_yaml("activation_fn: torch.nn.init.xavier_normal_")
+    with pytest.raises(ValueError, match="Untrusted"):
+        validate_model_yaml("weight_init_fn: torch.nn.GELU")
+
+    validate_model_yaml("activation_fn: torch.nn.GELU")
+    validate_model_yaml("weight_init_fn: torch.nn.init.xavier_normal_")
+
+
+@pytest.mark.parametrize(
+    ("path", "owner"),
+    [
+        ("aimnet.models.AIMNet2", "class"),
+        ("aimnet.models.aimnet2.AIMNet2", "class"),
+        ("aimnet.modules.AtomicShift", "class"),
+        ("aimnet.modules.AtomicSum", "class"),
+        ("aimnet.modules.Dipole", "class"),
+        ("aimnet.modules.Output", "class"),
+        ("aimnet.modules.Quadrupole", "class"),
+        ("aimnet.modules.SRCoulomb", "class"),
+        ("torch.nn.GELU", "activation"),
+        ("torch.nn.init.xavier_normal_", "initializer"),
+    ],
+)
+@pytest.mark.parametrize("role", ["class", "activation", "initializer"])
+def test_default_import_paths_reject_every_wrong_role(path: str, owner: str, role: str) -> None:
+    key_by_role = {"class": "class", "activation": "activation_fn", "initializer": "weight_init_fn"}
+
+    if role == owner:
+        validate_model_yaml(f"{key_by_role[role]}: {path}")
+    else:
+        with pytest.raises(ValueError, match="Untrusted"):
+            validate_model_yaml(f"{key_by_role[role]}: {path}")
 
 
 def test_default_extend_allows_torch_nn_init() -> None:
@@ -464,10 +522,10 @@ def test_unsafe_local_load_keeps_restricted_deserialization_and_sidecar_suppress
     assert build_module.call_args.kwargs["allow_file_references"] is False
 
 
-def test_obsolete_policy_objects_are_not_exported() -> None:
+def test_model_import_policy_is_exported_as_stable_type() -> None:
     import aimnet.models
 
-    assert not hasattr(aimnet.models, "ModelImportPolicy")
+    assert hasattr(aimnet.models, "ModelImportPolicy")
     assert not hasattr(aimnet.models, "custom_model_import_policy")
 
 
@@ -585,7 +643,577 @@ def test_unknown_model_uses_registry_resolution_error(monkeypatch: pytest.Monkey
 
 def test_allowed_import_paths_are_immutable() -> None:
     assert isinstance(ALLOWED_MODEL_IMPORT_PATHS, frozenset)
-    assert "torch.nn.*" in ALLOWED_MODEL_IMPORT_PATHS
-    assert all(path == "torch.nn.*" or "*" not in path for path in ALLOWED_MODEL_IMPORT_PATHS)
+    assert "torch.nn.GELU" in ALLOWED_MODEL_IMPORT_PATHS
+    assert "torch.nn.init.xavier_normal_" in ALLOWED_MODEL_IMPORT_PATHS
+    assert "torch.nn.*" not in ALLOWED_MODEL_IMPORT_PATHS
+    assert all("*" not in path for path in ALLOWED_MODEL_IMPORT_PATHS)
     with pytest.raises(AttributeError):
         ALLOWED_MODEL_IMPORT_PATHS.add("os.system")  # type: ignore[attr-defined]
+
+
+def test_load_state_dict_checked_fails_on_missing_parameters() -> None:
+    model = torch.nn.Linear(2, 2)
+    state_dict = {"weight": torch.zeros_like(model.weight)}
+
+    with pytest.raises(RuntimeError, match=r"Missing model parameters.*bias"):
+        model_utils.load_state_dict_checked(model, state_dict, source="local.pt")
+
+
+def test_load_state_dict_checked_warns_on_unexpected_parameters() -> None:
+    model = torch.nn.Linear(2, 2)
+    state_dict = {
+        "weight": torch.zeros_like(model.weight),
+        "bias": torch.zeros_like(model.bias),
+        "extra": torch.zeros(1),
+    }
+
+    with pytest.warns(UserWarning, match=r"Unexpected model parameters.*extra"):
+        model_utils.load_state_dict_checked(model, state_dict, source="local.pt")
+
+
+def test_load_state_dict_checked_can_fail_on_unexpected_parameters() -> None:
+    model = torch.nn.Linear(2, 2)
+    state_dict = {
+        "weight": torch.zeros_like(model.weight),
+        "bias": torch.zeros_like(model.bias),
+        "extra": torch.zeros(1),
+    }
+
+    with pytest.raises(RuntimeError, match=r"Unexpected model parameters.*extra"):
+        model_utils.load_state_dict_checked(model, state_dict, source="registry.pt", unexpected="error")
+
+
+def test_load_state_dict_checked_filters_migration_keys() -> None:
+    class Srcoulomb(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.embedding = torch.nn.Parameter(torch.zeros(1))
+
+    class Outputs(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.srcoulomb = Srcoulomb()
+
+    class Model(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.outputs = Outputs()
+            self.to_devices: list[str] = []
+
+        def to(self, *args: object, **kwargs: object) -> Model:
+            device = kwargs.get("device", args[0] if args else None)
+            self.to_devices.append(str(device))
+            return self
+
+    model = Model()
+    state_dict = {
+        "outputs.lrcoulomb.embedding": torch.zeros(1),
+        "outputs.dftd3.embedding": torch.zeros(1),
+        "outputs.d3bj.embedding": torch.zeros(1),
+        "outputs.dipole.mass": torch.zeros(1),
+        "outputs.quadrupole.mass": torch.zeros(1),
+    }
+
+    with warnings.catch_warnings(record=True) as caught:
+        model_utils.load_state_dict_checked(model, state_dict, source="converted.pt")
+
+    assert caught == []
+
+
+def test_local_v2_loader_fails_on_missing_parameters(tmp_path: Path) -> None:
+    model = torch.nn.Linear(2, 2)
+    path = tmp_path / "missing.pt"
+    torch.save(
+        _v2_data(
+            "class: torch.nn.Linear\nkwargs:\n  in_features: 2\n  out_features: 2\n",
+            state_dict={"weight": model.weight.detach().clone()},
+        ),
+        path,
+    )
+
+    with pytest.raises(RuntimeError, match=r"Missing model parameters.*bias"):
+        model_base.load_model(str(path), model_import_paths={"torch.nn.Linear"})
+
+
+def test_local_v2_loader_warns_on_unexpected_parameters(tmp_path: Path) -> None:
+    model = torch.nn.Linear(2, 2)
+    path = tmp_path / "unexpected.pt"
+    torch.save(
+        _v2_data(
+            "class: torch.nn.Linear\nkwargs:\n  in_features: 2\n  out_features: 2\n",
+            state_dict={
+                **model.state_dict(),
+                "extra": torch.zeros(1),
+            },
+        ),
+        path,
+    )
+
+    with pytest.warns(UserWarning, match=r"Unexpected model parameters.*extra"):
+        loaded, _ = model_base.load_model(str(path), model_import_paths={"torch.nn.Linear"})
+
+    assert isinstance(loaded, torch.nn.Linear)
+
+
+def test_v2_loader_constructs_on_cpu_with_meta_default_device(tmp_path: Path) -> None:
+    model = torch.nn.Linear(2, 2)
+    path = tmp_path / "cpu-first.pt"
+    torch.save(
+        _v2_data(
+            "class: torch.nn.Linear\nkwargs:\n  in_features: 2\n  out_features: 2\n",
+            state_dict=model.state_dict(),
+        ),
+        path,
+    )
+
+    with torch.device("meta"):
+        loaded, _ = model_base.load_model(str(path), model_import_paths={"torch.nn.Linear"})
+
+    assert isinstance(loaded, torch.nn.Linear)
+    assert loaded.weight.device.type == "cpu"
+
+
+def test_v2_loader_reads_state_on_cpu_and_moves_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    class SpyModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.weight = torch.nn.Parameter(torch.zeros(1))
+            self.to_devices: list[str] = []
+
+        def to(self, *args: object, **kwargs: object) -> SpyModel:
+            device = kwargs.get("device", args[0] if args else None)
+            self.to_devices.append(str(device))
+            return self
+
+    model = SpyModel()
+    data = _v2_data("class: torch.nn.Identity", state_dict={"weight": torch.zeros(1)})
+    load = Mock(return_value=data)
+    monkeypatch.setattr(model_base.torch, "load", load)
+    monkeypatch.setattr(model_base, "build_module", Mock(return_value=model))
+    monkeypatch.setattr(
+        model_base,
+        "validate_v2_artifact_with_policy",
+        Mock(return_value=({"class": "torch.nn.Identity"}, {"weight": torch.zeros(1)})),
+    )
+
+    model_base._load_v2_model(
+        "model.pt",
+        "cuda",
+        model_base._REGISTRY_IMPORT_POLICY,
+    )
+
+    assert load.call_args.kwargs["map_location"] == "cpu"
+    assert model.to_devices == ["cuda"]
+
+
+def test_v2_loader_preserves_float64_atomic_shifts(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Model(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.atomic_shift = AtomicShift("energy", "shifted")
+            self.to_devices: list[str] = []
+
+        def to(self, *args: object, **kwargs: object) -> Model:
+            device = kwargs.get("device", args[0] if args else None)
+            self.to_devices.append(str(device))
+            return self
+
+    model = Model()
+    values = torch.zeros(64, 1, dtype=torch.float64)
+    values[1, 0] = 1.0000000000000002
+    values[2, 0] = 2.0000000000000004
+    monkeypatch.setattr(
+        model_base,
+        "validate_v2_artifact_with_policy",
+        Mock(return_value=({"class": "aimnet.models.AIMNet2"}, {"atomic_shift.shifts.weight": values})),
+    )
+    monkeypatch.setattr(model_base.torch, "load", Mock(return_value=_v2_data("class: aimnet.models.AIMNet2")))
+    monkeypatch.setattr(model_base, "build_module", Mock(return_value=model))
+
+    model_base._load_v2_model("model.pt", "cuda", model_base._REGISTRY_IMPORT_POLICY)
+
+    assert model.atomic_shift.shifts.weight.dtype is torch.float64
+    assert torch.equal(model.atomic_shift.shifts.weight.detach(), values)
+    assert model.to_devices == ["cuda"]
+
+
+def test_runtime_authorizer_receives_nested_import_roles() -> None:
+    seen: list[tuple[str, str]] = []
+
+    def authorize(path: str, role: str) -> None:
+        seen.append((path, role))
+
+    config.build_module(
+        {
+            "class": "aimnet.modules.Output",
+            "kwargs": {
+                "n_in": 2,
+                "n_out": 1,
+                "key_in": "aim",
+                "key_out": "energy",
+                "mlp": {"hidden": [2], "activation_fn": "torch.nn.GELU"},
+            },
+        },
+        import_authorizer=authorize,
+    )
+
+    assert ("aimnet.modules.Output", "class") in seen
+    assert ("torch.nn.GELU", "activation") in seen
+    assert ("torch.nn.init.xavier_normal_", "initializer") in seen
+
+
+def test_runtime_authorizer_resets_after_failure() -> None:
+    def reject(path: str, role: str) -> None:
+        raise ValueError(f"rejected {path} as {role}")
+
+    with pytest.raises(ValueError, match="rejected"):
+        config.build_module({"class": "torch.nn.Identity"}, import_authorizer=reject)
+
+    assert config.get_module("torch.nn.Identity") is torch.nn.Identity
+
+
+def test_runtime_authorizer_rejects_before_import(monkeypatch: pytest.MonkeyPatch) -> None:
+    import_attempt = Mock(side_effect=AssertionError("import must not be reached"))
+    monkeypatch.setattr(config, "import_module", import_attempt)
+
+    def reject(path: str, role: str) -> None:
+        raise ValueError(f"rejected {path} as {role}")
+
+    with pytest.raises(ValueError, match="rejected"), config._import_authorization(reject):
+        config.get_module("torch.nn.Identity")
+
+    import_attempt.assert_not_called()
+
+
+def test_successful_build_cleans_authorizer_context() -> None:
+    seen: list[str] = []
+
+    def authorize(path: str, role: str) -> None:
+        seen.append(path)
+
+    config.build_module({"class": "torch.nn.Identity"}, import_authorizer=authorize)
+
+    assert seen == ["torch.nn.Identity"]
+    assert config.get_module("torch.nn.Identity") is torch.nn.Identity
+
+
+def test_nested_builds_restore_the_outer_policy() -> None:
+    seen: list[str] = []
+
+    def outer(path: str, role: str) -> None:
+        seen.append("outer")
+
+    def inner(path: str, role: str) -> None:
+        seen.append("inner")
+
+    with config._import_authorization(outer):
+        config.build_module({"class": "torch.nn.Identity"})
+        config.build_module({"class": "torch.nn.Identity"}, import_authorizer=inner)
+        config.build_module({"class": "torch.nn.Identity"})
+
+    assert seen == ["outer", "inner", "outer"]
+
+
+def test_runtime_authorizers_are_isolated_between_threads() -> None:
+    barrier = threading.Barrier(2)
+    seen: list[str] = []
+    errors: list[BaseException] = []
+
+    def run(name: str) -> None:
+        def authorize(path: str, role: str) -> None:
+            barrier.wait()
+            seen.append(name)
+
+        try:
+            config.build_module({"class": "torch.nn.Identity"}, import_authorizer=authorize)
+        except BaseException as exc:  # pragma: no cover - assertion reports unexpected thread failures
+            errors.append(exc)
+
+    threads = [threading.Thread(target=run, args=(name,)) for name in ("left", "right")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert sorted(seen) == ["left", "right"]
+
+
+def test_runtime_authorizers_are_isolated_before_concurrent_lookup() -> None:
+    barrier = threading.Barrier(2)
+    seen: list[str] = []
+    errors: list[BaseException] = []
+
+    def run(name: str) -> None:
+        def authorize(path: str, role: str) -> None:
+            seen.append(name)
+
+        try:
+            with config._import_authorization(authorize):
+                barrier.wait()
+                config.get_module("torch.nn.Identity")
+        except BaseException as exc:  # pragma: no cover - assertion reports unexpected thread failures
+            errors.append(exc)
+
+    threads = [threading.Thread(target=run, args=(name,)) for name in ("left", "right")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert sorted(seen) == ["left", "right"]
+
+
+def test_runtime_authorizers_are_isolated_between_async_tasks() -> None:
+    seen: list[str] = []
+
+    async def run(name: str) -> None:
+        def authorize(path: str, role: str) -> None:
+            seen.append(name)
+
+        with config._import_authorization(authorize):
+            await asyncio.sleep(0)
+            config.get_module("torch.nn.Identity")
+
+    async def main() -> None:
+        await asyncio.gather(run("left"), run("right"))
+
+    asyncio.run(main())
+
+    assert sorted(seen) == ["left", "right"]
+
+
+def test_runtime_authorizer_covers_future_symbol_lookups(monkeypatch: pytest.MonkeyPatch) -> None:
+    original_get_init_module = config.get_init_module
+
+    def future_constructor(
+        name: str,
+        args: list | None = None,
+        kwargs: dict | None = None,
+        *,
+        role: str = "class",
+    ) -> object:
+        config.get_module("torch.nn.Linear", role="activation")
+        return original_get_init_module(name, args=args, kwargs=kwargs, role=role)
+
+    monkeypatch.setattr(config, "get_init_module", future_constructor)
+
+    def reject(path: str, role: str) -> None:
+        if path == "torch.nn.Linear":
+            raise ValueError("future symbol rejected")
+
+    with pytest.raises(ValueError, match="future symbol rejected"):
+        config.build_module({"class": "torch.nn.Identity"}, import_authorizer=reject)
+
+
+def test_hf_local_resolution_does_not_require_hub_extra(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(hf_hub, "_snapshot_download", None)
+
+    assert hf_hub._resolve_repo(str(tmp_path), 0, None, None) == tmp_path
+
+
+def test_hf_remote_resolution_requires_hub_extra(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(hf_hub, "_snapshot_download", None)
+
+    with pytest.raises(ImportError, match=r"aimnet\[hf\]"):
+        hf_hub._resolve_repo("org/repository", 0, None, None)
+
+
+def test_hf_weight_loading_requires_safetensors_extra(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "ensemble_0.safetensors").write_bytes(b"placeholder")
+    (tmp_path / "config.json").write_text(
+        json.dumps({"model_yaml": "class: torch.nn.Identity", "cutoff": 5.0, "format_version": 2})
+    )
+    monkeypatch.setattr(hf_hub, "_load_safetensors_file", None)
+
+    with pytest.raises(ImportError, match=r"aimnet\[hf\]"):
+        hf_hub.load_from_hf_repo(
+            str(tmp_path),
+            model_import_paths={"torch.nn.Identity"},
+        )
+
+
+def test_direct_artifact_runtime_lookup_uses_authorizer(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    path = tmp_path / "runtime-boundary.pt"
+    torch.save(_v2_data("class: aimnet.models.AIMNet2"), path)
+    original_get_init_module = config.get_init_module
+
+    def future_constructor(
+        name: str,
+        args: list | None = None,
+        kwargs: dict | None = None,
+        *,
+        role: str = "class",
+    ) -> object:
+        config.get_module("torch.nn.Linear", role="activation")
+        return original_get_init_module(name, args=args, kwargs=kwargs, role=role)
+
+    monkeypatch.setattr(config, "get_init_module", future_constructor)
+
+    with pytest.raises(ValueError, match="Untrusted import path"):
+        model_base.load_model(str(path))
+
+
+def test_hf_artifact_runtime_lookup_uses_authorizer(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    (tmp_path / "ensemble_0.safetensors").write_bytes(b"placeholder")
+    (tmp_path / "config.json").write_text(
+        json.dumps({"model_yaml": "class: aimnet.models.AIMNet2", "cutoff": 5.0, "format_version": 2})
+    )
+    monkeypatch.setattr(hf_hub, "_load_safetensors_file", Mock(return_value={}))
+    original_get_init_module = config.get_init_module
+
+    def future_constructor(
+        name: str,
+        args: list | None = None,
+        kwargs: dict | None = None,
+        *,
+        role: str = "class",
+    ) -> object:
+        config.get_module("torch.nn.Linear", role="activation")
+        return original_get_init_module(name, args=args, kwargs=kwargs, role=role)
+
+    monkeypatch.setattr(config, "get_init_module", future_constructor)
+
+    with pytest.raises(ValueError, match="Untrusted import path"):
+        hf_hub.load_from_hf_repo(str(tmp_path))
+
+
+def test_hf_loader_reads_weights_on_cpu_and_moves_once_without_extra(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class SpyModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.to_devices: list[str] = []
+
+        def to(self, *args: object, **kwargs: object) -> SpyModel:
+            device = kwargs.get("device", args[0] if args else None)
+            self.to_devices.append(str(device))
+            return self
+
+    (tmp_path / "ensemble_0.safetensors").write_bytes(b"placeholder")
+    (tmp_path / "config.json").write_text(
+        json.dumps({"model_yaml": "class: aimnet.models.AIMNet2", "cutoff": 5.0, "format_version": 2})
+    )
+    load_file = Mock(return_value={})
+    model = SpyModel()
+    monkeypatch.setattr(hf_hub, "_load_safetensors_file", load_file)
+    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=model))
+
+    loaded, _ = hf_hub.load_from_hf_repo(str(tmp_path), device="cuda")
+
+    assert loaded is model
+    load_file.assert_called_once_with(str(tmp_path / "ensemble_0.safetensors"), device="cpu")
+    assert model.to_devices == ["cuda"]
+
+
+def test_hf_loader_preserves_float64_atomic_shifts_without_extra(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class Model(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.outputs = torch.nn.Module()
+            self.outputs.atomic_shift = AtomicShift("energy", "shifted")
+            self.to_devices: list[str] = []
+
+        def to(self, *args: object, **kwargs: object) -> Model:
+            device = kwargs.get("device", args[0] if args else None)
+            self.to_devices.append(str(device))
+            return self
+
+    values = torch.zeros(64, 1, dtype=torch.float64)
+    values[1, 0] = 1.0000000000000002
+    values[2, 0] = 2.0000000000000004
+    (tmp_path / "ensemble_0.safetensors").write_bytes(b"placeholder")
+    (tmp_path / "config.json").write_text(
+        json.dumps({"model_yaml": "class: aimnet.models.AIMNet2", "cutoff": 5.0, "format_version": 2})
+    )
+    model = Model()
+    monkeypatch.setattr(
+        hf_hub,
+        "_load_safetensors_file",
+        Mock(
+            return_value={
+                "outputs.atomic_shift.shifts.weight": values,
+            }
+        ),
+    )
+    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=model))
+
+    hf_hub.load_from_hf_repo(str(tmp_path), device="cuda")
+
+    assert model.outputs.atomic_shift.shifts.weight.dtype is torch.float64
+    assert torch.equal(model.outputs.atomic_shift.shifts.weight.detach(), values)
+    assert model.to_devices == ["cuda"]
+
+
+def test_hf_loader_fails_on_missing_key_without_extra(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "ensemble_0.safetensors").write_bytes(b"placeholder")
+    (tmp_path / "config.json").write_text(
+        json.dumps({
+            "model_yaml": "class: torch.nn.Linear\nkwargs:\n  in_features: 2\n  out_features: 2\n",
+            "cutoff": 5.0,
+            "format_version": 2,
+        })
+    )
+    model = torch.nn.Linear(2, 2)
+    monkeypatch.setattr(hf_hub, "_load_safetensors_file", Mock(return_value={"weight": model.weight.detach().clone()}))
+
+    with pytest.raises(RuntimeError, match=r"Missing model parameters.*bias"):
+        hf_hub.load_from_hf_repo(str(tmp_path), model_import_paths={"torch.nn.Linear"})
+
+
+def test_hf_loader_warns_on_complete_custom_unexpected_key_without_extra(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "ensemble_0.safetensors").write_bytes(b"placeholder")
+    (tmp_path / "config.json").write_text(
+        json.dumps({
+            "model_yaml": "class: torch.nn.Linear\nkwargs:\n  in_features: 2\n  out_features: 2\n",
+            "cutoff": 5.0,
+            "format_version": 2,
+        })
+    )
+    model = torch.nn.Linear(2, 2)
+    monkeypatch.setattr(
+        hf_hub,
+        "_load_safetensors_file",
+        Mock(return_value={**model.state_dict(), "extra": torch.zeros(1)}),
+    )
+
+    with pytest.warns(UserWarning, match=r"Unexpected model parameters.*extra"):
+        hf_hub.load_from_hf_repo(str(tmp_path), model_import_paths={"torch.nn.Linear"})
+
+
+def test_hf_registry_fallback_fails_on_unexpected_key_without_extra(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "ensemble_0.safetensors").write_bytes(b"placeholder")
+    (tmp_path / "config.json").write_text(json.dumps({"member_names": ["aimnet2"]}))
+    monkeypatch.setattr(
+        hf_hub,
+        "_fetch_pt_metadata_from_registry",
+        Mock(
+            return_value=(
+                {"model_yaml": "class: aimnet.models.AIMNet2", "cutoff": 5.0, "format_version": 2},
+                {"class": "aimnet.models.AIMNet2"},
+            )
+        ),
+    )
+    monkeypatch.setattr(hf_hub, "_load_safetensors_file", Mock(return_value={"extra": torch.zeros(1)}))
+    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=torch.nn.Identity()))
+
+    with pytest.raises(RuntimeError, match=r"Unexpected model parameters.*extra"):
+        hf_hub.load_from_hf_repo(str(tmp_path))

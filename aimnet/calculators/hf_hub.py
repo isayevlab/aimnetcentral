@@ -16,20 +16,32 @@ import re
 import warnings
 from collections.abc import Collection, Mapping
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import torch
 from torch import nn
 
+try:
+    from huggingface_hub import snapshot_download as _snapshot_download
+except ImportError:  # pragma: no cover - exercised through optional-dependency tests
+    _snapshot_download = None
+
+try:
+    from safetensors.torch import load_file as _load_safetensors_file
+except ImportError:  # pragma: no cover - exercised through optional-dependency tests
+    _load_safetensors_file = None
+
 from aimnet.calculators.model_registry import get_family_policy, get_registry_model_path
 from aimnet.config import build_module
 from aimnet.models.artifact_validation import (
-    _resolve_user_import_policy,
-    _validate_registry_v2_artifact,
+    _REGISTRY_IMPORT_POLICY,
+    resolve_model_import_policy,
     validate_model_metadata,
     validate_model_yaml,
+    validate_registry_v2_artifact,
 )
 from aimnet.models.base import ModelMetadata
+from aimnet.models.utils import convert_atomic_shifts_to_float64, load_state_dict_checked
 
 
 def is_hf_repo_id(model: str) -> bool:
@@ -123,7 +135,7 @@ def _fetch_pt_metadata_from_registry(
     pt_path = get_registry_model_path(member_name)
     data = torch.load(pt_path, map_location="cpu", weights_only=True)
     try:
-        model_config, _ = _validate_registry_v2_artifact(data)
+        model_config, _ = validate_registry_v2_artifact(data)
     except ValueError as exc:
         raise ValueError(f"Invalid registry .pt file for '{member_name}': {exc}") from exc
     # Return everything except state_dict
@@ -169,7 +181,7 @@ def load_from_hf_repo(
     metadata : ModelMetadata
         Model metadata dictionary.
     """
-    _resolve_user_import_policy(model_import_paths, model_import_mode)
+    policy = resolve_model_import_policy(model_import_paths, model_import_mode)
     customized = model_import_paths is not None or model_import_mode != "extend"
     local_dir = _resolve_repo(repo_id_or_path, ensemble_member, revision, token, include_weights=False)
 
@@ -180,13 +192,14 @@ def load_from_hf_repo(
     config = json.loads(config_path.read_text())
     if not isinstance(config, Mapping):
         raise TypeError("config.json root must be a mapping.")
+    config = dict(config)
     validate_model_metadata(config)
 
     # Validate model_yaml imports before build_module().
     # Family-level configs (config_schema_version=1 uploaded to HF) may not
     # include model_yaml or other per-member fields. Fall back to loading them
     # from the registry artifact.
-    _pt_meta: dict | None = None
+    _pt_meta: Mapping[str, Any] | None = None
     model_config: dict[str, object]
     model_yaml = config.get("model_yaml")
     if model_yaml is None:
@@ -212,41 +225,37 @@ def load_from_hf_repo(
     # Fetch remote weights only after config, model YAML, and metadata pass.
     local_dir = _resolve_repo(repo_id_or_path, ensemble_member, revision, token, include_weights=True)
 
-    # Load safetensors only after config and model YAML validation.
-    from safetensors.torch import load_file
-
     st_name = f"ensemble_{ensemble_member}.safetensors"
     st_path = local_dir / st_name
     if not st_path.exists():
         raise FileNotFoundError(f"{st_name} not found in {local_dir}")
-    state_dict = load_file(str(st_path), device=device)
+    if _load_safetensors_file is None:
+        raise ImportError(
+            'Loading Hugging Face weights requires the "hf" extra. Install with: pip install "aimnet[hf]"'
+        )
+    state_dict = _load_safetensors_file(str(st_path), device="cpu")
 
     # Rebuild model from config's model_yaml
-    model = build_module(copy.deepcopy(model_config), allow_file_references=False)
+    construction_policy = _REGISTRY_IMPORT_POLICY if _pt_meta is not None else policy
+    with torch.device("cpu"):
+        model = build_module(
+            copy.deepcopy(model_config),
+            allow_file_references=False,
+            import_authorizer=construction_policy.require_allowed,
+        )
     if not isinstance(model, nn.Module):
         raise TypeError("Built model configuration did not produce an nn.Module.")
 
-    # Load state dict with key validation (not silent strict=False)
-    from aimnet.models.utils import validate_state_dict_keys
+    convert_atomic_shifts_to_float64(model)
 
-    load_result = model.load_state_dict(state_dict, strict=False)
-    real_missing, real_unexpected = validate_state_dict_keys(load_result.missing_keys, load_result.unexpected_keys)
-    if real_missing:
-        raise RuntimeError(f"Missing keys in safetensors file: {real_missing}")
-    if real_unexpected:
-        warnings.warn(f"Unexpected keys in safetensors file: {real_unexpected}", stacklevel=2)
+    load_state_dict_checked(
+        model,
+        state_dict,
+        source=str(st_path),
+        unexpected="error" if _pt_meta is not None else "warn",
+    )
 
     model = model.to(device)
-
-    # Fix float64 atomic shifts: load_state_dict copies float64 safetensors
-    # data into float32 buffers, truncating precision. We must:
-    # 1) Convert the buffer to float64
-    # 2) Re-copy the original float64 data from safetensors
-    if hasattr(model, "outputs") and hasattr(model.outputs, "atomic_shift"):
-        shift_key = "outputs.atomic_shift.shifts.weight"
-        model.outputs.atomic_shift.shifts = model.outputs.atomic_shift.shifts.double()
-        if shift_key in state_dict:
-            model.outputs.atomic_shift.shifts.weight.data.copy_(state_dict[shift_key].to(device))
 
     # For fields not present in the flat family-level config.json (coulomb_sr_rc,
     # coulomb_sr_envelope, d3_params, has_embedded_lr) fall back first to
@@ -288,7 +297,7 @@ def load_from_hf_repo(
     }
     validate_model_metadata(metadata, require_cutoff=True, require_cross_field_consistency=True)
 
-    model._metadata = metadata
+    model.__dict__["_metadata"] = metadata
     return model, metadata
 
 
@@ -308,12 +317,14 @@ def _resolve_repo(
     if local.is_dir():
         return local
 
-    from huggingface_hub import snapshot_download
-
     allow_patterns = ["config.json"]
     if include_weights:
         allow_patterns.append(f"ensemble_{ensemble_member}.safetensors")
-    local_dir = snapshot_download(
+    if _snapshot_download is None:
+        raise ImportError(
+            'Loading Hugging Face repositories requires the "hf" extra. Install with: pip install "aimnet[hf]"'
+        )
+    local_dir = _snapshot_download(
         repo_id=repo_id_or_path,
         allow_patterns=allow_patterns,
         revision=revision,

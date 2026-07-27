@@ -7,7 +7,6 @@ import pytest
 import torch
 
 pytest.importorskip("safetensors")
-from safetensors import torch as safetensors_torch
 from safetensors.torch import save_file
 
 from aimnet.calculators import hf_hub
@@ -17,6 +16,9 @@ from aimnet.calculators.hf_hub import (
     load_from_hf_repo,
 )
 from aimnet.models.artifact_validation import validate_model_yaml
+from aimnet.modules import AtomicShift
+
+pytestmark = pytest.mark.hf
 
 
 @pytest.fixture
@@ -182,7 +184,7 @@ def test_hf_rejects_invalid_metadata_before_weights_or_construction(monkeypatch:
     )
     load_file = Mock(side_effect=AssertionError("weights must not be loaded"))
     build_module = Mock(side_effect=AssertionError("model must not be built"))
-    monkeypatch.setattr(safetensors_torch, "load_file", load_file)
+    monkeypatch.setattr(hf_hub, "_load_safetensors_file", load_file)
     monkeypatch.setattr(hf_hub, "build_module", build_module)
 
     with pytest.raises(ValueError, match="d3_params"):
@@ -201,11 +203,11 @@ def test_hf_fallback_uses_validated_registry_cutoff(monkeypatch: pytest.MonkeyPa
         Mock(
             return_value=(
                 {
-                    "model_yaml": "class: torch.nn.Identity",
+                    "model_yaml": "class: aimnet.models.AIMNet2",
                     "cutoff": 5.0,
                     "format_version": 2,
                 },
-                {"class": "torch.nn.Identity"},
+                {"class": "aimnet.models.AIMNet2"},
             )
         ),
     )
@@ -230,7 +232,7 @@ def test_hf_remote_weights_wait_for_config_validation(monkeypatch: pytest.Monkey
         json.dumps({"model_yaml": "class: os.system", "cutoff": 5.0, "format_version": 2})
     )
     snapshot_download = Mock(return_value=str(tmp_path))
-    monkeypatch.setattr("huggingface_hub.snapshot_download", snapshot_download)
+    monkeypatch.setattr(hf_hub, "_snapshot_download", snapshot_download)
 
     with pytest.raises(ValueError, match="Untrusted import path"):
         load_from_hf_repo("org/repository")
@@ -242,7 +244,7 @@ def test_hf_remote_weights_wait_for_config_validation(monkeypatch: pytest.Monkey
 def test_hf_rejects_non_module_construction(monkeypatch: pytest.MonkeyPatch, tmp_path):
     save_file({}, str(tmp_path / "ensemble_0.safetensors"))
     (tmp_path / "config.json").write_text(
-        json.dumps({"model_yaml": "class: torch.nn.Identity", "cutoff": 5.0, "format_version": 2})
+        json.dumps({"model_yaml": "class: aimnet.models.AIMNet2", "cutoff": 5.0, "format_version": 2})
     )
     monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=object()))
 
@@ -285,6 +287,137 @@ def test_hf_forwards_direct_import_options(
     }
 
 
+def test_hf_loads_weights_on_cpu_and_moves_once(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    class SpyModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.to_devices: list[str] = []
+
+        def to(self, *args: object, **kwargs: object) -> "SpyModel":
+            device = kwargs.get("device", args[0] if args else None)
+            self.to_devices.append(str(device))
+            return self
+
+    save_file({}, str(tmp_path / "ensemble_0.safetensors"))
+    (tmp_path / "config.json").write_text(
+        json.dumps({"model_yaml": "class: torch.nn.Identity", "cutoff": 5.0, "format_version": 2})
+    )
+    model = SpyModel()
+    load_file = Mock(return_value={})
+    monkeypatch.setattr(hf_hub, "_load_safetensors_file", load_file, raising=False)
+    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=model))
+
+    loaded, _ = load_from_hf_repo(
+        str(tmp_path),
+        device="cuda",
+        model_import_paths={"torch.nn.Identity"},
+    )
+
+    assert loaded is model
+    load_file.assert_called_once_with(str(tmp_path / "ensemble_0.safetensors"), device="cpu")
+    assert model.to_devices == ["cuda"]
+
+
+def test_hf_preserves_float64_atomic_shifts(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    class Model(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.outputs = torch.nn.Module()
+            self.outputs.atomic_shift = AtomicShift("energy", "shifted")
+            self.to_devices: list[str] = []
+
+        def to(self, *args: object, **kwargs: object) -> "Model":
+            device = kwargs.get("device", args[0] if args else None)
+            self.to_devices.append(str(device))
+            return self
+
+    values = torch.zeros(64, 1, dtype=torch.float64)
+    values[1, 0] = 1.0000000000000002
+    values[2, 0] = 2.0000000000000004
+    model = Model()
+    save_file({}, str(tmp_path / "ensemble_0.safetensors"))
+    (tmp_path / "config.json").write_text(
+        json.dumps({"model_yaml": "class: aimnet.models.AIMNet2", "cutoff": 5.0, "format_version": 2})
+    )
+    load_file = Mock(return_value={"outputs.atomic_shift.shifts.weight": values})
+    monkeypatch.setattr(hf_hub, "_load_safetensors_file", load_file)
+    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=model))
+
+    loaded, _ = load_from_hf_repo(str(tmp_path), device="cuda")
+
+    assert loaded is model
+    assert model.outputs.atomic_shift.shifts.weight.dtype is torch.float64
+    assert torch.equal(model.outputs.atomic_shift.shifts.weight.detach(), values)
+    assert model.to_devices == ["cuda"]
+
+
+def test_hf_complete_artifact_warns_on_unexpected_key(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    model = torch.nn.Linear(2, 2)
+    state_dict = {**model.state_dict(), "extra": torch.zeros(1)}
+    save_file(state_dict, str(tmp_path / "ensemble_0.safetensors"))
+    (tmp_path / "config.json").write_text(
+        json.dumps({
+            "model_yaml": "class: torch.nn.Linear\nkwargs:\n  in_features: 2\n  out_features: 2\n",
+            "cutoff": 5.0,
+            "format_version": 2,
+        })
+    )
+
+    with pytest.warns(UserWarning, match=r"Unexpected model parameters.*extra"):
+        loaded, _ = load_from_hf_repo(
+            str(tmp_path),
+            model_import_paths={"torch.nn.Linear"},
+        )
+
+    assert isinstance(loaded, torch.nn.Linear)
+
+
+def test_hf_artifact_fails_on_missing_key(tmp_path):
+    model = torch.nn.Linear(2, 2)
+    save_file({"weight": model.weight.detach().clone()}, str(tmp_path / "ensemble_0.safetensors"))
+    (tmp_path / "config.json").write_text(
+        json.dumps({
+            "model_yaml": "class: torch.nn.Linear\nkwargs:\n  in_features: 2\n  out_features: 2\n",
+            "cutoff": 5.0,
+            "format_version": 2,
+        })
+    )
+
+    with pytest.raises(RuntimeError, match=r"Missing model parameters.*bias"):
+        load_from_hf_repo(
+            str(tmp_path),
+            model_import_paths={"torch.nn.Linear"},
+        )
+
+
+def test_hf_registry_fallback_fails_on_unexpected_key(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    state_dict = {
+        "weight": torch.zeros(2, 2),
+        "bias": torch.zeros(2),
+        "extra": torch.zeros(1),
+    }
+    save_file(state_dict, str(tmp_path / "ensemble_0.safetensors"))
+    (tmp_path / "config.json").write_text(json.dumps({"member_names": ["aimnet2"]}))
+    monkeypatch.setattr(
+        hf_hub,
+        "_fetch_pt_metadata_from_registry",
+        Mock(
+            return_value=(
+                {
+                    "model_yaml": "class: aimnet.models.AIMNet2",
+                    "cutoff": 5.0,
+                    "format_version": 2,
+                },
+                {"class": "aimnet.models.AIMNet2"},
+            )
+        ),
+    )
+    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=torch.nn.Identity()))
+
+    with pytest.raises(RuntimeError, match=r"Unexpected model parameters.*extra"):
+        load_from_hf_repo(str(tmp_path))
+
+
 @pytest.mark.hf
 def test_hf_custom_model_does_not_expand_sidecar_yaml(tmp_path):
     sidecar = tmp_path / "sidecar.yaml"
@@ -302,6 +435,7 @@ def test_hf_custom_model_does_not_expand_sidecar_yaml(tmp_path):
     model, metadata = load_from_hf_repo(
         str(tmp_path),
         model_import_mode="extend",
+        model_import_paths={"torch.nn.Identity"},
     )
 
     assert isinstance(model, torch.nn.Identity)

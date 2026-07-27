@@ -104,6 +104,8 @@ For `torch.nn.Module`, metadata is read from `model.metadata` attribute if avail
 
 Direct local v2 files and complete Hugging Face repositories can extend or replace the trusted model-YAML import paths, or use unsafe loading for locally trusted artifacts. See [Model YAML import policy](model_format.md#model-yaml-import-policy) for the default allowlist, modes, examples, and security boundaries.
 
+Model weights load on CPU before the completed model moves to the requested device once. Missing real state-dict keys are fatal; unexpected keys warn for direct custom/HF artifacts and fail for registry artifacts. Known migration keys remain filtered.
+
 For a legacy TorchScript file, use `AIMNet2Calculator.from_legacy_jit()` when you want the trusted-code boundary to be explicit:
 
 ```python

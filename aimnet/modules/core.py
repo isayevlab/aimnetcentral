@@ -26,10 +26,10 @@ def MLP(
     # hp search hack
     hidden = [x for x in hidden if x > 0]
     if isinstance(activation_fn, str):
-        activation_fn = get_init_module(activation_fn, kwargs=activation_kwargs)
+        activation_fn = get_init_module(activation_fn, kwargs=activation_kwargs, role="activation")
     activation = cast(nn.Module, activation_fn)
     if isinstance(weight_init_fn, str):
-        weight_init_fn = get_module(weight_init_fn)
+        weight_init_fn = get_module(weight_init_fn, role="initializer")
     weight_init = cast(Callable[[Tensor], Any], weight_init_fn)
     sizes = [n_in, *hidden, n_out]
     layers: list[nn.Module] = []

@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **BREAKING:** Model loading now routes TorchScript only for `.jpt` files, gives bare registry names precedence over same-named implicit local paths, rejects inconsistent v2 metadata and incomplete weights, requires lowercase registry SHA-256 digests, and uses exact role-specific default YAML imports instead of the broad `torch.nn.*` namespace. See the model-format migration notes for remedies.
 - Hardened `make test`: the parallel run now hides CUDA and caps per-worker threads (`CUDA_VISIBLE_DEVICES="" OMP_NUM_THREADS=1`); previously xdist workers either all initialized the first GPU (OOM on CUDA boxes) or oversubscribed the CPU with per-worker torch thread pools. A new `make test-gpu` target runs the GPU-marked tests serially on CUDA.
 - Bumped `nvalchemi-toolkit-ops` to `>=0.4.0` and `warp-lang` to `>=1.13,<2` (installs 1.15). Energies, charges, and Hessians are bit-identical to 0.3.1; explicit force/virial outputs shift within float32 accumulation noise (max 6.7e-05 eV/A on a periodic system, 40x inside the project's cross-version acceptance of 1e-4 Hartree/A). The 0.4.0 direct-output flags used by the Ewald/PME path (`compute_forces`/`compute_virial`) are deprecated upstream and now emit `DeprecationWarning`; migrating to the autograd-based API is tracked as follow-up work.
 

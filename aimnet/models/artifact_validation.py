@@ -17,7 +17,9 @@ from typing import Any, Literal
 import yaml
 from torch import Tensor
 
-ALLOWED_MODEL_IMPORT_PATHS = frozenset({
+from aimnet.config import ImportRole
+
+_DEFAULT_CLASS_IMPORT_PATHS = frozenset({
     "aimnet.models.AIMNet2",
     "aimnet.models.aimnet2.AIMNet2",
     "aimnet.modules.AtomicShift",
@@ -26,21 +28,49 @@ ALLOWED_MODEL_IMPORT_PATHS = frozenset({
     "aimnet.modules.Output",
     "aimnet.modules.Quadrupole",
     "aimnet.modules.SRCoulomb",
-    "torch.nn.*",
+})
+_DEFAULT_ACTIVATION_IMPORT_PATHS = frozenset({"torch.nn.GELU"})
+_DEFAULT_INITIALIZER_IMPORT_PATHS = frozenset({"torch.nn.init.xavier_normal_"})
+ALLOWED_MODEL_IMPORT_PATHS = frozenset({
+    *_DEFAULT_CLASS_IMPORT_PATHS,
+    *_DEFAULT_ACTIVATION_IMPORT_PATHS,
+    *_DEFAULT_INITIALIZER_IMPORT_PATHS,
 })
 
-_MODEL_IMPORT_KEYS = frozenset({"class", "activation_fn", "weight_init_fn"})
+_MODEL_IMPORT_KEYS: dict[str, ImportRole] = {
+    "class": "class",
+    "activation_fn": "activation",
+    "weight_init_fn": "initializer",
+}
 _ALWAYS_FORBIDDEN_IMPORT_KEYS = frozenset({"fn", "trainer", "evaluator"})
-_RECOGNIZED_IMPORT_KEYS = _MODEL_IMPORT_KEYS | _ALWAYS_FORBIDDEN_IMPORT_KEYS
+_RECOGNIZED_IMPORT_KEYS = frozenset(_MODEL_IMPORT_KEYS) | _ALWAYS_FORBIDDEN_IMPORT_KEYS
 
 
 @dataclass(frozen=True)
-class _ModelImportPolicy:
-    allowed_paths: frozenset[str]
+class ModelImportPolicy:
+    class_paths: frozenset[str]
+    activation_paths: frozenset[str]
+    initializer_paths: frozenset[str]
     unsafe: bool = False
 
+    def require_allowed(self, path: str, role: ImportRole) -> None:
+        """Reject a symbol that is not authorized for its construction role."""
+        if self.unsafe:
+            return
+        allowed_paths = {
+            "class": self.class_paths,
+            "activation": self.activation_paths,
+            "initializer": self.initializer_paths,
+        }[role]
+        if not any(_matches_import_pattern(path, pattern) for pattern in allowed_paths):
+            raise ValueError(f"Untrusted import path for {role!r}: {path!r}.")
 
-_REGISTRY_IMPORT_POLICY = _ModelImportPolicy(allowed_paths=ALLOWED_MODEL_IMPORT_PATHS)
+
+_REGISTRY_IMPORT_POLICY = ModelImportPolicy(
+    class_paths=_DEFAULT_CLASS_IMPORT_PATHS,
+    activation_paths=_DEFAULT_ACTIVATION_IMPORT_PATHS,
+    initializer_paths=_DEFAULT_INITIALIZER_IMPORT_PATHS,
+)
 
 
 def _validate_import_pattern(path: object) -> str:
@@ -61,8 +91,6 @@ def _validate_import_pattern(path: object) -> str:
         raise ValueError(f"Invalid model import path: {path!r}.")
     if path.startswith("torch.") and path != "torch.nn.*" and not fixed_path.startswith("torch.nn."):
         raise ValueError(f"Invalid model import path: {path!r}.")
-    if is_namespace and not path.endswith(".*"):
-        raise ValueError(f"Invalid model import path: {path!r}.")
     return path
 
 
@@ -78,28 +106,41 @@ def _matches_import_pattern(path: str, pattern: str) -> bool:
     return path == pattern
 
 
-def _resolve_user_import_policy(
+def resolve_model_import_policy(
     model_import_paths: Collection[str] | None,
     model_import_mode: Literal["extend", "replace", "unsafe"],
-) -> _ModelImportPolicy:
+) -> ModelImportPolicy:
     if not isinstance(model_import_mode, str) or model_import_mode not in {"extend", "replace", "unsafe"}:
         raise ValueError(f"Invalid model_import_mode: {model_import_mode!r}.")
     if model_import_mode == "unsafe":
         if model_import_paths is not None:
             raise ValueError("model_import_paths cannot be used with unsafe model_import_mode.")
-        return _ModelImportPolicy(allowed_paths=frozenset(), unsafe=True)
+        return ModelImportPolicy(
+            class_paths=frozenset(),
+            activation_paths=frozenset(),
+            initializer_paths=frozenset(),
+            unsafe=True,
+        )
     if model_import_mode == "replace":
         if model_import_paths is None:
             raise ValueError("replace model_import_mode requires a non-empty model_import_paths collection.")
         paths = _normalize_model_import_paths(model_import_paths)
         if not paths:
             raise ValueError("replace model_import_mode requires a non-empty model_import_paths collection.")
-        return _ModelImportPolicy(allowed_paths=paths)
+        return ModelImportPolicy(
+            class_paths=paths,
+            activation_paths=paths,
+            initializer_paths=paths,
+        )
     additions = frozenset() if model_import_paths is None else _normalize_model_import_paths(model_import_paths)
-    return _ModelImportPolicy(allowed_paths=ALLOWED_MODEL_IMPORT_PATHS | additions)
+    return ModelImportPolicy(
+        class_paths=_DEFAULT_CLASS_IMPORT_PATHS | additions,
+        activation_paths=_DEFAULT_ACTIVATION_IMPORT_PATHS | additions,
+        initializer_paths=_DEFAULT_INITIALIZER_IMPORT_PATHS | additions,
+    )
 
 
-def _walk_model_yaml(model_yaml: str, policy: _ModelImportPolicy) -> dict[str, Any]:
+def _walk_model_yaml(model_yaml: str, policy: ModelImportPolicy) -> dict[str, Any]:
     if not isinstance(model_yaml, str) or not model_yaml.strip():
         raise ValueError("model_yaml must be a nonempty string.")
     try:
@@ -129,10 +170,7 @@ def _walk_model_yaml(model_yaml: str, policy: _ModelImportPolicy) -> dict[str, A
                         raise ValueError(f"Import key {key!r} is forbidden in model artifacts.")
                     if not isinstance(child, str):
                         raise ValueError(f"Import key {key!r} must contain a string path.")
-                    if not policy.unsafe and not any(
-                        _matches_import_pattern(child, pattern) for pattern in policy.allowed_paths
-                    ):
-                        raise ValueError(f"Untrusted import path for {key!r}: {child!r}.")
+                    policy.require_allowed(child, _MODEL_IMPORT_KEYS[key])
                 walk(child)
         else:
             for child in value:
@@ -159,14 +197,17 @@ def validate_model_yaml(
     for trusted artifacts because downstream construction may execute imported
     code.
     """
-    return _walk_model_yaml(model_yaml, _resolve_user_import_policy(model_import_paths, model_import_mode))
+    return _walk_model_yaml(model_yaml, resolve_model_import_policy(model_import_paths, model_import_mode))
 
 
 def _validate_registry_model_yaml(model_yaml: str) -> dict[str, Any]:
     return _walk_model_yaml(model_yaml, _REGISTRY_IMPORT_POLICY)
 
 
-def _validate_v2_artifact(data: object, policy: _ModelImportPolicy) -> tuple[dict[str, Any], Mapping[str, Tensor]]:
+def validate_v2_artifact_with_policy(
+    data: object,
+    policy: ModelImportPolicy,
+) -> tuple[dict[str, Any], Mapping[str, Tensor]]:
     if not isinstance(data, dict):
         raise ValueError(f"v2 artifact must be a dictionary, got {type(data).__name__}.")  # noqa: TRY004
 
@@ -206,12 +247,12 @@ def validate_v2_artifact(
     Import-path handling matches :func:`validate_model_yaml`. This function
     also validates the v2 envelope, metadata, and tensor-only state dict.
     """
-    policy = _resolve_user_import_policy(model_import_paths, model_import_mode)
-    return _validate_v2_artifact(data, policy)
+    policy = resolve_model_import_policy(model_import_paths, model_import_mode)
+    return validate_v2_artifact_with_policy(data, policy)
 
 
-def _validate_registry_v2_artifact(data: object) -> tuple[dict[str, Any], Mapping[str, Tensor]]:
-    return _validate_v2_artifact(data, _REGISTRY_IMPORT_POLICY)
+def validate_registry_v2_artifact(data: object) -> tuple[dict[str, Any], Mapping[str, Tensor]]:
+    return validate_v2_artifact_with_policy(data, _REGISTRY_IMPORT_POLICY)
 
 
 def validate_model_metadata(
