@@ -1143,7 +1143,7 @@ class TestNvAlchemiCoulombBackend:
         assert torch.isfinite(res["hessian"]).all()
         assert res["hessian"].abs().sum() > 0
 
-    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    @pytest.mark.parametrize("method", ["pme"])  # ewald is energy-in-graph; see ewald-specific tests
     def test_fd_hessian_matches_energy_fd(self, pbc_crystal_small, device, method):
         """The FD-of-forces full-periodic block equals the central-FD-of-energy Hessian.
 
@@ -1286,3 +1286,31 @@ class TestNvAlchemiCoulombBackend:
         assert torch.isfinite(res["energy"]).all()
         assert torch.isfinite(res["forces"]).all()
         assert torch.isfinite(res["stress"]).all()
+
+
+@pytest.mark.slow
+def test_ewald_hessian_consistent_with_forces(pbc_crystal_small):
+    """Autograd Ewald Hessian rows equal central differences of analytic forces."""
+    calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+        calc.set_lrcoulomb_method("ewald")
+    device = calc.device
+    data = {
+        "coord": pbc_crystal_small["coord"].to(device),
+        "numbers": pbc_crystal_small["numbers"].to(device),
+        "cell": pbc_crystal_small["cell"].to(device),
+        "charge": 0.0,
+    }
+    H = calc(dict(data), hessian=True)["hessian"].double().cpu()
+    h = 1e-3
+    coord = data["coord"].clone()
+    for a, x in [(0, 0), (1, 2)]:
+        dp = coord.clone()
+        dp[a, x] += h
+        dm = coord.clone()
+        dm[a, x] -= h
+        fp = calc({**data, "coord": dp}, forces=True)["forces"].double().cpu()
+        fm = calc({**data, "coord": dm}, forces=True)["forces"].double().cpu()
+        fd_row = -(fp - fm) / (2 * h)
+        torch.testing.assert_close(H[a, x], fd_row, rtol=0.05, atol=5e-3)
