@@ -492,9 +492,9 @@ class TestCoulombMethods:
         assert calc.external_coulomb.calls == [(True, True)]
         torch.testing.assert_close(data["energy"], torch.ones(1, dtype=torch.float64))
 
-    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    @pytest.mark.parametrize("method", ["pme"])
     def test_external_coulomb_training_derivatives_flag_for_train(self, method):
-        """Ewald/PME switch to training-derivative mode for force/stress training."""
+        """PME switches to training-derivative mode for force/stress training."""
         calc = AIMNet2Calculator.__new__(AIMNet2Calculator)
         calc.external_coulomb = RecordingExternalCoulomb(method)
         calc.external_dftd3 = None
@@ -504,6 +504,18 @@ class TestCoulombMethods:
 
         kwargs = calc.external_coulomb.kwargs[0]
         assert kwargs["training_derivatives"] is True
+
+    def test_external_coulomb_ewald_never_requests_training_derivatives(self):
+        """Ewald is energy-in-graph unconditionally; train mode must not flip the flag."""
+        calc = AIMNet2Calculator.__new__(AIMNet2Calculator)
+        calc.external_coulomb = RecordingExternalCoulomb("ewald")
+        calc.external_dftd3 = None
+        calc._train = True
+
+        calc._run_external_modules({"energy": torch.zeros(1)}, forces=True, stress=True)
+
+        kwargs = calc.external_coulomb.kwargs[0]
+        assert kwargs["training_derivatives"] is False
 
     @pytest.mark.parametrize("method", ["ewald", "pme"])
     def test_external_coulomb_training_derivatives_false_for_eval(self, method):
