@@ -164,7 +164,7 @@ class AIMNet2(AIMNet2Base):
                 _in = torch.cat([self._prepare_in_a(data), self._prepare_in_q(data)], dim=-1)
 
             _out = mlp(_in)
-            if data["_input_padded"].item():
+            if nbops.is_input_padded(data):
                 _out = nbops.mask_i_(_out, data, mask_value=0.0)
 
             if ipass == 0:
