@@ -316,7 +316,7 @@ def mol_sum(x: Tensor, data: dict[str, Tensor]) -> Tensor:
             2,
         ), "Invalid tensor shape for mol_sum, ndim should be 1 or 2"
         idx = data["mol_idx"]
-        if torch.compiler.is_compiling() and "charge" in data:
+        if torch.compiler.is_compiling() and "charge" in data and x.device.type != "cpu":
             # `charge` carries one entry per molecule and is a genuine model
             # input, so its length is static shape metadata: reading it costs
             # no device sync and no graph break.
@@ -325,6 +325,18 @@ def mol_sum(x: Tensor, data: dict[str, Tensor]) -> Tensor:
             # is the same number: mol_sizes comes out of `torch.bincount`, so
             # its length is a data-dependent (unbacked) symbol and sizing an
             # allocation from it hands inductor a shape it cannot reason about.
+            #
+            # CPU is excluded on purpose: it keeps the .item() graph break
+            # below. Through torch 2.10, inductor's CPU scheduler fuses the
+            # atomic_add scatters of the PBC distance backward with a
+            # dependent pointwise, and CppScheduling.try_loop_split then dies
+            # on the fused group with `AssertionError: expected_var_ranges ==
+            # extra_indexing_ranges` (a degenerate loop split). The fusion is
+            # outlawed upstream by pytorch/pytorch#172301, first released in
+            # torch 2.11. The break costs nothing on CPU -- .item() has no
+            # device sync there -- and restores the graph partitioning that
+            # avoids the fused group. Drop this exclusion when the supported
+            # torch floor reaches 2.11.
             out_size = data["charge"].shape[0]
         elif torch.compiler.is_compiling():
             # data dict assembled without `charge`: dynamo handles the .item()
