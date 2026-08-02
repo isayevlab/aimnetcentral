@@ -69,7 +69,13 @@ def set_grad_tensors(
         coord_unstrained = data["coord"]
         cell = data["cell"]
         cell_unstrained = cell
-        if cell.ndim == 2:
+        if coord_unstrained.ndim == 3:
+            B = coord_unstrained.shape[0]
+            scaling = torch.eye(3, dtype=cell.dtype, device=cell.device).unsqueeze(0).repeat(B, 1, 1)
+            scaling.requires_grad_(True)
+            data["coord"] = torch.einsum("bni,bij->bnj", coord_unstrained, scaling)
+            data["cell"] = cell @ scaling
+        elif cell.ndim == 2:
             # Single system: (3, 3) scaling
             scaling = torch.eye(3, requires_grad=True, dtype=cell.dtype, device=cell.device)
             data["coord"] = data["coord"] @ scaling
@@ -136,7 +142,10 @@ def get_derivatives(
                 volume = torch.linalg.det(cell).abs().unsqueeze(-1).unsqueeze(-1)  # (B, 1, 1)
             data["stress"] = dedc / volume
     if hessian:
-        H = calculate_hessian(data["forces"], saved_for_grad["coord"])
+        real_atom_mask = None
+        if saved_for_grad["coord"].ndim == 3 and "numbers" in data:
+            real_atom_mask = data["numbers"].ne(0)
+        H = calculate_hessian(data["forces"], saved_for_grad["coord"], real_atom_mask=real_atom_mask)
         if coulomb_terms is not None and getattr(coulomb_terms, "hessian", None) is not None:
             # The LR coulomb hessian is computed in float64 via finite
             # differences. Accumulate in that (higher) precision rather than
@@ -146,7 +155,7 @@ def get_derivatives(
     return data
 
 
-def calculate_hessian(forces: Tensor, coord: Tensor) -> Tensor:
+def calculate_hessian(forces: Tensor, coord: Tensor, real_atom_mask: Tensor | None = None) -> Tensor:
     """Dense ``(N, 3, N, 3)`` Hessian of the energy w.r.t. real-atom coordinates.
 
     Autograd contract (IMPORTANT):
@@ -169,6 +178,42 @@ def calculate_hessian(forces: Tensor, coord: Tensor) -> Tensor:
     periodic Ewald/PME long-range block remains a fixed-charge FD term in
     either case).
     """
+    if real_atom_mask is not None:
+        coord_for_grad = coord
+        if coord.ndim == 3:
+            if coord.shape[0] != 1 or forces.shape[0] != 1 or real_atom_mask.shape[0] != 1:
+                raise ValueError("real_atom_mask Hessian calculation requires a singleton mode-2 system.")
+            coord_real = coord[0][real_atom_mask[0]]
+            forces = forces[0]
+            real_atom_mask = real_atom_mask[0]
+        else:
+            coord_real = coord[real_atom_mask]
+        if real_atom_mask.shape != (coord_for_grad.shape[-2],):
+            raise ValueError("real_atom_mask must align with the coordinate atom dimension.")
+        if forces.shape[0] == coord_for_grad.shape[-2]:
+            forces_real = forces[real_atom_mask]
+        elif forces.shape[0] == coord_real.shape[0]:
+            forces_real = forces
+        else:
+            raise ValueError("forces must contain either all atoms or all real atoms.")
+        n = forces_real.numel()
+        eye = torch.eye(n, device=forces_real.device, dtype=forces_real.dtype)
+
+        def vjp_real(go: Tensor) -> Tensor:
+            grad = torch.autograd.grad(
+                forces_real.flatten(),
+                coord_for_grad,
+                grad_outputs=go,
+                retain_graph=True,
+                allow_unused=True,
+            )[0]
+            if grad is None:
+                return torch.zeros_like(coord_real)
+            grad_real = grad[0][real_atom_mask] if grad.ndim == 3 else grad[real_atom_mask]
+            return -grad_real
+
+        return torch.func.vmap(vjp_real, 0)(eye).view(-1, 3, coord_real.shape[0], 3)
+
     # Coord includes padding atom (shape N+1), forces only for real atoms (shape N).
     # Hessian computed only for actual atoms: (N, 3, N, 3).
     #

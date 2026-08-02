@@ -507,13 +507,21 @@ def add_lr_keys(
         # Batched mode (B, N, 3)
         B, N = coord.shape[:2]
         max_nb = N - 1
-        nbmat = torch.zeros((B, N, max_nb), dtype=torch.long, device=device)
-        for b in range(B):
+        if B == 1:
+            nbmat = torch.zeros((N, max_nb), dtype=torch.long, device=device)
             for i in range(N):
                 neighbors = [j for j in range(N) if j != i]
                 for k, nb in enumerate(neighbors[:max_nb]):
-                    nbmat[b, i, k] = nb
-        shifts = torch.zeros((B, N, max_nb, 3), dtype=torch.int32, device=device)
+                    nbmat[i, k] = nb
+            shifts = torch.zeros((N, max_nb, 3), dtype=torch.int32, device=device)
+        else:
+            nbmat = torch.zeros((B, N, max_nb), dtype=torch.long, device=device)
+            for b in range(B):
+                for i in range(N):
+                    neighbors = [b * N + j for j in range(N) if j != i]
+                    for k, nb in enumerate(neighbors[:max_nb]):
+                        nbmat[b, i, k] = nb
+            shifts = torch.zeros((B, N, max_nb, 3), dtype=torch.int32, device=device)
     else:
         # Flat mode (N, 3)
         N = coord.shape[0]

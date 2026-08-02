@@ -28,6 +28,29 @@ def _dense_hessian_matmul(calc, data, v):
     return (Hmat @ v.reshape(-1).double()).reshape(n, 3)
 
 
+def _singleton_mode2_input() -> dict[str, torch.Tensor]:
+    sentinel = 5
+    nbmat = torch.tensor([
+        [
+            [1, 2, sentinel],
+            [0, 2, sentinel],
+            [0, 1, sentinel],
+            [sentinel, sentinel, sentinel],
+            [sentinel, sentinel, sentinel],
+        ]
+    ])
+    return {
+        "coord": torch.tensor([
+            [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+        ]),
+        "numbers": torch.tensor([[8, 1, 1, 0, 0]]),
+        "charge": torch.tensor([0.0]),
+        "nbmat": nbmat,
+        "nbmat_lr": nbmat,
+        "nbmat_coulomb": nbmat,
+    }
+
+
 def _nblist_state(nblist):
     if nblist is None:
         return None
@@ -107,6 +130,20 @@ def test_hvp_multiple_vectors_shape():
     assert HV.shape == (4, 3, 3)
     ref = torch.stack([_dense_hessian_matmul(calc, data, V[k]) for k in range(4)], 0)
     torch.testing.assert_close(HV.double().cpu(), ref.cpu(), rtol=1e-3, atol=1e-3)
+
+
+@pytest.mark.slow
+def test_hvp_matches_dense_singleton_mode2_with_multiple_padding_rows():
+    calc = AIMNet2Calculator("aimnet2", nb_threshold=0, device="cpu")
+    calc.external_dftd3 = None
+    data = _singleton_mode2_input()
+    vector = torch.randn(3, 3, dtype=torch.float64)
+
+    actual = calc.hessian_vector_product(data, vector)
+    expected = _dense_hessian_matmul(calc, data, vector)
+
+    assert actual.shape == (3, 3)
+    torch.testing.assert_close(actual.double().cpu(), expected.cpu(), rtol=1e-3, atol=1e-3)
 
 
 def test_hvp_batched_input_raises():

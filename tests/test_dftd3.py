@@ -215,8 +215,8 @@ class TestDFTD3Forward:
             torch.full_like(kernel_inputs.neighbor_matrix[data["mask_ij_dftd3"]], kernel_inputs.fill_value),
         )
 
-    def test_mode_2_masks_padded_neighbors_after_global_offset(self, device):
-        """Batched sparse DFTD3 inputs convert local padding indices to the global fill value."""
+    def test_mode_2_preserves_global_sentinel_and_padded_neighbors(self, device):
+        """Batched sparse DFTD3 inputs preserve global indices and sentinel tails."""
         module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device)
         coord = torch.tensor(
             [
@@ -229,10 +229,11 @@ class TestDFTD3Forward:
         numbers = torch.tensor([[8, 1, 0], [6, 1, 0]], device=device)
         nbmat = torch.tensor(
             [
-                [[1, 2], [0, 2], [2, 2]],
-                [[1, 2], [0, 2], [2, 2]],
+                [[1, 6], [0, 6], [6, 6]],
+                [[4, 6], [3, 6], [6, 6]],
             ],
             device=device,
+            dtype=torch.int32,
         )
         data = {
             "coord": coord,
