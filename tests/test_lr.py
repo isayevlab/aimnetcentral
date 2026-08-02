@@ -622,28 +622,34 @@ class TestLRCoulombDSFPBC:
         charges = torch.randn(B, N, device=device) * 0.3
         charges = charges - charges.mean(dim=-1, keepdim=True)
 
-        # All-pairs nbmat with local atom indices per batch.
-        nbmat = torch.zeros((B, N, N - 1), dtype=torch.long, device=device)
-        for i in range(N):
-            others = [j for j in range(N) if j != i]
-            nbmat[:, i, :] = torch.tensor(others, device=device)
-        mask_ij = torch.zeros((B, N, N - 1), dtype=torch.bool, device=device)
+        # Global all-pairs matrix with one required dummy atom per system.
+        nbmat = torch.full((B, N, N), B * N, dtype=torch.int32, device=device)
+        for b in range(B):
+            for i in range(N - 1):
+                others = [b * N + j for j in range(N - 1) if j != i]
+                nbmat[b, i, : len(others)] = torch.tensor(others, device=device)
         mask_i = torch.zeros((B, N), dtype=torch.bool, device=device)
+        mask_i[:, -1] = True
 
         module = LRCoulomb(method="dsf", dsf_rc=8.0, subtract_sr=False).to(device)
 
         data_mode2 = {
-            "_nb_mode": torch.tensor(2),
-            "_input_padded": torch.tensor(False),
             "coord": coord,
             "charges": charges,
-            "numbers": torch.ones((B, N), dtype=torch.long, device=device),
+            "numbers": torch.cat(
+                [
+                    torch.ones((B, N - 1), dtype=torch.long, device=device),
+                    torch.zeros((B, 1), dtype=torch.long, device=device),
+                ],
+                dim=1,
+            ),
+            "nbmat": nbmat,
             "nbmat_lr": nbmat,
-            "mask_ij_lr": mask_ij,
             "mask_i": mask_i,
             "mol_idx": torch.arange(B, device=device).repeat_interleave(N),
             "mol_sizes": torch.full((B,), N, device=device, dtype=torch.long),
         }
+        data_mode2 = nbops.calc_masks(nbops.set_nb_mode(data_mode2))
         result_mode2, terms_mode2 = module(data_mode2, compute_forces=True)
         e_mode2 = result_mode2["e_h"]
         assert terms_mode2 is not None and terms_mode2.forces is not None
@@ -654,16 +660,11 @@ class TestLRCoulombDSFPBC:
         f_ref = []
         for b in range(B):
             data_b = {
-                "_nb_mode": torch.tensor(0),
-                "_input_padded": torch.tensor(False),
-                "coord": coord[b : b + 1],
-                "charges": charges[b : b + 1],
-                "numbers": torch.ones((1, N), dtype=torch.long, device=device),
-                "mask_ij": mask_ij[b : b + 1],
-                "mask_i": mask_i[b : b + 1],
-                "mol_idx": torch.zeros(N, device=device, dtype=torch.long),
-                "mol_sizes": torch.tensor([N], device=device, dtype=torch.long),
+                "coord": coord[b : b + 1, :-1],
+                "charges": charges[b : b + 1, :-1],
+                "numbers": torch.ones((1, N - 1), dtype=torch.long, device=device),
             }
+            data_b = nbops.calc_masks(nbops.set_nb_mode(data_b))
             result_b, terms_b = module(data_b, compute_forces=True)
             assert terms_b is not None and terms_b.forces is not None
             e_ref.append(result_b["e_h"])
@@ -672,7 +673,7 @@ class TestLRCoulombDSFPBC:
         f_ref = torch.stack(f_ref, dim=0)
 
         torch.testing.assert_close(e_mode2, e_ref, atol=1e-5, rtol=1e-5)
-        torch.testing.assert_close(terms_mode2.forces, f_ref, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(terms_mode2.forces[:, :-1], f_ref, atol=1e-5, rtol=1e-5)
 
     def test_dsf_mode0_padded_batched_indices(self, device):
         """DSF mode-0 builds a cutoff-bounded NL with correct global indices and
@@ -731,9 +732,9 @@ class TestLRCoulombDSFPBC:
         f_ref = torch.stack(f_ref, dim=0)
 
         torch.testing.assert_close(e_mode0, e_ref, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(terms_mode0.forces, f_ref, atol=1e-5, rtol=1e-5)
         # Padded atom force should be zero (it has charge zero and was shifted out).
         assert torch.allclose(terms_mode0.forces[0, -1], torch.zeros(3, device=device), atol=1e-5)
-        torch.testing.assert_close(terms_mode0.forces, f_ref, atol=1e-5, rtol=1e-5)
 
     def test_dsf_mode0_large_coordinates_keep_padding_out_of_neighbor_list(self, device):
         """Padded atoms stay out of the DSF NL even for large unwrapped coordinates."""
@@ -786,6 +787,24 @@ class TestLRCoulombDSFPBC:
         torch.testing.assert_close(result_padded["e_h"], result_ref["e_h"], atol=1e-5, rtol=1e-5)
         torch.testing.assert_close(terms_padded.forces[:, :2], terms_ref.forces, atol=1e-5, rtol=1e-5)
         assert torch.allclose(terms_padded.forces[0, padded_idx], torch.zeros(3, device=device), atol=1e-5)
+
+
+def test_global_mode2_lr_matrix_is_symmetric():
+    B, N, M = 2, 5, 6
+    sentinel = B * N
+    nbmat = torch.full((B, N, M), sentinel, dtype=torch.int32)
+    for b in range(B):
+        for i in range(N - 1):
+            targets = [j for j in range(N - 1) if j != i]
+            nbmat[b, i, : len(targets)] = torch.tensor([b * N + j for j in targets])
+    for b in range(B):
+        for i in range(N - 1):
+            for target in nbmat[b, i]:
+                if int(target) != sentinel:
+                    source = b * N + i
+                    reverse = nbmat[b, target - b * N]
+                    assert source in reverse
+        assert torch.equal(nbmat[b, -1], torch.full((M,), sentinel, dtype=torch.int32))
 
 
 class TestLRCoulombEwaldPBC:

@@ -49,6 +49,59 @@ result = calc({
 }, forces=True, stress=True)
 ```
 
+## Batched sparse neighbor matrices (mode 2)
+
+Mode 2 represents several padded systems in one tensor. Coordinates, atomic numbers, and features have shape `(B, N, ...)`, where `B` is the number of systems and `N` is the padded atom capacity. Each system reserves its final atom slot as a dummy (`numbers[:, -1] == 0`); any additional zero-number atoms form a contiguous tail.
+
+Neighbor indices are global: atom `j` in system `b` is `b*N + j`. The sentinel is `B*N`, and valid neighbors must precede the sentinel tail in every center row. A neighbor that targets a padded atom is also excluded and belongs to that tail. The primary and long-range matrices use the same representation:
+
+```python
+nbmat.shape == (B, N, M)
+nbmat[b, i, k] == b * N + j       # valid neighbor
+nbmat[b, i, k] == B * N           # excluded slot
+```
+
+Periodic mode 2 uses full three-dimensional cells with shape `(B, 3, 3)` for batches, or `(1, 3, 3)` for one system. `pbc` is optional when a cell is supplied; if present, all three components must be true. Each periodic neighbor matrix must have aligned integral lattice coefficients in `shifts.shape == (B, N, M, 3)`. Energy, forces, stress, and Hessian requests preserve the 3D execution path; Hessians select only real atoms and return `(R, 3, R, 3)` per system, where `R` excludes the padded tail. Batched Hessians stack when all systems have the same `R`, otherwise they return a list. Slab, mixed-periodicity, and partial-PBC inputs are deferred to PR 03.
+
+All four periodic long-range producers—DSF, DFT-D3, Ewald, and PME—use the same global indices and aligned shifts. Their periodic neighbor lists must represent each physical interaction symmetrically: if an edge uses shift `s`, the reverse edge must use the opposite shift `-s`. A directed or half neighbor list is not a valid input for these long-range observables. A full-observable request can be made directly:
+
+```python
+result = calc(
+    {
+        "coord": coord_batch,      # (B, N, 3), final atom padded
+        "numbers": numbers_batch,  # (B, N)
+        "charge": charges,
+        "cell": cells,             # (B, 3, 3)
+        "nbmat": nbmat_global,     # (B, N, M), global indices
+        "shifts": shifts,          # (B, N, M, 3)
+        "nbmat_lr": nbmat_global,
+        "shifts_lr": shifts,
+        "nbmat_coulomb": nbmat_global,
+        "shifts_coulomb": shifts,
+        "nbmat_dftd3": nbmat_global,
+        "shifts_dftd3": shifts,
+    },
+    forces=True,
+    stress=True,
+    hessian=True,
+)
+```
+
+Calculator results from an explicit mode-2 Hessian split retain the singleton system axis for each recursive subsystem (for example, energy `(B, 1)` and forces `(B, 1, N, 3)`). This preserves the existing mode-2 collection behavior; the Hessian itself contains only real atoms.
+
+Legacy local matrices can be converted when their exclusions are already tail-packed:
+
+```python
+from aimnet import nbops
+
+nbmat_global = nbops.convert_mode2_local_to_global(
+    nbmat_local,
+    padding_mask=padding_mask,
+)
+```
+
+The helper does not reorder slots. If exclusions are interleaved, the producer must repack both the neighbor matrix and its aligned shifts together; moving indices alone would assign the wrong periodic image. This is an intentional API break for callers that previously supplied local 3D mode-2 indices. Invalid CUDA content queues a device-side assertion, so restart the CUDA process after a validation failure.
+
 ### Changing Coulomb Methods
 
 ```python
@@ -381,8 +434,8 @@ For both Ewald and PME, `ewald_accuracy` (default `1e-6`, matching the nvalchemi
 
 **Derivative Support:**
 
-- `simple` and `dsf`: inference forces/stress are supported. DSF force/stress losses (`train=True` with `forces` or `stress`) and Hessian calculations raise `NotImplementedError`.
-- `ewald` and `pme`: forces, stress, and force/stress losses in `train=True` are supported. Hessian requests raise `NotImplementedError` because nvalchemiops exposes explicit first coordinate derivatives, not second coordinate derivatives.
+- `simple` and `dsf`: inference forces/stress are supported. DSF force/stress losses (`train=True` with `forces` or `stress`) remain unsupported; periodic Hessians select real atoms.
+- `ewald` and `pme`: forces, stress, force/stress losses in `train=True`, and real-atom Hessians are supported. PME includes its fixed-charge finite-difference long-range block.
 
 See [Long-Range Methods → Derivative Support](long_range.md#derivative-support) for the rationale.
 
@@ -512,25 +565,27 @@ H = torch.autograd.functional.hessian(energy_fn, coords)  # shape (N, 3, N, 3)
 
 !!! note "Long-range backend limitations"
 
-    External higher-order differentiation depends on the selected long-range backend. Ewald and PME use nvalchemiops explicit first coordinate derivatives and do not provide complete Coulomb Hessians.
+    External higher-order differentiation depends on the selected long-range backend. The calculator's explicit Hessian path includes the real-atom periodic Coulomb block where the backend provides it; external `torch.autograd.functional.hessian` remains subject to each backend's graph support.
 
 When `coord` does **not** have `requires_grad=True` (the default), inputs are detached as before — optimization loops that call the calculator repeatedly incur no graph accumulation overhead.
 
 ## Output Format
 
-| Key       | Shape                   | Description                   |
-| --------- | ----------------------- | ----------------------------- |
-| `energy`  | `(1,)` or `(B,)`        | Total energy per molecule     |
-| `charges` | `(N,)` or `(B, N)`      | Atomic partial charges        |
-| `forces`  | `(N, 3)` or `(B, N, 3)` | Atomic forces (if requested)  |
-| `stress`  | `(3, 3)` or `(B, 3, 3)` | Stress tensor (if requested)  |
-| `hessian` | `(N, 3, N, 3)`          | Hessian matrix (if requested) |
+`energy`: `(1,)` or `(B,)`, total energy per molecule.
+
+`charges`: `(N,)` or `(B, N)`, atomic partial charges.
+
+`forces`: `(N, 3)` or `(B, N, 3)`, when requested.
+
+`stress`: `(3, 3)` or `(B, 3, 3)`, when requested.
+
+`hessian`: `(N, 3, N, 3)` or batched mode-2 equivalents, over real atoms.
 
 **Notes:**
 
 - `forces` requires `forces=True` in `eval()`
 - `stress` requires `stress=True` and `cell` in input
-- `hessian` requires `hessian=True`, only for single molecules
+- `hessian` requires `hessian=True`; explicit batched mode 2 supports stacked or ragged per-system results
 
 ## Batching and Neighbor Modes
 
@@ -762,15 +817,7 @@ Legacy JIT models (`.jpt`) have different behavior:
 
 ### Common Errors
 
-| Condition                                   | Error                 |
-| ------------------------------------------- | --------------------- |
-| Invalid model type                          | `TypeError`           |
-| Missing required input key                  | `KeyError`            |
-| Hessian with multiple molecules             | `NotImplementedError` |
-| Hessian with DSF/Ewald/PME Coulomb          | `NotImplementedError` |
-| PBC with multiple molecules                 | `NotImplementedError` |
-| Invalid Coulomb method                      | `ValueError`          |
-| `needs_dispersion=True` without `d3_params` | `ValueError`          |
+Invalid model type: `TypeError`. Missing required input key: `KeyError`. Unsupported Hessian representation: `ValueError` or `NotImplementedError`. Partial or mixed PBC: `ValueError` (PR 03 scope). Invalid Coulomb method: `ValueError`. Missing D3 parameters: `ValueError`.
 
 ### Warnings
 

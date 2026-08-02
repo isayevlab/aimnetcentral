@@ -222,13 +222,31 @@ class AIMNet2Base(nn.Module):
         for k, d in zip(self._required_keys, self._required_keys_dtype, strict=False):
             assert k in data, f"Key {k} is required"
             data[k] = data[k].to(d)
+        neighbor_keys = {f"nbmat{suffix}" for suffix in nbops.NBMAT_SUFFIXES}
+        converted_neighbors: list[tuple[Tensor, Tensor]] = []
+        for key in neighbor_keys:
+            if key not in data:
+                continue
+            source = data[key]
+            converted = next((value for previous, value in converted_neighbors if source is previous), None)
+            if converted is None:
+                converted = source if source.dtype == torch.int32 else source.to(torch.int32)
+                converted_neighbors.append((source, converted))
+            data[key] = converted
         for k, d in zip(self._optional_keys, self._optional_keys_dtype, strict=False):
-            if k in data:
+            if k in data and k not in neighbor_keys:
                 data[k] = data[k].to(d)
         return data
 
     def prepare_input(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         """Common operations for input preparation."""
+        nbmat = data.get("nbmat")
+        nbops.validate_neighbor_suffix_layout(data)
+        if isinstance(nbmat, Tensor) and nbmat.ndim == 3:
+            nbops.normalize_mode2_periodic_geometry(data, B=nbmat.shape[0])
+            for suffix in nbops.NBMAT_SUFFIXES:
+                if f"nbmat{suffix}" in data or f"shifts{suffix}" in data:
+                    nbops.validate_mode2_nbmat_raw(data, suffix=suffix)
         data = self._prepare_dtype(data)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)

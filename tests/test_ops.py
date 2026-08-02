@@ -567,8 +567,8 @@ class TestBatchedCells:
         # Batched coordinates (B, N, 3)
         coord = torch.tensor(
             [
-                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
-                [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
+                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]],
+                [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 0.0]],
             ],
             dtype=torch.float32,
             device=device,
@@ -582,8 +582,8 @@ class TestBatchedCells:
 
         # Create neighbor matrix (B, N, M)
         # Note: In mode 2, nbmat indices are GLOBAL into flattened (B*N) array
-        # System 0 atoms: 0, 1, 2; System 1 atoms: 3, 4, 5
-        B, N, M = 2, 3, 2
+        # System 0 atoms: 0, 1, 2; system 1 atoms: 4, 5, 6; index 3/7 are dummies/sentinel.
+        B, N, M = 2, 4, 2
         fill_val = B * N  # Fill value is total number of atoms
         nbmat = torch.full((B, N, M), fill_val, dtype=torch.int32, device=device)
         # System 0: atom 0's neighbors are atoms 1, 2 (global indices 1, 2)
@@ -593,20 +593,20 @@ class TestBatchedCells:
         nbmat[0, 1, 1] = 2
         nbmat[0, 2, 0] = 0
         nbmat[0, 2, 1] = 1
-        # System 1: atom 3's neighbors are atoms 4, 5 (global indices 4, 5)
-        nbmat[1, 0, 0] = 4  # System 1, atom 0 -> global atom 4
-        nbmat[1, 0, 1] = 5  # System 1, atom 0 -> global atom 5
-        nbmat[1, 1, 0] = 3
-        nbmat[1, 1, 1] = 5
-        nbmat[1, 2, 0] = 3
-        nbmat[1, 2, 1] = 4
+        # System 1: atom 4's neighbors are atoms 5, 6 (global indices 5, 6)
+        nbmat[1, 0, 0] = 5
+        nbmat[1, 0, 1] = 6
+        nbmat[1, 1, 0] = 4
+        nbmat[1, 1, 1] = 6
+        nbmat[1, 2, 0] = 4
+        nbmat[1, 2, 1] = 5
 
         # Create shifts (B, N, M, 3)
         shifts = torch.zeros((B, N, M, 3), dtype=torch.float32, device=device)
 
         data = {
             "coord": coord,
-            "numbers": torch.tensor([[8, 1, 1], [8, 1, 1]], device=device),
+            "numbers": torch.tensor([[8, 1, 1, 0], [8, 1, 1, 0]], device=device),
             "nbmat": nbmat,
             "shifts": shifts,
             "cell": cell,
@@ -628,58 +628,10 @@ class TestBatchedCells:
         assert d_ij[1, 0, 0].item() == pytest.approx(2.0, abs=1e-5)
 
     def test_calc_distances_single_cell_nb_mode2(self, device):
-        """Test calc_distances with batched coordinates but single cell (backward compatible)."""
-        # Batched coordinates (B, N, 3)
-        coord = torch.tensor(
-            [
-                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
-                [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
-            ],
-            dtype=torch.float32,
-            device=device,
-        )
-
-        # Single cell (3, 3)
+        """Reject a shared cell for a multi-system mode-2 batch."""
         cell = torch.eye(3, device=device) * 10.0
-
-        # Create neighbor matrix (B, N, M)
-        # Note: In mode 2, nbmat indices are GLOBAL into flattened (B*N) array
-        B, N, M = 2, 3, 2
-        fill_val = B * N
-        nbmat = torch.full((B, N, M), fill_val, dtype=torch.int32, device=device)
-        # System 0
-        nbmat[0, 0, 0] = 1
-        nbmat[0, 0, 1] = 2
-        nbmat[0, 1, 0] = 0
-        nbmat[0, 1, 1] = 2
-        nbmat[0, 2, 0] = 0
-        nbmat[0, 2, 1] = 1
-        # System 1 (global indices 3, 4, 5)
-        nbmat[1, 0, 0] = 4
-        nbmat[1, 0, 1] = 5
-        nbmat[1, 1, 0] = 3
-        nbmat[1, 1, 1] = 5
-        nbmat[1, 2, 0] = 3
-        nbmat[1, 2, 1] = 4
-
-        # Create shifts (B, N, M, 3)
-        shifts = torch.zeros((B, N, M, 3), dtype=torch.float32, device=device)
-
-        data = {
-            "coord": coord,
-            "numbers": torch.tensor([[8, 1, 1], [8, 1, 1]], device=device),
-            "nbmat": nbmat,
-            "shifts": shifts,
-            "cell": cell,  # Single cell, not batched
-        }
-        data = nbops.set_nb_mode(data)
-        data = nbops.calc_masks(data)
-
-        # Should work with single cell
-        d_ij, _r_ij = ops.calc_distances(data)
-
-        assert d_ij.shape == (B, N, M)
-        assert d_ij[0, 0, 0].item() == pytest.approx(1.0, abs=1e-5)
+        with pytest.raises(ValueError, match="B, 3, 3"):
+            nbops.normalize_mode2_periodic_geometry({"cell": cell}, B=2)
 
 
 def test_move_coord_to_cell_respects_partial_pbc(device):

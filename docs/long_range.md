@@ -2,6 +2,8 @@
 
 This page documents the long-range (LR) modules implemented in `aimnet/modules/lr.py`. All modules operate on the shared data dictionary and add their contributions to `data[key_out]` (usually `energy`).
 
+For the complete batched sparse neighbor contract, including global indices, required dummy atoms, periodic cells, aligned shifts, and migration guidance, see [Batched sparse neighbor matrices (mode 2)](calculator.md#batched-sparse-neighbor-matrices-mode-2). DSF, DFT-D3, Ewald, and PME accept this representation without stripping per-system dummy rows or remapping valid indices.
+
 ## Choosing a Coulomb Method
 
 Select the appropriate method based on your system and accuracy requirements.
@@ -78,7 +80,7 @@ calc.set_lrcoulomb_method("dsf", cutoff=15.0, dsf_alpha=0.2)
 - O(N) scaling with neighbor lists
 - Energy and forces continuous at cutoff
 - Based on Wolf summation method
-- Inference forces and stress are supported; force/stress training and Hessians are not (see [Derivative Support](#derivative-support))
+- Inference forces, stress, and real-atom Hessians are supported for full-3D periodic mode 2; force/stress training remains unsupported (see [Derivative Support](#derivative-support)).
 
 ### Ewald Summation
 
@@ -164,14 +166,14 @@ The nvalchemiops-backed external methods differ in how they expose derivatives:
 
 | Backend | Inference forces/stress | Force/stress training | Hessian |
 | --- | --- | --- | --- |
-| DSF | Yes | No | No |
-| Ewald | Yes | Yes | No |
-| PME | Yes | Yes | No |
-| DFT-D3 | Yes | Not applicable; no trainable DFT-D3 parameters | Yes |
+| DSF | Yes | No | Yes, real atoms |
+| Ewald | Yes | Yes | Yes, real atoms |
+| PME | Yes | Yes | Yes, real atoms |
+| DFT-D3 | Yes | Not applicable; no trainable DFT-D3 parameters | Yes, real atoms |
 
-- **DSF**: energy is autograd-connected through charges only. The calculator assembles inference forces and stress by combining PyTorch autograd for the NN and the charge chain with explicit DSF forces/virial. Force/stress losses (`train=True` with `forces=True` or `stress=True`) and Hessian requests raise `NotImplementedError`.
-- **Ewald / PME**: support inference forces/stress and force/stress losses in `train=True`. Hessian requests raise `NotImplementedError` because nvalchemiops exposes explicit first coordinate derivatives, not the second coordinate derivatives needed for a complete Coulomb Hessian.
-- **DFT-D3**: inference forces and stress come from detached nvalchemiops force/virial terms. Hessian requests use the pure-torch differentiable DFT-D3 path.
+- **DSF**: energy is autograd-connected through charges only. The calculator assembles inference forces and stress by combining PyTorch autograd for the NN and the charge chain with explicit DSF forces/virial. Force/stress losses (`train=True` with `forces=True` or `stress=True`) remain unsupported; Hessian requests use the differentiable periodic path.
+- **Ewald / PME**: support inference forces/stress and force/stress losses in `train=True`. Dense Hessians select real atoms; PME adds its fixed-charge finite-difference long-range block.
+- **DFT-D3**: inference forces and stress come from detached nvalchemiops force/virial terms. Hessian requests use the pure-torch differentiable DFT-D3 energy path and select real atoms.
 
 ## Method Comparison
 

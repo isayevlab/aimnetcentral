@@ -71,6 +71,48 @@ class ExternalDerivativeTerms:
     hessian: Tensor | None = None
 
 
+class _Mode2BackendInputs(NamedTuple):
+    coord: Tensor
+    neighbor_matrix: Tensor
+    shifts: Tensor | None
+    batch_idx: Tensor
+    fill_value: int
+    num_systems: int
+    cell: Tensor | None
+
+
+def _mode2_backend_inputs(data: dict[str, Tensor], suffix: str) -> _Mode2BackendInputs:
+    """Return the prepared global mode-2 tensors in backend layout."""
+    coord = data["coord"]
+    B, N = coord.shape[:2]
+    neighbor_matrix_source = data.get(f"_nbmat_kernel{suffix}", data[f"nbmat{suffix}"])
+    coord_flat = _flatten_backend_view(coord, "mode-2 coordinates")
+    neighbor_matrix_source = neighbor_matrix_source.to(torch.int32)
+    neighbor_matrix = _flatten_backend_view(neighbor_matrix_source, f"mode-2 nbmat{suffix}")
+    shifts_source = data.get(f"shifts{suffix}")
+    shifts = _flatten_backend_view(shifts_source, f"mode-2 shifts{suffix}") if shifts_source is not None else None
+    cell = data.get("cell")
+    if cell is not None and cell.ndim == 2:
+        cell = cell.unsqueeze(0)
+    batch_idx = torch.arange(B, device=coord.device, dtype=torch.int32).repeat_interleave(N)
+    return _Mode2BackendInputs(
+        coord=coord_flat,
+        neighbor_matrix=neighbor_matrix,
+        shifts=shifts,
+        batch_idx=batch_idx,
+        fill_value=B * N,
+        num_systems=B,
+        cell=cell,
+    )
+
+
+def _flatten_backend_view(tensor: Tensor, name: str) -> Tensor:
+    flattened = tensor.flatten(0, 1)
+    if flattened._base is None:
+        raise ValueError(f"{name} must be view-flattenable across (B, N).")
+    return flattened
+
+
 def _periodic_coulomb_hybrid(
     *,
     coord: Tensor,
@@ -440,47 +482,21 @@ class LRCoulomb(nn.Module):
         data: dict[str, Tensor],
         suffix: str,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor | None, Tensor | None, int, int]:
-        """Flatten batched neighbor-matrix inputs for nvalchemiops DSF."""
-        coord = data["coord"]
-        charges = data[self.key_in].to(coord.dtype).masked_fill(data["mask_i"], 0.0)
-        B, N = coord.shape[:2]
-        fill_value = B * N
-
-        positions = torch.cat([coord.reshape(B * N, 3), coord.new_zeros(1, 3)], dim=0)
-        charges_flat = torch.cat([charges.reshape(B * N), charges.new_zeros(1)], dim=0)
-        batch_idx = torch.cat(
-            [
-                torch.repeat_interleave(torch.arange(B, device=coord.device, dtype=torch.int32), N),
-                torch.zeros(1, device=coord.device, dtype=torch.int32),
-            ],
-            dim=0,
+        mode2 = _mode2_backend_inputs(data, suffix)
+        charges = data[self.key_in].to(data["coord"].dtype)
+        charges_flat = charges.flatten(0, 1).masked_fill(data["mask_i"].flatten(), 0.0)
+        shifts = mode2.shifts.to(torch.int32) if mode2.shifts is not None else None
+        cell = mode2.cell.to(data["coord"].dtype) if mode2.cell is not None else None
+        return (
+            mode2.coord,
+            charges_flat,
+            mode2.batch_idx,
+            mode2.neighbor_matrix,
+            cell,
+            shifts,
+            mode2.fill_value,
+            mode2.num_systems,
         )
-
-        # nbmat values are atom indices LOCAL to each batch; the flattened
-        # `positions` tensor uses GLOBAL indices (b * N + i), so each batch's
-        # neighbor entries must be offset by b * N. Without this, valid
-        # neighbors in batch b > 0 silently point into batch 0 and DSF energy
-        # is wrong. Mirrors the offset that DFTD3 mode-2 already applies.
-        nbmat_local = data[f"nbmat{suffix}"].to(torch.int32)
-        offsets = (torch.arange(B, device=coord.device, dtype=torch.int32) * N).view(B, 1, 1)
-        nbmat = (nbmat_local + offsets).flatten(0, 1)
-        mask_ij = data[f"mask_ij{suffix}"].flatten(0, 1)
-        nbmat = torch.where(mask_ij, torch.full_like(nbmat, fill_value), nbmat)
-        nbmat = torch.cat(
-            [nbmat, torch.full((1, nbmat.shape[1]), fill_value, dtype=torch.int32, device=coord.device)],
-            dim=0,
-        )
-
-        cell = data.get("cell")
-        shifts = None
-        if cell is not None:
-            cell = cell.to(coord.dtype)
-            if cell.ndim == 2:
-                cell = cell.unsqueeze(0).expand(B, -1, -1)
-            shifts = data[f"shifts{suffix}"].flatten(0, 1).to(torch.int32)
-            shifts = torch.cat([shifts, torch.zeros((1, shifts.shape[1], 3), dtype=torch.int32, device=coord.device)])
-
-        return positions, charges_flat, batch_idx, nbmat, cell, shifts, fill_value, B
 
     def _dsf_inputs(
         self,
@@ -502,8 +518,10 @@ class LRCoulomb(nn.Module):
         nb_mode = nbops.get_nb_mode(data)
         if nb_mode == 1:
             return forces
-        if nb_mode in (0, 2):
+        if nb_mode == 0:
             return forces[:-1].reshape_as(data["coord"])
+        if nb_mode == 2:
+            return forces.reshape_as(data["coord"])
         raise ValueError(f"Invalid neighbor mode: {nb_mode}")
 
     def _coul_dsf_nvalchemi(
@@ -637,9 +655,9 @@ class LRCoulomb(nn.Module):
 
         Requires ``cell`` in ``data`` and a PBC neighbor list under
         ``nbmat_coulomb``/``shifts_coulomb`` (preferred) or the shared
-        ``nbmat_lr``/``shifts_lr``. Drops the trailing padding row before
-        invoking the backend and re-adds a zero pad row so downstream
-        ``unpad_output`` contracts are preserved.
+        ``nbmat_lr``/``shifts_lr``. Mode 2 preserves all batch-major dummy
+        rows through zero-copy flattened backend views; flat mode 1 removes
+        and restores its single trailing padding row.
         """
         suffix = nbops.resolve_suffix(data, ["_coulomb", "_lr"])
 
@@ -648,29 +666,43 @@ class LRCoulomb(nn.Module):
         if cell is None:
             raise ValueError("nvalchemi Coulomb requires periodic cell data")
 
-        charges = data[self.key_in]
-        mol_idx = data["mol_idx"]
-        nbmat = data[f"nbmat{suffix}"]
-        shifts = data[f"shifts{suffix}"]
-        if coord.ndim != 2 or charges.ndim != 1 or mol_idx.ndim != 1 or nbmat.ndim != 2:
-            raise ValueError("nvalchemi Coulomb expects flat padded PBC inputs")
-        if not (coord.shape[0] == charges.shape[0] == mol_idx.shape[0] == nbmat.shape[0]):
-            raise ValueError("nvalchemi Coulomb flat inputs must include matching coord/charge/mol_idx/nbmat rows")
-        if coord.shape[0] < 2:
-            raise ValueError("nvalchemi Coulomb flat inputs must include at least one real atom and one padding row")
+        mode2 = nbops.get_nb_mode(data) == 2
+        if mode2:
+            mode2_inputs = _mode2_backend_inputs(data, suffix)
+            coord_real = mode2_inputs.coord
+            charges_real = data[self.key_in].to(coord.dtype).flatten(0, 1).masked_fill(data["mask_i"].flatten(), 0.0)
+            mol_idx_real = mode2_inputs.batch_idx
+            nbmat_real = mode2_inputs.neighbor_matrix
+            shifts_real = mode2_inputs.shifts.to(torch.int32) if mode2_inputs.shifts is not None else None
+            cell = mode2_inputs.cell.to(coord.dtype) if mode2_inputs.cell is not None else None
+            N = mode2_inputs.fill_value
+            num_systems = mode2_inputs.num_systems
+        else:
+            charges = data[self.key_in]
+            mol_idx = data["mol_idx"]
+            nbmat = data[f"nbmat{suffix}"]
+            shifts = data[f"shifts{suffix}"]
+            if coord.ndim != 2 or charges.ndim != 1 or mol_idx.ndim != 1 or nbmat.ndim != 2:
+                raise ValueError("nvalchemi Coulomb expects flat padded PBC inputs")
+            if not (coord.shape[0] == charges.shape[0] == mol_idx.shape[0] == nbmat.shape[0]):
+                raise ValueError("nvalchemi Coulomb flat inputs must include matching coord/charge/mol_idx/nbmat rows")
+            if coord.shape[0] < 2:
+                raise ValueError(
+                    "nvalchemi Coulomb flat inputs must include at least one real atom and one padding row"
+                )
 
-        # Drop the trailing padding atom (flat mode includes one at index N).
-        N_padded = coord.shape[0]
-        N = N_padded - 1
-        coord_real = coord[:-1]
-        charges_real = charges[:-1]
-        mol_idx_real = mol_idx[:-1].to(torch.int32)
-        nbmat_real = nbmat[:-1].to(torch.int32)
-        shifts_real = shifts[:-1].to(torch.int32)
+            # Flat mode reserves one final padding atom for the backend fill value.
+            N_padded = coord.shape[0]
+            N = N_padded - 1
+            coord_real = coord[:-1]
+            charges_real = charges[:-1]
+            mol_idx_real = mol_idx[:-1].to(torch.int32)
+            nbmat_real = nbmat[:-1].to(torch.int32)
+            shifts_real = shifts[:-1].to(torch.int32)
+            num_systems = int(mol_idx_real.max().item()) + 1
 
         if backend not in ("ewald", "pme"):
             raise ValueError(f"backend must be 'ewald' or 'pme', got {backend!r}")
-        num_systems = int(mol_idx_real.max().item()) + 1
         fn = particle_mesh_ewald if backend == "pme" else ewald_summation
 
         if backend == "ewald":
@@ -713,8 +745,9 @@ class LRCoulomb(nn.Module):
             if needs_strain_grad:
                 if coord_unstrained is None or cell_unstrained is None:
                     raise ValueError("scaling-aware Coulomb requires coord_unstrained and cell_unstrained")
+                coord_unstrained_backend = coord_unstrained.flatten(0, 1) if mode2 else coord_unstrained[:-1]
                 e_periodic, _forces, _charge_grad, _virial = _PeriodicCoulombFunction.apply(
-                    coord_unstrained[:-1],
+                    coord_unstrained_backend,
                     cell_unstrained,
                     scaling,
                     charges_real,
@@ -796,7 +829,11 @@ class LRCoulomb(nn.Module):
         if compute_forces or compute_virial:
             forces = None
             if forces_real is not None:
-                forces = torch.cat([forces_real.detach() * ke, forces_real.new_zeros((1, 3))], dim=0)
+                forces = forces_real.detach() * ke
+                if mode2:
+                    forces = forces.view_as(data["coord"])
+                else:
+                    forces = torch.cat([forces, forces_real.new_zeros((1, 3))], dim=0)
             virial_ev = virial.detach() * ke if virial is not None else None
             terms = ExternalDerivativeTerms(forces=forces, virial=virial_ev)
         e_periodic = energies_per_system
@@ -807,11 +844,7 @@ class LRCoulomb(nn.Module):
         return e_periodic, terms
 
     def _periodic_fd_setup(self, data: dict[str, Tensor], backend: str):
-        """Shared marshalling for the periodic-Coulomb finite-difference Hessian
-        and Hessian-vector-product paths. Returns ``(forces_at, coord_real, N)``
-        where ``forces_at(positions)`` evaluates the analytic full-periodic
-        Coulomb forces (N, 3) in eV/Ang at float64, with neighbor list, cell, and
-        (detached) charges held fixed."""
+        """Prepare fixed-charge periodic force evaluations for finite differences."""
         suffix = nbops.resolve_suffix(data, ["_coulomb", "_lr"])
         coord = data["coord"]
         cell = data["cell"]
@@ -819,14 +852,30 @@ class LRCoulomb(nn.Module):
             raise ValueError("nvalchemi Coulomb requires periodic cell data")
         if backend not in ("ewald", "pme"):
             raise ValueError(f"backend must be 'ewald' or 'pme', got {backend!r}")
-        N = coord.shape[0] - 1
-        coord_real = coord[:-1].detach().double()
-        charges_real = data[self.key_in][:-1].detach().double()
-        mol_idx_real = data["mol_idx"][:-1].to(torch.int32)
-        nbmat_real = data[f"nbmat{suffix}"][:-1].to(torch.int32)
-        shifts_real = data[f"shifts{suffix}"][:-1].to(torch.int32)
-        cell_det = cell.detach().double()
-        num_systems = int(mol_idx_real.max().item()) + 1
+        mode2 = nbops.get_nb_mode(data) == 2
+        if mode2:
+            inputs = _mode2_backend_inputs(data, suffix)
+            coord_real = inputs.coord.detach().double()
+            charges_real = (
+                data[self.key_in].flatten(0, 1).masked_fill(data["numbers"].flatten().eq(0), 0.0).detach().double()
+            )
+            mol_idx_real = inputs.batch_idx
+            nbmat_real = inputs.neighbor_matrix
+            shifts_real = inputs.shifts.to(torch.int32) if inputs.shifts is not None else None
+            cell_det = inputs.cell.detach().double() if inputs.cell is not None else cell.detach().double()
+            real_indices = data["numbers"].flatten().ne(0).nonzero(as_tuple=False).flatten()
+            num_systems = inputs.num_systems
+            N = inputs.fill_value
+        else:
+            N = coord.shape[0] - 1
+            coord_real = coord[:-1].detach().double()
+            charges_real = data[self.key_in][:-1].detach().double()
+            mol_idx_real = data["mol_idx"][:-1].to(torch.int32)
+            nbmat_real = data[f"nbmat{suffix}"][:-1].to(torch.int32)
+            shifts_real = data[f"shifts{suffix}"][:-1].to(torch.int32)
+            cell_det = cell.detach().double()
+            num_systems = int(mol_idx_real.max().item()) + 1
+            real_indices = torch.arange(coord_real.shape[0], device=coord.device)
         is_pme = backend == "pme"
 
         def forces_at(positions: Tensor) -> Tensor:
@@ -845,7 +894,7 @@ class LRCoulomb(nn.Module):
             )
             return f  # (N, 3) eV/Ang (already scaled by k_e in the helper)
 
-        return forces_at, coord_real, N
+        return forces_at, coord_real, real_indices
 
     def _coul_nvalchemi_fd_hessian(self, data: dict[str, Tensor], backend: str, *, step: float = 5e-4) -> Tensor:
         """Central finite-difference Hessian of the FULL periodic Coulomb energy.
@@ -883,21 +932,24 @@ class LRCoulomb(nn.Module):
         bound scales with ``ewald_accuracy``: loosening ``ewald_accuracy``
         raises the erfc residual at the cutoff and weakens the guarantee.
         """
-        forces_at, coord_real, N = self._periodic_fd_setup(data, backend)
+        forces_at, coord_flat, real_indices = self._periodic_fd_setup(data, backend)
+        coord_real = coord_flat.index_select(0, real_indices)
+        N = coord_real.shape[0]
         hessian = coord_real.new_zeros((N, 3, N, 3), dtype=torch.float64)
         with torch.no_grad():
-            scratch = coord_real.clone()
+            scratch = coord_flat.clone()
             for j in range(N):
                 for b in range(3):
-                    orig = scratch[j, b].item()
-                    scratch[j, b] = orig + step
+                    atom = real_indices[j]
+                    orig = scratch[atom, b].item()
+                    scratch[atom, b] = orig + step
                     fp = forces_at(scratch)
-                    scratch[j, b] = orig - step
+                    scratch[atom, b] = orig - step
                     fm = forces_at(scratch)
-                    scratch[j, b] = orig
+                    scratch[atom, b] = orig
                     # H_{ia,jb} = d^2E/dr_ia dr_jb = -dF_ia/dr_jb
                     dF = (fp - fm) / (2.0 * step)
-                    hessian[:, :, j, b] = (-dF).double()
+                    hessian[:, :, j, b] = (-dF.index_select(0, real_indices)).double()
         return hessian
 
     def _coul_nvalchemi_fd_hvp(
@@ -916,13 +968,17 @@ class LRCoulomb(nn.Module):
         see :meth:`_coul_nvalchemi_fd_hessian` for the charge-response and
         step/``ewald_accuracy`` caveats, which apply identically here.
         """
-        forces_at, coord_real, _N = self._periodic_fd_setup(data, backend)
+        forces_at, coord_flat, real_indices = self._periodic_fd_setup(data, backend)
         vec_real = vec.detach().double()
+        if vec_real.shape[0] != real_indices.shape[0]:
+            raise ValueError("HVP vector must contain one entry per real atom.")
+        vec_flat = torch.zeros_like(coord_flat)
+        vec_flat.index_copy_(0, real_indices, vec_real)
         with torch.no_grad():
-            fp = forces_at(coord_real + step * vec_real)
-            fm = forces_at(coord_real - step * vec_real)
+            fp = forces_at(coord_flat + step * vec_flat)
+            fm = forces_at(coord_flat - step * vec_flat)
             # H_LR @ vec = d^2E/dr dr . vec = -dF/dr . vec  (directional)
-            hv = -(fp - fm) / (2.0 * step)
+            hv = -(fp.index_select(0, real_indices) - fm.index_select(0, real_indices)) / (2.0 * step)
         return hv  # (N, 3), float64
 
     def forward(
@@ -1534,24 +1590,15 @@ class DFTD3(nn.Module):
 
         elif nb_mode == 2:
             suffix = nbops.resolve_suffix(data, ["_dftd3", "_lr"])
-            B, N = coord.shape[:2]
-            coord_flat = coord.flatten(0, 1)
-            numbers_flat = numbers.flatten()
-            batch_idx = torch.arange(B, device=coord.device, dtype=torch.int32).repeat_interleave(N)
-            num_systems = B
-
-            nbmat = data[f"nbmat{suffix}"]
-            offsets = torch.arange(B, device=coord.device).unsqueeze(1) * N
-            neighbor_matrix = (nbmat + offsets.unsqueeze(-1)).flatten(0, 1).to(torch.int32)
-            mask_ij = data.get(f"mask_ij{suffix}")
-            if mask_ij is not None:
-                fill_matrix = torch.full_like(neighbor_matrix, B * N)
-                neighbor_matrix = torch.where(mask_ij.flatten(0, 1), fill_matrix, neighbor_matrix)
-
-            shifts = data.get(f"shifts{suffix}")
-            neighbor_matrix_shifts = shifts.flatten(0, 1).to(torch.int32) if shifts is not None else None
-            fill_value = B * N
-            cell_for_kernel = cell
+            mode2 = _mode2_backend_inputs(data, suffix)
+            coord_flat = mode2.coord
+            numbers_flat = numbers.flatten(0, 1)
+            batch_idx = mode2.batch_idx
+            num_systems = mode2.num_systems
+            neighbor_matrix = mode2.neighbor_matrix
+            neighbor_matrix_shifts = mode2.shifts.to(torch.int32) if mode2.shifts is not None else None
+            fill_value = mode2.fill_value
+            cell_for_kernel = mode2.cell
 
         else:
             raise ValueError(f"Unsupported neighbor mode: {nb_mode}")

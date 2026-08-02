@@ -711,3 +711,60 @@ def test_aimnet2_rxn_yaml_builds():
     assert hasattr(model.outputs, "dipole")
     assert hasattr(model.outputs, "quadrupole")
     assert hasattr(model.outputs, "lrcoulomb")
+
+
+def test_global_mode2_validates_before_int32_narrowing():
+    """A float mode-2 matrix must be rejected before conversion to int32."""
+    from aimnet.models.base import AIMNet2Base
+
+    data = {
+        "coord": torch.zeros((2, 4, 3), dtype=torch.float32),
+        "numbers": torch.tensor([[6, 1, 1, 0], [8, 1, 1, 0]]),
+        "charge": torch.zeros(2),
+        "nbmat": torch.tensor([
+            [[1.5, 2.0, 8.0], [0.0, 2.0, 8.0], [0.0, 1.0, 8.0], [8.0, 8.0, 8.0]],
+            [[5.0, 6.0, 8.0], [4.0, 6.0, 8.0], [4.0, 5.0, 8.0], [8.0, 8.0, 8.0]],
+        ]),
+    }
+    with pytest.raises(ValueError, match="integer dtype"):
+        AIMNet2Base().prepare_input(data)
+
+
+def test_global_mode2_full_model_cpu_batch_vs_individual():
+    """Global mode-2 model energies are isolated per padded system."""
+    model = build_model(aimnet2_d3_def).eval()
+    B, N, M = 2, 4, 3
+    coord = torch.tensor([
+        [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [0.0, 0.9, 0.0], [0.0, 0.0, 0.0]],
+        [[2.0, 0.0, 0.0], [2.9, 0.0, 0.0], [2.0, 1.0, 0.0], [2.0, 0.0, 0.0]],
+    ])
+    numbers = torch.tensor([[8, 1, 1, 0], [6, 1, 1, 0]])
+    nbmat = torch.full((B, N, M), B * N, dtype=torch.int64)
+    for b in range(B):
+        for i in range(N - 1):
+            targets = [b * N + j for j in range(N - 1) if j != i]
+            nbmat[b, i, : len(targets)] = torch.tensor(targets)
+    data = {
+        "coord": coord,
+        "numbers": numbers,
+        "charge": torch.zeros(B),
+        "nbmat": nbmat,
+        "nbmat_lr": nbmat,
+        "nbmat_coulomb": nbmat,
+        "nbmat_dftd3": nbmat,
+    }
+    with torch.no_grad():
+        batched = model(data)["energy"]
+        individual = []
+        for b in range(B):
+            single = {
+                "coord": coord[b : b + 1],
+                "numbers": numbers[b : b + 1],
+                "charge": torch.zeros(1),
+                "nbmat": torch.where(nbmat[b : b + 1] == B * N, torch.tensor(N), nbmat[b : b + 1] - b * N),
+                "nbmat_lr": torch.where(nbmat[b : b + 1] == B * N, torch.tensor(N), nbmat[b : b + 1] - b * N),
+                "nbmat_coulomb": torch.where(nbmat[b : b + 1] == B * N, torch.tensor(N), nbmat[b : b + 1] - b * N),
+                "nbmat_dftd3": torch.where(nbmat[b : b + 1] == B * N, torch.tensor(N), nbmat[b : b + 1] - b * N),
+            }
+            individual.append(model(single)["energy"])
+    torch.testing.assert_close(batched, torch.cat(individual), atol=1e-6, rtol=1e-5)

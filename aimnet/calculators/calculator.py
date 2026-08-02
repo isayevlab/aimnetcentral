@@ -9,6 +9,7 @@ from typing import Any, ClassVar, Literal, cast
 import torch
 from torch import Tensor, nn
 
+from aimnet import nbops
 from aimnet.modules import DFTD3, LRCoulomb
 from aimnet.modules.lr import ExternalDerivativeTerms
 
@@ -112,12 +113,18 @@ class AIMNet2Calculator:
         "mol_idx": torch.int,
         "nbmat": torch.int,
         "nbmat_lr": torch.int,
+        "nbmat_coulomb": torch.int,
+        "nbmat_dftd3": torch.int,
         "nb_pad_mask": torch.bool,
         "nb_pad_mask_lr": torch.bool,
         "shifts": torch.float,
         "shifts_lr": torch.float,
+        "shifts_coulomb": torch.float,
+        "shifts_dftd3": torch.float,
         "cell": torch.float,
         "pbc": torch.bool,
+        "cutoff_coulomb": torch.float,
+        "cutoff_dftd3": torch.float,
     }
     keys_out: ClassVar[list[str]] = ["energy", "charges", "spin_charges", "forces", "hessian", "stress"]
     atom_feature_keys: ClassVar[list[str]] = ["coord", "numbers", "charges", "spin_charges", "forces"]
@@ -846,6 +853,14 @@ class AIMNet2Calculator:
             )
 
         if hessian:
+            probe = self.to_input_tensors(data)
+            primary_nbmat = probe.get("nbmat")
+            nbops.validate_neighbor_suffix_layout(probe)
+            if primary_nbmat is not None and primary_nbmat.ndim == 3:
+                nbops.normalize_mode2_periodic_geometry(probe, B=primary_nbmat.shape[0])
+                for suffix in nbops.NBMAT_SUFFIXES:
+                    if f"nbmat{suffix}" in probe or f"shifts{suffix}" in probe:
+                        nbops.validate_mode2_nbmat_raw(probe, suffix=suffix)
             subsystems = self._split_hessian_batch(data)
             if subsystems is not None:
                 stack = torch.as_tensor(data["coord"]).ndim == 3
@@ -984,6 +999,13 @@ class AIMNet2Calculator:
         caller_had_mol_idx = raw_data.get("mol_idx") is not None
         caller_had_nbmat = raw_data.get("nbmat") is not None
         data = self.to_input_tensors(data)
+        primary_nbmat = data.get("nbmat")
+        nbops.validate_neighbor_suffix_layout(data)
+        if primary_nbmat is not None and primary_nbmat.ndim == 3:
+            nbops.normalize_mode2_periodic_geometry(data, B=primary_nbmat.shape[0])
+            for suffix in nbops.NBMAT_SUFFIXES:
+                if f"nbmat{suffix}" in data or f"shifts{suffix}" in data:
+                    nbops.validate_mode2_nbmat_raw(data, suffix=suffix)
         data = self.mol_flatten(data, hessian=hessian)
         if data.get("cell") is not None and self._coulomb_method == "simple":
             warnings.warn(
@@ -1219,22 +1241,36 @@ class AIMNet2Calculator:
     def _split_batch_dim(self, data: dict[str, Any], B: int) -> list[dict[str, Any]]:
         """Slice a (B, ...) batched input into B single-structure dicts."""
         subs: list[dict[str, Any]] = []
+        primary_nbmat = data.get("nbmat")
+        mode2 = primary_nbmat is not None and torch.as_tensor(primary_nbmat).ndim == 3
         for b in range(B):
             sub: dict[str, Any] = {}
             for k, v in data.items():
                 if v is None:
                     continue
                 if k in ("coord", "numbers"):
-                    sub[k] = torch.as_tensor(v)[b]
+                    value = torch.as_tensor(v)
+                    sub[k] = value[b : b + 1] if mode2 else value[b]
                 elif k in ("charge", "mult"):
                     sub[k] = self._select_for_structure(v, b, B)
                 elif k == "cell":
                     t = torch.as_tensor(v)
-                    sub[k] = t[b] if t.ndim == 3 else t
-                elif k.startswith(("nbmat", "shifts")) or k == "mol_idx":
-                    # Precomputed neighbor-list keys must not be shared unsliced
-                    # across subsystems (they'd be wrong per-structure); the
-                    # recursive eval rebuilds them.
+                    sub[k] = t[b : b + 1] if mode2 and t.ndim == 3 else (t[b] if t.ndim == 3 else t)
+                elif k == "pbc":
+                    t = torch.as_tensor(v)
+                    sub[k] = t[b : b + 1] if mode2 and t.ndim == 2 else (t[b] if t.ndim == 2 else t)
+                elif k.startswith("nbmat"):
+                    t = torch.as_tensor(v)[b : b + 1]
+                    if t.ndim == 3:
+                        sentinel = B * t.shape[1]
+                        singleton_sentinel = t.shape[1]
+                        usable = t != sentinel
+                        t = torch.where(usable, t - b * t.shape[1], torch.full_like(t, singleton_sentinel))
+                    sub[k] = t
+                elif k.startswith("shifts"):
+                    t = torch.as_tensor(v)
+                    sub[k] = t[b : b + 1] if t.ndim >= 3 else t
+                elif k == "mol_idx":
                     continue
                 else:
                     sub[k] = v
@@ -1404,11 +1440,22 @@ class AIMNet2Calculator:
             if not (isinstance(data[k], Tensor) and data[k].requires_grad):
                 t = t.detach()
             ret[k] = t
+        neighbor_memo: list[tuple[Any, Tensor]] = []
+        neighbor_keys = {f"nbmat{suffix}" for suffix in nbops.NBMAT_SUFFIXES}
         for k in self.keys_in_optional:
             if k in data and data[k] is not None:
-                t = torch.as_tensor(data[k], device=self.device, dtype=self.keys_in_optional[k])
-                if not (isinstance(data[k], Tensor) and data[k].requires_grad):
-                    t = t.detach()
+                if k in neighbor_keys:
+                    source = data[k]
+                    t = next((value for previous, value in neighbor_memo if source is previous), None)
+                    if t is None:
+                        t = torch.as_tensor(source, device=self.device)
+                        if not (isinstance(source, Tensor) and source.requires_grad):
+                            t = t.detach()
+                        neighbor_memo.append((source, t))
+                else:
+                    t = torch.as_tensor(data[k], device=self.device, dtype=self.keys_in_optional[k])
+                    if not (isinstance(data[k], Tensor) and data[k].requires_grad):
+                        t = t.detach()
                 ret[k] = t
         # Ensure all tensors have at least 1D shape for consistent batch processing
         for k, v in ret.items():
@@ -1421,6 +1468,11 @@ class AIMNet2Calculator:
         Will not flatten for batched input and molecule size below threshold.
         """
         ndim = data["coord"].ndim
+        explicit_mode2 = data.get("nbmat") is not None and data["nbmat"].ndim == 3
+        if explicit_mode2:
+            self._batch = None
+            self._max_mol_size = data["coord"].shape[1]
+            return data
         if ndim == 2:
             self._batch = None
             if "mol_idx" not in data:
@@ -1884,28 +1936,29 @@ class AIMNet2Calculator:
             prepared, forces=False, stress=False, hessian=external_hessian
         )
 
-        coord = self._saved_for_grad["coord"]  # (N+1, 3), requires_grad
+        coord = self._saved_for_grad["coord"]
+        coord_flat = coord.reshape(-1, 3)
+        real_indices = (~prepared["mask_i"].reshape(-1)).nonzero(as_tuple=False).flatten()
+        n_real = real_indices.numel()
         tot_energy = prepared["energy"].sum()
         # Differentiable part of the forces only. The detached ``coulomb_terms``
         # forces are a constant w.r.t. coord (zero second derivative), so they are
         # intentionally excluded from the vjp; the periodic curvature they would
         # have carried is supplied by the directional FD helper instead.
-        forces_diff = -torch.autograd.grad(tot_energy, coord, create_graph=True)[0]  # (N+1, 3)
-        N = coord.shape[0] - 1
+        forces_diff = -torch.autograd.grad(tot_energy, coord, create_graph=True)[0]
 
         device = coord.device
         vecs = torch.as_tensor(vectors, device=device)
         single = vecs.ndim == 2
         if single:
             vecs = vecs.unsqueeze(0)
-        if vecs.shape[-2:] != (N, 3):
-            raise ValueError(f"vectors must have trailing shape ({N}, 3); got {tuple(vecs.shape)}")
+        if vecs.shape[-2:] != (n_real, 3):
+            raise ValueError(f"vectors must have trailing shape ({n_real}, 3); got {tuple(vecs.shape)}")
 
         outs = []
         for k in range(vecs.shape[0]):
             v = vecs[k].to(forces_diff.dtype)
-            v_full = torch.zeros_like(coord)
-            v_full[:N] = v
+            v_full = torch.zeros_like(coord_flat).index_copy(0, real_indices, v).reshape_as(coord)
             # autograd Hv = -d(forces . v)/dcoord = d^2E/dr^2 . v
             # (NN + short-range + dsf/simple charge-response + dftd3)
             hv_full = -torch.autograd.grad(
@@ -1916,7 +1969,7 @@ class AIMNet2Calculator:
                 create_graph=create_graph,
                 allow_unused=True,
             )[0]
-            hv = hv_full[:N]
+            hv = hv_full.reshape(-1, 3).index_select(0, real_indices)
             if method == "pme" and self.external_coulomb is not None:
                 # Full-periodic fixed-position curvature (directional FD).
                 # Ewald needs no FD block: its energy is in the autograd graph
