@@ -46,11 +46,10 @@ def _conv_sv_2d_sp_kernel(
     idx: wp.array2d(dtype=wp.int32),  # (B, M)
     g: wp.array3d(dtype=wp.vec4f),  # (B, M, G, D)
     output: wp.array3d(dtype=wp.vec4f),  # (B, A, G, D)
+    padding_value: int,
 ):
     """Forward: output[b,a,g] = sum_m a[idx[b,m],a,g] * g[b,m,g]"""
-    B, M = idx.shape[0], idx.shape[1]
-    padding_value = B - 1  # last row is padding
-
+    M = idx.shape[1]
     _b, _a, _g = wp.tid()
 
     acc = wp.vec4f()
@@ -71,11 +70,10 @@ def _conv_sv_2d_sp_backward_a_kernel(
     idx: wp.array2d(dtype=wp.int32),  # (B, M)
     g: wp.array3d(dtype=wp.vec4f),  # (B, M, G, D)
     grad_a: wp.array3d(dtype=wp.float32),  # (B, A, G)
+    padding_value: int,
 ):
     """Backward w.r.t. a: grad_a[idx[b,m],a,g] += dot(grad_output[b,a,g], g[b,m,g])"""
-    B, M = idx.shape[0], idx.shape[1]
-    padding_value = B - 1  # last row is padding
-
+    M = idx.shape[1]
     _b, _a, _g = wp.tid()
 
     grad_out = grad_output[_b, _a, _g]
@@ -95,12 +93,10 @@ def _conv_sv_2d_sp_backward_g_kernel(
     a: wp.array3d(dtype=wp.float32),  # (B, A, G)
     idx: wp.array2d(dtype=wp.int32),  # (B, M)
     grad_g: wp.array3d(dtype=wp.vec4f),  # (B, M, G, D)
+    padding_value: int,
 ):
     """Backward w.r.t. g: grad_g[b,m,g] = sum_a a[idx[b,m],a,g] * grad_output[b,a,g]"""
-    B = idx.shape[0]
     A = a.shape[1]
-    padding_value = B - 1  # last row is padding
-
     _b, _m, _g = wp.tid()
 
     _idx = idx[_b, _m]
@@ -123,12 +119,10 @@ def _conv_sv_2d_sp_double_backward_a_g_kernel(
     idx: wp.array2d(dtype=wp.int32),  # (B, M)
     grad_output: wp.array3d(dtype=wp.vec4f),  # (B, A, G, D)
     grad_g: wp.array3d(dtype=wp.vec4f),  # (B, M, G, D)
+    padding_value: int,
 ):
     """Double backward: d(grad_a)/dg -> grad_g"""
-    B = idx.shape[0]
     A = grad_grad_a.shape[1]
-    padding_value = B - 1  # last row is padding
-
     _b, _m, _g = wp.tid()
 
     _idx = idx[_b, _m]
@@ -151,11 +145,10 @@ def _conv_sv_2d_sp_double_backward_g_contrib_kernel(
     a: wp.array3d(dtype=wp.float32),  # (B, A, G)
     idx: wp.array2d(dtype=wp.int32),  # (B, M)
     grad_output_double: wp.array3d(dtype=wp.vec4f),  # (B, A, G, D) - OUTPUT
+    padding_value: int,
 ):
     """Double backward from grad2_g: einsum('bmgd,bmag->bagd', grad2_g, a_selected)"""
-    B, M = idx.shape[0], idx.shape[1]
-    padding_value = B - 1  # last row is padding
-
+    M = idx.shape[1]
     _b, _a, _g = wp.tid()
 
     acc = wp.vec4f()
@@ -177,11 +170,10 @@ def _conv_sv_2d_sp_double_backward_a_contrib_kernel(
     idx: wp.array2d(dtype=wp.int32),  # (B, M)
     g: wp.array3d(dtype=wp.vec4f),  # (B, M, G, D)
     grad_output_double: wp.array3d(dtype=wp.vec4f),  # (B, A, G, D) - OUTPUT
+    padding_value: int,
 ):
     """Double backward from grad2_a: einsum('bmag,bmgd->bagd', grad2_a_selected, g)"""
-    B, M = idx.shape[0], idx.shape[1]
-    padding_value = B - 1  # last row is padding
-
+    M = idx.shape[1]
     _b, _a, _g = wp.tid()
 
     acc = wp.vec4f()
@@ -202,21 +194,33 @@ def _conv_sv_2d_sp_double_backward_a_contrib_kernel(
 # =============================================================================
 
 
+def _validate_conv_sv_sizes(a: Tensor, idx: Tensor, padding_value: int, num_centers: int) -> None:
+    """Validate the flattened atom and center capacities used by Warp."""
+    if a.ndim != 3 or idx.ndim != 2:
+        raise ValueError("a must be 3D and idx must be 2D.")
+    if padding_value < 0 or padding_value > a.shape[0]:
+        raise ValueError("padding_value must be in [0, a.shape[0]].")
+    if num_centers < 0 or num_centers > idx.shape[0]:
+        raise ValueError("num_centers must be in [0, idx.shape[0]].")
+
+
 @torch.library.custom_op(
     "aimnet::conv_sv_2d_sp_fwd",
     mutates_args=(),
     device_types=["cuda"],
 )
-def _(a: Tensor, idx: Tensor, g: Tensor) -> Tensor:
+def _(a: Tensor, idx: Tensor, g: Tensor, padding_value: int, num_centers: int) -> Tensor:
     """Forward primitive for conv_sv_2d_sp."""
+    _validate_conv_sv_sizes(a, idx, padding_value, num_centers)
     stream = _get_stream(a.device)
     device = wp.device_from_torch(a.device)
-    B, A, G = a.shape
-    output = torch.zeros(B, A, G, 4, dtype=a.dtype, device=a.device)
+    _B, A, G = a.shape
+    B_out = idx.shape[0]
+    output = torch.zeros(B_out, A, G, 4, dtype=a.dtype, device=a.device)
 
     wp.launch(
         _conv_sv_2d_sp_kernel,
-        dim=(B - 1, A, G),  # B-1: exclude padding row
+        dim=(num_centers, A, G),
         stream=stream,
         device=device,
         inputs=(
@@ -224,15 +228,17 @@ def _(a: Tensor, idx: Tensor, g: Tensor) -> Tensor:
             wp.from_torch(idx.to(torch.int32), return_ctype=True),
             wp.from_torch(g.detach(), return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(output, return_ctype=True, dtype=wp.vec4f),
+            padding_value,
         ),
     )
     return output
 
 
 @torch.library.register_fake("aimnet::conv_sv_2d_sp_fwd")
-def _(a: Tensor, idx: Tensor, g: Tensor) -> Tensor:
-    B, A, G = a.shape
-    return torch.empty(B, A, G, 4, dtype=a.dtype, device=a.device)
+def _(a: Tensor, idx: Tensor, g: Tensor, padding_value: int, num_centers: int) -> Tensor:
+    _validate_conv_sv_sizes(a, idx, padding_value, num_centers)
+    _B, A, G = a.shape
+    return torch.empty(idx.shape[0], A, G, 4, dtype=a.dtype, device=a.device)
 
 
 @torch.library.custom_op(
@@ -240,11 +246,12 @@ def _(a: Tensor, idx: Tensor, g: Tensor) -> Tensor:
     mutates_args=(),
     device_types=["cuda"],
 )
-def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor) -> list[Tensor]:
+def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor, padding_value: int, num_centers: int) -> list[Tensor]:
     """Backward primitive for conv_sv_2d_sp."""
+    _validate_conv_sv_sizes(a, idx, padding_value, num_centers)
     stream = _get_stream(a.device)
     device = wp.device_from_torch(a.device)
-    B, A, G = a.shape
+    _B, A, G = a.shape
     B_out, M = idx.shape
 
     grad_a = torch.zeros_like(a)
@@ -255,7 +262,7 @@ def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor) -> list[Tensor]:
     # Launch backward w.r.t. a
     wp.launch(
         _conv_sv_2d_sp_backward_a_kernel,
-        dim=(B - 1, A, G),  # B-1: exclude padding row
+        dim=(num_centers, A, G),
         stream=stream,
         device=device,
         inputs=(
@@ -263,13 +270,14 @@ def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor) -> list[Tensor]:
             wp.from_torch(idx.to(torch.int32), return_ctype=True),
             wp.from_torch(g.detach(), return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(grad_a, return_ctype=True),
+            padding_value,
         ),
     )
 
     # Launch backward w.r.t. g
     wp.launch(
         _conv_sv_2d_sp_backward_g_kernel,
-        dim=(B_out - 1, M, G),  # B_out-1: exclude padding row
+        dim=(num_centers, M, G),
         stream=stream,
         device=device,
         inputs=(
@@ -277,6 +285,7 @@ def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor) -> list[Tensor]:
             wp.from_torch(a.detach(), return_ctype=True),
             wp.from_torch(idx.to(torch.int32), return_ctype=True),
             wp.from_torch(grad_g, return_ctype=True, dtype=wp.vec4f),
+            padding_value,
         ),
     )
 
@@ -284,9 +293,10 @@ def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor) -> list[Tensor]:
 
 
 @torch.library.register_fake("aimnet::conv_sv_2d_sp_bwd")
-def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor) -> list[Tensor]:
+def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor, padding_value: int, num_centers: int) -> list[Tensor]:
     B_out, M = idx.shape
     G = a.shape[2]
+    _validate_conv_sv_sizes(a, idx, padding_value, num_centers)
     return [
         torch.empty_like(a),
         torch.empty(B_out, M, G, 4, dtype=g.dtype, device=g.device),
@@ -305,14 +315,17 @@ def _(
     a: Tensor,
     idx: Tensor,
     g: Tensor,
+    padding_value: int,
+    num_centers: int,
 ) -> list[Tensor]:
     """Double backward primitive for conv_sv_2d_sp."""
+    _validate_conv_sv_sizes(a, idx, padding_value, num_centers)
     stream = _get_stream(a.device)
     device = wp.device_from_torch(a.device)
-    B, A, G = a.shape
+    _B, A, G = a.shape
     B_out, M = idx.shape
 
-    grad_grad_output = torch.zeros(B, A, G, 4, dtype=a.dtype, device=a.device)
+    grad_grad_output = torch.zeros(B_out, A, G, 4, dtype=a.dtype, device=a.device)
     grad_a_double = torch.zeros_like(a)
     grad_g_double = torch.zeros(B_out, M, G, 4, dtype=a.dtype, device=a.device)
 
@@ -323,7 +336,7 @@ def _(
     # Contribution from grad2_g to grad_grad_output
     wp.launch(
         _conv_sv_2d_sp_double_backward_g_contrib_kernel,
-        dim=(B - 1, A, G),  # B-1: exclude padding row
+        dim=(num_centers, A, G),
         stream=stream,
         device=device,
         inputs=(
@@ -331,14 +344,15 @@ def _(
             wp.from_torch(a.detach(), return_ctype=True),
             wp.from_torch(idx.to(torch.int32), return_ctype=True),
             wp.from_torch(grad_grad_output, return_ctype=True, dtype=wp.vec4f),
+            padding_value,
         ),
     )
 
     # Contribution from grad2_a to grad_grad_output
-    grad_output_2_a = torch.zeros(B, A, G, 4, dtype=a.dtype, device=a.device)
+    grad_output_2_a = torch.zeros(B_out, A, G, 4, dtype=a.dtype, device=a.device)
     wp.launch(
         _conv_sv_2d_sp_double_backward_a_contrib_kernel,
-        dim=(B - 1, A, G),  # B-1: exclude padding row
+        dim=(num_centers, A, G),
         stream=stream,
         device=device,
         inputs=(
@@ -346,6 +360,7 @@ def _(
             wp.from_torch(idx.to(torch.int32), return_ctype=True),
             wp.from_torch(g.detach(), return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(grad_output_2_a, return_ctype=True, dtype=wp.vec4f),
+            padding_value,
         ),
     )
     grad_grad_output = grad_grad_output + grad_output_2_a
@@ -353,7 +368,7 @@ def _(
     # Mixed partial: d(grad_a)/dg -> grad_g_double
     wp.launch(
         _conv_sv_2d_sp_double_backward_a_g_kernel,
-        dim=(B_out - 1, M, G),  # B_out-1: exclude padding row
+        dim=(num_centers, M, G),
         stream=stream,
         device=device,
         inputs=(
@@ -361,13 +376,14 @@ def _(
             wp.from_torch(idx.to(torch.int32), return_ctype=True),
             wp.from_torch(grad_output_contig, return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(grad_g_double, return_ctype=True, dtype=wp.vec4f),
+            padding_value,
         ),
     )
 
     # Mixed partial: d(grad_g)/da -> grad_a_double
     wp.launch(
         _conv_sv_2d_sp_backward_a_kernel,
-        dim=(B - 1, A, G),  # B-1: exclude padding row
+        dim=(num_centers, A, G),
         stream=stream,
         device=device,
         inputs=(
@@ -375,6 +391,7 @@ def _(
             wp.from_torch(idx.to(torch.int32), return_ctype=True),
             wp.from_torch(grad2_g_contig, return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(grad_a_double, return_ctype=True),
+            padding_value,
         ),
     )
 
@@ -389,11 +406,14 @@ def _(
     a: Tensor,
     idx: Tensor,
     g: Tensor,
+    padding_value: int,
+    num_centers: int,
 ) -> list[Tensor]:
-    B, A, G = a.shape
+    _B, A, G = a.shape
     B_out, M = idx.shape
+    _validate_conv_sv_sizes(a, idx, padding_value, num_centers)
     return [
-        torch.empty(B, A, G, 4, dtype=a.dtype, device=a.device),
+        torch.empty(B_out, A, G, 4, dtype=a.dtype, device=a.device),
         torch.empty_like(a),
         torch.empty(B_out, M, G, 4, dtype=a.dtype, device=a.device),
     ]
@@ -406,22 +426,28 @@ def _(
 
 def _conv_sv_2d_sp_setup_fwd_context(ctx, inputs, output):
     """Setup context for forward pass."""
-    a, idx, g = inputs
+    a, idx, g, padding_value, num_centers = inputs
     ctx.save_for_backward(a, idx, g)
+    ctx.padding_value = padding_value
+    ctx.num_centers = num_centers
 
 
 def _conv_sv_2d_sp_setup_bwd_context(ctx, inputs, output):
     """Setup context for backward pass."""
-    grad_output, a, idx, g = inputs
+    grad_output, a, idx, g, padding_value, num_centers = inputs
     ctx.save_for_backward(grad_output, a, idx, g)
+    ctx.padding_value = padding_value
+    ctx.num_centers = num_centers
 
 
 @torch.compiler.allow_in_graph
 def _conv_sv_2d_sp_bwd(ctx, grad_output):
     """Backward pass for conv_sv_2d_sp."""
     a, idx, g = ctx.saved_tensors
-    grad_a, grad_g = torch.ops.aimnet.conv_sv_2d_sp_bwd(grad_output.contiguous(), a, idx, g)
-    return grad_a, None, grad_g
+    grad_a, grad_g = torch.ops.aimnet.conv_sv_2d_sp_bwd(
+        grad_output.contiguous(), a, idx, g, ctx.padding_value, ctx.num_centers
+    )
+    return grad_a, None, grad_g, None, None
 
 
 @torch.compiler.allow_in_graph
@@ -439,9 +465,11 @@ def _conv_sv_2d_sp_bwd_bwd(ctx, *grad_outputs):
         G = a.shape[2]
         grad2_g = torch.zeros(B_out, M, G, 4, dtype=g.dtype, device=g.device)
 
-    outputs = torch.ops.aimnet.conv_sv_2d_sp_bwd_bwd(grad_output_saved, grad2_a, grad2_g, a, idx, g)
+    outputs = torch.ops.aimnet.conv_sv_2d_sp_bwd_bwd(
+        grad_output_saved, grad2_a, grad2_g, a, idx, g, ctx.padding_value, ctx.num_centers
+    )
 
-    return outputs[0], outputs[1], None, outputs[2]
+    return outputs[0], outputs[1], None, outputs[2], None, None
 
 
 torch.library.register_autograd(
@@ -462,6 +490,11 @@ torch.library.register_autograd(
 # =============================================================================
 
 
+@torch.library.register_vmap("aimnet::conv_sv_2d_sp_fwd")
+def _vmap_conv_sv_2d_sp_fwd(info, in_dims, a, idx, g, padding_value, num_centers):
+    raise RuntimeError("aimnet::conv_sv_2d_sp_fwd does not support direct vmap.")
+
+
 def _vmap_slice(t: Tensor, d: int | None, k: int) -> Tensor:
     """Pick the k-th slice along vmap batch dim d, or pass through if not batched.
 
@@ -475,7 +508,7 @@ def _vmap_slice(t: Tensor, d: int | None, k: int) -> Tensor:
 
 
 @torch.library.register_vmap("aimnet::conv_sv_2d_sp_bwd")
-def _vmap_conv_sv_2d_sp_bwd(info, in_dims, grad_output, a, idx, g):
+def _vmap_conv_sv_2d_sp_bwd(info, in_dims, grad_output, a, idx, g, padding_value, num_centers):
     """vmap rule for the first-backward primitive.
 
     Hit when torch.func.vmap traverses a vjp closure that reaches the first-order
@@ -502,6 +535,8 @@ def _vmap_conv_sv_2d_sp_bwd(info, in_dims, grad_output, a, idx, g):
             _vmap_slice(a, in_dims[1], k),
             _vmap_slice(idx, in_dims[2], k),
             _vmap_slice(g, in_dims[3], k),
+            padding_value,
+            num_centers,
         )
         out0.append(outs[0])
         out1.append(outs[1])
@@ -513,7 +548,7 @@ def _vmap_conv_sv_2d_sp_bwd(info, in_dims, grad_output, a, idx, g):
 
 
 @torch.library.register_vmap("aimnet::conv_sv_2d_sp_bwd_bwd")
-def _vmap_conv_sv_2d_sp_bwd_bwd(info, in_dims, grad_output, grad2_a, grad2_g, a, idx, g):
+def _vmap_conv_sv_2d_sp_bwd_bwd(info, in_dims, grad_output, grad2_a, grad2_g, a, idx, g, padding_value, num_centers):
     """vmap rule for the double-backward primitive.
 
     Hit when torch.func.vmap traverses a vjp closure that reaches the second-order
@@ -550,6 +585,8 @@ def _vmap_conv_sv_2d_sp_bwd_bwd(info, in_dims, grad_output, grad2_a, grad2_g, a,
             _vmap_slice(a, in_dims[3], k),
             _vmap_slice(idx, in_dims[4], k),
             _vmap_slice(g, in_dims[5], k),
+            padding_value,
+            num_centers,
         )
         out0.append(outs[0])
         out1.append(outs[1])
@@ -566,22 +603,32 @@ def _vmap_conv_sv_2d_sp_bwd_bwd(info, in_dims, grad_output, grad2_a, grad2_g, a,
 # =============================================================================
 
 
-def conv_sv_2d_sp(a: Tensor, idx: Tensor, g: Tensor) -> Tensor:
+def conv_sv_2d_sp(
+    a: Tensor,
+    idx: Tensor,
+    g: Tensor,
+    padding_value: int | None = None,
+    num_centers: int | None = None,
+) -> Tensor:
     """Compute conv_sv_2d_sp with support for 1st and 2nd order derivatives.
 
     Parameters
     ----------
     a : Tensor
-        Input tensor of shape (B, A, G).
+        Input tensor of shape (K, A, G), where K is the atom capacity.
     idx : Tensor
-        Index tensor of shape (B, M).
+        Index tensor of shape (C, M), where C is the center capacity.
     g : Tensor
-        Gate tensor of shape (B, M, G, 4).
+        Gate tensor of shape (C, M, G, 4).
+    padding_value : int, optional
+        Sentinel threshold in the atom dimension. Defaults to ``K - 1``.
+    num_centers : int, optional
+        Number of centers launched by Warp. Defaults to ``C - 1``.
 
     Notes
     -----
     ``idx`` rows must follow the packed-padding contract: real neighbor indices
-    come first and padding sentinels (values >= B-1, the padding row) are
+    come first and padding sentinels (values >= ``padding_value``) are
     contiguous at the end of each row. The Warp kernels stop scanning a row at
     the first sentinel, so interleaved padding would silently drop real
     neighbors. ``nvalchemiops.torch.neighbors.neighbor_list`` produces this
@@ -597,8 +644,10 @@ def conv_sv_2d_sp(a: Tensor, idx: Tensor, g: Tensor) -> Tensor:
     Returns
     -------
     Tensor
-        Output tensor of shape (B, A, G, 4).
+        Output tensor of shape (C, A, G, 4).
     """
+    if (padding_value is None) != (num_centers is None):
+        raise ValueError("padding_value and num_centers must be supplied together.")
     if a.device.type != "cuda" or idx.device.type != "cuda" or g.device.type != "cuda":
         raise RuntimeError("conv_sv_2d_sp is a CUDA-only Warp kernel")
     if a.dtype != torch.float32 or g.dtype != torch.float32:
@@ -607,12 +656,17 @@ def conv_sv_2d_sp(a: Tensor, idx: Tensor, g: Tensor) -> Tensor:
         idx = idx.to(torch.int32)
     if a.ndim != 3 or idx.ndim != 2 or g.ndim != 4 or g.shape[-1] != 4:
         raise ValueError("Expected shapes a=(B,A,G), idx=(B,M), g=(B,M,G,4)")
-    if a.shape[0] != idx.shape[0] or idx.shape[0] != g.shape[0] or a.shape[2] != g.shape[2]:
+    if idx.shape[0] != g.shape[0] or a.shape[2] != g.shape[2]:
         raise ValueError("Incompatible conv_sv_2d_sp leading or basis dimensions")
+    if padding_value is None:
+        padding_value = a.shape[0] - 1
+        num_centers = idx.shape[0] - 1
+    assert num_centers is not None
+    _validate_conv_sv_sizes(a, idx, padding_value, num_centers)
     if not a.is_contiguous():
         a = a.contiguous()
     if not idx.is_contiguous():
         idx = idx.contiguous()
     if not g.is_contiguous():
         g = g.contiguous()
-    return torch.ops.aimnet.conv_sv_2d_sp_fwd(a, idx, g)
+    return torch.ops.aimnet.conv_sv_2d_sp_fwd(a, idx, g, padding_value, num_centers)

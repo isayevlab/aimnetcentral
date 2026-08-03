@@ -9,6 +9,7 @@ import torch
 from conftest import CAFFEINE_FILE, load_mol
 
 from aimnet.calculators import AIMNet2Calculator
+from aimnet.modules.lr import _mode2_backend_inputs
 
 # Skip entire module if CUDA is not available
 pytestmark = pytest.mark.gpu
@@ -69,6 +70,47 @@ def _neighbor_list_calls(calc):
     )
 
 
+def _cuda_global_mode2_data(*, batch: int = 2, dtype: torch.dtype = torch.float32, periodic: bool = False):
+    B, N, M = batch, 4, 4
+    coord = torch.zeros((B, N, 3), device="cuda", dtype=dtype)
+    coord[:, 1, 0] = 1.0
+    coord[:, 2, 1] = 1.1
+    if B > 1:
+        coord[1, :3] += 2.0
+    numbers = torch.tensor([[6, 1, 1, 0]] * B, device="cuda")
+    nbmat = torch.full((B, N, M), B * N, device="cuda", dtype=torch.int64)
+    for b in range(B):
+        for i in range(N - 1):
+            targets = [b * N + j for j in range(N - 1) if j != i]
+            nbmat[b, i, : len(targets)] = torch.tensor(targets, device="cuda")
+    data = {
+        "coord": coord,
+        "numbers": numbers,
+        "charge": torch.zeros(B, device="cuda", dtype=dtype),
+        "nbmat": nbmat,
+        "nbmat_lr": nbmat,
+        "nbmat_coulomb": nbmat,
+        "nbmat_dftd3": nbmat,
+    }
+    if periodic:
+        shifts = torch.zeros((*nbmat.shape, 3), device="cuda", dtype=dtype)
+        shifts[:, 0, 0, 0] = 1
+        shifts[:, 1, 0, 0] = -1
+        data.update({
+            "cell": torch.eye(3, device="cuda", dtype=dtype).expand(B, -1, -1) * 12,
+            "pbc": torch.ones((B, 3), device="cuda", dtype=torch.bool),
+            "shifts": shifts,
+            "shifts_lr": shifts,
+            "shifts_coulomb": shifts,
+            "shifts_dftd3": shifts,
+        })
+    return data
+
+
+def _cuda_calc():
+    return AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
+
+
 class TestGPUBasics:
     """Basic GPU functionality tests."""
 
@@ -97,6 +139,102 @@ class TestGPUBasics:
 
         assert "forces" in res
         assert res["forces"].device.type == "cuda"
+
+
+def test_global_mode2_cuda_float32_parity():
+    calc = _cuda_calc()
+    data = _cuda_global_mode2_data()
+    batched = calc(data, forces=True)
+    for b in range(2):
+        single = _cuda_global_mode2_data(batch=1)
+        single["coord"] = data["coord"][b : b + 1].clone()
+        single["numbers"] = data["numbers"][b : b + 1].clone()
+        single["charge"] = data["charge"][b : b + 1].clone()
+        single_nbmat = torch.where(
+            data["nbmat"][b : b + 1] == 8, torch.tensor(4, device="cuda"), data["nbmat"][b : b + 1] - b * 4
+        )
+        for key in ("nbmat", "nbmat_lr", "nbmat_coulomb", "nbmat_dftd3"):
+            single[key] = single_nbmat
+        result = calc(single, forces=True)
+        torch.testing.assert_close(batched["energy"][b], result["energy"][0], atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(batched["forces"][b], result["forces"][0], atol=1e-5, rtol=1e-4)
+
+
+def test_global_mode2_cuda_float64_fallback():
+    result = _cuda_calc()(_cuda_global_mode2_data(dtype=torch.float64))
+    assert result["energy"].dtype == torch.float64
+
+
+def test_global_mode2_cuda_force_parity():
+    calc = _cuda_calc()
+    data = _cuda_global_mode2_data()
+    result = calc(data, forces=True)
+    assert result["forces"].shape == data["coord"].shape
+    assert torch.isfinite(result["forces"]).all()
+
+
+def test_global_mode2_cuda_full3d_periodic_all_observables():
+    calc = _cuda_calc()
+    data = _cuda_global_mode2_data(periodic=True)
+    result = calc(data, forces=True, stress=True, hessian=True)
+    assert result["energy"].shape == (2, 1)
+    assert result["forces"].shape == (2, 1, 4, 3)
+    assert result["stress"].shape == (2, 1, 3, 3)
+    assert result["hessian"].ndim == 5
+    for batch_index in range(2):
+        single = _cuda_global_mode2_data(batch=1, periodic=True)
+        single["coord"] = data["coord"][batch_index : batch_index + 1].clone()
+        single["numbers"] = data["numbers"][batch_index : batch_index + 1].clone()
+        single["charge"] = data["charge"][batch_index : batch_index + 1].clone()
+        single["cell"] = data["cell"][batch_index : batch_index + 1].clone()
+        single["pbc"] = data["pbc"][batch_index : batch_index + 1].clone()
+        single_nbmat = torch.where(
+            data["nbmat"][batch_index : batch_index + 1] == 8,
+            torch.tensor(4, device="cuda"),
+            data["nbmat"][batch_index : batch_index + 1] - batch_index * 4,
+        )
+        single_shifts = data["shifts"][batch_index : batch_index + 1].clone()
+        for key in ("nbmat", "nbmat_lr", "nbmat_coulomb", "nbmat_dftd3"):
+            single[key] = single_nbmat
+        for key in ("shifts", "shifts_lr", "shifts_coulomb", "shifts_dftd3"):
+            single[key] = single_shifts
+        independent = calc(single, forces=True, stress=True, hessian=True)
+        for key in ("energy", "forces", "stress", "hessian"):
+            independent_value = independent[key] if key == "hessian" else independent[key][0]
+            torch.testing.assert_close(
+                result[key][batch_index].reshape(-1),
+                independent_value.reshape(-1),
+                atol=2e-4,
+                rtol=2e-4,
+            )
+
+
+def test_global_mode2_cuda_periodic_single_cell_geometry():
+    data = _cuda_global_mode2_data(batch=1, periodic=True)
+    data["cell"] = torch.eye(3, device="cuda") * 12
+    data["pbc"] = torch.ones(3, device="cuda", dtype=torch.bool)
+    result = _cuda_calc()(data)
+    assert result["energy"].shape == (1,)
+
+
+def test_global_mode2_cuda_cross_batch_isolation():
+    calc = _cuda_calc()
+    data = _cuda_global_mode2_data()
+    baseline = calc(data)["energy"].detach()
+    mutated = {key: value.clone() if isinstance(value, torch.Tensor) else value for key, value in data.items()}
+    mutated["coord"][0, 1, 0] += 0.5
+    changed = calc(mutated)["energy"].detach()
+    torch.testing.assert_close(changed[1], baseline[1], atol=1e-5, rtol=1e-5)
+    assert not torch.allclose(changed[0], baseline[0], atol=1e-5, rtol=1e-5)
+
+
+def test_global_mode2_cuda_zero_copy_reshape():
+    data = _cuda_global_mode2_data(periodic=True)
+    prepared = _cuda_calc().prepare_input(data)
+    inputs = _mode2_backend_inputs(prepared, "_lr")
+    assert inputs.coord._base is not None
+    assert inputs.neighbor_matrix._base is not None
+    assert inputs.shifts is not None and inputs.shifts._base is not None
 
 
 class TestGPUvsCPUConsistency:

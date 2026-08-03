@@ -1,6 +1,289 @@
 import torch
 from torch import Tensor
 
+NBMAT_SUFFIXES = ("", "_lr", "_coulomb", "_dftd3")
+_SIGNED_INTEGER_DTYPES = {torch.int8, torch.int16, torch.int32, torch.int64}
+
+
+def _mode2_check(condition: Tensor, message: str) -> None:
+    """Raise on CPU or queue a device-side assertion on CUDA."""
+    if condition.device.type == "cuda":
+        torch._assert_async(condition, message)
+    elif not condition.item():
+        raise ValueError(message)
+
+
+def normalize_mode2_periodic_geometry(data: dict[str, Tensor], *, B: int) -> dict[str, Tensor]:
+    """Normalize full-3D periodic mode-2 geometry in place."""
+    cell = data.get("cell")
+    pbc = data.get("pbc")
+    shift_keys = [f"shifts{suffix}" for suffix in NBMAT_SUFFIXES]
+    has_shifts = any(data.get(key) is not None for key in shift_keys)
+    if cell is None:
+        if pbc is not None:
+            raise ValueError("pbc requires cell for mode-2 input.")
+        if has_shifts:
+            raise ValueError("shifts require cell for mode-2 input.")
+        return data
+
+    if not isinstance(cell, Tensor):
+        cell = torch.as_tensor(cell)
+    if B == 1:
+        if cell.ndim == 2 and cell.shape == (3, 3):
+            cell = cell.unsqueeze(0)
+        elif cell.ndim != 3 or cell.shape != (1, 3, 3):
+            raise ValueError("cell must have shape (3, 3) or (1, 3, 3) for B=1.")
+    elif cell.ndim != 3 or cell.shape != (B, 3, 3):
+        raise ValueError("cell must have shape (B, 3, 3) for batched mode-2 input.")
+    data["cell"] = cell
+
+    if pbc is None:
+        pbc = torch.ones((B, 3), dtype=torch.bool, device=cell.device)
+    else:
+        pbc = torch.as_tensor(pbc, dtype=torch.bool, device=cell.device)
+        if pbc.ndim == 1 and pbc.shape == (3,):
+            pbc = pbc.unsqueeze(0).expand(B, -1)
+        elif pbc.ndim != 2 or pbc.shape != (B, 3):
+            raise ValueError("pbc must have shape (3,) or (B, 3).")
+    _mode2_check(pbc.all(), "mode-2 periodic input requires full-3D pbc.")
+    data["pbc"] = pbc
+    return data
+
+
+def validate_neighbor_suffix_layout(data: dict[str, Tensor]) -> None:
+    """Require every supplied neighbor suffix to match the primary representation."""
+    primary = data.get("nbmat")
+    present = [
+        (suffix, data.get(f"nbmat{suffix}"), data.get(f"shifts{suffix}"))
+        for suffix in NBMAT_SUFFIXES
+        if data.get(f"nbmat{suffix}") is not None or data.get(f"shifts{suffix}") is not None
+    ]
+    if not present:
+        return
+    if not isinstance(primary, Tensor):
+        for suffix, neighbor, _shifts in present:
+            if neighbor is None:
+                raise ValueError(f"shifts{suffix} requires matching nbmat{suffix}.")
+            if neighbor.ndim == 3:
+                raise ValueError("3D suffixed neighbor matrices require a primary nbmat.")
+        return
+    if primary.ndim not in (2, 3):
+        raise ValueError("nbmat must be 2D or 3D when suffixed neighbor matrices are supplied.")
+    prefix = primary.shape[:2] if primary.ndim == 3 else primary.shape[:1]
+    for suffix, neighbor, shifts in present:
+        key = f"nbmat{suffix}"
+        if neighbor is None:
+            raise ValueError(f"{f'shifts{suffix}'} requires matching {key}.")
+        if not isinstance(neighbor, Tensor) or neighbor.ndim != primary.ndim or neighbor.shape[: len(prefix)] != prefix:
+            raise ValueError(f"{key} must match nbmat rank and leading shape {prefix}.")
+        if shifts is not None and not isinstance(shifts, Tensor):
+            raise ValueError(f"shifts{suffix} must be a tensor.")
+
+
+def _validate_mode2_view_layout(value: Tensor, name: str) -> None:
+    """Require flattening the batch and atom dimensions to be a view."""
+    if value.ndim >= 2 and value.shape[0] and value.shape[1] and value.stride(0) != value.stride(1) * value.shape[1]:
+        raise ValueError(f"{name} must be flattenable across (B, N) without a copy.")
+
+
+def validate_mode2_nbmat_raw(data: dict[str, Tensor], *, suffix: str) -> None:
+    """Validate one raw mode-2 neighbor matrix before dtype narrowing."""
+    nbmat_key = f"nbmat{suffix}"
+    shifts_key = f"shifts{suffix}"
+    nbmat = data.get(nbmat_key)
+    shifts = data.get(shifts_key)
+    if nbmat is None:
+        if shifts is not None:
+            raise ValueError(f"{shifts_key} requires matching {nbmat_key}.")
+        raise ValueError(f"{nbmat_key} is required for mode-2 validation.")
+    if not isinstance(nbmat, Tensor):
+        raise ValueError(f"{nbmat_key} must be a tensor.")  # noqa: TRY004
+    if nbmat.ndim != 3:
+        raise ValueError(f"{nbmat_key} must have shape (B, N, M).")
+    if nbmat.dtype not in _SIGNED_INTEGER_DTYPES:
+        raise ValueError(f"{nbmat_key} must use a signed integer dtype.")
+
+    coord = data.get("coord")
+    numbers = data.get("numbers")
+    if not isinstance(coord, Tensor) or not isinstance(numbers, Tensor):
+        raise ValueError("coord and numbers are required for mode-2 validation.")  # noqa: TRY004
+    B, N, _M = nbmat.shape
+    if coord.shape[:2] != (B, N) or numbers.shape != (B, N):
+        raise ValueError(f"{nbmat_key} must match coord and numbers shape prefix (B, N).")
+    for name, value in (("coord", coord), ("numbers", numbers), (nbmat_key, nbmat)):
+        _validate_mode2_view_layout(value, name)
+        if value.device != nbmat.device:
+            raise ValueError(f"{name} and {nbmat_key} must be on the same device.")
+
+    total_atoms = B * N
+    if total_atoms > torch.iinfo(torch.int32).max:
+        raise ValueError(f"{nbmat_key} B*N must fit in int32.")
+
+    cell = data.get("cell")
+    pbc = data.get("pbc")
+    if cell is None:
+        if pbc is not None:
+            raise ValueError("pbc requires cell for mode-2 input.")
+        if shifts is not None:
+            raise ValueError(f"{shifts_key} requires cell for mode-2 input.")
+    else:
+        if not isinstance(cell, Tensor) or cell.device != nbmat.device:
+            raise ValueError("cell and mode-2 neighbor tensors must be on the same device.")
+        if cell.ndim != 3 or cell.shape != (B, 3, 3):
+            raise ValueError("cell must be normalized to shape (B, 3, 3).")
+        if pbc is None:
+            raise ValueError("pbc must be normalized when cell is present.")
+        if pbc.device != nbmat.device or pbc.shape != (B, 3):
+            raise ValueError("pbc must be normalized to shape (B, 3).")
+        _mode2_check(pbc.all(), "mode-2 periodic input requires full-3D pbc.")
+        if shifts is None:
+            raise ValueError(f"{shifts_key} is required when cell is present.")
+        if shifts.shape != (*nbmat.shape, 3):
+            raise ValueError(f"{shifts_key} must match {nbmat_key} shape plus a final dimension of 3.")
+        if shifts.device != nbmat.device:
+            raise ValueError(f"{shifts_key} and {nbmat_key} must be on the same device.")
+        _validate_mode2_view_layout(shifts, shifts_key)
+        if (
+            shifts.dtype == torch.bool
+            or shifts.dtype.is_complex
+            or not (shifts.dtype in _SIGNED_INTEGER_DTYPES or shifts.dtype.is_floating_point)
+        ):
+            raise ValueError(f"{shifts_key} must be an integer or floating-point tensor.")
+        if shifts.dtype.is_floating_point:
+            _mode2_check(torch.isfinite(shifts).all(), f"{shifts_key} must be finite.")
+            _mode2_check((shifts == shifts.round()).all(), f"{shifts_key} must be integral-valued.")
+        _mode2_check(
+            ((shifts >= -(2**31)) & (shifts < 2**31)).all(),
+            f"{shifts_key} values must fit in int32.",
+        )
+
+    sentinel = total_atoms
+    is_sentinel = nbmat == sentinel
+    _mode2_check(
+        ((nbmat >= 0) & (nbmat <= sentinel)).all(),
+        f"{nbmat_key} contains an index outside [0, B*N].",
+    )
+    starts = torch.arange(B, device=nbmat.device, dtype=nbmat.dtype).view(B, 1, 1) * N
+    in_batch = is_sentinel | ((nbmat >= starts) & (nbmat < starts + N))
+    _mode2_check(in_batch.all(), f"{nbmat_key} contains an index outside its batch interval.")
+
+    mask_i = numbers == 0
+    _mode2_check(mask_i[..., -1].all(), "numbers must reserve the final atom as the final dummy.")
+    _mode2_check(
+        ~(mask_i[..., :-1] & ~mask_i[..., 1:]).any(),
+        "numbers padding must be a contiguous tail.",
+    )
+    safe_idx = nbmat.clamp(0, sentinel - 1)
+    padded_neighbor = numbers.flatten().index_select(0, safe_idx.flatten()).view_as(nbmat) == 0
+    excluded = is_sentinel | padded_neighbor
+    _mode2_check(
+        ~(excluded[..., :-1] & ~excluded[..., 1:]).any(),
+        f"{nbmat_key} must have a packed sentinel/padded-neighbor tail.",
+    )
+    _mode2_check(
+        ~(mask_i.unsqueeze(-1) & ~is_sentinel).any(),
+        f"{nbmat_key} padded center rows must contain only the sentinel.",
+    )
+    if shifts is not None:
+        center_slots = mask_i.unsqueeze(-1).unsqueeze(-1).expand_as(shifts)
+        neighbor_slots = excluded.unsqueeze(-1).expand_as(shifts) & ~center_slots
+        _mode2_check(
+            (shifts.eq(0) | ~neighbor_slots).all(),
+            f"{shifts_key} must be zero for sentinel and padded-neighbor slots.",
+        )
+        _mode2_check(
+            (shifts.eq(0) | ~center_slots).all(),
+            f"{shifts_key} must be zero for padded center rows.",
+        )
+
+
+def _prepare_mode2_neighbor_tensors(data: dict[str, Tensor]) -> None:
+    """Create mode-2 masks and safe gather indices from validated int32 inputs."""
+    nbmat = data["nbmat"]
+    B, N, _M = nbmat.shape
+    sentinel = B * N
+    dedup = not torch.compiler.is_compiling()
+    previous: list[tuple[Tensor, Tensor, Tensor, Tensor]] = []
+    mask_i = data["mask_i"]
+    for suffix in NBMAT_SUFFIXES:
+        key = f"nbmat{suffix}"
+        if key not in data:
+            continue
+        current = data[key]
+        reused = False
+        if dedup:
+            for source, mask_ij, gather, kernel in previous:
+                if (
+                    current is source
+                    and current.shape == source.shape
+                    and current.stride() == source.stride()
+                    and current.storage_offset() == source.storage_offset()
+                ):
+                    data[f"mask_ij{suffix}"] = mask_ij
+                    data[f"_nbmat_gather{suffix}"] = gather
+                    data[f"_nbmat_kernel{suffix}"] = kernel
+                    reused = True
+                    break
+        if reused:
+            continue
+        is_sentinel = current == sentinel
+        safe_idx = torch.where(is_sentinel, torch.zeros_like(current), current)
+        padded_neighbor = mask_i.flatten().index_select(0, safe_idx.flatten()).view_as(current)
+        center_pad = mask_i.unsqueeze(-1)
+        mask_ij = center_pad | is_sentinel | padded_neighbor
+        gather = safe_idx.masked_fill(mask_ij, 0)
+        kernel = current.masked_fill(mask_ij, sentinel)
+        data[f"mask_ij{suffix}"] = mask_ij
+        data[f"_nbmat_gather{suffix}"] = gather
+        data[f"_nbmat_kernel{suffix}"] = kernel
+        if dedup:
+            previous.append((current, mask_ij, gather, kernel))
+
+
+def convert_mode2_local_to_global(nbmat_local: Tensor, *, padding_mask: Tensor) -> Tensor:
+    """Convert a legacy local matrix to packed global int32 indices.
+
+    ``nbmat_local`` and ``padding_mask`` must be ``(B, N, M)`` tensors on the
+    same device. The matrix must use a signed integer dtype, the mask must be
+    boolean, exclusions must form a tail in every row, and the final center
+    row must be fully excluded because ``N - 1`` is the required dummy atom.
+    Unmasked values are local indices in ``[0, N - 1)``. The returned tensor
+    is a new contiguous int32 matrix whose masked entries are the global
+    sentinel ``B * N``. This helper does not reorder neighbors or shifts;
+    producers owning aligned shifts must repack interleaved exclusions.
+
+    See ``docs/calculator.md#batched-sparse-neighbor-matrices-mode-2`` for the
+    complete public mode-2 contract and migration guidance.
+    """
+    if nbmat_local.ndim != 3 or padding_mask.shape != nbmat_local.shape:
+        raise ValueError("nbmat_local and padding_mask must have identical shape (B, N, M).")
+    if nbmat_local.device != padding_mask.device:
+        raise ValueError("nbmat_local and padding_mask must be on the same device.")
+    if nbmat_local.dtype not in _SIGNED_INTEGER_DTYPES:
+        raise ValueError("nbmat_local must use a signed integer dtype.")
+    if padding_mask.dtype != torch.bool:
+        raise ValueError("padding_mask must be boolean.")
+    B, N, _M = nbmat_local.shape
+    sentinel = B * N
+    if sentinel > torch.iinfo(torch.int32).max:
+        raise ValueError("B*N must fit in int32.")
+    _mode2_check(
+        ~((padding_mask[..., :-1]) & ~padding_mask[..., 1:]).any(),
+        "padding_mask must be tail-packed.",
+    )
+    _mode2_check(
+        padding_mask[:, -1, :].all(),
+        "padding_mask must exclude the final dummy center row.",
+    )
+    _mode2_check(
+        (~padding_mask & ((nbmat_local < 0) | (nbmat_local >= N - 1))).logical_not().all(),
+        "unmasked local indices are outside the local index range [0, N-1).",
+    )
+    local_int32 = nbmat_local.to(torch.int32)
+    offsets = torch.arange(B, device=nbmat_local.device, dtype=torch.int32).view(B, 1, 1) * N
+    result = torch.where(padding_mask, torch.full_like(local_int32, sentinel), local_int32 + offsets)
+    return result.contiguous()
+
 
 def set_nb_mode(data: dict[str, Tensor]) -> dict[str, Tensor]:
     """Logic to guess and set the neighbor model."""
@@ -112,47 +395,13 @@ def calc_masks(data: dict[str, Tensor]) -> dict[str, Tensor]:
             data["_num_mol"] = torch.tensor(data["mol_sizes"].shape[0])
     elif nb_mode == 2:
         data["mask_i"] = data["numbers"] == 0
-        # Same eager-only dedup as mode 1: see the note there on data_ptr().
-        dedup_nb2 = not torch.compiler.is_compiling()
-        processed_nb2: dict[int, str] = {}  # data_ptr -> mask_suffix
-        for suffix in ("", "_lr", "_coulomb", "_dftd3"):
-            nbmat_key = f"nbmat{suffix}"
-            if nbmat_key in data:
-                if dedup_nb2:
-                    ptr = data[nbmat_key].data_ptr()
-                    if ptr in processed_nb2:
-                        data[f"mask_ij{suffix}"] = data[f"mask_ij{processed_nb2[ptr]}"]
-                        continue
-                    processed_nb2[ptr] = suffix
-                data[f"mask_ij{suffix}"] = _calc_mask_ij_mode2(data[nbmat_key], data["mask_i"])
+        _prepare_mode2_neighbor_tensors(data)
         data["_input_padded"] = torch.tensor(True)
         data["mol_sizes"] = (~data["mask_i"]).sum(-1)
     else:
         raise ValueError(f"Invalid neighbor mode: {nb_mode}")
 
     return data
-
-
-def _calc_mask_ij_mode2(nbmat: Tensor, mask_i: Tensor) -> Tensor:
-    """Mask padded neighbor entries for batched neighbor matrices.
-
-    Historically mode-2 callers have used both local per-system indices
-    ``0..N-1`` and flattened global indices ``b*N + i``. Treat both as valid
-    input conventions for masking so padded atoms are excluded consistently
-    before downstream code canonicalizes its own neighbor representation.
-    """
-    _, N = mask_i.shape
-    local_idx = torch.arange(N, device=nbmat.device).view(1, 1, N)
-    local_pad = (nbmat.unsqueeze(-1) == local_idx) & mask_i.to(device=nbmat.device).unsqueeze(1).unsqueeze(1)
-
-    global_pad_idx = torch.where(mask_i.to(device=nbmat.device).flatten())[0]
-    if global_pad_idx.numel():
-        global_pad = torch.isin(nbmat, global_pad_idx)
-    else:
-        global_pad = torch.zeros_like(nbmat, dtype=torch.bool)
-
-    center_pad = mask_i.to(device=nbmat.device).unsqueeze(-1)
-    return center_pad | local_pad.any(dim=-1) | global_pad
 
 
 def mask_ij_(
@@ -270,7 +519,7 @@ def get_ij(x: Tensor, data: dict[str, Tensor], suffix: str = "") -> tuple[Tensor
         x_j = torch.index_select(x, 0, idx.flatten()).unflatten(0, idx.shape)
     elif nb_mode == 2:
         x_i = x.unsqueeze(2)
-        idx = data[f"nbmat{suffix}"]
+        idx = data[f"_nbmat_gather{suffix}"]
         x_j = torch.index_select(x.flatten(0, 1), 0, idx.flatten()).unflatten(0, idx.shape)
     else:
         raise ValueError(f"Invalid neighbor mode: {nb_mode}")

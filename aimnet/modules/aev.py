@@ -155,7 +155,28 @@ class ConvSV(nn.Module):
     def forward(self, data: dict[str, Tensor], a: Tensor) -> Tensor:
         g_sv = data["g_sv"]
         mode = nbops.get_nb_mode(data)
-        if self.d2features:
+        if mode == 2:
+            a_flat = _flatten_mode2(a, "atomic features")
+            g_flat = _flatten_mode2(g_sv, "ConvSV geometry")
+            gather_flat = _flatten_mode2(data["_nbmat_gather"], "ConvSV gather indices")
+            kernel_flat = _flatten_mode2(data["_nbmat_kernel"], "ConvSV kernel indices")
+            b, n = a.shape[:2]
+            if self.d2features:
+                if a.device.type == "cuda" and a.dtype == torch.float32 and g_sv.dtype == torch.float32:
+                    avf_sv = conv_sv_2d_sp(
+                        a_flat,
+                        kernel_flat,
+                        g_flat,
+                        padding_value=b * n,
+                        num_centers=b * n,
+                    ).unflatten(0, (b, n))
+                else:
+                    a_j = a_flat.index_select(0, gather_flat.flatten()).unflatten(0, data["_nbmat_gather"].shape)
+                    avf_sv = torch.einsum("...mag,...mgd->...agd", a_j, g_sv)
+            else:
+                a_j = a_flat.index_select(0, gather_flat.flatten()).unflatten(0, data["_nbmat_gather"].shape)
+                avf_sv = torch.einsum("...ma,...mgd->...agd", a_j, g_sv)
+        elif self.d2features:
             # The Warp kernel is float32-only; float64 (and mixed-dtype) inputs
             # fall through to the pure-torch einsum branch below.
             if mode > 0 and a.device.type == "cuda" and a.dtype == torch.float32 and g_sv.dtype == torch.float32:
@@ -173,7 +194,18 @@ class ConvSV(nn.Module):
                 avf_sv = torch.einsum("...ma,...mgd->...agd", a.unsqueeze(1), g_sv)
         avf_s, avf_v = avf_sv.split([1, 3], dim=-1)
         avf_v = torch.einsum("agh,...agd->...ahd", self.agh, avf_v).pow(2).sum(-1)
-        return torch.cat([avf_s.squeeze(-1).flatten(-2, -1), avf_v.flatten(-2, -1)], dim=-1)
+        out = torch.cat([avf_s.squeeze(-1).flatten(-2, -1), avf_v.flatten(-2, -1)], dim=-1)
+        if mode == 1:
+            return out
+        return nbops.mask_i_(out, data, mask_value=0.0, inplace=False)
+
+
+def _flatten_mode2(tensor: Tensor, name: str) -> Tensor:
+    """Flatten system and atom dimensions without allocating."""
+    flattened = tensor.flatten(0, 1)
+    if flattened._base is None:
+        raise ValueError(f"mode-2 {name} must be view-flattenable")
+    return flattened
 
 
 def _init_ahg(b: int, m: int, n: int):
