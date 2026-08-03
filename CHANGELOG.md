@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Verified official model-registry downloads and cached artifacts against their SHA-256 digests before loading. Registry names and aliases now take precedence over same-named implicit local paths, preventing unverified local files from shadowing registry models.
 - Restricted v2 `.pt` artifact deserialization to weights and basic data. Legacy `.jpt` files are loaded only through the TorchScript loader and must come from a trusted source.
 - Validated Python class and function references in model YAML against a default trusted set. Direct local and Hugging Face artifacts can extend or replace that set, or explicitly select unsafe loading for trusted custom code; registry models always use the fixed default set.
+- Bumped the locked torch from 2.9.1 to 2.12.1 (with triton 3.7.1), staying inside the supported 2.8-2.12 matrix. This clears the low-severity `torch.lstm_cell` memory-corruption advisory (patched in 2.10.0; the earlier note that both torch advisories required 2.13 no longer matches the updated advisory data) and moves the default CI lane onto an inductor with the upstream fusion-legality fix (pytorch/pytorch#172301). The `torch.jit.script` advisory remains open: patched only in 2.13, still outside the supported matrix.
 
 ### Added
 
@@ -19,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Migrated Ewald Coulomb to the nvalchemiops (>=0.4) energy+autograd API: energies are bit-identical and forces/stress unchanged to kernel rounding (<=2e-06 eV/A), the upstream `DeprecationWarning` for Ewald is gone, and Ewald dense Hessians / HVPs are now true relaxed-charge autograd derivatives (comparable with simple/DSF) instead of fixed-charge finite differences. The `eps` argument of `hessian_vector_product` now applies to PME only. PME intentionally remains on the legacy explicit-terms path: its charge-gradient backward misbehaves inside the full calculator graph under `create_graph=True` (train mode), tracked in a dedicated issue; PME behavior is bit-identical to the previous release.
 - Hardened `make test`: the parallel run now hides CUDA and caps per-worker threads (`CUDA_VISIBLE_DEVICES="" OMP_NUM_THREADS=1`); previously xdist workers either all initialized the first GPU (OOM on CUDA boxes) or oversubscribed the CPU with per-worker torch thread pools. A new `make test-gpu` target runs the GPU-marked tests serially on CUDA.
 - Bumped `nvalchemi-toolkit-ops` to `>=0.4.0` and `warp-lang` to `>=1.13,<2` (installs 1.15). Energies, charges, and Hessians are bit-identical to 0.3.1; explicit force/virial outputs shift within float32 accumulation noise (max 6.7e-05 eV/A on a periodic system, 40x inside the project's cross-version acceptance of 1e-4 Hartree/A). The 0.4.0 direct-output flags used by the Ewald/PME path (`compute_forces`/`compute_virial`) are deprecated upstream and now emit `DeprecationWarning`; migrating to the autograd-based API is tracked as follow-up work.
 

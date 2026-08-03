@@ -117,21 +117,25 @@ def nse(
         F_u = F_u.unsqueeze(-2)
         dQ = dQ.unsqueeze(-2)
     elif nb_mode == 1:
-        if torch.compiler.is_compiling():
-            # under torch.compile keep the repeat_interleave formulation: the
-            # index_select gather below fuses with mol_sum's scatter into one
-            # graph and trips inductor's CPU codegen
-            data["mol_sizes"][-1] += 1
-            F_u = torch.repeat_interleave(F_u, data["mol_sizes"], dim=0)
-            dQ = torch.repeat_interleave(dQ, data["mol_sizes"], dim=0)
-            data["mol_sizes"][-1] -= 1
+        # broadcast per-molecule values to atoms with a gather on mol_idx;
+        # equivalent to repeat_interleave over mol_sizes (mol_idx is sorted)
+        # but stays on-device. The trailing padding atom picks up the value
+        # for its own mol_idx entry, exactly as repeat_interleave with the
+        # padding-inclusive mol_sizes did before.
+        # This form is also the compilable one: repeat_interleave has a
+        # data-dependent output shape and was costing several graph breaks per
+        # forward, while the gather keeps a static shape.
+        mol_idx = data["mol_idx"]
+        if torch.compiler.is_compiling() and F_u.shape[0] == 1:
+            # Single molecule: every atom reads row 0, so the gather is just a
+            # broadcast of a (1, C) tensor against (n_atoms, C). Leaving it as
+            # a broadcast keeps its backward a plain reduction instead of a
+            # scatter into a size-1 buffer, which inductor (2.9.1+cu128)
+            # miscompiles. Compile-only: eager keeps the gather so its
+            # floating-point summation order is unchanged.
+            F_u = F_u.expand(mol_idx.shape[0], -1)
+            dQ = dQ.expand(mol_idx.shape[0], -1)
         else:
-            # broadcast per-molecule values to atoms with a gather on mol_idx;
-            # equivalent to repeat_interleave over mol_sizes (mol_idx is sorted)
-            # but stays on-device. The trailing padding atom picks up the value
-            # for its own mol_idx entry, exactly as repeat_interleave with the
-            # padding-inclusive mol_sizes did before.
-            mol_idx = data["mol_idx"]
             F_u = torch.index_select(F_u, 0, mol_idx)
             dQ = torch.index_select(dQ, 0, mol_idx)
     else:
