@@ -236,12 +236,13 @@ def test_export_model_atomic_save_preserves_existing_permissions(tmp_path):
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits are required")
-def test_export_model_atomic_save_respects_restrictive_umask(tmp_path):
+@pytest.mark.parametrize("file_umask", [0, 0o077])
+def test_export_model_atomic_save_uses_private_permissions_for_new_file(tmp_path, file_umask):
     from aimnet.train.export_model import _save_artifact_atomically
 
     destination = tmp_path / "new.pt"
 
-    previous_umask = os.umask(0o077)
+    previous_umask = os.umask(file_umask)
     try:
         _save_artifact_atomically({"value": 1}, destination)
     finally:

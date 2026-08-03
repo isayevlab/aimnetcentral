@@ -23,8 +23,8 @@ The output file contains:
 
 import copy
 import os
-import secrets
 import stat
+import tempfile
 from collections.abc import Collection, Mapping
 from pathlib import Path
 
@@ -84,19 +84,12 @@ def _save_artifact_atomically(artifact: dict[str, object], output: str | Path) -
     """Save an artifact without replacing an existing destination on failure."""
     destination = Path(output)
     destination_mode = stat.S_IMODE(destination.stat().st_mode) if destination.exists() else None
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
-    temporary: Path | None = None
-    fd: int | None = None
-    for _ in range(100):
-        candidate = destination.parent / f".{destination.name}.{secrets.token_hex(8)}.tmp"
-        try:
-            fd = os.open(candidate, flags, 0o666)
-        except FileExistsError:
-            continue
-        temporary = candidate
-        break
-    if temporary is None or fd is None:
-        raise FileExistsError(f"could not create a unique temporary file for {destination}")
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.",
+        suffix=".tmp",
+        dir=destination.parent,
+    )
+    temporary = Path(temporary_name)
 
     try:
         if destination_mode is not None:
