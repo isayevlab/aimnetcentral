@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import warnings
 from collections.abc import Collection
 from pathlib import Path
 from typing import ClassVar, Final, Literal, NotRequired, TypedDict
@@ -13,15 +12,16 @@ from aimnet import nbops
 from aimnet.config import build_module
 from aimnet.models.artifact_validation import (
     _REGISTRY_IMPORT_POLICY,
-    _ModelImportPolicy,
-    _resolve_user_import_policy,
-    _validate_v2_artifact,
+    ModelImportPolicy,
+    resolve_model_import_policy,
+    validate_v2_artifact_with_policy,
 )
 from aimnet.models.utils import (
+    convert_atomic_shifts_to_float64,
     extract_d3_params,
     extract_species,
     has_externalizable_dftd3,
-    validate_state_dict_keys,
+    load_state_dict_checked,
 )
 
 
@@ -122,7 +122,7 @@ def load_model(
     Use ``unsafe`` only for locally trusted artifacts. Legacy ``.jpt`` files
     accept only ``model_import_paths=None`` and ``model_import_mode="extend"``.
     """
-    policy = _resolve_user_import_policy(model_import_paths, model_import_mode)
+    policy = resolve_model_import_policy(model_import_paths, model_import_mode)
     if Path(path).suffix.lower() == ".jpt":
         if model_import_paths is not None or model_import_mode != "extend":
             raise ValueError("Import settings are not supported for .jpt sources.")
@@ -130,28 +130,35 @@ def load_model(
     return _load_v2_model(path, device, policy)
 
 
-def _load_v2_model(path: str, device: str, policy: _ModelImportPolicy) -> tuple[nn.Module, ModelMetadata]:
-    data = torch.load(path, map_location=device, weights_only=True)
-    model_config, state_dict = _validate_v2_artifact(data, policy)
-    model = build_module(model_config, allow_file_references=False)
+def _load_v2_model(
+    path: str,
+    device: str,
+    policy: ModelImportPolicy,
+    *,
+    unexpected: Literal["warn", "error"] = "warn",
+) -> tuple[nn.Module, ModelMetadata]:
+    data = torch.load(path, map_location="cpu", weights_only=True)
+    model_config, state_dict = validate_v2_artifact_with_policy(data, policy)
+    with torch.device("cpu"):
+        model = build_module(
+            model_config,
+            allow_file_references=False,
+            import_authorizer=policy.require_allowed,
+        )
     if not isinstance(model, nn.Module):
         raise TypeError("Built model configuration did not produce an nn.Module.")
 
     # Atomic shifts store SAE/reference-energy values and may be float64 in
     # the file. Cast before load_state_dict so copy_ does not truncate them
     # into the default float32 embedding.
-    if hasattr(model, "outputs") and hasattr(model.outputs, "atomic_shift"):
-        model.outputs.atomic_shift.double()
+    convert_atomic_shifts_to_float64(model)
 
-    load_result = model.load_state_dict(state_dict, strict=False)
-    real_missing, real_unexpected = validate_state_dict_keys(load_result.missing_keys, load_result.unexpected_keys)
-    if real_missing or real_unexpected:
-        msg_parts = []
-        if real_missing:
-            msg_parts.append(f"Missing keys: {real_missing}")
-        if real_unexpected:
-            msg_parts.append(f"Unexpected keys: {real_unexpected}")
-        warnings.warn(f"State dict mismatch during model loading. {'; '.join(msg_parts)}", stacklevel=2)
+    load_state_dict_checked(
+        model,
+        state_dict,
+        source=path,
+        unexpected=unexpected,
+    )
 
     model = model.to(device)
     metadata: ModelMetadata = {
@@ -175,7 +182,7 @@ def _load_v2_model(path: str, device: str, policy: _ModelImportPolicy) -> tuple[
 
 def _load_registry_model(path: str, device: str = "cpu") -> tuple[nn.Module, ModelMetadata]:
     """Load a registry artifact with its immutable import policy."""
-    return _load_v2_model(path, device, _REGISTRY_IMPORT_POLICY)
+    return _load_v2_model(path, device, _REGISTRY_IMPORT_POLICY, unexpected="error")
 
 
 class AIMNet2Base(nn.Module):

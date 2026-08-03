@@ -4,7 +4,7 @@ AIMNet2 provides command-line tools for training, model export, conversion, and 
 
 ## Model cache recovery
 
-Official registry downloads are verified against the SHA-256 digest committed with each registry entry. Cache hits are re-hashed, and a failed download is never installed as the final cache file. If a cached artifact is corrupt or the upstream artifact has been replaced, remove the cache and retry:
+Official registry downloads are verified against the SHA-256 digest committed with each registry entry. Cache hits are re-hashed, and a failed download is never installed as the final cache file. A corrupt cache hit triggers one verified atomic replacement attempt; if failures persist, remove the cache and retry:
 
 ```bash
 aimnet clear_model_cache

@@ -1,14 +1,38 @@
 import copy
 import os
 from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from importlib import import_module
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from jinja2 import Template
 
+ImportRole = Literal["class", "activation", "initializer"]
+ImportAuthorizer = Callable[[str, ImportRole], None]
+# Approved artifact constructors resolve synchronously; callers that start new
+# threads must propagate authorization context explicitly.
+_ACTIVE_IMPORT_AUTHORIZER: ContextVar[ImportAuthorizer | None] = ContextVar(
+    "aimnet_import_authorizer",
+    default=None,
+)
 
-def get_module(name: str) -> Callable[..., Any]:
+
+@contextmanager
+def _import_authorization(import_authorizer: ImportAuthorizer | None):
+    """Temporarily apply artifact import authorization to this context."""
+    if import_authorizer is None:
+        yield
+        return
+    token = _ACTIVE_IMPORT_AUTHORIZER.set(import_authorizer)
+    try:
+        yield
+    finally:
+        _ACTIVE_IMPORT_AUTHORIZER.reset(token)
+
+
+def get_module(name: str, *, role: ImportRole = "class") -> Callable[..., Any]:
     """
     Retrieves a module and function based on the given name.
 
@@ -22,6 +46,9 @@ def get_module(name: str) -> Callable[..., Any]:
         ImportError: If the module cannot be imported.
         AttributeError: If the function does not exist in the module.
     """
+    authorizer = _ACTIVE_IMPORT_AUTHORIZER.get()
+    if authorizer is not None:
+        authorizer(name, role)
     parts = name.split(".")
     module_name, func_name = ".".join(parts[:-1]), parts[-1]
     module = import_module(module_name)
@@ -29,7 +56,13 @@ def get_module(name: str) -> Callable[..., Any]:
     return func  # type: ignore[no-any-return]
 
 
-def get_init_module(name: str, args: list | None = None, kwargs: dict | None = None) -> Any:
+def get_init_module(
+    name: str,
+    args: list | None = None,
+    kwargs: dict | None = None,
+    *,
+    role: ImportRole = "class",
+) -> Any:
     """
     Get the initialized module based on the given name, arguments, and keyword arguments.
 
@@ -44,7 +77,7 @@ def get_init_module(name: str, args: list | None = None, kwargs: dict | None = N
     """
     args = args if args is not None else []
     kwargs = kwargs if kwargs is not None else {}
-    return get_module(name)(*args, **kwargs)  # type: ignore[no-any-return]
+    return get_module(name, role=role)(*args, **kwargs)  # type: ignore[no-any-return]
 
 
 def load_yaml(
@@ -123,6 +156,7 @@ def build_module(
     hyperpar: str | dict | None = None,
     *,
     allow_file_references: bool = True,
+    import_authorizer: ImportAuthorizer | None = None,
 ) -> Any:
     """
     Build a module based on the provided configuration.
@@ -144,25 +178,28 @@ def build_module(
         AssertionError: If `hyperpar` is provided and is not a dictionary.
 
     """
-    if isinstance(hyperpar, str):
-        hyperpar = load_yaml(hyperpar, allow_file_references=allow_file_references)  # type: ignore[assignment]
-    if hyperpar and not isinstance(hyperpar, dict):
-        raise TypeError("Hyperpar must be a dictionary")
-    config = load_yaml(config, hyperpar, allow_file_references=allow_file_references)
-    for d, k, v in _iter_rec_bottomup(config):
-        if isinstance(v, dict) and "class" in v:
-            d[k] = get_init_module(  # type: ignore[index]
-                v["class"],
-                args=v.get("args", []),  # type: ignore[assignment]
-                kwargs=v.get("kwargs", {}),
+    with _import_authorization(import_authorizer):
+        if isinstance(hyperpar, str):
+            hyperpar = load_yaml(hyperpar, allow_file_references=allow_file_references)  # type: ignore[assignment]
+        if hyperpar and not isinstance(hyperpar, dict):
+            raise TypeError("Hyperpar must be a dictionary")
+        config = load_yaml(config, hyperpar, allow_file_references=allow_file_references)
+        for d, k, v in _iter_rec_bottomup(config):
+            if isinstance(v, dict) and "class" in v:
+                d[k] = get_init_module(  # type: ignore[index]
+                    v["class"],
+                    args=v.get("args", []),  # type: ignore[assignment]
+                    kwargs=v.get("kwargs", {}),
+                    role="class",
+                )
+        if "class" in config:
+            config = get_init_module(  # type: ignore[assignment]
+                config["class"],  # type: ignore[call-overload]
+                args=config.get("args", []),  # type: ignore[union-attr]
+                kwargs=config.get("kwargs", {}),  # type: ignore[union-attr]
+                role="class",
             )
-    if "class" in config:
-        config = get_init_module(  # type: ignore[assignment]
-            config["class"],  # type: ignore[call-overload]
-            args=config.get("args", []),  # type: ignore[union-attr]
-            kwargs=config.get("kwargs", {}),  # type: ignore[union-attr]
-        )
-    return config  # type: ignore[assignment]
+        return config  # type: ignore[assignment]
 
 
 def dict_to_dotted(d, parent=""):

@@ -33,6 +33,10 @@ Model metadata is returned by `load_model()` as a `ModelMetadata` TypedDict. For
 | `format_version` | `int` | `1` = legacy JIT, `2` = new format (default for early v2 bundles) |
 | `cutoff` | `float` | Model short-range cutoff radius (Å) |
 | `implemented_species` | `list[int]` | Supported atomic numbers |
+| `family` | `str \| None` | Released model family used for calculator defaults |
+| `supports_charged_systems` | `bool \| None` | Whether the model supports charged systems |
+| `has_embedded_lr` | `bool` | Whether long-range behavior is embedded |
+| `has_embedded_d3ts` | `bool` | Whether D3TS dispersion is embedded |
 
 ### Coulomb Configuration
 
@@ -92,7 +96,7 @@ The `coulomb_mode` field describes what Coulomb treatment is embedded in the mod
 │ Model:      E_NN - E_SR (SR Coulomb subtracted)                 │
 │ Calculator: + E_full (adds full Coulomb externally)             │
 │ Total:      E_NN + E_LR (SR cancels out)                        │
-│                                                                  │
+│                                                                 │
 │ Runtime control: ✓ Can switch simple/DSF/Ewald/PME              │
 │ File size:       Smaller (no LR modules embedded)               │
 └─────────────────────────────────────────────────────────────────┘
@@ -103,7 +107,7 @@ The `coulomb_mode` field describes what Coulomb treatment is embedded in the mod
 │ Model:      E_NN + E_Coulomb (full Coulomb embedded in JIT)     │
 │ Calculator: (nothing)                                           │
 │ Total:      E_NN + E_Coulomb                                    │
-│                                                                  │
+│                                                                 │
 │ Runtime control: ✗ Fixed method, warning only                   │
 │ File size:       Larger (modules in JIT)                        │
 └─────────────────────────────────────────────────────────────────┘
@@ -198,6 +202,10 @@ The envelope function defines how the SR interaction decays at the cutoff:
     "coulomb_sr_envelope": str | None,
     "d3_params": dict | None,    # DFTD3 params for external use
     "implemented_species": list[int],
+    "has_embedded_lr": bool,
+    "has_embedded_d3ts": bool,
+    "family": str | None,
+    "supports_charged_systems": bool | None,
     "state_dict": dict,          # Model weights (SAE baked in)
 }
 ```
@@ -256,9 +264,9 @@ aimnet convert model.jpt config.yaml model_v2.pt
 3. Extract `implemented_species` from `afv.weight` (non-NaN entries)
 4. Strip LR modules from config, add SRCoulomb if needed (requires determinable `rc`)
 5. Build core model from modified config
-6. Load weights from JIT state dict
-7. Validate keys (filter expected missing/unexpected)
-8. Convert `atomic_shift` to float64
+6. Convert `atomic_shift` to float64 before loading weights
+7. Load weights from JIT state dict
+8. Validate keys (filter expected missing/unexpected)
 9. Save with metadata
 
 ### Key Changes During Conversion
@@ -296,7 +304,8 @@ model, metadata = load_legacy_jit("legacy.jpt", device="cpu")
 - New format: Restricted-loads the envelope, validates the schema and model YAML, then builds the model and loads its state dict
 - Legacy format: Only a `.jpt` suffix routes to `torch.jit.load()`
 - Metadata always returned as `ModelMetadata` dict
-- `atomic_shift` converted to float64 after loading (precision)
+- v2 and safetensors weights are loaded on CPU; `atomic_shift` is converted to float64 before state loading, then the completed model moves to the requested device once
+- Missing real state-dict keys are fatal. Unexpected real keys warn for direct custom/HF artifacts and fail for registry artifacts; known format-migration keys remain filtered.
 
 ### Model YAML import policy
 
@@ -312,11 +321,20 @@ ALLOWED_MODEL_IMPORT_PATHS = frozenset({
     "aimnet.modules.Output",
     "aimnet.modules.Quadrupole",
     "aimnet.modules.SRCoulomb",
-    "torch.nn.*",
+    "torch.nn.GELU",
+    "torch.nn.init.xavier_normal_",
 })
 ```
 
-The `torch.nn.*` entry allows paths below that namespace, such as `torch.nn.Linear`, `torch.nn.GELU`, and `torch.nn.init.xavier_normal_`. It does not allow other PyTorch namespaces such as `torch.hub` or `torch.utils`. Training-only keys such as `fn`, `trainer`, and `evaluator` are rejected in inference artifacts.
+Default imports are role-specific: AIMNet paths are model classes, `torch.nn.GELU` is the activation, and `torch.nn.init.xavier_normal_` is the initializer. Other `torch.nn` symbols such as `Linear`, `ReLU`, or `uniform_` must be supplied explicitly for a direct custom artifact. Training-only keys such as `fn`, `trainer`, and `evaluator` are rejected in inference artifacts.
+
+This release intentionally changes compatibility. To migrate:
+
+- Rename a trusted TorchScript `model.pt` to `model.jpt`, or convert it to v2 with `aimnet convert`.
+- Write `./name`, `../name`, or an absolute path when a local file collides with a registry name.
+- Fix inconsistent metadata and regenerate incomplete artifacts; disabling import checks does not disable metadata or state-dict validation.
+- Add each trusted custom import explicitly through `model_import_paths`; do not restore the broad namespace.
+- Treat registry checksum failures as provenance failures; do not replace the committed digest.
 
 Direct local v2 files and complete Hugging Face repositories support three import modes:
 
@@ -324,7 +342,7 @@ Direct local v2 files and complete Hugging Face repositories support three impor
 - `replace`: trust only `model_import_paths`, which must be nonempty.
 - `unsafe`: skip import-path checks. `model_import_paths` must be `None`. This can execute arbitrary imported code during model construction, so use it only for locally trusted artifacts.
 
-Caller-supplied entries may be exact dotted paths or namespace patterns ending in `.*`. For example:
+Caller-supplied entries may be exact dotted paths or namespace patterns ending in `.*`; each supplied entry is available to the class, activation, and initializer roles. For example:
 
 ```python
 from aimnet.models import load_model
@@ -357,7 +375,7 @@ model, metadata = load_model(
 
 ### `load_model(path, device="cpu", *, model_import_paths=None, model_import_mode="extend")`
 
-Load model from file with automatic format detection.
+Load model from file with suffix-based format dispatch.
 
 **Parameters:**
 
