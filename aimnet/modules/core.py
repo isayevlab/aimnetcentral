@@ -126,7 +126,7 @@ class Output(nn.Module):
 
     def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         v = self.mlp(data[self.key_in]).squeeze(-1)
-        if data["_input_padded"].item():
+        if nbops.is_input_padded(data):
             v = nbops.mask_i_(v, data, mask_value=0.0)
         data[self.key_out] = v
         return data

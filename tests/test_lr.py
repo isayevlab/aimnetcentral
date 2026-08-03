@@ -887,7 +887,7 @@ class TestLRCoulombPMEPBC:
 class TestLRCoulombBackendInterface:
     """Tests for the common external Coulomb derivative interface."""
 
-    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    @pytest.mark.parametrize("method", ["pme"])  # ewald is energy-in-graph; see ewald-specific tests
     def test_ewald_pme_inference_returns_explicit_terms(self, pbc_crystal_small, device, method):
         """Inference-style Ewald/PME returns explicit fixed-charge terms."""
         module = LRCoulomb(method=method).to(device)
@@ -1155,7 +1155,7 @@ class TestLRCoulombTraining:
         for g in param_grads:
             assert torch.isfinite(g).all()
 
-    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    @pytest.mark.parametrize("method", ["pme"])  # ewald is energy-in-graph; see ewald-specific tests
     def test_energy_backward_matches_hybrid_explicit_forces(self, pbc_crystal_small, device, method):
         """Native autograd forces match hybrid fixed-charge explicit forces."""
         torch.manual_seed(1)
@@ -1207,3 +1207,39 @@ def test_lrcoulomb_rejects_unknown_method_and_envelope():
         LRCoulomb(method="not-a-method")
     with pytest.raises(ValueError, match="Unknown envelope"):
         LRCoulomb(envelope="not-an-envelope")
+
+
+class TestEwaldEnergyGraph:
+    """Contract tests for the Ewald energy-in-graph migration (nvalchemiops >=0.4)."""
+
+    def test_ewald_inference_returns_energy_in_graph_no_terms(self, pbc_crystal_small, device):
+        import warnings
+
+        from aimnet.calculators import AIMNet2Calculator
+
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True, device=device)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
+            calc.set_lrcoulomb_method("ewald")
+        module = calc.external_coulomb
+
+        captured = {}
+        orig = module._coul_nvalchemi
+
+        def spy(data, backend, **kw):
+            e, terms = orig(data, backend, **kw)
+            captured["terms"] = terms
+            captured["e_requires_grad"] = e.requires_grad
+            return e, terms
+
+        module._coul_nvalchemi = spy
+        data_calc = {
+            "coord": pbc_crystal_small["coord"].to(device),
+            "numbers": pbc_crystal_small["numbers"].to(device),
+            "cell": pbc_crystal_small["cell"].to(device),
+            "charge": 0.0,
+        }
+        res = calc(data_calc, forces=True)
+        assert captured["terms"] is None
+        assert captured["e_requires_grad"]
+        assert torch.isfinite(res["forces"]).all()
