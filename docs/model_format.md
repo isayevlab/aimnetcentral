@@ -54,6 +54,17 @@ Model metadata is returned by `load_model()` as a `ModelMetadata` TypedDict. For
 | `needs_dispersion` | `bool` | If `True`, calculator should add external DFTD3 |
 | `d3_params` | `dict | None` | D3 parameters: `{s6, s8, a1, a2}` |
 
+### Validation Semantics
+
+Validation is deliberately layered:
+
+1. **Envelope/schema validation** checks the v2 dictionary, safe YAML, forbidden keys, authorized imports, scalar ranges, and tensor-only state values. An omitted v2 `format_version` defaults to 2; an explicit value must be the integer `2`.
+2. **Structural validation** checks intrinsic facts that caller flags cannot change. For example, `sr_embedded` requires a valid SR cutoff/envelope and embedded LR metadata, while embedded D3TS also requires embedded LR.
+3. **Canonical validation** adds distribution invariants for official registry artifacts, registry-backed HF fallback, and newly exported artifacts. It requires action flags and complete external-D3 metadata to agree with the artifact contents.
+4. **Effective validation** runs in the calculator after family defaults and explicit `needs_coulomb`/`needs_dispersion` flags are resolved. It permits explicit disabling of external components after structural validation, but rejects incompatible enabled components.
+
+Direct local v2 artifacts and complete third-party HF repositories require structural consistency rather than canonical action flags, preserving explicit calculator override compatibility.
+
 ## Which Format Should I Use?
 
 ### Decision Matrix
@@ -218,6 +229,8 @@ TorchScript module with attributes:
 - `cutoff_lr`: Long-range cutoff (if applicable)
 - LRCoulomb and DFTD3/D3BJ modules embedded
 
+The loader synthesizes version-1 metadata with `has_embedded_lr=True`, `coulomb_mode="full_embedded"`, and both external-module action flags disabled.
+
 ## Exporting Models
 
 Use the `aimnet export` CLI command:
@@ -243,11 +256,13 @@ aimnet export weights.pt model_v2.pt --model config.yaml --sae sae.yaml
 aimnet export weights.pt model.pt \
     --model config.yaml \
     --sae sae.yaml \
-    --needs-coulomb    # Override: force external Coulomb
-    --needs-dispersion # Override: force external DFTD3
+    --needs-coulomb \
+    --needs-dispersion
 ```
 
-Explicit flags override auto-detection from config.
+Explicit flags override auto-detection from config, subject to canonical consistency: `--no-coulomb` is invalid when `sr_embedded` is detected, and enabled dispersion requires `s8`, `a1`, and `a2`. For a trusted local custom constructor, repeat `--model-import-path` with each exact dotted path or trusted namespace pattern required by the model YAML.
+
+Export validates the complete canonical artifact before serialization. It writes a sibling temporary file and atomically replaces the destination only after serialization succeeds, so validation or save failures preserve an existing output file.
 
 ## Converting Legacy Models
 
@@ -306,6 +321,9 @@ model, metadata = load_legacy_jit("legacy.jpt", device="cpu")
 - Metadata always returned as `ModelMetadata` dict
 - v2 and safetensors weights are loaded on CPU; `atomic_shift` is converted to float64 before state loading, then the completed model moves to the requested device once
 - Missing real state-dict keys are fatal. Unexpected real keys warn for direct custom/HF artifacts and fail for registry artifacts; known format-migration keys remain filtered.
+- Direct, registry, and HF v2 paths share the same construction and state-loading behavior while retaining source-specific import and unexpected-key policies. These assembly and registry-policy helpers are implementation contracts, not additional stable top-level `aimnet.models` APIs.
+
+Official models are not currently bundled in wheels or source distributions. Registry artifacts are downloaded on demand and every cached, downstream- bundled, or downloaded candidate must match the registry SHA-256 digest before use. A stale bundled candidate fails closed rather than being replaced by a download.
 
 ### Model YAML import policy
 
@@ -569,6 +587,9 @@ aimnet export weights.pt model_v2.pt \
 # Override auto-detection
 --needs-coulomb       # Force external Coulomb
 --needs-dispersion    # Force external DFTD3
+--no-coulomb          # Disable external Coulomb when structurally compatible
+--no-dispersion       # Disable external DFTD3
+--model-import-path my_package.models.*  # Trust custom local export constructors
 ```
 
 ## CLI Commands

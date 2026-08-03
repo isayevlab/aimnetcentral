@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import keyword
 import math
+import os
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from numbers import Real
@@ -66,11 +67,31 @@ class ModelImportPolicy:
             raise ValueError(f"Untrusted import path for {role!r}: {path!r}.")
 
 
-_REGISTRY_IMPORT_POLICY = ModelImportPolicy(
+REGISTRY_IMPORT_POLICY = ModelImportPolicy(
     class_paths=_DEFAULT_CLASS_IMPORT_PATHS,
     activation_paths=_DEFAULT_ACTIVATION_IMPORT_PATHS,
     initializer_paths=_DEFAULT_INITIALIZER_IMPORT_PATHS,
 )
+_REGISTRY_IMPORT_POLICY = REGISTRY_IMPORT_POLICY
+
+
+def is_legacy_jit_path(path: str) -> bool:
+    """Return whether ``path`` selects the trusted legacy TorchScript loader."""
+    return str(path).lower().endswith(".jpt")
+
+
+def is_explicit_local_path(path: str) -> bool:
+    """Return whether ``path`` unambiguously denotes a local filesystem path."""
+    path = str(path)
+    return os.path.isabs(path) or path.startswith("./") or path.startswith("../")
+
+
+def uses_default_model_import_settings(
+    paths: Collection[str] | None,
+    mode: Literal["extend", "replace", "unsafe"],
+) -> bool:
+    """Return whether model imports use the unmodified default policy."""
+    return paths is None and mode == "extend"
 
 
 def _validate_import_pattern(path: object) -> str:
@@ -201,12 +222,14 @@ def validate_model_yaml(
 
 
 def _validate_registry_model_yaml(model_yaml: str) -> dict[str, Any]:
-    return _walk_model_yaml(model_yaml, _REGISTRY_IMPORT_POLICY)
+    return _walk_model_yaml(model_yaml, REGISTRY_IMPORT_POLICY)
 
 
 def validate_v2_artifact_with_policy(
     data: object,
     policy: ModelImportPolicy,
+    *,
+    validation: Literal["structural", "canonical"] = "structural",
 ) -> tuple[dict[str, Any], Mapping[str, Tensor]]:
     if not isinstance(data, dict):
         raise ValueError(f"v2 artifact must be a dictionary, got {type(data).__name__}.")  # noqa: TRY004
@@ -218,7 +241,14 @@ def validate_v2_artifact_with_policy(
         model_config = _walk_model_yaml(model_yaml, policy)
     except ValueError as exc:
         raise ValueError(f"Invalid v2 artifact field 'model_yaml': {exc}") from exc
-    validate_model_metadata(data, require_cutoff=True, require_cross_field_consistency=True)
+    if validation not in {"structural", "canonical"}:
+        raise ValueError(f"Unsupported v2 artifact validation mode: {validation!r}.")
+    validate_model_metadata(
+        data,
+        require_cutoff=True,
+        require_structural_consistency=True,
+        require_cross_field_consistency=validation == "canonical",
+    )
 
     state_dict = data.get("state_dict")
     if not isinstance(state_dict, Mapping):
@@ -252,13 +282,17 @@ def validate_v2_artifact(
 
 
 def validate_registry_v2_artifact(data: object) -> tuple[dict[str, Any], Mapping[str, Tensor]]:
-    return validate_v2_artifact_with_policy(data, _REGISTRY_IMPORT_POLICY)
+    return validate_v2_artifact_with_policy(data, REGISTRY_IMPORT_POLICY, validation="canonical")
+
+
+_validate_registry_v2_artifact = validate_registry_v2_artifact
 
 
 def validate_model_metadata(
     metadata: Mapping[str, Any],
     *,
     require_cutoff: bool = False,
+    require_structural_consistency: bool = False,
     require_cross_field_consistency: bool = False,
 ) -> None:
     """Validate scalar metadata consumed by the calculator.
@@ -280,9 +314,9 @@ def validate_model_metadata(
         if isinstance(cutoff, bool) or not isinstance(cutoff, Real) or not math.isfinite(float(cutoff)) or cutoff <= 0:
             raise ValueError("model metadata field 'cutoff' must be a finite positive real number.")
     if "format_version" in metadata and (
-        type(metadata["format_version"]) is not int or metadata["format_version"] != 2
+        type(metadata["format_version"]) is not int or metadata["format_version"] not in {1, 2}
     ):
-        raise ValueError("model metadata field 'format_version' must be integer 2.")
+        raise ValueError("model metadata field 'format_version' must be integer 1 or 2.")
 
     for key in ("needs_coulomb", "needs_dispersion", "has_embedded_lr", "has_embedded_d3ts"):
         if key in metadata and type(metadata[key]) is not bool:
@@ -324,17 +358,13 @@ def validate_model_metadata(
     if "family" in metadata and metadata["family"] is not None and not isinstance(metadata["family"], str):
         raise ValueError("model metadata field 'family' must be a string or null.")
 
-    if require_cross_field_consistency:
-        needs_coulomb = metadata.get("needs_coulomb", False)
-        needs_dispersion = metadata.get("needs_dispersion", False)
+    if require_structural_consistency or require_cross_field_consistency:
         coulomb_mode = metadata.get("coulomb_mode", "none")
         has_embedded_lr = metadata.get("has_embedded_lr", False)
         if coulomb_mode == "sr_embedded" and (
             metadata.get("coulomb_sr_rc") is None or metadata.get("coulomb_sr_envelope") is None
         ):
             raise ValueError("sr_embedded Coulomb metadata requires cutoff and envelope fields.")
-        if coulomb_mode == "sr_embedded" and not needs_coulomb:
-            raise ValueError("sr_embedded Coulomb metadata requires external Coulomb.")
         if coulomb_mode == "sr_embedded" and not has_embedded_lr:
             raise ValueError("sr_embedded Coulomb metadata requires embedded LR metadata.")
         if (
@@ -344,10 +374,19 @@ def validate_model_metadata(
             and metadata["coulomb_sr_rc"] > metadata["cutoff"]
         ):
             raise ValueError("coulomb_sr_rc cannot exceed model cutoff.")
-        if needs_coulomb and coulomb_mode == "full_embedded":
-            raise ValueError("full_embedded Coulomb metadata cannot request external Coulomb.")
         if coulomb_mode == "full_embedded" and not has_embedded_lr:
             raise ValueError("full_embedded Coulomb metadata requires embedded LR metadata.")
+        if metadata.get("has_embedded_d3ts", False) and not has_embedded_lr:
+            raise ValueError("embedded D3TS metadata requires embedded LR metadata.")
+
+    if require_cross_field_consistency:
+        needs_coulomb = metadata.get("needs_coulomb", False)
+        needs_dispersion = metadata.get("needs_dispersion", False)
+        coulomb_mode = metadata.get("coulomb_mode", "none")
+        if coulomb_mode == "sr_embedded" and not needs_coulomb:
+            raise ValueError("sr_embedded Coulomb metadata requires external Coulomb.")
+        if needs_coulomb and coulomb_mode == "full_embedded":
+            raise ValueError("full_embedded Coulomb metadata cannot request external Coulomb.")
         if needs_dispersion:
             if d3_params is None:
                 raise ValueError("needs_dispersion metadata requires d3_params.")
@@ -356,5 +395,36 @@ def validate_model_metadata(
                 raise ValueError(f"needs_dispersion metadata is missing d3_params: {sorted(missing_d3)}.")
             if metadata.get("has_embedded_d3ts", False):
                 raise ValueError("needs_dispersion cannot be combined with embedded D3TS.")
-        if metadata.get("has_embedded_d3ts", False) and not has_embedded_lr:
-            raise ValueError("embedded D3TS metadata requires embedded LR metadata.")
+
+
+def validate_runtime_model_metadata(
+    metadata: Mapping[str, Any],
+    *,
+    needs_coulomb: bool,
+    needs_dispersion: bool,
+) -> None:
+    """Validate metadata after calculator flags have resolved runtime behavior."""
+    effective = dict(metadata)
+    effective["needs_coulomb"] = needs_coulomb
+    effective["needs_dispersion"] = needs_dispersion
+    if "format_version" in metadata:
+        is_legacy_runtime = type(effective.get("format_version")) is int and effective["format_version"] == 1
+        validate_model_metadata(
+            effective,
+            require_cutoff=not is_legacy_runtime,
+            require_structural_consistency=not is_legacy_runtime,
+        )
+    # Raw nn.Module metadata predates the artifact schema and may expose only
+    # operation-specific fields. It remains exempt from schema and structural
+    # requirements, but effective runtime combinations must still be safe.
+    if needs_coulomb and effective.get("coulomb_mode") == "full_embedded":
+        raise ValueError("full_embedded Coulomb metadata cannot request external Coulomb.")
+    if needs_dispersion:
+        d3_params = effective.get("d3_params")
+        if not isinstance(d3_params, Mapping):
+            raise ValueError("needs_dispersion metadata requires d3_params.")
+        missing_d3 = {"s8", "a1", "a2"} - set(d3_params)
+        if missing_d3:
+            raise ValueError(f"needs_dispersion metadata is missing d3_params: {sorted(missing_d3)}.")
+        if effective.get("has_embedded_d3ts", False):
+            raise ValueError("needs_dispersion cannot be combined with embedded D3TS.")

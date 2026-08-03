@@ -11,6 +11,8 @@ import click
 import requests
 import yaml
 
+from aimnet.models.artifact_validation import is_explicit_local_path
+
 logging.basicConfig(level=logging.INFO)
 
 
@@ -233,7 +235,7 @@ def get_model_path(s: str) -> str:
     local files. Absolute paths and paths beginning with ``./`` or ``../`` are
     always treated as explicit local paths.
     """
-    explicit_local = os.path.isabs(s) or s.startswith("./") or s.startswith("../")
+    explicit_local = is_explicit_local_path(s)
     if not explicit_local and try_resolve_registry_model_name(s) is not None:
         return get_registry_model_path(s)
     if os.path.isfile(s):

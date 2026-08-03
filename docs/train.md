@@ -160,3 +160,9 @@ Maintainers publishing a registry artifact must:
    Registry keys follow the convention `aimnet2-<family>_<member>` (dash separates `aimnet2` from the family tag, trailing `_<int>` is the ensemble member index). The `file:` field keeps the original filename so cached `.pt` downloads remain valid.
 
    The digest is the immutable identity of the uploaded bytes. Calculate it by streaming the final public download URL twice from fresh temporary directories, reject non-HTTPS or cross-origin redirects, and require both passes to agree. Obtain maintainer approval against the authoritative upload/source record before committing the registry change. If bytes change later, publish a new filename and registry entry rather than silently replacing the digest.
+
+### Registry Distribution and Bundling Policy
+
+Official AIMNet distributions do not bundle model artifacts. Registry models are downloaded on demand, and cached, bundled, or newly downloaded bytes must match the registry SHA-256 digest before a path is returned. A stale bundled artifact fails closed on a checksum mismatch; it is not replaced by a network download.
+
+Introducing bundled model artifacts later requires a separate design and release review plus explicit maintainer approval. The approved process must preserve immutable artifact filenames, bytes, and registry digests; require each bundled artifact to match its registry digest; keep checksum failures fail-closed; and add non-vacuous release checks for the actual wheel and source-distribution contents.

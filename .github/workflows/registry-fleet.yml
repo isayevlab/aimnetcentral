@@ -1,0 +1,34 @@
+name: Registry fleet
+
+on:
+    schedule:
+        - cron: "0 6 * * 1"
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: registry-fleet
+    cancel-in-progress: true
+
+jobs:
+    registry-fleet:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        env:
+            AIMNET_CACHE_DIR: ${{ runner.temp }}/aimnet-registry-cache
+        steps:
+            - uses: actions/checkout@v7
+
+            - uses: ./.github/actions/setup-uv-env
+              with:
+                  python-version: "3.11"
+                  groups: dev
+
+            - name: Verify registry fleet
+              run: >-
+                  uv run pytest -q
+                  tests/test_model_registry.py::test_registry_digests_match
+                  tests/test_model_registry.py::test_every_registry_artifact_loads_with_strict_policy
+                  tests/test_serialization_abi.py::test_digest_verified_registry_yaml_uses_exact_role_defaults

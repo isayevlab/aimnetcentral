@@ -18,7 +18,7 @@ from aimnet.calculators.model_registry import (
     load_model_registry,
     resolve_registry_model_name,
 )
-from aimnet.models.base import _load_registry_model
+from aimnet.models.base import load_registry_model
 
 
 def test_load_model_registry_respects_registry_file_param(tmp_path):
@@ -259,7 +259,29 @@ def test_registry_loader_rejects_unexpected_state_key(tmp_path):
     )
 
     with pytest.raises(RuntimeError, match=r"Unexpected model parameters.*extra"):
-        _load_registry_model(str(path))
+        load_registry_model(str(path))
+
+
+def test_registry_loader_rejects_structurally_valid_noncanonical_metadata(tmp_path):
+    source_model = torch.nn.Embedding(64, 1, padding_idx=0)
+    path = tmp_path / "registry-noncanonical.pt"
+    torch.save(
+        {
+            "model_yaml": ("class: aimnet.modules.AtomicShift\nkwargs:\n  key_in: energy\n  key_out: shifted\n"),
+            "state_dict": {"shifts.weight": source_model.weight.detach().clone()},
+            "cutoff": 5.0,
+            "format_version": 2,
+            "needs_coulomb": False,
+            "coulomb_mode": "sr_embedded",
+            "coulomb_sr_rc": 4.6,
+            "coulomb_sr_envelope": "exp",
+            "has_embedded_lr": True,
+        },
+        path,
+    )
+
+    with pytest.raises(ValueError, match="external Coulomb"):
+        load_registry_model(str(path))
 
 
 def test_corrupt_cache_failure_preserves_original(monkeypatch, tmp_path):
@@ -484,6 +506,40 @@ def test_corrupt_bundled_asset_does_not_fall_back_to_download(monkeypatch, tmp_p
     download.assert_not_called()
 
 
+def test_stale_bundled_asset_fails_closed_before_registry_download(monkeypatch, tmp_path):
+    from aimnet.calculators import model_registry as mr
+
+    package_dir = tmp_path / "package"
+    bundled_dir = package_dir / "assets"
+    bundled_dir.mkdir(parents=True)
+    bundled = bundled_dir / "custom.pt"
+    bundled.write_bytes(b"stale bundled bytes")
+    expected = hashlib.sha256(b"current registry bytes").hexdigest()
+    registry = {
+        "aliases": {},
+        "models": {
+            "custom": {
+                "file": "custom.pt",
+                "url": "https://example.invalid/custom.pt",
+                "sha256": expected,
+            }
+        },
+    }
+    monkeypatch.setattr(mr, "__file__", str(package_dir / "model_registry.py"))
+    monkeypatch.setattr(mr, "load_model_registry", lambda registry_file=None: registry)
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setenv("AIMNET_CACHE_DIR", str(cache_dir))
+    download = Mock(side_effect=AssertionError("stale bundled assets must not download"))
+    monkeypatch.setattr(mr, "_download_asset_atomic", download)
+
+    with pytest.raises(ValueError, match="Checksum mismatch"):
+        mr.get_registry_model_path("custom")
+
+    download.assert_not_called()
+    assert not (cache_dir / "custom.pt").exists()
+    assert not list(cache_dir.glob(".bundled-*.tmp"))
+
+
 def test_registry_alias_takes_precedence_over_implicit_local_path(monkeypatch, tmp_path):
     from aimnet.calculators import model_registry as mr
 
@@ -515,30 +571,30 @@ def test_registry_alias_takes_precedence_over_implicit_local_path(monkeypatch, t
 
 
 @pytest.mark.network
-def test_registry_digests_match():
-    registry = load_model_registry()
-    for name, entry in registry["models"].items():
-        digest = hashlib.sha256()
-        with requests.get(entry["url"], stream=True, timeout=(10, 120)) as response:
-            response.raise_for_status()
-            for item in [*response.history, response]:
-                url = urlparse(item.url)
-                assert (
-                    url.scheme == "https"
-                    and url.hostname == "storage.googleapis.com"
-                    and url.path.startswith("/aimnetcentral/")
-                ), f"{name} redirected to unexpected origin: {item.url}"
-            for chunk in response.iter_content(1024 * 1024):
-                if chunk:
-                    digest.update(chunk)
-        assert digest.hexdigest() == entry["sha256"], f"{name}: {entry['url']}"
+@pytest.mark.parametrize("model_name", sorted(load_model_registry()["models"]))
+def test_registry_digests_match(model_name):
+    entry = load_model_registry()["models"][model_name]
+    digest = hashlib.sha256()
+    with requests.get(entry["url"], stream=True, timeout=(10, 120)) as response:
+        response.raise_for_status()
+        for item in [*response.history, response]:
+            url = urlparse(item.url)
+            assert (
+                url.scheme == "https"
+                and url.hostname == "storage.googleapis.com"
+                and url.path.startswith("/aimnetcentral/")
+            ), f"{model_name} redirected to unexpected origin: {item.url}"
+        for chunk in response.iter_content(1024 * 1024):
+            if chunk:
+                digest.update(chunk)
+    assert digest.hexdigest() == entry["sha256"], f"{model_name}: {entry['url']}"
 
 
 @pytest.mark.network
 @pytest.mark.parametrize("model_name", sorted(load_model_registry()["models"]))
 def test_every_registry_artifact_loads_with_strict_policy(model_name):
     path = get_registry_model_path(model_name)
-    model, metadata = _load_registry_model(path, device="cpu")
+    model, metadata = load_registry_model(path, device="cpu")
 
     assert model is not None
     assert metadata["format_version"] == 2

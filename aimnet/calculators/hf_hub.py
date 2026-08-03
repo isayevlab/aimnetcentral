@@ -10,7 +10,6 @@ shared immutable set.
 
 from __future__ import annotations
 
-import copy
 import json
 import re
 import warnings
@@ -32,16 +31,38 @@ except ImportError:  # pragma: no cover - exercised through optional-dependency 
     _load_safetensors_file = None
 
 from aimnet.calculators.model_registry import get_family_policy, get_registry_model_path
-from aimnet.config import build_module
 from aimnet.models.artifact_validation import (
-    _REGISTRY_IMPORT_POLICY,
+    REGISTRY_IMPORT_POLICY,
     resolve_model_import_policy,
+    uses_default_model_import_settings,
     validate_model_metadata,
     validate_model_yaml,
     validate_registry_v2_artifact,
 )
-from aimnet.models.base import ModelMetadata
-from aimnet.models.utils import convert_atomic_shifts_to_float64, load_state_dict_checked
+from aimnet.models.base import ModelMetadata, assemble_v2_model
+
+_HF_ROUTING_CONFIG_KEYS = frozenset({
+    "config_schema_version",
+    "family_name",
+    "member_names",
+    "ensemble_size",
+})
+_ARTIFACT_METADATA_KEYS = frozenset({
+    "format_version",
+    "model_yaml",
+    "cutoff",
+    "needs_coulomb",
+    "needs_dispersion",
+    "coulomb_mode",
+    "coulomb_sr_rc",
+    "coulomb_sr_envelope",
+    "d3_params",
+    "has_embedded_lr",
+    "has_embedded_d3ts",
+    "implemented_species",
+    "family",
+    "supports_charged_systems",
+})
 
 
 def is_hf_repo_id(model: str) -> bool:
@@ -60,32 +81,137 @@ def is_hf_repo_id(model: str) -> bool:
 
 
 def _extract_sr_coulomb_from_config(config: Mapping[str, object]) -> tuple[float | None, str | None]:
-    """Extract coulomb_sr_rc and coulomb_sr_envelope from parsed model config.
+    """Extract an unambiguous SRCoulomb pair from parsed model config.
 
-    Looks for an SRCoulomb module definition in the parsed model config and
-    returns its rc and envelope kwargs. Returns (None, None) if not found.
+    Duplicate identical definitions are treated as one pair. Distinct pairs
+    are rejected because no single metadata value can describe the model.
     """
-    return _find_srcoulomb_params(config)
+    pairs = _find_srcoulomb_params(config)
+    if len(pairs) > 1:
+        raise ValueError(f"ambiguous SRCoulomb definitions contain distinct parameter pairs: {sorted(pairs)!r}.")
+    return next(iter(pairs), (None, None))
 
 
-def _find_srcoulomb_params(obj) -> tuple[float | None, str | None]:
-    """Recursively search a config dict for SRCoulomb kwargs."""
+def _find_srcoulomb_params(obj: object) -> set[tuple[float, str]]:
+    """Recursively collect complete SRCoulomb ``(rc, envelope)`` pairs."""
+    pairs: set[tuple[float, str]] = set()
     if isinstance(obj, dict):
-        if obj.get("class", "").endswith("SRCoulomb"):
+        class_name = obj.get("class")
+        if isinstance(class_name, str) and class_name.endswith("SRCoulomb"):
             kwargs = obj.get("kwargs", {})
-            rc = kwargs.get("rc")
-            envelope = kwargs.get("envelope")
-            return (float(rc) if rc is not None else None, envelope)
-        for v in obj.values():
-            result = _find_srcoulomb_params(v)
-            if result != (None, None):
-                return result
+            if isinstance(kwargs, Mapping):
+                rc = kwargs.get("rc")
+                envelope = kwargs.get("envelope")
+                if rc is not None and envelope is not None:
+                    if not isinstance(envelope, str):
+                        raise ValueError("SRCoulomb model_yaml field 'coulomb_sr_envelope' must be a supported string.")
+                    validate_model_metadata({
+                        "coulomb_sr_rc": rc,
+                        "coulomb_sr_envelope": envelope,
+                    })
+                    pairs.add((float(rc), envelope))
+        for value in obj.values():
+            pairs.update(_find_srcoulomb_params(value))
     elif isinstance(obj, list):
         for item in obj:
-            result = _find_srcoulomb_params(item)
-            if result != (None, None):
-                return result
-    return (None, None)
+            pairs.update(_find_srcoulomb_params(item))
+    return pairs
+
+
+def _derive_sr_coulomb_metadata(config: dict, model_config: Mapping[str, object]) -> None:
+    """Validate and fill short-range Coulomb metadata from complete model YAML."""
+    coulomb_sr_rc, coulomb_sr_envelope = _extract_sr_coulomb_from_config(model_config)
+    explicit_rc = config.get("coulomb_sr_rc")
+    explicit_envelope = config.get("coulomb_sr_envelope")
+    discovered = coulomb_sr_rc is not None and coulomb_sr_envelope is not None
+
+    if discovered and explicit_rc is not None and float(explicit_rc) != coulomb_sr_rc:
+        raise ValueError(
+            "config.json field 'coulomb_sr_rc' conflicts with the SRCoulomb value discovered in model_yaml."
+        )
+    if discovered and explicit_envelope is not None and explicit_envelope != coulomb_sr_envelope:
+        raise ValueError(
+            "config.json field 'coulomb_sr_envelope' conflicts with the SRCoulomb value discovered in model_yaml."
+        )
+
+    needs_sr_pair = config.get("coulomb_mode", "none") == "sr_embedded"
+    if needs_sr_pair and (explicit_rc is None or explicit_envelope is None) and not discovered:
+        raise ValueError(
+            "sr_embedded metadata with an omitted Coulomb field requires exactly one distinct complete "
+            "SRCoulomb parameter pair in model_yaml."
+        )
+
+    if explicit_rc is None and discovered:
+        config["coulomb_sr_rc"] = coulomb_sr_rc
+    if explicit_envelope is None and discovered:
+        config["coulomb_sr_envelope"] = coulomb_sr_envelope
+
+
+def _validate_ensemble_member(ensemble_member: object) -> int:
+    if type(ensemble_member) is not int or ensemble_member < 0:
+        raise ValueError("ensemble_member must be a non-boolean integer greater than or equal to zero.")
+    return ensemble_member
+
+
+def _validated_member_names(config: Mapping[str, Any], ensemble_member: int) -> list[str] | None:
+    if "member_names" not in config:
+        return None
+    member_names = config["member_names"]
+    if (
+        not isinstance(member_names, list)
+        or not member_names
+        or any(not isinstance(name, str) for name in member_names)
+    ):
+        raise ValueError("config.json field 'member_names' must be a nonempty list of strings.")
+    if ensemble_member >= len(member_names):
+        raise ValueError(
+            f"ensemble_member {ensemble_member} is out of range for config.json 'member_names' "
+            f"with {len(member_names)} entries."
+        )
+    return member_names
+
+
+def _complete_model_metadata(config: Mapping[str, Any]) -> ModelMetadata:
+    format_version = config.get("format_version", 2)
+    if type(format_version) is not int or format_version != 2:
+        raise ValueError("HF model metadata field 'format_version' must be integer 2.")
+    return {
+        "format_version": format_version,
+        "cutoff": config["cutoff"],
+        "needs_coulomb": config.get("needs_coulomb", False),
+        "needs_dispersion": config.get("needs_dispersion", False),
+        "coulomb_mode": config.get("coulomb_mode", "none"),
+        "coulomb_sr_rc": config.get("coulomb_sr_rc"),
+        "coulomb_sr_envelope": config.get("coulomb_sr_envelope"),
+        "d3_params": config.get("d3_params"),
+        "has_embedded_lr": config.get("has_embedded_lr", False),
+        "implemented_species": config.get("implemented_species", []),
+        "family": config.get("family"),
+        "supports_charged_systems": config.get("supports_charged_systems"),
+        "has_embedded_d3ts": config.get("has_embedded_d3ts", False),
+    }
+
+
+def _validate_registry_fallback_config(
+    family_config: Mapping[str, Any],
+    registry_metadata: Mapping[str, Any],
+) -> ModelMetadata:
+    unsupported = set(family_config) - _HF_ROUTING_CONFIG_KEYS - _ARTIFACT_METADATA_KEYS
+    if unsupported:
+        fields = ", ".join(repr(field) for field in sorted(unsupported))
+        raise ValueError(
+            f"Registry HF fallback config fields {fields} are not permitted; "
+            "family config may contain only routing fields and matching artifact metadata."
+        )
+
+    metadata = _complete_model_metadata(registry_metadata)
+    authoritative: dict[str, Any] = {"model_yaml": registry_metadata["model_yaml"], **metadata}
+    for key in _ARTIFACT_METADATA_KEYS & family_config.keys():
+        if family_config[key] != authoritative[key]:
+            raise ValueError(
+                f"Registry HF fallback config field {key!r} conflicts with authoritative registry metadata."
+            )
+    return metadata
 
 
 def _fetch_pt_metadata_from_registry(
@@ -103,26 +229,30 @@ def _fetch_pt_metadata_from_registry(
     Returns the full .pt metadata dict (everything except state_dict) and the
     already validated parsed model configuration.
     """
-    member_names = config.get("member_names")
-    if member_names and ensemble_member < len(member_names):
+    ensemble_member = _validate_ensemble_member(ensemble_member)
+    member_names = _validated_member_names(config, ensemble_member)
+    if member_names is not None:
         member_name = member_names[ensemble_member]
     else:
-        # Best-effort: derive from family_name or repo slug via the registry's
-        # family policy (repo slugs carry the "aimnet2-" prefix, family tags don't).
+        # Derive from family_name or repo slug via the registry's family policy
+        # (repo slugs carry the "aimnet2-" prefix, family tags don't).
         family_name = config.get("family_name") or Path(repo_id_or_path).name
-        member_name = None
         policy = get_family_policy(family_name)
         if not policy.members:
             policy = get_family_policy(family_name.removeprefix("aimnet2-"))
         candidates = policy.members
-        if candidates:
-            member_name = candidates[ensemble_member] if ensemble_member < len(candidates) else candidates[0]
-        if member_name is None:
+        if not candidates:
             raise ValueError(
                 f"config.json in '{repo_id_or_path}' has no 'model_yaml' field and "
                 "no 'member_names' list to look up a fallback. "
                 "Please re-upload the repo with a config.json that includes 'model_yaml'."
             )
+        if ensemble_member >= len(candidates):
+            raise ValueError(
+                f"ensemble_member {ensemble_member} is out of range for family {family_name!r} "
+                f"with {len(candidates)} registry members."
+            )
+        member_name = candidates[ensemble_member]
 
     warnings.warn(
         f"config.json in '{repo_id_or_path}' is missing fields (model_yaml, d3_params, etc.). "
@@ -181,8 +311,9 @@ def load_from_hf_repo(
     metadata : ModelMetadata
         Model metadata dictionary.
     """
+    ensemble_member = _validate_ensemble_member(ensemble_member)
     policy = resolve_model_import_policy(model_import_paths, model_import_mode)
-    customized = model_import_paths is not None or model_import_mode != "extend"
+    customized = not uses_default_model_import_settings(model_import_paths, model_import_mode)
     local_dir = _resolve_repo(repo_id_or_path, ensemble_member, revision, token, include_weights=False)
 
     # Load config.json
@@ -194,6 +325,7 @@ def load_from_hf_repo(
         raise TypeError("config.json root must be a mapping.")
     config = dict(config)
     validate_model_metadata(config)
+    _validated_member_names(config, ensemble_member)
 
     # Validate model_yaml imports before build_module().
     # Family-level configs (config_schema_version=1 uploaded to HF) may not
@@ -206,24 +338,42 @@ def load_from_hf_repo(
         if customized:
             raise ValueError("Custom import settings are forbidden for registry HF fallback.")
         _pt_meta, model_config = _fetch_pt_metadata_from_registry(config, repo_id_or_path, ensemble_member)
-        config = {**_pt_meta, **config}
-        model_yaml = config["model_yaml"]
-        metadata_config = config
+        metadata = _validate_registry_fallback_config(config, _pt_meta)
+        validate_model_metadata(
+            metadata,
+            require_cutoff=True,
+            require_structural_consistency=True,
+            require_cross_field_consistency=True,
+        )
+        construction_policy = REGISTRY_IMPORT_POLICY
+        unexpected: Literal["warn", "error"] = "error"
     else:
-        metadata_config = config
         model_config = validate_model_yaml(
             model_yaml,
             model_import_paths=model_import_paths,
             model_import_mode=model_import_mode,
         )
-    validate_model_metadata(
-        metadata_config,
-        require_cutoff=True,
-        require_cross_field_consistency=True,
-    )
+        _derive_sr_coulomb_metadata(config, model_config)
+        validate_model_metadata(config, require_cutoff=True)
+        metadata = _complete_model_metadata(config)
+        validate_model_metadata(
+            metadata,
+            require_cutoff=True,
+            require_structural_consistency=True,
+        )
+        construction_policy = policy
+        unexpected = "warn"
 
-    # Fetch remote weights only after config, model YAML, and metadata pass.
-    local_dir = _resolve_repo(repo_id_or_path, ensemble_member, revision, token, include_weights=True)
+    # Resolve and read weights only after final metadata passes source-specific
+    # structural or canonical validation.
+    snapshot_revision = _snapshot_revision(local_dir, revision)
+    local_dir = _resolve_repo(
+        repo_id_or_path,
+        ensemble_member,
+        snapshot_revision,
+        token,
+        include_weights=True,
+    )
 
     st_name = f"ensemble_{ensemble_member}.safetensors"
     st_path = local_dir / st_name
@@ -235,70 +385,29 @@ def load_from_hf_repo(
         )
     state_dict = _load_safetensors_file(str(st_path), device="cpu")
 
-    # Rebuild model from config's model_yaml
-    construction_policy = _REGISTRY_IMPORT_POLICY if _pt_meta is not None else policy
-    with torch.device("cpu"):
-        model = build_module(
-            copy.deepcopy(model_config),
-            allow_file_references=False,
-            import_authorizer=construction_policy.require_allowed,
-        )
-    if not isinstance(model, nn.Module):
-        raise TypeError("Built model configuration did not produce an nn.Module.")
-
-    convert_atomic_shifts_to_float64(model)
-
-    load_state_dict_checked(
-        model,
+    model = assemble_v2_model(
+        model_config,
         state_dict,
+        metadata,
+        policy=construction_policy,
+        device=device,
         source=str(st_path),
-        unexpected="error" if _pt_meta is not None else "warn",
+        unexpected=unexpected,
     )
+    attached_metadata: ModelMetadata = model.__dict__["_metadata"]
+    return model, attached_metadata
 
-    model = model.to(device)
 
-    # For fields not present in the flat family-level config.json (coulomb_sr_rc,
-    # coulomb_sr_envelope, d3_params, has_embedded_lr) fall back first to
-    # _pt_meta (already loaded above), then to parsing model_yaml.
-    def _cfg(key, default=None):
-        """Get a config value, falling back to _pt_meta, then default."""
-        val = config.get(key)
-        if val is None and _pt_meta is not None:
-            val = _pt_meta.get(key)
-        if val is None:
-            val = default
-        return val
+def _snapshot_revision(local_dir: Path, requested_revision: str | None) -> str | None:
+    """Return the immutable commit encoded by a standard HF snapshot path.
 
-    coulomb_sr_rc = _cfg("coulomb_sr_rc")
-    coulomb_sr_envelope = _cfg("coulomb_sr_envelope")
-    # If still None, try extracting from model_yaml (SRCoulomb module kwargs)
-    if coulomb_sr_rc is None or coulomb_sr_envelope is None:
-        _sr_rc, _sr_env = _extract_sr_coulomb_from_config(model_config)
-        if coulomb_sr_rc is None:
-            coulomb_sr_rc = _sr_rc
-        if coulomb_sr_envelope is None:
-            coulomb_sr_envelope = _sr_env
-
-    # Build metadata
-    metadata: ModelMetadata = {
-        "format_version": _cfg("format_version", 2),
-        "cutoff": config["cutoff"],
-        "needs_coulomb": _cfg("needs_coulomb", False),
-        "needs_dispersion": _cfg("needs_dispersion", False),
-        "coulomb_mode": _cfg("coulomb_mode", "none"),
-        "coulomb_sr_rc": coulomb_sr_rc,
-        "coulomb_sr_envelope": coulomb_sr_envelope,
-        "d3_params": _cfg("d3_params"),
-        "has_embedded_lr": _cfg("has_embedded_lr", False),
-        "implemented_species": _cfg("implemented_species", []),
-        "family": _cfg("family"),
-        "supports_charged_systems": _cfg("supports_charged_systems"),
-        "has_embedded_d3ts": _cfg("has_embedded_d3ts", False),
-    }
-    validate_model_metadata(metadata, require_cutoff=True, require_cross_field_consistency=True)
-
-    model.__dict__["_metadata"] = metadata
-    return model, metadata
+    Local directories and test doubles that do not use the Hub cache layout
+    retain the caller's requested revision.
+    """
+    commit = local_dir.name
+    if local_dir.parent.name == "snapshots" and re.fullmatch(r"[0-9a-fA-F]{40,64}", commit):
+        return commit
+    return requested_revision
 
 
 def _resolve_repo(

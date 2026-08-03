@@ -12,6 +12,8 @@ aimnet clear_model_cache
 
 Do not replace a registry digest to work around a mismatch; investigate the artifact provenance and publish a new immutable filename when bytes change.
 
+Official wheels and source distributions currently contain no bundled model artifacts; registry models are downloaded on demand. A downstream bundled candidate is still digest-checked and fails closed when stale. Weekly strict fleet CI verifies every official registry digest, loads every artifact with the fixed registry import policy, and checks the exact role-specific YAML defaults.
+
 ## Installation
 
 The `aimnet` entry point is installed with the core package. Training, export, and self-atomic-energy commands require the `train` extra:
@@ -139,12 +141,13 @@ aimnet export INPUT OUTPUT [OPTIONS]
 
 **Options:**
 
-| Option               | Description                          |
-| -------------------- | ------------------------------------ |
-| `--model PATH`       | Model architecture YAML (required)   |
-| `--sae PATH`         | Self-atomic energies YAML (required) |
-| `--needs-coulomb`    | Force external Coulomb module        |
-| `--needs-dispersion` | Force external DFTD3 module          |
+| Option | Description |
+| --- | --- |
+| `--model PATH` | Model architecture YAML (required) |
+| `--sae PATH` | Self-atomic energies YAML (required) |
+| `--needs-coulomb` / `--no-coulomb` | Override external Coulomb detection |
+| `--needs-dispersion` / `--no-dispersion` | Override external DFTD3 detection |
+| `--model-import-path PATH` | Trust an exact constructor path or namespace for this local export; repeat as needed |
 
 ### Export Process
 
@@ -156,7 +159,10 @@ The export process:
 4. Loads trained weights
 5. Bakes SAE into atomic_shift as float64
 6. Masks unimplemented species
-7. Saves with metadata
+7. Validates the complete artifact with canonical distribution rules
+8. Serializes to a sibling temporary file and atomically replaces the output
+
+`--no-coulomb` is rejected when an embedded short-range Coulomb subtraction requires an external full-Coulomb correction. Enabled dispersion requires complete `s8`, `a1`, and `a2` parameters. A validation or serialization failure leaves an existing output file unchanged.
 
 ### Examples
 
@@ -178,8 +184,11 @@ aimnet export weights.pt model.pt \
   --model config.yaml \
   --sae sae.yaml \
   --needs-coulomb \
-  --needs-dispersion
+  --needs-dispersion \
+  --model-import-path "my_package.models.*"
 ```
+
+`--model-import-path` is an explicit trust decision for local export. It extends the default constructor allowlist; it does not weaken safe YAML parsing, forbidden-key checks, metadata validation, or state-dict validation.
 
 **Export without dispersion:**
 

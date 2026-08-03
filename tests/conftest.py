@@ -742,22 +742,23 @@ def _cache_load_model():
     import aimnet.calculators.calculator as _calc
     import aimnet.calculators.resolve as _resolve
     import aimnet.models.base as _base
+    from aimnet.models.artifact_validation import is_legacy_jit_path, uses_default_model_import_settings
 
     _real_load_model = _base.load_model
-    _real_registry_load_model = _base._load_registry_model
+    _real_registry_load_model = _base.load_registry_model
     _store: dict = {}
     _registry_store: dict = {}
 
     @functools.wraps(_real_load_model)
     def _cached_load_model(path, device="cpu", *, model_import_paths=None, model_import_mode="extend"):
-        if model_import_paths is not None or model_import_mode != "extend":
+        if not uses_default_model_import_settings(model_import_paths, model_import_mode):
             return _real_load_model(
                 path,
                 device,
                 model_import_paths=model_import_paths,
                 model_import_mode=model_import_mode,
             )
-        if str(path).lower().endswith(".jpt"):
+        if is_legacy_jit_path(path):
             return _real_load_model(path, device)
         key = (path, str(device))
         if key not in _store:
@@ -777,6 +778,7 @@ def _cache_load_model():
 
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(_base, "load_model", _cached_load_model, raising=False)
+        mp.setattr(_base, "load_registry_model", _cached_registry_load_model, raising=False)
         mp.setattr(_base, "_load_registry_model", _cached_registry_load_model, raising=False)
         if hasattr(_calc, "load_model"):
             mp.setattr(_calc, "load_model", _cached_load_model, raising=False)
@@ -800,7 +802,7 @@ def model_cache():
     import copy
 
     from aimnet.calculators.model_registry import get_model_path
-    from aimnet.models.base import _load_registry_model
+    from aimnet.models.base import load_registry_model
 
     cache: dict = {}
 
@@ -809,7 +811,7 @@ def model_cache():
         def load(name: str = "aimnet2", device: str = "cpu"):
             key = (name, str(device))
             if key not in cache:
-                cache[key] = _load_registry_model(get_model_path(name), device)
+                cache[key] = load_registry_model(get_model_path(name), device)
             model, metadata = cache[key]
             return copy.deepcopy(model), metadata
 

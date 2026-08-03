@@ -16,11 +16,17 @@ The output file contains:
 - coulomb_sr_envelope: Envelope function ("exp" or "cosine", optional)
 - d3_params: D3 parameters {s8, a1, a2, s6} (optional, if needs_dispersion=True)
 - has_embedded_lr: Whether model has embedded LR modules (D3TS, SRCoulomb) needing nbmat_lr
+- has_embedded_d3ts: Whether the model contains embedded learned D3TS dispersion
 - implemented_species: Parametrized atomic numbers
 - state_dict: Model weights with SAE baked into atomic_shift (float64)
 """
 
 import copy
+import os
+import secrets
+import stat
+from collections.abc import Collection, Mapping
+from pathlib import Path
 
 import click
 import torch
@@ -28,6 +34,11 @@ import yaml
 from torch import nn
 
 from aimnet.config import build_module, load_yaml
+from aimnet.models.artifact_validation import (
+    resolve_model_import_policy,
+    validate_model_yaml,
+    validate_v2_artifact_with_policy,
+)
 from aimnet.models.utils import strip_lr_modules_from_yaml, validate_state_dict_keys
 
 
@@ -69,18 +80,62 @@ def mask_not_implemented_species(model: nn.Module, species: list[int]) -> nn.Mod
     return model
 
 
+def _save_artifact_atomically(artifact: dict[str, object], output: str | Path) -> None:
+    """Save an artifact without replacing an existing destination on failure."""
+    destination = Path(output)
+    destination_mode = stat.S_IMODE(destination.stat().st_mode) if destination.exists() else None
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    temporary: Path | None = None
+    fd: int | None = None
+    for _ in range(100):
+        candidate = destination.parent / f".{destination.name}.{secrets.token_hex(8)}.tmp"
+        try:
+            fd = os.open(candidate, flags, 0o666)
+        except FileExistsError:
+            continue
+        temporary = candidate
+        break
+    if temporary is None or fd is None:
+        raise FileExistsError(f"could not create a unique temporary file for {destination}")
+
+    try:
+        if destination_mode is not None:
+            if hasattr(os, "fchmod"):
+                os.fchmod(fd, destination_mode)
+            else:
+                temporary.chmod(destination_mode)
+        stream = os.fdopen(fd, "wb")
+        fd = None
+        with stream:
+            torch.save(artifact, stream)
+        os.replace(temporary, destination)
+    except BaseException:
+        if fd is not None:
+            os.close(fd)
+        temporary.unlink(missing_ok=True)
+        raise
+
+
 @click.command()
 @click.argument("weights", type=click.Path(exists=True))
 @click.argument("output", type=str)
 @click.option("--model", "-m", type=click.Path(exists=True), required=True, help="Path to model definition YAML file")
 @click.option("--sae", "-s", type=click.Path(exists=True), required=True, help="Path to the SAE YAML file")
 @click.option(
-    "--needs-coulomb/--no-coulomb", default=None, help="Override Coulomb detection. Default: auto-detect from YAML"
+    "--needs-coulomb/--no-coulomb",
+    default=None,
+    help="Override Coulomb detection. --no-coulomb is invalid for detected sr_embedded Coulomb.",
 )
 @click.option(
     "--needs-dispersion/--no-dispersion",
     default=None,
-    help="Override dispersion detection. Default: auto-detect from YAML",
+    help="Override dispersion detection. Enabled dispersion requires complete D3 parameters.",
+)
+@click.option(
+    "--model-import-path",
+    "model_import_paths",
+    multiple=True,
+    help="Explicitly trust an exact constructor path or namespace for this local export.",
 )
 def export_model(
     weights: str,
@@ -89,6 +144,7 @@ def export_model(
     sae: str,
     needs_coulomb: bool | None,
     needs_dispersion: bool | None,
+    model_import_paths: Collection[str] = (),
 ):
     """Export trained model to distributable state dict format.
 
@@ -119,10 +175,41 @@ def export_model(
 
     # Serialize YAML BEFORE building module (build_module mutates the dict)
     core_yaml_str = yaml.dump(core_config, default_flow_style=False, sort_keys=False)
+    explicit_import_paths = tuple(model_import_paths) or None
+    validated_core_config = validate_model_yaml(
+        core_yaml_str,
+        model_import_paths=explicit_import_paths,
+    )
+    import_policy = resolve_model_import_policy(explicit_import_paths, "extend")
+
+    # Resolve CLI overrides without permitting an invalid exported runtime.
+    auto_needs_coulomb = coulomb_mode == "sr_embedded"
+    auto_needs_dispersion = needs_dispersion_auto
+    final_needs_coulomb = needs_coulomb if needs_coulomb is not None else auto_needs_coulomb
+    final_needs_dispersion = needs_dispersion if needs_dispersion is not None else auto_needs_dispersion
+    if coulomb_mode == "sr_embedded" and not final_needs_coulomb:
+        raise click.ClickException(
+            "--no-coulomb cannot be used with detected sr_embedded Coulomb: "
+            "the exported model requires external Coulomb to restore the full interaction."
+        )
+    if final_needs_dispersion:
+        missing_d3 = {"s8", "a1", "a2"}
+        if isinstance(d3_params, Mapping):
+            missing_d3 -= set(d3_params)
+        if missing_d3:
+            missing = ", ".join(sorted(missing_d3))
+            raise click.ClickException(
+                "Cannot enable dispersion without complete D3 parameters "
+                f"(missing: {missing}). Provide s8, a1, and a2 or use --no-dispersion."
+            )
 
     # Build model from modified config
     print("Building model...")
-    core_model = build_module(copy.deepcopy(core_config))
+    core_model = build_module(
+        copy.deepcopy(validated_core_config),
+        allow_file_references=False,
+        import_authorizer=import_policy.require_allowed,
+    )
     if not isinstance(core_model, nn.Module):
         raise TypeError("Built module is not an nn.Module")
 
@@ -164,19 +251,6 @@ def export_model(
     # Set model to eval mode
     core_model.eval()
 
-    # Determine final flags (CLI overrides auto-detection)
-    auto_needs_coulomb = coulomb_mode == "sr_embedded"
-    auto_needs_dispersion = needs_dispersion_auto
-
-    final_needs_coulomb = needs_coulomb if needs_coulomb is not None else auto_needs_coulomb
-    final_needs_dispersion = needs_dispersion if needs_dispersion is not None else auto_needs_dispersion
-
-    # Warn if overriding auto-detection
-    if needs_coulomb is not None and needs_coulomb != auto_needs_coulomb:
-        print(f"  Overriding needs_coulomb: {auto_needs_coulomb} -> {needs_coulomb}")
-    if needs_dispersion is not None and needs_dispersion != auto_needs_dispersion:
-        print(f"  Overriding needs_dispersion: {auto_needs_dispersion} -> {needs_dispersion}")
-
     # Detect if model has any embedded LR modules that need nbmat_lr
     outputs = model_config.get("kwargs", {}).get("outputs", {})
     has_embedded_lr = False
@@ -198,16 +272,17 @@ def export_model(
         "needs_coulomb": final_needs_coulomb,
         "needs_dispersion": final_needs_dispersion,
         "coulomb_mode": coulomb_mode,
-        "coulomb_sr_rc": coulomb_sr_rc if final_needs_coulomb else None,
-        "coulomb_sr_envelope": coulomb_sr_envelope if final_needs_coulomb else None,
+        "coulomb_sr_rc": coulomb_sr_rc if coulomb_mode == "sr_embedded" else None,
+        "coulomb_sr_envelope": coulomb_sr_envelope if coulomb_mode == "sr_embedded" else None,
         "d3_params": d3_params if final_needs_dispersion else None,
         "has_embedded_lr": has_embedded_lr,
+        "has_embedded_d3ts": has_d3ts,
         "implemented_species": implemented_species,
         "state_dict": core_model.state_dict(),
     }
 
-    # Save
-    torch.save(new_format, output)
+    validate_v2_artifact_with_policy(new_format, import_policy, validation="canonical")
+    _save_artifact_atomically(new_format, output)
     print(f"\nSaved model to {output}")
     print(f"  cutoff: {cutoff}")
     print(f"  needs_coulomb: {final_needs_coulomb}")
@@ -219,6 +294,7 @@ def export_model(
     if final_needs_dispersion:
         print(f"  d3_params: {d3_params}")
     print(f"  has_embedded_lr: {has_embedded_lr}")
+    print(f"  has_embedded_d3ts: {has_d3ts}")
     print(f"  implemented_species: {implemented_species}")
 
 

@@ -10,7 +10,9 @@ The core calculator for running AIMNet2 inference. It handles model loading, dev
 
 - **Format Support**: Loads both legacy `.jpt` models and new `.pt` format.
 - **Long-Range Interactions**: Automatically attaches `LRCoulomb` and `DFTD3` modules based on model metadata.
-- **Overrides**: You can force specific long-range behavior using `needs_coulomb` and `needs_dispersion` arguments.
+- **Overrides**: `needs_coulomb` and `needs_dispersion` resolve effective
+  long-range behavior after artifact validation. Explicit `False` values can
+  disable external components for structurally valid custom artifacts.
 - **Batching**: Automatically batches large molecules/systems based on `nb_threshold`.
 
 ::: aimnet.calculators.AIMNet2Calculator
@@ -113,6 +115,9 @@ Every registry download and cache hit is verified against its SHA-256 digest.
 A corrupt cache hit triggers one verified atomic replacement attempt; persistent
 acquisition failures propagate after the final path is revalidated. See
 [Model cache recovery](../cli.md#model-cache-recovery).
+
+Official wheels and source distributions currently bundle no model artifacts;
+registry models are downloaded on demand.
 
 Bare registry names and aliases take precedence over same-named implicit local
 files or directories, preventing a local shadow from bypassing verification.

@@ -1,12 +1,34 @@
+import os
+import stat
+from pathlib import Path
+from unittest.mock import Mock
+
 import pytest
-
-pytest.importorskip("ignite")
-
 
 pytestmark = pytest.mark.train
 
 
+def _write_export_inputs(tmp_path, model_yaml: str) -> tuple[Path, Path, Path]:
+    torch = pytest.importorskip("torch")
+    weights = tmp_path / "weights.pt"
+    model_config = tmp_path / "model.yaml"
+    sae = tmp_path / "model.sae"
+    torch.save({}, weights)
+    model_config.write_text(model_yaml)
+    sae.write_text("1: -0.5\n")
+    return weights, model_config, sae
+
+
+def _patch_minimal_export_model(monkeypatch) -> None:
+    from aimnet.train import export_model as export_module
+
+    monkeypatch.setattr(export_module, "bake_sae_into_model", lambda model, _sae: model)
+    monkeypatch.setattr(export_module, "mask_not_implemented_species", lambda model, _species: model)
+    monkeypatch.setattr(export_module, "extract_cutoff", Mock(return_value=5.0))
+
+
 def test_build_model_does_not_wrap_forces_when_false():
+    pytest.importorskip("ignite")
     torch = pytest.importorskip("torch")
     OmegaConf = pytest.importorskip("omegaconf").OmegaConf
     from aimnet.modules import Forces
@@ -19,6 +41,7 @@ def test_build_model_does_not_wrap_forces_when_false():
 
 
 def test_build_model_wraps_forces_when_true():
+    pytest.importorskip("ignite")
     OmegaConf = pytest.importorskip("omegaconf").OmegaConf
     from aimnet.modules import Forces
     from aimnet.train.utils import build_model
@@ -40,6 +63,7 @@ def test_state_dict_roundtrip_weights_only(tmp_path):
 
 
 def test_regression_stats_and_metric_compute():
+    pytest.importorskip("ignite")
     torch = pytest.importorskip("torch")
     import numpy as np
 
@@ -69,6 +93,7 @@ def test_regression_stats_and_metric_compute():
 
 
 def test_reg_multi_metric_raises_when_empty():
+    pytest.importorskip("ignite")
     pytest.importorskip("torch")
     from ignite.exceptions import NotComputableError
 
@@ -120,7 +145,307 @@ def test_export_model_helpers(tmp_path):
     assert not torch.isnan(model.afv.weight[1]).any()
 
 
+def test_export_model_rejects_conflicting_coulomb_flag_before_building(monkeypatch, tmp_path):
+    import click
+
+    from aimnet.train import export_model as export_module
+
+    weights, model_config, sae = _write_export_inputs(tmp_path, "{}")
+
+    monkeypatch.setattr(
+        export_module,
+        "strip_lr_modules_from_yaml",
+        Mock(return_value=({"class": "aimnet.models.AIMNet2"}, "sr_embedded", False, None, 4.6, "exp", None)),
+    )
+    build_module = Mock(side_effect=AssertionError("model must not be built"))
+    monkeypatch.setattr(export_module, "build_module", build_module)
+
+    with pytest.raises(click.ClickException, match=r"--no-coulomb.*sr_embedded"):
+        export_module.export_model.callback(
+            str(weights),
+            str(tmp_path / "export.pt"),
+            str(model_config),
+            str(sae),
+            False,
+            None,
+        )
+
+    build_module.assert_not_called()
+
+
+def test_export_model_rejects_enabled_dispersion_without_complete_d3(monkeypatch, tmp_path):
+    import click
+
+    from aimnet.train import export_model as export_module
+
+    weights, model_config, sae = _write_export_inputs(tmp_path, "{}")
+    output = tmp_path / "export.pt"
+    output.write_bytes(b"original artifact")
+    monkeypatch.setattr(
+        export_module,
+        "strip_lr_modules_from_yaml",
+        Mock(return_value=({"class": "aimnet.models.AIMNet2"}, "none", True, {"s8": 1.0}, None, "exp", None)),
+    )
+    build_module = Mock(side_effect=AssertionError("model must not be built"))
+    monkeypatch.setattr(export_module, "build_module", build_module)
+
+    with pytest.raises(click.ClickException, match=r"complete D3 parameters.*a1.*a2"):
+        export_module.export_model.callback(
+            str(weights),
+            str(output),
+            str(model_config),
+            str(sae),
+            None,
+            None,
+        )
+
+    build_module.assert_not_called()
+    assert output.read_bytes() == b"original artifact"
+
+
+def test_export_model_atomic_save_preserves_existing_destination(monkeypatch, tmp_path):
+    torch = pytest.importorskip("torch")
+    from aimnet.train.export_model import _save_artifact_atomically
+
+    destination = tmp_path / "existing.pt"
+    destination.write_bytes(b"original artifact")
+
+    def corrupt_then_fail(_artifact, target):
+        target.write(b"partial artifact")
+        raise OSError("simulated write failure")
+
+    monkeypatch.setattr(torch, "save", corrupt_then_fail)
+
+    with pytest.raises(OSError, match="simulated write failure"):
+        _save_artifact_atomically({}, destination)
+
+    assert destination.read_bytes() == b"original artifact"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits are required")
+def test_export_model_atomic_save_preserves_existing_permissions(tmp_path):
+    from aimnet.train.export_model import _save_artifact_atomically
+
+    destination = tmp_path / "existing.pt"
+    destination.write_bytes(b"original artifact")
+    destination.chmod(0o640)
+
+    _save_artifact_atomically({"value": 1}, destination)
+
+    assert stat.S_IMODE(destination.stat().st_mode) == 0o640
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits are required")
+def test_export_model_atomic_save_respects_restrictive_umask(tmp_path):
+    from aimnet.train.export_model import _save_artifact_atomically
+
+    destination = tmp_path / "new.pt"
+
+    previous_umask = os.umask(0o077)
+    try:
+        _save_artifact_atomically({"value": 1}, destination)
+    finally:
+        os.umask(previous_umask)
+
+    assert stat.S_IMODE(destination.stat().st_mode) == 0o600
+
+
+def test_export_model_validates_canonical_artifact_before_replacing_output(monkeypatch, tmp_path):
+    torch = pytest.importorskip("torch")
+    from aimnet.train import export_model as export_module
+
+    weights, model_config, sae = _write_export_inputs(tmp_path, "{}")
+    output = tmp_path / "export.pt"
+    output.write_bytes(b"original artifact")
+
+    monkeypatch.setattr(
+        export_module,
+        "strip_lr_modules_from_yaml",
+        Mock(return_value=({"class": "aimnet.models.AIMNet2"}, "none", False, None, None, "exp", None)),
+    )
+    monkeypatch.setattr(export_module, "build_module", Mock(return_value=torch.nn.Identity()))
+    monkeypatch.setattr(export_module, "bake_sae_into_model", lambda model, _sae: model)
+    monkeypatch.setattr(export_module, "mask_not_implemented_species", lambda model, _species: model)
+    monkeypatch.setattr(export_module, "extract_cutoff", Mock(return_value=5.0))
+    monkeypatch.setattr(export_module, "validate_state_dict_keys", Mock(return_value=([], [])))
+    validate = Mock(side_effect=ValueError("invalid canonical artifact"))
+    monkeypatch.setattr(export_module, "validate_v2_artifact_with_policy", validate)
+
+    with pytest.raises(ValueError, match="invalid canonical artifact"):
+        export_module.export_model.callback(
+            str(weights),
+            str(output),
+            str(model_config),
+            str(sae),
+            None,
+            None,
+        )
+
+    validate.assert_called_once()
+    assert output.read_bytes() == b"original artifact"
+
+
+def test_export_model_rejects_forbidden_yaml_before_construction(monkeypatch, tmp_path):
+    from aimnet.train import export_model as export_module
+
+    config = """
+class: aimnet.modules.AtomicSum
+fn: os.system
+kwargs:
+  key_in: energy
+  key_out: energy
+"""
+    weights, model_config, sae = _write_export_inputs(tmp_path, config)
+    output = tmp_path / "export.pt"
+    output.write_bytes(b"original artifact")
+    build_module = Mock(side_effect=AssertionError("model must not be built"))
+    monkeypatch.setattr(export_module, "build_module", build_module)
+
+    with pytest.raises(ValueError, match="forbidden"):
+        export_module.export_model.callback(
+            str(weights),
+            str(output),
+            str(model_config),
+            str(sae),
+            None,
+            None,
+        )
+
+    build_module.assert_not_called()
+    assert output.read_bytes() == b"original artifact"
+
+
+def test_export_model_includes_embedded_d3ts_flag(monkeypatch, tmp_path):
+    torch = pytest.importorskip("torch")
+    from aimnet.train import export_model as export_module
+
+    config = """
+class: aimnet.modules.AtomicSum
+kwargs:
+  key_in: energy
+  key_out: energy
+  outputs:
+    d3ts:
+      class: custom.D3TS
+"""
+    core_config = {
+        "class": "aimnet.modules.AtomicSum",
+        "kwargs": {"key_in": "energy", "key_out": "energy"},
+    }
+    weights, model_config, sae = _write_export_inputs(tmp_path, config)
+    output = tmp_path / "export.pt"
+    monkeypatch.setattr(
+        export_module,
+        "strip_lr_modules_from_yaml",
+        Mock(return_value=(core_config, "none", False, None, None, "exp", None)),
+    )
+    _patch_minimal_export_model(monkeypatch)
+
+    export_module.export_model.callback(
+        str(weights),
+        str(output),
+        str(model_config),
+        str(sae),
+        None,
+        None,
+    )
+
+    artifact = torch.load(output, map_location="cpu", weights_only=True)
+    assert artifact["has_embedded_d3ts"] is True
+    assert artifact["has_embedded_lr"] is True
+
+
+def test_export_builtin_constructor_round_trips_through_default_calculator(monkeypatch, tmp_path):
+    from aimnet.calculators import AIMNet2Calculator
+    from aimnet.modules import AtomicSum
+    from aimnet.train import export_model as export_module
+
+    config = """
+class: aimnet.modules.AtomicSum
+kwargs:
+  key_in: energy
+  key_out: energy
+"""
+    weights, model_config, sae = _write_export_inputs(tmp_path, config)
+    output = tmp_path / "export.pt"
+    _patch_minimal_export_model(monkeypatch)
+    monkeypatch.setattr(
+        export_module,
+        "strip_lr_modules_from_yaml",
+        Mock(
+            return_value=(
+                {"class": "aimnet.modules.AtomicSum", "kwargs": {"key_in": "energy", "key_out": "energy"}},
+                "none",
+                False,
+                None,
+                None,
+                "exp",
+                None,
+            )
+        ),
+    )
+
+    export_module.export_model.callback(
+        str(weights),
+        str(output),
+        str(model_config),
+        str(sae),
+        None,
+        None,
+    )
+    calc = AIMNet2Calculator(str(output), device="cpu")
+
+    assert isinstance(calc.model, AtomicSum)
+    assert calc.external_coulomb is None
+    assert calc.external_dftd3 is None
+
+
+def test_export_custom_constructor_requires_explicit_import_round_trip(monkeypatch, tmp_path):
+    from aimnet.calculators import AIMNet2Calculator
+    from aimnet.train import export_model as export_module
+
+    config = "class: torch.nn.Identity\n"
+    weights, model_config, sae = _write_export_inputs(tmp_path, config)
+    output = tmp_path / "export.pt"
+    _patch_minimal_export_model(monkeypatch)
+    monkeypatch.setattr(
+        export_module,
+        "strip_lr_modules_from_yaml",
+        Mock(return_value=({"class": "torch.nn.Identity"}, "none", False, None, None, "exp", None)),
+    )
+
+    with pytest.raises(ValueError, match="Untrusted"):
+        export_module.export_model.callback(
+            str(weights),
+            str(output),
+            str(model_config),
+            str(sae),
+            None,
+            None,
+        )
+
+    export_module.export_model.callback(
+        str(weights),
+        str(output),
+        str(model_config),
+        str(sae),
+        None,
+        None,
+        ("torch.nn.Identity",),
+    )
+    with pytest.raises(ValueError, match="Untrusted"):
+        AIMNet2Calculator(str(output), device="cpu")
+
+    calc = AIMNet2Calculator(
+        str(output),
+        device="cpu",
+        model_import_paths={"torch.nn.Identity"},
+    )
+    assert isinstance(calc.model, pytest.importorskip("torch").nn.Identity)
+
+
 def test_train_utils_param_helpers():
+    pytest.importorskip("ignite")
     torch = pytest.importorskip("torch")
     OmegaConf = pytest.importorskip("omegaconf").OmegaConf
 
