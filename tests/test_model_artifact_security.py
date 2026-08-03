@@ -14,11 +14,16 @@ import torch
 
 from aimnet import config
 from aimnet.calculators import hf_hub
+from aimnet.models import artifact_validation
 from aimnet.models import base as model_base
 from aimnet.models import utils as model_utils
 from aimnet.models.artifact_validation import (
     ALLOWED_MODEL_IMPORT_PATHS,
+    ModelImportPolicy,
+    validate_model_metadata,
     validate_model_yaml,
+    validate_registry_v2_artifact,
+    validate_runtime_model_metadata,
     validate_v2_artifact,
 )
 from aimnet.modules import AtomicShift
@@ -33,6 +38,149 @@ def _v2_data(model_yaml: str, **overrides: object) -> dict[str, object]:
     }
     data.update(overrides)
     return data
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("model.jpt", True),
+        ("MODEL.JPT", True),
+        (".jpt", True),
+        ("model.pt", False),
+    ],
+)
+def test_legacy_jit_path_routing(path: str, expected: bool) -> None:
+    assert artifact_validation.is_legacy_jit_path(path) is expected
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("/models/model.pt", True),
+        ("./model.pt", True),
+        ("../model.pt", True),
+        ("model.pt", False),
+        ("org/model", False),
+    ],
+)
+def test_explicit_local_path_routing(path: str, expected: bool) -> None:
+    assert artifact_validation.is_explicit_local_path(path) is expected
+
+
+@pytest.mark.parametrize(
+    ("paths", "mode", "expected"),
+    [
+        (None, "extend", True),
+        ((), "extend", False),
+        (None, "replace", False),
+        (None, "unsafe", False),
+    ],
+)
+def test_default_model_import_settings(paths: object, mode: str, expected: bool) -> None:
+    assert artifact_validation.uses_default_model_import_settings(paths, mode) is expected
+
+
+def test_renamed_loading_helpers_keep_monkeypatch_aliases() -> None:
+    assert artifact_validation._REGISTRY_IMPORT_POLICY is artifact_validation.REGISTRY_IMPORT_POLICY
+    assert artifact_validation._validate_registry_v2_artifact is artifact_validation.validate_registry_v2_artifact
+    assert model_base._REGISTRY_IMPORT_POLICY is artifact_validation.REGISTRY_IMPORT_POLICY
+    assert model_base._load_registry_model is model_base.load_registry_model
+
+
+def test_assemble_v2_model_applies_shared_construction_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Model(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.first = AtomicShift("energy", "first_shifted")
+            self.second = AtomicShift("energy", "second_shifted")
+            self.to_devices: list[str] = []
+
+        def to(self, *args: object, **kwargs: object) -> Model:
+            device = kwargs.get("device", args[0] if args else None)
+            self.to_devices.append(str(device))
+            return self
+
+    model = Model()
+    config = {"class": "torch.nn.Identity", "nested": {"value": "original"}}
+    metadata: model_base.ModelMetadata = {
+        "format_version": 2,
+        "cutoff": 5.0,
+        "needs_coulomb": False,
+        "needs_dispersion": False,
+        "coulomb_mode": "none",
+        "d3_params": {"s8": 1.0, "a1": 2.0, "a2": 3.0},
+        "implemented_species": [],
+    }
+    seen: dict[str, object] = {}
+
+    def build(model_config: dict, **kwargs: object) -> Model:
+        seen["device"] = torch.empty(1).device.type
+        seen["allow_file_references"] = kwargs["allow_file_references"]
+        kwargs["import_authorizer"]("torch.nn.Identity", "class")  # type: ignore[operator]
+        model_config["nested"]["value"] = "changed"
+        return model
+
+    monkeypatch.setattr(model_base, "build_module", build)
+    values = torch.zeros(64, 1, dtype=torch.float64)
+    values[1, 0] = 1.0000000000000002
+    state_dict = {
+        "first.shifts.weight": values,
+        "second.shifts.weight": values + 1,
+    }
+    policy = ModelImportPolicy(
+        class_paths=frozenset({"torch.nn.Identity"}),
+        activation_paths=frozenset(),
+        initializer_paths=frozenset(),
+    )
+
+    loaded = model_base.assemble_v2_model(
+        config,
+        state_dict,
+        metadata,
+        policy=policy,
+        device="cuda",
+        source="model.pt",
+        unexpected="warn",
+    )
+
+    assert loaded is model
+    assert seen == {"device": "cpu", "allow_file_references": False}
+    assert config["nested"]["value"] == "original"
+    assert model.first.shifts.weight.dtype is torch.float64
+    assert model.second.shifts.weight.dtype is torch.float64
+    assert torch.equal(model.first.shifts.weight.detach(), values)
+    assert torch.equal(model.second.shifts.weight.detach(), values + 1)
+    assert model.to_devices == ["cuda"]
+    assert model.training is True
+    assert model._metadata == metadata
+    assert model._metadata is not metadata
+    assert model._metadata["d3_params"] is not metadata["d3_params"]
+
+
+def test_structural_validation_allows_disabled_incomplete_external_dispersion() -> None:
+    metadata = {
+        "format_version": 2,
+        "cutoff": 5.0,
+        "needs_dispersion": True,
+        "d3_params": None,
+    }
+    validate_model_metadata(metadata, require_cutoff=True, require_structural_consistency=True)
+    validate_runtime_model_metadata(metadata, needs_coulomb=False, needs_dispersion=False)
+    with pytest.raises(ValueError, match="d3_params"):
+        validate_runtime_model_metadata(metadata, needs_coulomb=False, needs_dispersion=True)
+
+
+def test_structural_validation_cannot_disable_invalid_sr_coulomb() -> None:
+    metadata = {
+        "format_version": 2,
+        "cutoff": 5.0,
+        "coulomb_mode": "sr_embedded",
+        "coulomb_sr_rc": None,
+        "coulomb_sr_envelope": None,
+        "has_embedded_lr": True,
+    }
+    with pytest.raises(ValueError, match="sr_embedded"):
+        validate_model_metadata(metadata, require_cutoff=True, require_structural_consistency=True)
 
 
 def test_default_extend_allows_official_and_exact_torch_paths() -> None:
@@ -290,9 +438,9 @@ def test_validate_v2_artifact_rejects_invalid_runtime_metadata(field: str, value
         validate_v2_artifact(_v2_data("class: aimnet.models.AIMNet2", **{field: value}))
 
 
-def test_validate_v2_artifact_requires_complete_d3_params() -> None:
+def test_registry_v2_artifact_requires_complete_d3_params() -> None:
     with pytest.raises(ValueError, match="d3_params"):
-        validate_v2_artifact(
+        validate_registry_v2_artifact(
             _v2_data(
                 "class: aimnet.models.AIMNet2",
                 needs_dispersion=True,
@@ -314,15 +462,16 @@ def test_validate_v2_artifact_rejects_incomplete_sr_coulomb_metadata() -> None:
         )
 
 
-def test_validate_v2_artifact_rejects_sr_coulomb_without_external_coulomb() -> None:
+def test_registry_v2_artifact_rejects_sr_coulomb_without_external_coulomb() -> None:
     with pytest.raises(ValueError, match="external Coulomb"):
-        validate_v2_artifact(
+        validate_registry_v2_artifact(
             _v2_data(
                 "class: aimnet.models.AIMNet2",
                 needs_coulomb=False,
                 coulomb_mode="sr_embedded",
                 coulomb_sr_rc=4.6,
                 coulomb_sr_envelope="exp",
+                has_embedded_lr=True,
             )
         )
 
@@ -1103,7 +1252,7 @@ def test_hf_loader_reads_weights_on_cpu_and_moves_once_without_extra(
     load_file = Mock(return_value={})
     model = SpyModel()
     monkeypatch.setattr(hf_hub, "_load_safetensors_file", load_file)
-    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=model))
+    monkeypatch.setattr(model_base, "build_module", Mock(return_value=model))
 
     loaded, _ = hf_hub.load_from_hf_repo(str(tmp_path), device="cuda")
 
@@ -1145,7 +1294,7 @@ def test_hf_loader_preserves_float64_atomic_shifts_without_extra(
             }
         ),
     )
-    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=model))
+    monkeypatch.setattr(model_base, "build_module", Mock(return_value=model))
 
     hf_hub.load_from_hf_repo(str(tmp_path), device="cuda")
 
@@ -1213,7 +1362,7 @@ def test_hf_registry_fallback_fails_on_unexpected_key_without_extra(
         ),
     )
     monkeypatch.setattr(hf_hub, "_load_safetensors_file", Mock(return_value={"extra": torch.zeros(1)}))
-    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=torch.nn.Identity()))
+    monkeypatch.setattr(model_base, "build_module", Mock(return_value=torch.nn.Identity()))
 
     with pytest.raises(RuntimeError, match=r"Unexpected model parameters.*extra"):
         hf_hub.load_from_hf_repo(str(tmp_path))

@@ -22,6 +22,27 @@ class TinyLegacyModel(torch.nn.Module):
         return x * self.weight
 
 
+def _model_with_metadata(metadata: dict[str, object]) -> torch.nn.Module:
+    model = torch.nn.Identity()
+    model.cutoff = 5.0
+    model._metadata = metadata
+    return model
+
+
+def _write_direct_artifact(tmp_path, metadata: dict[str, object]):
+    path = tmp_path / "direct.pt"
+    torch.save(
+        {
+            "format_version": 2,
+            "model_yaml": ("class: aimnet.modules.AtomicSum\nkwargs:\n  key_in: energy\n  key_out: energy\n"),
+            "state_dict": {},
+            **metadata,
+        },
+        path,
+    )
+    return path
+
+
 def test_calculator_import_options_are_keyword_only():
     signature = inspect.signature(AIMNet2Calculator)
     assert signature.parameters["model_import_paths"].kind is inspect.Parameter.KEYWORD_ONLY
@@ -1935,6 +1956,224 @@ def test_rxn_family_gets_posthoc_wb97m_d3_from_metadata():
         AIMNet2Calculator._constructed_families.clear()
 
 
+def test_explicit_dispersion_false_overrides_family_default_without_mutating_source():
+    source_metadata = {
+        "cutoff": 5.0,
+        "needs_coulomb": False,
+        "needs_dispersion": False,
+        "coulomb_mode": "none",
+        "d3_params": None,
+        "implemented_species": [1, 6, 7, 8],
+        "family": "rxn",
+    }
+    original_metadata = dict(source_metadata)
+
+    calc = AIMNet2Calculator(
+        _model_with_metadata(source_metadata),
+        device="cpu",
+        needs_dispersion=False,
+    )
+
+    assert calc.external_dftd3 is None
+    assert calc.metadata["needs_dispersion"] is True
+    assert calc.metadata["d3_params"] == {"s6": 1.0, "s8": 0.3908, "a1": 0.566, "a2": 3.128}
+    assert source_metadata == original_metadata
+
+
+@pytest.mark.parametrize("needs_dispersion", [None, True])
+def test_incomplete_d3_metadata_fails_when_dispersion_is_enabled(needs_dispersion, tmp_path):
+    metadata = {
+        "cutoff": 5.0,
+        "needs_coulomb": False,
+        "needs_dispersion": True,
+        "coulomb_mode": "none",
+        "d3_params": {"s8": 1.0},
+        "has_embedded_lr": False,
+    }
+    path = _write_direct_artifact(tmp_path, metadata)
+
+    with pytest.raises(ValueError, match="d3_params"):
+        AIMNet2Calculator(
+            str(path),
+            device="cpu",
+            needs_dispersion=needs_dispersion,
+        )
+
+
+def test_incomplete_d3_metadata_can_be_disabled_without_mutation(tmp_path):
+    metadata = {
+        "cutoff": 5.0,
+        "needs_coulomb": False,
+        "needs_dispersion": True,
+        "coulomb_mode": "none",
+        "d3_params": {"s8": 1.0},
+        "has_embedded_lr": False,
+    }
+    original_metadata = {
+        **metadata,
+        "d3_params": dict(metadata["d3_params"]),
+    }
+    path = _write_direct_artifact(tmp_path, metadata)
+
+    calc = AIMNet2Calculator(
+        str(path),
+        device="cpu",
+        needs_dispersion=False,
+    )
+
+    assert calc.external_dftd3 is None
+    assert calc.metadata["needs_dispersion"] is True
+    assert metadata == original_metadata
+    stored = torch.load(path, map_location="cpu", weights_only=True)
+    assert stored["needs_dispersion"] is True
+    assert stored["d3_params"] == {"s8": 1.0}
+
+
+def test_valid_sr_embedded_coulomb_can_be_disabled():
+    metadata = {
+        "format_version": 2,
+        "cutoff": 5.0,
+        "needs_coulomb": True,
+        "needs_dispersion": False,
+        "coulomb_mode": "sr_embedded",
+        "coulomb_sr_rc": 4.6,
+        "coulomb_sr_envelope": "exp",
+        "has_embedded_lr": True,
+    }
+
+    calc = AIMNet2Calculator(
+        _model_with_metadata(metadata),
+        device="cpu",
+        needs_coulomb=False,
+    )
+
+    assert calc.external_coulomb is None
+    assert calc.metadata["needs_coulomb"] is True
+
+
+def test_coulomb_override_cannot_bypass_structural_invalidity():
+    metadata = {
+        "format_version": 2,
+        "cutoff": 5.0,
+        "needs_coulomb": True,
+        "needs_dispersion": False,
+        "coulomb_mode": "sr_embedded",
+        "coulomb_sr_rc": None,
+        "coulomb_sr_envelope": "exp",
+        "has_embedded_lr": True,
+    }
+
+    with pytest.raises(ValueError, match="sr_embedded"):
+        AIMNet2Calculator(
+            _model_with_metadata(metadata),
+            device="cpu",
+            needs_coulomb=False,
+        )
+
+
+def test_full_embedded_coulomb_rejects_external_override():
+    metadata = {
+        "format_version": 2,
+        "cutoff": 5.0,
+        "needs_coulomb": False,
+        "needs_dispersion": False,
+        "coulomb_mode": "full_embedded",
+        "has_embedded_lr": True,
+    }
+
+    with pytest.raises(ValueError, match="full_embedded"):
+        AIMNet2Calculator(
+            _model_with_metadata(metadata),
+            device="cpu",
+            needs_coulomb=True,
+        )
+
+
+def test_embedded_d3ts_rejects_external_dispersion_override():
+    metadata = {
+        "format_version": 2,
+        "cutoff": 5.0,
+        "needs_coulomb": False,
+        "needs_dispersion": False,
+        "coulomb_mode": "none",
+        "d3_params": {"s8": 1.0, "a1": 1.0, "a2": 1.0},
+        "has_embedded_lr": True,
+        "has_embedded_d3ts": True,
+    }
+
+    with pytest.raises(ValueError, match="embedded D3TS"):
+        AIMNet2Calculator(
+            _model_with_metadata(metadata),
+            device="cpu",
+            needs_dispersion=True,
+        )
+
+
+@pytest.mark.parametrize(
+    ("metadata", "overrides", "message"),
+    [
+        (
+            {"coulomb_mode": "full_embedded"},
+            {"needs_coulomb": True},
+            "full_embedded",
+        ),
+        (
+            {
+                "has_embedded_d3ts": True,
+                "d3_params": {"s8": 1.0, "a1": 1.0, "a2": 1.0},
+            },
+            {"needs_dispersion": True},
+            "embedded D3TS",
+        ),
+        (
+            {"d3_params": {"s8": 1.0}},
+            {"needs_dispersion": True},
+            "d3_params",
+        ),
+    ],
+)
+def test_raw_module_metadata_rejects_effective_external_incompatibilities(metadata, overrides, message):
+    with pytest.raises(ValueError, match=message):
+        AIMNet2Calculator(
+            _model_with_metadata(metadata),
+            device="cpu",
+            **overrides,
+        )
+
+
+def test_raw_module_partial_metadata_remains_supported():
+    calc = AIMNet2Calculator(
+        _model_with_metadata({"needs_coulomb": False, "coulomb_mode": "simple"}),
+        device="cpu",
+    )
+
+    assert calc.external_coulomb is None
+    assert calc.external_dftd3 is None
+
+
+def test_none_mode_external_coulomb_uses_defaults_for_null_metadata():
+    metadata = {
+        "format_version": 2,
+        "cutoff": 5.0,
+        "needs_coulomb": False,
+        "needs_dispersion": False,
+        "coulomb_mode": "none",
+        "coulomb_sr_rc": None,
+        "coulomb_sr_envelope": None,
+        "has_embedded_lr": False,
+    }
+
+    calc = AIMNet2Calculator(
+        _model_with_metadata(metadata),
+        device="cpu",
+        needs_coulomb=True,
+    )
+
+    assert calc.external_coulomb is not None
+    assert calc.external_coulomb.rc.item() == pytest.approx(4.6)
+    assert calc.external_coulomb.envelope == "exp"
+
+
 def test_raw_module_metadata_property_is_used():
     from torch import nn
 
@@ -1983,10 +2222,8 @@ def test_has_embedded_dispersion_explicit_d3ts_flag():
     assert calc._has_embedded_dispersion() is True
 
 
-def test_has_embedded_dispersion_legacy_heuristic_fallback():
-    """For pre-explicit-flag .pt files (no `has_embedded_d3ts` key), the legacy
-    heuristic still detects D3TS-only models (has_embedded_lr=True with
-    coulomb_mode != 'sr_embedded')."""
+def test_has_embedded_dispersion_legacy_d3_metadata_fallback():
+    """Legacy metadata detects embedded dispersion from D3-specific fields."""
     from aimnet.calculators import AIMNet2Calculator
 
     calc = AIMNet2Calculator("aimnet2", device="cpu")
@@ -1994,7 +2231,7 @@ def test_has_embedded_dispersion_legacy_heuristic_fallback():
     calc.model._metadata.pop("has_embedded_d3ts", None)  # legacy: flag absent
     calc.model._metadata["has_embedded_lr"] = True
     calc.model._metadata["coulomb_mode"] = "none"  # D3TS-only, no SRCoulomb
-    calc.model._metadata["d3_params"] = None
+    calc.model._metadata["d3_params"] = {"s8": 1.0, "a1": 1.0, "a2": 1.0}
     calc.model._metadata["needs_dispersion"] = False
     assert calc._has_embedded_dispersion() is True
 
@@ -2058,12 +2295,12 @@ class TestDeterministicMode:
             calc({**water_molecule, "cell": cell}, forces=True)
 
 
-def test_legacy_jpt_constructor_routes_once(tmp_path, monkeypatch):
-    """The ordinary constructor routes a real .jpt path through JIT exactly once."""
+def test_legacy_jpt_metadata_drives_calculator_lr_behavior(tmp_path, monkeypatch):
+    """Legacy metadata keeps embedded LR behavior through case-insensitive routing."""
     from aimnet.models import base
 
     source = torch.jit.script(TinyLegacyModel())
-    path = tmp_path / "legacy.jpt"
+    path = tmp_path / "legacy.JpT"
     torch.jit.save(source, str(path))
     original_jit_load = base.torch.jit.load
     jit_load = Mock(wraps=original_jit_load)
@@ -2077,9 +2314,26 @@ def test_legacy_jpt_constructor_routes_once(tmp_path, monkeypatch):
 
     assert calc.metadata is not None
     assert calc.metadata["format_version"] == 1
+    assert calc.metadata["has_embedded_lr"] is True
+    assert calc.lr is True
+    assert calc._has_embedded_dispersion() is False
+    assert calc.cutoff_lr == float("inf")
+    assert calc._nblist_dftd3 is None
+    prepared = calc.prepare_input({
+        "coord": [[0.0, 0.0, 0.0], [20.0, 0.0, 0.0]],
+        "numbers": [1, 6],
+        "charge": 0.0,
+    })
+    assert "nbmat_lr" in prepared
+    assert {0, 1}.issubset(prepared["nbmat_lr"].flatten().tolist())
+    assert calc.external_coulomb is None
+    assert calc.external_dftd3 is None
     assert next(calc.model.parameters()).device.type == "cpu"
     jit_load.assert_called_once_with(str(path), map_location="cpu")
     torch_load.assert_not_called()
+
+    with pytest.raises(ValueError, match="full_embedded"):
+        AIMNet2Calculator(calc.model, device="cpu", needs_coulomb=True)
 
 
 def test_from_legacy_jit_routes_once(monkeypatch):
@@ -2089,7 +2343,6 @@ def test_from_legacy_jit_routes_once(monkeypatch):
     model = TinyLegacyModel()
     metadata = {
         "format_version": 1,
-        "cutoff": 5.0,
         "needs_coulomb": False,
         "needs_dispersion": False,
         "coulomb_mode": "full_embedded",
@@ -2104,6 +2357,8 @@ def test_from_legacy_jit_routes_once(monkeypatch):
     legacy_load.assert_called_once_with("custom.jpt", "cpu")
     assert calc.metadata is not None
     assert calc.metadata["format_version"] == 1
+    assert "cutoff" not in calc.metadata
+    assert calc.cutoff == 5.0
     assert calc.nb_threshold == 7
 
     with pytest.raises(TypeError, match="model"):

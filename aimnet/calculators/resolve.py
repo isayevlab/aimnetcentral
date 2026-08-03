@@ -12,8 +12,13 @@ from typing import Any, Literal, cast
 
 from torch import nn
 
-from aimnet.models.artifact_validation import resolve_model_import_policy
-from aimnet.models.base import _load_registry_model, load_model
+from aimnet.models.artifact_validation import (
+    is_explicit_local_path,
+    is_legacy_jit_path,
+    resolve_model_import_policy,
+    uses_default_model_import_settings,
+)
+from aimnet.models.base import load_model, load_registry_model
 
 from .model_registry import (
     get_family_policy,
@@ -25,6 +30,7 @@ from .model_registry import (
 # Inline org/name pattern — exactly one slash, both segments alphanumeric+._-
 # This avoids importing optional HF deps for ordinary file paths containing slashes.
 _HF_ID_RE = re.compile(r"^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$")
+_load_registry_model = load_registry_model
 
 
 def _apply_family_defaults(metadata: Mapping[str, Any], registry_family: str | None) -> dict[str, Any]:
@@ -99,13 +105,13 @@ def resolve_model(
         ``model_import_mode="extend"``.
     """
     resolve_model_import_policy(model_import_paths, model_import_mode)
-    customized = model_import_paths is not None or model_import_mode != "extend"
+    customized = not uses_default_model_import_settings(model_import_paths, model_import_mode)
     metadata: Mapping[str, Any] | None = None
     registry_family: str | None = None
     if isinstance(model, str):
-        if model.lower().endswith(".jpt") and customized:
+        if is_legacy_jit_path(model) and customized:
             raise ValueError("Import settings are not supported for .jpt sources.")
-        explicit_local = os.path.isabs(model) or model.startswith("./") or model.startswith("../")
+        explicit_local = is_explicit_local_path(model)
         registry_name = None if explicit_local else try_resolve_registry_model_name(model)
         if registry_name is not None:
             if customized:

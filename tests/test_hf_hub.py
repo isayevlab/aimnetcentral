@@ -15,6 +15,7 @@ from aimnet.calculators.hf_hub import (
     is_hf_repo_id,
     load_from_hf_repo,
 )
+from aimnet.models import base as model_base
 from aimnet.models.artifact_validation import validate_model_yaml
 from aimnet.modules import AtomicShift
 
@@ -101,14 +102,13 @@ def test_hf_metadata_fallback_accepts_registry_names_only(monkeypatch, tmp_path)
 
 @pytest.mark.hf
 def test_hf_rejects_malicious_yaml_before_build_module(monkeypatch, tmp_path):
-    from aimnet.calculators import hf_hub
 
     save_file({}, str(tmp_path / "ensemble_0.safetensors"))
     (tmp_path / "config.json").write_text(
         json.dumps({"model_yaml": "class: os.system", "cutoff": 5.0, "format_version": 2})
     )
     build_module = Mock(side_effect=AssertionError("build_module must not be called"))
-    monkeypatch.setattr(hf_hub, "build_module", build_module)
+    monkeypatch.setattr(model_base, "build_module", build_module)
 
     with pytest.raises(ValueError, match="Untrusted import path"):
         load_from_hf_repo(str(tmp_path))
@@ -117,10 +117,15 @@ def test_hf_rejects_malicious_yaml_before_build_module(monkeypatch, tmp_path):
 
 
 @pytest.mark.hf
-def test_hf_rejects_invalid_format_version(tmp_path):
+@pytest.mark.parametrize("format_version", [True, 1, "2"])
+def test_hf_rejects_invalid_format_version(tmp_path, format_version):
     save_file({}, str(tmp_path / "ensemble_0.safetensors"))
     (tmp_path / "config.json").write_text(
-        json.dumps({"model_yaml": "class: aimnet.models.AIMNet2", "cutoff": 5.0, "format_version": "2"})
+        json.dumps({
+            "model_yaml": "class: aimnet.models.AIMNet2",
+            "cutoff": 5.0,
+            "format_version": format_version,
+        })
     )
 
     with pytest.raises(ValueError, match="format_version"):
@@ -172,7 +177,82 @@ def test_hf_registry_fallback_uses_shared_allowlist(monkeypatch: pytest.MonkeyPa
         _fetch_pt_metadata_from_registry({"member_names": ["aimnet2"]}, "repo", 0)
 
 
-def test_hf_rejects_invalid_metadata_before_weights_or_construction(monkeypatch: pytest.MonkeyPatch, tmp_path):
+@pytest.mark.parametrize("ensemble_member", [True, -1, 1.0, "0"])
+def test_hf_rejects_invalid_ensemble_member_before_repo_access(
+    monkeypatch: pytest.MonkeyPatch,
+    ensemble_member,
+) -> None:
+    resolve_repo = Mock(side_effect=AssertionError("repository must not be accessed"))
+    monkeypatch.setattr(hf_hub, "_resolve_repo", resolve_repo)
+
+    with pytest.raises(ValueError, match="ensemble_member"):
+        load_from_hf_repo("org/repository", ensemble_member=ensemble_member)
+
+    resolve_repo.assert_not_called()
+
+
+@pytest.mark.parametrize("member_names", [[], "aimnet2", ["aimnet2", 1]])
+def test_hf_rejects_invalid_member_names_before_weight_access(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    member_names,
+) -> None:
+    (tmp_path / "config.json").write_text(
+        json.dumps({
+            "model_yaml": "class: aimnet.models.AIMNet2",
+            "cutoff": 5.0,
+            "format_version": 2,
+            "member_names": member_names,
+        })
+    )
+    resolve_repo = Mock(return_value=tmp_path)
+    monkeypatch.setattr(hf_hub, "_resolve_repo", resolve_repo)
+
+    with pytest.raises(ValueError, match="member_names"):
+        load_from_hf_repo("org/repository")
+
+    assert resolve_repo.call_count == 1
+    assert resolve_repo.call_args.kwargs["include_weights"] is False
+
+
+def test_hf_rejects_out_of_range_member_name_before_weight_access(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    (tmp_path / "config.json").write_text(
+        json.dumps({
+            "model_yaml": "class: aimnet.models.AIMNet2",
+            "cutoff": 5.0,
+            "format_version": 2,
+            "member_names": ["aimnet2"],
+        })
+    )
+    resolve_repo = Mock(return_value=tmp_path)
+    monkeypatch.setattr(hf_hub, "_resolve_repo", resolve_repo)
+
+    with pytest.raises(ValueError, match=r"ensemble_member.*member_names"):
+        load_from_hf_repo("org/repository", ensemble_member=1)
+
+    assert resolve_repo.call_count == 1
+    assert resolve_repo.call_args.kwargs["include_weights"] is False
+
+
+def test_hf_registry_family_members_never_fall_back_to_member_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(hf_hub, "get_family_policy", Mock(return_value=Mock(members=("aimnet2",))))
+    registry_path = Mock(side_effect=AssertionError("registry member zero must not be used"))
+    monkeypatch.setattr(hf_hub, "get_registry_model_path", registry_path)
+
+    with pytest.raises(ValueError, match=r"ensemble_member.*family"):
+        _fetch_pt_metadata_from_registry({"family_name": "aimnet2"}, "org/aimnet2", 1)
+
+    registry_path.assert_not_called()
+
+
+def test_hf_allows_incomplete_external_dispersion_metadata_for_calculator_override(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
     save_file({}, str(tmp_path / "ensemble_0.safetensors"))
     (tmp_path / "config.json").write_text(
         json.dumps({
@@ -182,16 +262,217 @@ def test_hf_rejects_invalid_metadata_before_weights_or_construction(monkeypatch:
             "needs_dispersion": True,
         })
     )
-    load_file = Mock(side_effect=AssertionError("weights must not be loaded"))
-    build_module = Mock(side_effect=AssertionError("model must not be built"))
+    load_file = Mock(return_value={})
+    build_module = Mock(return_value=torch.nn.Identity())
     monkeypatch.setattr(hf_hub, "_load_safetensors_file", load_file)
-    monkeypatch.setattr(hf_hub, "build_module", build_module)
+    monkeypatch.setattr(model_base, "build_module", build_module)
 
-    with pytest.raises(ValueError, match="d3_params"):
+    _, metadata = load_from_hf_repo(str(tmp_path))
+
+    assert metadata["needs_dispersion"] is True
+    load_file.assert_called_once()
+    build_module.assert_called_once()
+
+
+def test_hf_complete_config_derives_sr_metadata_before_loading_weights(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    save_file({}, str(tmp_path / "ensemble_0.safetensors"))
+    (tmp_path / "config.json").write_text(
+        json.dumps({
+            "model_yaml": """
+class: aimnet.models.AIMNet2
+kwargs:
+  outputs:
+    coulomb:
+      class: aimnet.modules.SRCoulomb
+      kwargs:
+        rc: 4.6
+        envelope: cosine
+""",
+            "cutoff": 5.0,
+            "format_version": 2,
+            "needs_coulomb": True,
+            "coulomb_mode": "sr_embedded",
+            "has_embedded_lr": True,
+        })
+    )
+    load_file = Mock(return_value={})
+    monkeypatch.setattr(hf_hub, "_load_safetensors_file", load_file)
+    monkeypatch.setattr(model_base, "build_module", Mock(return_value=torch.nn.Identity()))
+
+    _, metadata = load_from_hf_repo(str(tmp_path))
+
+    assert metadata["coulomb_sr_rc"] == 4.6
+    assert metadata["coulomb_sr_envelope"] == "cosine"
+    load_file.assert_called_once()
+
+
+def test_hf_complete_config_accepts_duplicate_identical_srcoulomb_pairs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    save_file({}, str(tmp_path / "ensemble_0.safetensors"))
+    (tmp_path / "config.json").write_text(
+        json.dumps({
+            "model_yaml": """
+class: aimnet.models.AIMNet2
+kwargs:
+  outputs:
+    - class: aimnet.modules.SRCoulomb
+      kwargs: {rc: 4.6, envelope: exp}
+    - nested:
+        class: custom.SRCoulomb
+        kwargs: {rc: 4.6, envelope: exp}
+""",
+            "cutoff": 5.0,
+            "format_version": 2,
+            "needs_coulomb": True,
+            "coulomb_mode": "sr_embedded",
+            "has_embedded_lr": True,
+        })
+    )
+    monkeypatch.setattr(hf_hub, "_load_safetensors_file", Mock(return_value={}))
+    monkeypatch.setattr(model_base, "build_module", Mock(return_value=torch.nn.Identity()))
+
+    _, metadata = load_from_hf_repo(
+        str(tmp_path),
+        model_import_paths={"custom.SRCoulomb"},
+    )
+
+    assert (metadata["coulomb_sr_rc"], metadata["coulomb_sr_envelope"]) == (4.6, "exp")
+
+
+def test_hf_complete_config_rejects_ambiguous_srcoulomb_pairs_before_weight_access(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    (tmp_path / "config.json").write_text(
+        json.dumps({
+            "model_yaml": """
+class: aimnet.models.AIMNet2
+kwargs:
+  outputs:
+    - class: aimnet.modules.SRCoulomb
+      kwargs: {rc: 4.6, envelope: exp}
+    - class: aimnet.modules.SRCoulomb
+      kwargs: {rc: 4.5, envelope: cosine}
+""",
+            "cutoff": 5.0,
+            "format_version": 2,
+            "needs_coulomb": True,
+            "coulomb_mode": "sr_embedded",
+            "has_embedded_lr": True,
+        })
+    )
+    resolve_repo = Mock(return_value=tmp_path)
+    monkeypatch.setattr(hf_hub, "_resolve_repo", resolve_repo)
+
+    with pytest.raises(ValueError, match=r"ambiguous.*SRCoulomb"):
+        load_from_hf_repo("org/repository")
+
+    assert resolve_repo.call_count == 1
+    assert resolve_repo.call_args.kwargs["include_weights"] is False
+
+
+def test_hf_complete_config_rejects_invalid_srcoulomb_pair_before_weight_access(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    (tmp_path / "config.json").write_text(
+        json.dumps({
+            "model_yaml": """
+class: aimnet.models.AIMNet2
+kwargs:
+  outputs:
+    class: aimnet.modules.SRCoulomb
+    kwargs: {rc: 4.6, envelope: [exp]}
+""",
+            "cutoff": 5.0,
+            "format_version": 2,
+            "coulomb_mode": "sr_embedded",
+            "has_embedded_lr": True,
+        })
+    )
+    resolve_repo = Mock(return_value=tmp_path)
+    monkeypatch.setattr(hf_hub, "_resolve_repo", resolve_repo)
+
+    with pytest.raises(ValueError, match="coulomb_sr_envelope"):
+        load_from_hf_repo("org/repository")
+
+    assert resolve_repo.call_count == 1
+    assert resolve_repo.call_args.kwargs["include_weights"] is False
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("coulomb_sr_rc", 4.5),
+        ("coulomb_sr_envelope", "cosine"),
+    ],
+)
+def test_hf_complete_config_rejects_srcoulomb_metadata_conflicts_before_weight_access(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    field: str,
+    value,
+) -> None:
+    config = {
+        "model_yaml": """
+class: aimnet.models.AIMNet2
+kwargs:
+  outputs:
+    coulomb:
+      class: aimnet.modules.SRCoulomb
+      kwargs: {rc: 4.6, envelope: exp}
+""",
+        "cutoff": 5.0,
+        "format_version": 2,
+        "needs_coulomb": True,
+        "coulomb_mode": "sr_embedded",
+        "coulomb_sr_rc": 4.6,
+        "coulomb_sr_envelope": "exp",
+        "has_embedded_lr": True,
+    }
+    config[field] = value
+    (tmp_path / "config.json").write_text(json.dumps(config))
+    resolve_repo = Mock(return_value=tmp_path)
+    monkeypatch.setattr(hf_hub, "_resolve_repo", resolve_repo)
+
+    with pytest.raises(ValueError, match=field):
+        load_from_hf_repo("org/repository")
+
+    assert resolve_repo.call_count == 1
+    assert resolve_repo.call_args.kwargs["include_weights"] is False
+
+
+def test_hf_complete_config_validates_derived_sr_metadata_before_loading_weights(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    (tmp_path / "config.json").write_text(
+        json.dumps({
+            "model_yaml": """
+class: aimnet.models.AIMNet2
+kwargs:
+  outputs:
+    coulomb:
+      class: aimnet.modules.SRCoulomb
+      kwargs:
+        rc: 4.6
+        envelope: exp
+""",
+            "cutoff": 5.0,
+            "format_version": 2,
+            "needs_coulomb": True,
+            "coulomb_mode": "sr_embedded",
+            "has_embedded_lr": False,
+        })
+    )
+    load_file = Mock(side_effect=AssertionError("weights must not be loaded"))
+    monkeypatch.setattr(hf_hub, "_load_safetensors_file", load_file)
+
+    with pytest.raises(ValueError, match="embedded LR"):
         load_from_hf_repo(str(tmp_path))
 
     load_file.assert_not_called()
-    build_module.assert_not_called()
 
 
 def test_hf_fallback_uses_validated_registry_cutoff(monkeypatch: pytest.MonkeyPatch, tmp_path):
@@ -212,12 +493,147 @@ def test_hf_fallback_uses_validated_registry_cutoff(monkeypatch: pytest.MonkeyPa
         ),
     )
     model = torch.nn.Identity()
-    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=model))
+    monkeypatch.setattr(model_base, "build_module", Mock(return_value=model))
 
     loaded, metadata = load_from_hf_repo(str(tmp_path))
 
     assert loaded is model
     assert metadata["cutoff"] == 5.0
+
+
+def test_hf_fallback_accepts_matching_artifact_metadata_duplicates(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    save_file({}, str(tmp_path / "ensemble_0.safetensors"))
+    registry_metadata = {
+        "model_yaml": "class: aimnet.models.AIMNet2",
+        "cutoff": 5.0,
+        "format_version": 2,
+        "needs_coulomb": False,
+        "needs_dispersion": False,
+        "coulomb_mode": "none",
+        "coulomb_sr_rc": None,
+        "coulomb_sr_envelope": None,
+        "d3_params": None,
+        "has_embedded_lr": False,
+        "has_embedded_d3ts": False,
+        "implemented_species": [1, 6],
+        "family": "test",
+        "supports_charged_systems": True,
+    }
+    (tmp_path / "config.json").write_text(
+        json.dumps({
+            "config_schema_version": 1,
+            "member_names": ["aimnet2"],
+            **{key: value for key, value in registry_metadata.items() if key != "model_yaml"},
+        })
+    )
+    monkeypatch.setattr(
+        hf_hub,
+        "_fetch_pt_metadata_from_registry",
+        Mock(return_value=(registry_metadata, {"class": "aimnet.models.AIMNet2"})),
+    )
+    monkeypatch.setattr(hf_hub, "_load_safetensors_file", Mock(return_value={}))
+    monkeypatch.setattr(model_base, "build_module", Mock(return_value=torch.nn.Identity()))
+
+    _, metadata = load_from_hf_repo(str(tmp_path))
+
+    assert metadata["cutoff"] == registry_metadata["cutoff"]
+    assert metadata["family"] == registry_metadata["family"]
+
+
+@pytest.mark.parametrize(
+    ("field", "conflicting_value"),
+    [
+        ("format_version", 1),
+        ("model_yaml", None),
+        ("cutoff", 6.0),
+        ("needs_coulomb", True),
+        ("needs_dispersion", True),
+        ("coulomb_mode", "full_embedded"),
+        ("coulomb_sr_rc", 4.5),
+        ("coulomb_sr_envelope", "cosine"),
+        ("d3_params", {"s8": 1.0, "a1": 1.0, "a2": 1.0}),
+        ("has_embedded_lr", True),
+        ("has_embedded_d3ts", True),
+        ("implemented_species", [8]),
+        ("family", "other"),
+        ("supports_charged_systems", False),
+    ],
+)
+def test_hf_fallback_rejects_conflicting_artifact_metadata_before_weight_access(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    field: str,
+    conflicting_value,
+) -> None:
+    registry_metadata = {
+        "model_yaml": "class: aimnet.models.AIMNet2",
+        "cutoff": 5.0,
+        "format_version": 2,
+        "needs_coulomb": False,
+        "needs_dispersion": False,
+        "coulomb_mode": "none",
+        "coulomb_sr_rc": None,
+        "coulomb_sr_envelope": None,
+        "d3_params": None,
+        "has_embedded_lr": False,
+        "has_embedded_d3ts": False,
+        "implemented_species": [1, 6],
+        "family": "test",
+        "supports_charged_systems": True,
+    }
+    family_config = {
+        "config_schema_version": 1,
+        "member_names": ["aimnet2"],
+        field: conflicting_value,
+    }
+    (tmp_path / "config.json").write_text(json.dumps(family_config))
+    monkeypatch.setattr(
+        hf_hub,
+        "_fetch_pt_metadata_from_registry",
+        Mock(return_value=(registry_metadata, {"class": "aimnet.models.AIMNet2"})),
+    )
+    resolve_repo = Mock(return_value=tmp_path)
+    monkeypatch.setattr(hf_hub, "_resolve_repo", resolve_repo)
+
+    with pytest.raises(ValueError, match=field):
+        load_from_hf_repo("org/repository")
+
+    assert resolve_repo.call_count == 1
+    assert resolve_repo.call_args.kwargs["include_weights"] is False
+
+
+def test_hf_fallback_rejects_nonrouting_family_config_before_weight_access(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    (tmp_path / "config.json").write_text(
+        json.dumps({
+            "config_schema_version": 1,
+            "member_names": ["aimnet2"],
+            "architectures": ["AIMNet2"],
+        })
+    )
+    registry_metadata = {
+        "model_yaml": "class: aimnet.models.AIMNet2",
+        "cutoff": 5.0,
+        "format_version": 2,
+    }
+    monkeypatch.setattr(
+        hf_hub,
+        "_fetch_pt_metadata_from_registry",
+        Mock(return_value=(registry_metadata, {"class": "aimnet.models.AIMNet2"})),
+    )
+    resolve_repo = Mock(return_value=tmp_path)
+    monkeypatch.setattr(hf_hub, "_resolve_repo", resolve_repo)
+
+    with pytest.raises(ValueError, match=r"architectures.*routing"):
+        load_from_hf_repo("org/repository")
+
+    assert resolve_repo.call_count == 1
+    assert resolve_repo.call_args.kwargs["include_weights"] is False
 
 
 def test_hf_rejects_non_mapping_config_root(tmp_path):
@@ -241,12 +657,71 @@ def test_hf_remote_weights_wait_for_config_validation(monkeypatch: pytest.Monkey
     assert snapshot_download.call_args.kwargs["allow_patterns"] == ["config.json"]
 
 
+def test_hf_complete_config_requires_cutoff_before_weight_access(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    (tmp_path / "config.json").write_text(
+        json.dumps({"model_yaml": "class: aimnet.models.AIMNet2", "format_version": 2})
+    )
+    resolve_repo = Mock(return_value=tmp_path)
+    monkeypatch.setattr(hf_hub, "_resolve_repo", resolve_repo)
+
+    with pytest.raises(ValueError, match="cutoff"):
+        load_from_hf_repo("org/repository")
+
+    assert resolve_repo.call_count == 1
+    assert resolve_repo.call_args.kwargs["include_weights"] is False
+
+
+def test_hf_remote_config_and_weights_use_one_immutable_snapshot(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    config_commit = "a" * 40
+    changed_commit = "b" * 40
+    snapshots = tmp_path / "models--org--repository" / "snapshots"
+    config_snapshot = snapshots / config_commit
+    changed_snapshot = snapshots / changed_commit
+    config_snapshot.mkdir(parents=True)
+    changed_snapshot.mkdir()
+    config = {
+        "model_yaml": "class: torch.nn.Linear\nkwargs:\n  in_features: 2\n  out_features: 2\n",
+        "cutoff": 5.0,
+        "format_version": 2,
+    }
+    (config_snapshot / "config.json").write_text(json.dumps(config))
+    save_file(
+        {"weight": torch.ones(2, 2), "bias": torch.ones(2)},
+        str(config_snapshot / "ensemble_0.safetensors"),
+    )
+    save_file(
+        {"weight": torch.full((2, 2), 2.0), "bias": torch.full((2,), 2.0)},
+        str(changed_snapshot / "ensemble_0.safetensors"),
+    )
+
+    def snapshot_download(**kwargs):
+        if kwargs["allow_patterns"] == ["config.json"]:
+            return str(config_snapshot)
+        if kwargs["revision"] == config_commit:
+            return str(config_snapshot)
+        return str(changed_snapshot)
+
+    download = Mock(side_effect=snapshot_download)
+    monkeypatch.setattr(hf_hub, "_snapshot_download", download)
+
+    model, _ = load_from_hf_repo(
+        "org/repository",
+        revision="main",
+        model_import_paths={"torch.nn.Linear"},
+    )
+
+    torch.testing.assert_close(model.weight, torch.ones(2, 2))
+    torch.testing.assert_close(model.bias, torch.ones(2))
+    assert download.call_count == 2
+    assert download.call_args_list[1].kwargs["revision"] == config_commit
+
+
 def test_hf_rejects_non_module_construction(monkeypatch: pytest.MonkeyPatch, tmp_path):
     save_file({}, str(tmp_path / "ensemble_0.safetensors"))
     (tmp_path / "config.json").write_text(
         json.dumps({"model_yaml": "class: aimnet.models.AIMNet2", "cutoff": 5.0, "format_version": 2})
     )
-    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=object()))
+    monkeypatch.setattr(model_base, "build_module", Mock(return_value=object()))
 
     with pytest.raises(TypeError, match=r"nn\.Module"):
         load_from_hf_repo(str(tmp_path))
@@ -272,7 +747,7 @@ def test_hf_forwards_direct_import_options(
     validate = Mock(return_value={"class": "my_package.CustomAIMNet"})
     model = torch.nn.Identity()
     monkeypatch.setattr(hf_hub, "validate_model_yaml", validate)
-    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=model))
+    monkeypatch.setattr(model_base, "build_module", Mock(return_value=model))
 
     loaded, _ = load_from_hf_repo(
         str(tmp_path),
@@ -305,7 +780,7 @@ def test_hf_loads_weights_on_cpu_and_moves_once(monkeypatch: pytest.MonkeyPatch,
     model = SpyModel()
     load_file = Mock(return_value={})
     monkeypatch.setattr(hf_hub, "_load_safetensors_file", load_file, raising=False)
-    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=model))
+    monkeypatch.setattr(model_base, "build_module", Mock(return_value=model))
 
     loaded, _ = load_from_hf_repo(
         str(tmp_path),
@@ -341,7 +816,7 @@ def test_hf_preserves_float64_atomic_shifts(monkeypatch: pytest.MonkeyPatch, tmp
     )
     load_file = Mock(return_value={"outputs.atomic_shift.shifts.weight": values})
     monkeypatch.setattr(hf_hub, "_load_safetensors_file", load_file)
-    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=model))
+    monkeypatch.setattr(model_base, "build_module", Mock(return_value=model))
 
     loaded, _ = load_from_hf_repo(str(tmp_path), device="cuda")
 
@@ -412,7 +887,7 @@ def test_hf_registry_fallback_fails_on_unexpected_key(monkeypatch: pytest.Monkey
             )
         ),
     )
-    monkeypatch.setattr(hf_hub, "build_module", Mock(return_value=torch.nn.Identity()))
+    monkeypatch.setattr(model_base, "build_module", Mock(return_value=torch.nn.Identity()))
 
     with pytest.raises(RuntimeError, match=r"Unexpected model parameters.*extra"):
         load_from_hf_repo(str(tmp_path))

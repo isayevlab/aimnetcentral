@@ -9,6 +9,7 @@ from typing import Any, ClassVar, Literal, Self, cast
 import torch
 from torch import Tensor, nn
 
+from aimnet.models.artifact_validation import uses_default_model_import_settings, validate_runtime_model_metadata
 from aimnet.models.base import load_legacy_jit
 from aimnet.modules import DFTD3, LRCoulomb
 from aimnet.modules.lr import ExternalDerivativeTerms
@@ -202,10 +203,18 @@ class AIMNet2Calculator:
             if needs_dispersion is not None
             else (metadata.get("needs_dispersion", False) if metadata is not None else False)
         )
+        if metadata is not None:
+            validate_runtime_model_metadata(
+                metadata,
+                needs_coulomb=final_needs_coulomb,
+                needs_dispersion=final_needs_dispersion,
+            )
 
         # Set up external Coulomb if needed
         if final_needs_coulomb:
             sr_embedded = metadata.get("coulomb_mode") == "sr_embedded" if metadata is not None else False
+            coulomb_sr_rc = metadata.get("coulomb_sr_rc") if metadata is not None else None
+            coulomb_sr_envelope = metadata.get("coulomb_sr_envelope") if metadata is not None else None
             # For PBC, user can switch to DSF/Ewald via set_lrcoulomb_method()
             # When sr_embedded=True: model has SRCoulomb which subtracts SR, so external
             # should compute FULL (subtract_sr=False) to give: (NN - SR) + FULL = NN + LR
@@ -215,8 +224,8 @@ class AIMNet2Calculator:
                 key_in="charges",
                 key_out="energy",
                 method="simple",
-                rc=metadata.get("coulomb_sr_rc", 4.6) if metadata is not None else 4.6,
-                envelope=metadata.get("coulomb_sr_envelope", "exp") if metadata is not None else "exp",
+                rc=4.6 if coulomb_sr_rc is None else coulomb_sr_rc,
+                envelope="exp" if coulomb_sr_envelope is None else coulomb_sr_envelope,
                 subtract_sr=not sr_embedded,
             )
             self.external_coulomb = self.external_coulomb.to(self.device)
@@ -254,11 +263,12 @@ class AIMNet2Calculator:
                 self.cutoff_lr = float("inf")
             else:
                 self.cutoff_lr = self._default_dsf_cutoff
-        elif self.external_dftd3 is not None:
+        elif self.external_dftd3 is not None or self._has_embedded_dispersion():
             self.cutoff_lr = self._default_dftd3_cutoff
         elif has_embedded_lr:
-            # Embedded LR modules (D3TS, SRCoulomb) need nbmat_lr
-            self.cutoff_lr = self._default_dftd3_cutoff
+            # Embedded Coulomb and unknown legacy LR modules need all pairs;
+            # do not silently apply the finite D3 cutoff.
+            self.cutoff_lr = float("inf")
         else:
             self.cutoff_lr = None
         self.nb_threshold = nb_threshold
@@ -282,6 +292,8 @@ class AIMNet2Calculator:
                 self._coulomb_cutoff = None  # Ewald/PME manage their own cutoff
             else:
                 self._coulomb_cutoff = self.external_coulomb.dsf_rc
+        elif self._has_embedded_coulomb():
+            self._coulomb_cutoff = float("inf")
         if self.external_dftd3 is not None:
             self._dftd3_cutoff = self.external_dftd3.smoothing_off
 
@@ -352,9 +364,9 @@ class AIMNet2Calculator:
         """
         if "model" in calculator_kwargs:
             raise TypeError("from_legacy_jit() does not accept a model keyword argument.")
-        if (
-            calculator_kwargs.get("model_import_paths") is not None
-            or calculator_kwargs.get("model_import_mode", "extend") != "extend"
+        if not uses_default_model_import_settings(
+            calculator_kwargs.get("model_import_paths"),
+            calculator_kwargs.get("model_import_mode", "extend"),
         ):
             raise ValueError("Import settings are not supported for .jpt sources.")
         resolved_device = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -519,19 +531,12 @@ class AIMNet2Calculator:
         if meta is None:
             return False  # Unknown, assume no embedded dispersion
 
-        # Authoritative path (new conversions): explicit flag.
-        if meta.get("has_embedded_d3ts", False):
-            return True
+        # Authoritative path (new conversions): explicit D3TS flag.
+        if "has_embedded_d3ts" in meta:
+            return bool(meta["has_embedded_d3ts"])
 
-        # Legacy heuristic (pre-explicit-flag .pt files): if has_embedded_lr=True
-        # AND coulomb_mode != "sr_embedded", the LR module must be D3TS — but
-        # this misses the both-set case (D3TS + SRCoulomb), which is exactly the
-        # bug fixed by the explicit flag above. Kept here only as a fallback for
-        # legacy files; new conversions take the path above.
-        if meta.get("has_embedded_lr", False) and meta.get("coulomb_mode", "none") != "sr_embedded":
-            return True
-
-        # Legacy JIT format: needs_dispersion=False + d3_params present means dispersion is embedded.
+        # Legacy format: embedded D3 parameters identify dispersion without
+        # conflating it with the independent has_embedded_lr transport flag.
         return not meta.get("needs_dispersion", False) and meta.get("d3_params") is not None
 
     def _has_embedded_coulomb(self) -> bool:

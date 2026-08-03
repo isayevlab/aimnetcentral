@@ -20,7 +20,7 @@ from aimnet.calculators import AIMNet2Calculator
 calc = AIMNet2Calculator("isayevlab/aimnet2-wb97m-d3")
 ```
 
-The first call downloads the model weights to the HF cache directory (`~/.cache/huggingface/hub/` by default) and reuses them on subsequent runs.
+The first call downloads the repository configuration, derives any omitted `SRCoulomb` cutoff and envelope metadata from an unambiguous definition in `model_yaml`, validates the resulting metadata, and only then downloads the selected weights to the HF cache directory (`~/.cache/huggingface/hub/` by default). Subsequent runs reuse the cache.
 
 ## Available Models
 
@@ -116,7 +116,9 @@ ensemble_3.safetensors      # weights for member 3
 | `family` | no | Released model family tag |
 | `supports_charged_systems` | no | Whether charged systems are supported |
 
-_For complete configs, `cutoff` is required. If `model_yaml` is absent, the loader falls back to the official registry using `member_names` (a list of registry keys) and uses the validated registry metadata. A warning is issued in this case._
+_For complete configs, `cutoff` is required. The loader validates the selected ensemble index, YAML imports, metadata schema, and intrinsic model consistency before resolving weights. For `coulomb_mode="sr_embedded"`, omitted `coulomb_sr_rc` or `coulomb_sr_envelope` can be derived from exactly one distinct complete `SRCoulomb` parameter pair in `model_yaml`; conflicting or ambiguous values are rejected._
+
+_If `model_yaml` is absent, the loader falls back through the official registry using `member_names` or the registered family members. The digest-verified registry YAML and metadata are authoritative and receive canonical validation. Family-level HF fields are used only for routing; any repeated artifact metadata must exactly match the registry value. A warning is issued for this fallback._
 
 !!! note "Custom architectures"
 

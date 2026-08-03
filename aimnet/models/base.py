@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Collection
-from pathlib import Path
-from typing import ClassVar, Final, Literal, NotRequired, TypedDict
+import copy
+from collections.abc import Collection, Mapping
+from typing import Any, ClassVar, Final, Literal, NotRequired, TypedDict
 
 import torch
 from torch import Tensor, nn
@@ -11,9 +11,11 @@ from torch import Tensor, nn
 from aimnet import nbops
 from aimnet.config import build_module
 from aimnet.models.artifact_validation import (
-    _REGISTRY_IMPORT_POLICY,
+    REGISTRY_IMPORT_POLICY,
     ModelImportPolicy,
+    is_legacy_jit_path,
     resolve_model_import_policy,
+    uses_default_model_import_settings,
     validate_v2_artifact_with_policy,
 )
 from aimnet.models.utils import (
@@ -23,6 +25,8 @@ from aimnet.models.utils import (
     has_externalizable_dftd3,
     load_state_dict_checked,
 )
+
+_REGISTRY_IMPORT_POLICY = REGISTRY_IMPORT_POLICY
 
 
 class ModelMetadata(TypedDict):
@@ -58,6 +62,33 @@ class ModelMetadata(TypedDict):
     # which conflates D3TS with SRCoulomb — see _has_embedded_dispersion)
 
 
+def assemble_v2_model(
+    model_config: Mapping[str, Any],
+    state_dict: Mapping[str, Tensor],
+    metadata: ModelMetadata,
+    *,
+    policy: ModelImportPolicy,
+    device: str,
+    source: str,
+    unexpected: Literal["warn", "error"],
+) -> nn.Module:
+    """Construct and populate a validated v2 model under an explicit policy."""
+    with torch.device("cpu"):
+        model = build_module(
+            copy.deepcopy(model_config),
+            allow_file_references=False,
+            import_authorizer=policy.require_allowed,
+        )
+    if not isinstance(model, nn.Module):
+        raise TypeError("Built model configuration did not produce an nn.Module.")
+
+    convert_atomic_shifts_to_float64(model)
+    load_state_dict_checked(model, state_dict, source=source, unexpected=unexpected)
+    model = model.to(device)
+    model.__dict__["_metadata"] = copy.deepcopy(metadata)
+    return model
+
+
 def load_legacy_jit(path: str, device: str = "cpu") -> tuple[torch.jit.ScriptModule, ModelMetadata]:
     """Load a legacy TorchScript model from a trusted ``.jpt`` source.
 
@@ -71,6 +102,7 @@ def load_legacy_jit(path: str, device: str = "cpu") -> tuple[torch.jit.ScriptMod
         "needs_coulomb": False,
         "needs_dispersion": False,
         "coulomb_mode": "full_embedded",
+        "has_embedded_lr": True,
         "d3_params": extract_d3_params(model) if has_externalizable_dftd3(model) else None,
         "implemented_species": extract_species(model),
     }
@@ -123,8 +155,8 @@ def load_model(
     accept only ``model_import_paths=None`` and ``model_import_mode="extend"``.
     """
     policy = resolve_model_import_policy(model_import_paths, model_import_mode)
-    if Path(path).suffix.lower() == ".jpt":
-        if model_import_paths is not None or model_import_mode != "extend":
+    if is_legacy_jit_path(path):
+        if not uses_default_model_import_settings(model_import_paths, model_import_mode):
             raise ValueError("Import settings are not supported for .jpt sources.")
         return load_legacy_jit(path, device)
     return _load_v2_model(path, device, policy)
@@ -135,32 +167,11 @@ def _load_v2_model(
     device: str,
     policy: ModelImportPolicy,
     *,
+    validation: Literal["structural", "canonical"] = "structural",
     unexpected: Literal["warn", "error"] = "warn",
 ) -> tuple[nn.Module, ModelMetadata]:
     data = torch.load(path, map_location="cpu", weights_only=True)
-    model_config, state_dict = validate_v2_artifact_with_policy(data, policy)
-    with torch.device("cpu"):
-        model = build_module(
-            model_config,
-            allow_file_references=False,
-            import_authorizer=policy.require_allowed,
-        )
-    if not isinstance(model, nn.Module):
-        raise TypeError("Built model configuration did not produce an nn.Module.")
-
-    # Atomic shifts store SAE/reference-energy values and may be float64 in
-    # the file. Cast before load_state_dict so copy_ does not truncate them
-    # into the default float32 embedding.
-    convert_atomic_shifts_to_float64(model)
-
-    load_state_dict_checked(
-        model,
-        state_dict,
-        source=path,
-        unexpected=unexpected,
-    )
-
-    model = model.to(device)
+    model_config, state_dict = validate_v2_artifact_with_policy(data, policy, validation=validation)
     metadata: ModelMetadata = {
         "format_version": data.get("format_version", 2),
         "cutoff": data["cutoff"],
@@ -176,13 +187,31 @@ def _load_v2_model(
         "supports_charged_systems": data.get("supports_charged_systems"),
         "has_embedded_d3ts": data.get("has_embedded_d3ts", False),
     }
-    model._metadata = metadata  # type: ignore[assignment]
-    return model, metadata
+    model = assemble_v2_model(
+        model_config,
+        state_dict,
+        metadata,
+        policy=policy,
+        device=device,
+        source=path,
+        unexpected=unexpected,
+    )
+    attached_metadata: ModelMetadata = model.__dict__["_metadata"]
+    return model, attached_metadata
 
 
-def _load_registry_model(path: str, device: str = "cpu") -> tuple[nn.Module, ModelMetadata]:
+def load_registry_model(path: str, device: str = "cpu") -> tuple[nn.Module, ModelMetadata]:
     """Load a registry artifact with its immutable import policy."""
-    return _load_v2_model(path, device, _REGISTRY_IMPORT_POLICY, unexpected="error")
+    return _load_v2_model(
+        path,
+        device,
+        REGISTRY_IMPORT_POLICY,
+        validation="canonical",
+        unexpected="error",
+    )
+
+
+_load_registry_model = load_registry_model
 
 
 class AIMNet2Base(nn.Module):
