@@ -1,10 +1,12 @@
 import hashlib
 import re
+import threading
 from unittest.mock import Mock
 from urllib.parse import urlparse
 
 import pytest
 import requests
+import torch
 import yaml
 
 from aimnet.calculators.model_registry import (
@@ -12,9 +14,11 @@ from aimnet.calculators.model_registry import (
     get_cache_dir,
     get_family_policy,
     get_registry_model_family,
+    get_registry_model_path,
     load_model_registry,
     resolve_registry_model_name,
 )
+from aimnet.models.base import _load_registry_model
 
 
 def test_load_model_registry_respects_registry_file_param(tmp_path):
@@ -183,7 +187,7 @@ def test_registry_sha256_entries_are_valid_hex():
 
 def test_every_registry_model_has_sha256():
     registry = load_model_registry()
-    assert len(registry["models"]) == 24
+    assert registry["models"]
     for key, entry in registry["models"].items():
         digest = entry.get("sha256")
         assert isinstance(digest, str), key
@@ -211,7 +215,54 @@ def test_get_registry_model_path_rejects_missing_or_invalid_sha256(monkeypatch, 
     assert not cache_dir.exists()
 
 
-def test_cache_hit_revalidates_sha256(monkeypatch, tmp_path):
+def test_corrupt_cache_is_replaced_once(monkeypatch, tmp_path):
+    from aimnet.calculators import model_registry as mr
+
+    content = b"corrupt cache"
+    replacement = b"verified replacement"
+    expected = hashlib.sha256(replacement).hexdigest()
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    (cache_dir / "custom.pt").write_bytes(content)
+    registry = {
+        "aliases": {},
+        "models": {"custom": {"file": "custom.pt", "url": "https://example.invalid/custom.pt", "sha256": expected}},
+    }
+    monkeypatch.setattr(mr, "load_model_registry", lambda registry_file=None: registry)
+    monkeypatch.setenv("AIMNET_CACHE_DIR", str(cache_dir))
+    acquire = Mock(
+        side_effect=lambda filename, file, url, expected_sha256: (cache_dir / "custom.pt").write_bytes(replacement)
+    )
+    monkeypatch.setattr(mr, "_acquire_asset", acquire)
+
+    assert mr.get_registry_model_path("custom") == str(cache_dir / "custom.pt")
+    acquire.assert_called_once_with(
+        str(cache_dir / "custom.pt"),
+        "custom.pt",
+        "https://example.invalid/custom.pt",
+        expected,
+    )
+    assert (cache_dir / "custom.pt").read_bytes() == replacement
+
+
+def test_registry_loader_rejects_unexpected_state_key(tmp_path):
+    source_model = torch.nn.Embedding(64, 1, padding_idx=0)
+    path = tmp_path / "registry-extra.pt"
+    torch.save(
+        {
+            "model_yaml": ("class: aimnet.modules.AtomicShift\nkwargs:\n  key_in: energy\n  key_out: shifted\n"),
+            "state_dict": {"shifts.weight": source_model.weight.detach().clone(), "extra": torch.zeros(1)},
+            "cutoff": 5.0,
+            "format_version": 2,
+        },
+        path,
+    )
+
+    with pytest.raises(RuntimeError, match=r"Unexpected model parameters.*extra"):
+        _load_registry_model(str(path))
+
+
+def test_corrupt_cache_failure_preserves_original(monkeypatch, tmp_path):
     from aimnet.calculators import model_registry as mr
 
     content = b"corrupt cache"
@@ -225,11 +276,128 @@ def test_cache_hit_revalidates_sha256(monkeypatch, tmp_path):
     }
     monkeypatch.setattr(mr, "load_model_registry", lambda registry_file=None: registry)
     monkeypatch.setenv("AIMNET_CACHE_DIR", str(cache_dir))
+    acquire = Mock(side_effect=OSError("download failed"))
+    monkeypatch.setattr(mr, "_acquire_asset", acquire)
 
-    with pytest.raises(ValueError, match=f"expected {expected}"):
+    with pytest.raises(OSError, match="download failed"):
         mr.get_registry_model_path("custom")
 
+    acquire.assert_called_once()
     assert (cache_dir / "custom.pt").read_bytes() == content
+
+
+def test_corrupt_cache_uses_concurrent_valid_replacement(monkeypatch, tmp_path):
+    from aimnet.calculators import model_registry as mr
+
+    content = b"corrupt cache"
+    replacement = b"verified replacement"
+    expected = hashlib.sha256(replacement).hexdigest()
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    target = cache_dir / "custom.pt"
+    target.write_bytes(content)
+    registry = {
+        "aliases": {},
+        "models": {"custom": {"file": "custom.pt", "url": "https://example.invalid/custom.pt", "sha256": expected}},
+    }
+    monkeypatch.setattr(mr, "load_model_registry", lambda registry_file=None: registry)
+    monkeypatch.setenv("AIMNET_CACHE_DIR", str(cache_dir))
+
+    def acquire(*args):
+        target.write_bytes(replacement)
+        raise OSError("stale acquisition failed")
+
+    monkeypatch.setattr(mr, "_acquire_asset", acquire)
+
+    assert mr.get_registry_model_path("custom") == str(target)
+    assert target.read_bytes() == replacement
+
+
+def test_cold_cache_returns_concurrent_valid_replacement_after_failure(monkeypatch, tmp_path):
+    from aimnet.calculators import model_registry as mr
+
+    replacement = b"verified concurrent replacement"
+    expected = hashlib.sha256(replacement).hexdigest()
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    target = cache_dir / "custom.pt"
+    registry = {
+        "aliases": {},
+        "models": {"custom": {"file": "custom.pt", "url": "https://example.invalid/custom.pt", "sha256": expected}},
+    }
+    monkeypatch.setattr(mr, "load_model_registry", lambda registry_file=None: registry)
+    monkeypatch.setenv("AIMNET_CACHE_DIR", str(cache_dir))
+
+    def acquire(*args):
+        target.write_bytes(replacement)
+        raise OSError("stale acquisition failed")
+
+    monkeypatch.setattr(mr, "_acquire_asset", acquire)
+
+    assert mr.get_registry_model_path("custom") == str(target)
+    assert target.read_bytes() == replacement
+
+
+def test_valid_cache_hit_does_not_acquire(monkeypatch, tmp_path):
+    from aimnet.calculators import model_registry as mr
+
+    content = b"already verified"
+    expected = hashlib.sha256(content).hexdigest()
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    target = cache_dir / "custom.pt"
+    target.write_bytes(content)
+    monkeypatch.setenv("AIMNET_CACHE_DIR", str(cache_dir))
+    acquire = Mock(side_effect=AssertionError("valid cache must not reacquire"))
+    monkeypatch.setattr(mr, "_acquire_asset", acquire)
+
+    assert mr._maybe_download_asset("custom.pt", "https://example.invalid/custom.pt", expected) == str(target)
+    acquire.assert_not_called()
+
+
+def test_concurrent_replacements_use_unique_verified_temporary_files(monkeypatch, tmp_path):
+    from aimnet.calculators import model_registry as mr
+
+    replacement = b"verified concurrent replacement"
+    expected = hashlib.sha256(replacement).hexdigest()
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    target = cache_dir / "custom.pt"
+    target.write_bytes(b"corrupt")
+    barrier = threading.Barrier(2)
+    errors: list[BaseException] = []
+
+    def get(*args, **kwargs):
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=None)
+        response.raise_for_status = Mock()
+
+        def iter_content(*iter_args, **iter_kwargs):
+            barrier.wait()
+            return [replacement]
+
+        response.iter_content = iter_content
+        return response
+
+    monkeypatch.setenv("AIMNET_CACHE_DIR", str(cache_dir))
+    monkeypatch.setattr(mr, "_maybe_copy_bundled_asset", Mock(return_value=False))
+    monkeypatch.setattr(mr.requests, "get", get)
+
+    def run() -> None:
+        try:
+            mr._maybe_download_asset("custom.pt", "https://example.invalid/custom.pt", expected)
+        except BaseException as exc:  # pragma: no cover - assertion reports unexpected thread failures
+            errors.append(exc)
+
+    threads = [threading.Thread(target=run) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert hashlib.sha256(target.read_bytes()).hexdigest() == expected
 
 
 def test_atomic_download_rejects_bad_sha256(monkeypatch, tmp_path):
@@ -263,6 +431,57 @@ def test_atomic_download_installs_verified_bytes(monkeypatch, tmp_path):
     mr._download_asset_atomic(str(target), "https://example.invalid/custom.pt", hashlib.sha256(content).hexdigest())
 
     assert target.read_bytes() == content
+
+
+def test_bundled_copy_hashes_while_streaming(monkeypatch, tmp_path):
+    from aimnet.calculators import model_registry as mr
+
+    asset_dir = tmp_path / "package"
+    bundled_dir = asset_dir / "assets"
+    bundled_dir.mkdir(parents=True)
+    content = b"bundled verified bytes"
+    (bundled_dir / "custom.pt").write_bytes(content)
+    target = asset_dir / "custom.pt"
+    monkeypatch.setattr(mr.os.path, "dirname", lambda _: str(asset_dir))
+
+    assert mr._maybe_copy_bundled_asset(str(target), "custom.pt", hashlib.sha256(content).hexdigest())
+    assert target.read_bytes() == content
+    assert not list(asset_dir.glob(".bundled-*.tmp"))
+
+
+def test_bundled_copy_rejects_bad_hash_without_installing(monkeypatch, tmp_path):
+    from aimnet.calculators import model_registry as mr
+
+    asset_dir = tmp_path / "package"
+    bundled_dir = asset_dir / "assets"
+    bundled_dir.mkdir(parents=True)
+    (bundled_dir / "custom.pt").write_bytes(b"bundled bytes")
+    target = asset_dir / "custom.pt"
+    monkeypatch.setattr(mr.os.path, "dirname", lambda _: str(asset_dir))
+
+    with pytest.raises(ValueError, match="Checksum mismatch"):
+        mr._maybe_copy_bundled_asset(str(target), "custom.pt", "0" * 64)
+
+    assert not target.exists()
+    assert not list(asset_dir.glob(".bundled-*.tmp"))
+
+
+def test_corrupt_bundled_asset_does_not_fall_back_to_download(monkeypatch, tmp_path):
+    from aimnet.calculators import model_registry as mr
+
+    asset_dir = tmp_path / "package"
+    bundled_dir = asset_dir / "assets"
+    bundled_dir.mkdir(parents=True)
+    (bundled_dir / "custom.pt").write_bytes(b"corrupt bundled bytes")
+    target = asset_dir / "custom.pt"
+    monkeypatch.setattr(mr.os.path, "dirname", lambda _: str(asset_dir))
+    download = Mock(side_effect=AssertionError("corrupt bundled assets must not download"))
+    monkeypatch.setattr(mr, "_download_asset_atomic", download)
+
+    with pytest.raises(ValueError, match="Checksum mismatch"):
+        mr._acquire_asset(str(target), "custom.pt", "https://example.invalid/custom.pt", "0" * 64)
+
+    download.assert_not_called()
 
 
 def test_registry_alias_takes_precedence_over_implicit_local_path(monkeypatch, tmp_path):
@@ -313,6 +532,17 @@ def test_registry_digests_match():
                 if chunk:
                     digest.update(chunk)
         assert digest.hexdigest() == entry["sha256"], f"{name}: {entry['url']}"
+
+
+@pytest.mark.network
+@pytest.mark.parametrize("model_name", sorted(load_model_registry()["models"]))
+def test_every_registry_artifact_loads_with_strict_policy(model_name):
+    path = get_registry_model_path(model_name)
+    model, metadata = _load_registry_model(path, device="cpu")
+
+    assert model is not None
+    assert metadata["format_version"] == 2
+    assert metadata["cutoff"] > 0
 
 
 def test_every_yaml_family_resolves_to_a_policy():

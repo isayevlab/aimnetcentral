@@ -110,7 +110,8 @@ print(results[0]["potential_energy"], results[0]["forces"])
 Utilities for loading pre-trained models. Models are automatically downloaded from the remote repository to the local model cache (`AIMNET_CACHE_DIR` when set, otherwise `~/.cache/aimnet/`) upon first use.
 
 Every registry download and cache hit is verified against its SHA-256 digest.
-A mismatch raises `ValueError`; see
+A corrupt cache hit triggers one verified atomic replacement attempt; persistent
+acquisition failures propagate after the final path is revalidated. See
 [Model cache recovery](../cli.md#model-cache-recovery).
 
 Bare registry names and aliases take precedence over same-named implicit local

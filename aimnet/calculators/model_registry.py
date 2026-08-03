@@ -1,7 +1,6 @@
 import logging
 import os
 import re
-import shutil
 import tempfile
 from dataclasses import dataclass, field
 from hashlib import sha256
@@ -160,13 +159,16 @@ def _maybe_copy_bundled_asset(filename: str, file: str, expected_sha256: str) ->
     bundled = os.path.join(os.path.dirname(__file__), "assets", file)
     if not os.path.exists(bundled):
         return False
-    _validate_sha256(bundled, expected_sha256)
     dirname = os.path.dirname(filename)
     fd, tmp = tempfile.mkstemp(prefix=".bundled-", suffix=".tmp", dir=dirname)
+    digest = sha256()
     try:
         with os.fdopen(fd, "wb") as output, open(bundled, "rb") as source:
-            shutil.copyfileobj(source, output, length=1024 * 1024)
-        _validate_sha256(tmp, expected_sha256)
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+                output.write(chunk)
+        if digest.hexdigest() != expected_sha256:
+            raise ValueError(f"Checksum mismatch for {bundled}: expected {expected_sha256}, got {digest.hexdigest()}")
         os.replace(tmp, filename)
         return True
     finally:
@@ -194,14 +196,33 @@ def _download_asset_atomic(filename: str, url: str, expected_sha256: str) -> Non
             os.remove(tmp)
 
 
+def _acquire_asset(filename: str, file: str, url: str, expected_sha256: str) -> None:
+    if not _maybe_copy_bundled_asset(filename, file, expected_sha256):
+        _download_asset_atomic(filename, url, expected_sha256)
+
+
+def _acquire_asset_with_recovery(filename: str, file: str, url: str, expected_sha256: str) -> None:
+    try:
+        _acquire_asset(filename, file, url, expected_sha256)
+    except Exception as acquisition_error:
+        try:
+            _validate_sha256(filename, expected_sha256)
+        except (FileNotFoundError, ValueError):
+            raise acquisition_error from None
+
+
 def _maybe_download_asset(file: str, url: str, expected_sha256: str) -> str:
     filename = os.path.join(get_cache_dir(), file)
     if not os.path.exists(filename):
         print(f"Downloading {url} -> {filename}")
-        if not _maybe_copy_bundled_asset(filename, file, expected_sha256):
-            _download_asset_atomic(filename, url, expected_sha256)
-    else:
+        _acquire_asset_with_recovery(filename, file, url, expected_sha256)
+        return filename
+
+    try:
         _validate_sha256(filename, expected_sha256)
+    except ValueError:
+        logging.warning("Checksum mismatch in cached model artifact %s; replacing it once.", filename)
+        _acquire_asset_with_recovery(filename, file, url, expected_sha256)
     return filename
 
 
