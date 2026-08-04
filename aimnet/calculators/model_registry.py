@@ -1,6 +1,6 @@
 import logging
 import os
-import shutil
+import re
 import tempfile
 from dataclasses import dataclass, field
 from hashlib import sha256
@@ -10,6 +10,8 @@ from typing import Any
 import click
 import requests
 import yaml
+
+from aimnet.models.artifact_validation import is_explicit_local_path
 
 logging.basicConfig(level=logging.INFO)
 
@@ -93,13 +95,21 @@ def create_assets_dir():
     return get_cache_dir()
 
 
-def resolve_registry_model_name(model_name: str) -> str:
+def try_resolve_registry_model_name(model_name: str) -> str | None:
+    """Resolve a registry name or alias without raising for unknown names."""
     model_registry = load_model_registry()
     if model_name in model_registry["aliases"]:
         model_name = model_registry["aliases"][model_name]  # type: ignore
     if model_name not in model_registry["models"]:
-        raise ValueError(f"Model {model_name} not found in the registry.")
+        return None
     return model_name
+
+
+def resolve_registry_model_name(model_name: str) -> str:
+    resolved = try_resolve_registry_model_name(model_name)
+    if resolved is None:
+        raise ValueError(f"Model {model_name} not found in the registry.")
+    return resolved
 
 
 def get_registry_model_family(model_name: str) -> str:
@@ -113,11 +123,23 @@ def get_registry_model_family(model_name: str) -> str:
 
 
 def get_registry_model_path(model_name: str) -> str:
+    """Return a verified local path for a registered model artifact.
+
+    The registry entry must contain a lowercase 64-character SHA-256 digest.
+    Cached, bundled, and downloaded bytes are verified against that digest
+    before the path is returned.
+    """
     model_registry = load_model_registry()
-    create_assets_dir()
     model_name = resolve_registry_model_name(model_name)
     cfg = model_registry["models"][model_name]  # type: ignore
-    model_path = _maybe_download_asset(file=cfg["file"], url=cfg["url"], sha256=cfg.get("sha256"))
+    expected_sha256 = cfg.get("sha256")
+    if not isinstance(expected_sha256, str) or re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is None:
+        raise ValueError(f"Registry model {model_name!r} has no valid SHA-256 digest; refusing artifact access.")
+    model_path = _maybe_download_asset(
+        file=cfg["file"],
+        url=cfg["url"],
+        expected_sha256=expected_sha256,
+    )
     return model_path
 
 
@@ -129,37 +151,46 @@ def _hash_file(filename: str) -> str:
     return h.hexdigest()
 
 
-def _validate_sha256(filename: str, expected: str | None) -> None:
-    if expected is None:
-        return
+def _validate_sha256(filename: str, expected: str) -> None:
     digest = _hash_file(filename)
-    if digest.lower() != expected.lower():
+    if digest != expected:
         raise ValueError(f"Checksum mismatch for {filename}: expected {expected}, got {digest}")
 
 
-def _maybe_copy_bundled_asset(filename: str, file: str, sha256: str | None) -> bool:
+def _maybe_copy_bundled_asset(filename: str, file: str, expected_sha256: str) -> bool:
     bundled = os.path.join(os.path.dirname(__file__), "assets", file)
     if not os.path.exists(bundled):
         return False
-    _validate_sha256(bundled, sha256)
-    shutil.copyfile(bundled, filename)
-    return True
+    dirname = os.path.dirname(filename)
+    fd, tmp = tempfile.mkstemp(prefix=".bundled-", suffix=".tmp", dir=dirname)
+    digest = sha256()
+    try:
+        with os.fdopen(fd, "wb") as output, open(bundled, "rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+                output.write(chunk)
+        if digest.hexdigest() != expected_sha256:
+            raise ValueError(f"Checksum mismatch for {bundled}: expected {expected_sha256}, got {digest.hexdigest()}")
+        os.replace(tmp, filename)
+        return True
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
 
 
-def _download_asset_atomic(filename: str, url: str, expected_sha256: str | None) -> None:
+def _download_asset_atomic(filename: str, url: str, expected_sha256: str) -> None:
     dirname = os.path.dirname(filename)
     fd, tmp = tempfile.mkstemp(prefix=".download-", suffix=".tmp", dir=dirname)
     h = sha256()
     try:
-        with os.fdopen(fd, "wb") as f:
-            response = requests.get(url, timeout=60, stream=True)
+        with os.fdopen(fd, "wb") as f, requests.get(url, timeout=(10, 120), stream=True) as response:
             response.raise_for_status()
             for chunk in response.iter_content(chunk_size=1024 * 1024):
                 if not chunk:
                     continue
                 h.update(chunk)
                 f.write(chunk)
-        if expected_sha256 is not None and h.hexdigest().lower() != expected_sha256.lower():
+        if h.hexdigest() != expected_sha256:
             raise ValueError(f"Checksum mismatch for {url}: expected {expected_sha256}, got {h.hexdigest()}")
         os.replace(tmp, filename)
     finally:
@@ -167,22 +198,49 @@ def _download_asset_atomic(filename: str, url: str, expected_sha256: str | None)
             os.remove(tmp)
 
 
-def _maybe_download_asset(file: str, url: str, sha256: str | None = None) -> str:
+def _acquire_asset(filename: str, file: str, url: str, expected_sha256: str) -> None:
+    if not _maybe_copy_bundled_asset(filename, file, expected_sha256):
+        _download_asset_atomic(filename, url, expected_sha256)
+
+
+def _acquire_asset_with_recovery(filename: str, file: str, url: str, expected_sha256: str) -> None:
+    try:
+        _acquire_asset(filename, file, url, expected_sha256)
+    except Exception as acquisition_error:
+        try:
+            _validate_sha256(filename, expected_sha256)
+        except (FileNotFoundError, ValueError):
+            raise acquisition_error from None
+
+
+def _maybe_download_asset(file: str, url: str, expected_sha256: str) -> str:
     filename = os.path.join(get_cache_dir(), file)
     if not os.path.exists(filename):
         print(f"Downloading {url} -> {filename}")
-        if not _maybe_copy_bundled_asset(filename, file, sha256):
-            _download_asset_atomic(filename, url, sha256)
-    else:
-        _validate_sha256(filename, sha256)
+        _acquire_asset_with_recovery(filename, file, url, expected_sha256)
+        return filename
+
+    try:
+        _validate_sha256(filename, expected_sha256)
+    except ValueError:
+        logging.warning("Checksum mismatch in cached model artifact %s; replacing it once.", filename)
+        _acquire_asset_with_recovery(filename, file, url, expected_sha256)
     return filename
 
 
 def get_model_path(s: str) -> str:
-    # direct file path
-    if not os.path.isfile(s):
-        s = get_registry_model_path(s)
-    return s
+    """Resolve a model name or explicit local path.
+
+    Bare registry names and aliases take precedence over same-named implicit
+    local files. Absolute paths and paths beginning with ``./`` or ``../`` are
+    always treated as explicit local paths.
+    """
+    explicit_local = is_explicit_local_path(s)
+    if not explicit_local and try_resolve_registry_model_name(s) is not None:
+        return get_registry_model_path(s)
+    if os.path.isfile(s):
+        return s
+    return get_registry_model_path(s)
 
 
 @click.command(short_help="Clear assets directory.")

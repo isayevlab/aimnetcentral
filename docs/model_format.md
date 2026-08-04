@@ -13,10 +13,14 @@ AIMNet2 supports two model formats:
 
 ### Format Detection
 
-When loading a model via `load_model()`, the format is automatically detected:
+When loading a model via `load_model()`, the suffix determines the loader:
 
-- **New format**: Dictionary containing `"model_yaml"` key
-- **Legacy format**: `torch.jit.ScriptModule` instance
+- **`.jpt` (case-insensitive)**: `torch.jit.load()` through `load_legacy_jit()`
+- **Every other suffix, including `.pt`**: exactly one restricted `torch.load(..., weights_only=True)` call, followed by v2 envelope and YAML validation
+
+A TorchScript archive named `.pt` is not a legacy model for dispatch purposes: rename it to `.jpt` or convert it to v2. A v2 dictionary named `.jpt` is sent to `torch.jit.load()` and is not retried with pickle loading.
+
+`.jpt` loading is a trusted-code boundary. TorchScript is not a sandbox, so load only files whose source and embedded code you trust.
 
 ## Metadata Structure
 
@@ -29,6 +33,10 @@ Model metadata is returned by `load_model()` as a `ModelMetadata` TypedDict. For
 | `format_version` | `int` | `1` = legacy JIT, `2` = new format (default for early v2 bundles) |
 | `cutoff` | `float` | Model short-range cutoff radius (Å) |
 | `implemented_species` | `list[int]` | Supported atomic numbers |
+| `family` | `str \| None` | Released model family used for calculator defaults |
+| `supports_charged_systems` | `bool \| None` | Whether the model supports charged systems |
+| `has_embedded_lr` | `bool` | Whether long-range behavior is embedded |
+| `has_embedded_d3ts` | `bool` | Whether D3TS dispersion is embedded |
 
 ### Coulomb Configuration
 
@@ -45,6 +53,17 @@ Model metadata is returned by `load_model()` as a `ModelMetadata` TypedDict. For
 | --- | --- | --- | --- |
 | `needs_dispersion` | `bool` | If `True`, calculator should add external DFTD3 |
 | `d3_params` | `dict | None` | D3 parameters: `{s6, s8, a1, a2}` |
+
+### Validation Semantics
+
+Validation is deliberately layered:
+
+1. **Envelope/schema validation** checks the v2 dictionary, safe YAML, forbidden keys, authorized imports, scalar ranges, and tensor-only state values. An omitted v2 `format_version` defaults to 2; an explicit value must be the integer `2`.
+2. **Structural validation** checks intrinsic facts that caller flags cannot change. For example, `sr_embedded` requires a valid SR cutoff/envelope and embedded LR metadata, while embedded D3TS also requires embedded LR.
+3. **Canonical validation** adds distribution invariants for official registry artifacts, registry-backed HF fallback, and newly exported artifacts. It requires action flags and complete external-D3 metadata to agree with the artifact contents.
+4. **Effective validation** runs in the calculator after family defaults and explicit `needs_coulomb`/`needs_dispersion` flags are resolved. It permits explicit disabling of external components after structural validation, but rejects incompatible enabled components.
+
+Direct local v2 artifacts and complete third-party HF repositories require structural consistency rather than canonical action flags, preserving explicit calculator override compatibility.
 
 ## Which Format Should I Use?
 
@@ -88,7 +107,7 @@ The `coulomb_mode` field describes what Coulomb treatment is embedded in the mod
 │ Model:      E_NN - E_SR (SR Coulomb subtracted)                 │
 │ Calculator: + E_full (adds full Coulomb externally)             │
 │ Total:      E_NN + E_LR (SR cancels out)                        │
-│                                                                  │
+│                                                                 │
 │ Runtime control: ✓ Can switch simple/DSF/Ewald/PME              │
 │ File size:       Smaller (no LR modules embedded)               │
 └─────────────────────────────────────────────────────────────────┘
@@ -99,7 +118,7 @@ The `coulomb_mode` field describes what Coulomb treatment is embedded in the mod
 │ Model:      E_NN + E_Coulomb (full Coulomb embedded in JIT)     │
 │ Calculator: (nothing)                                           │
 │ Total:      E_NN + E_Coulomb                                    │
-│                                                                  │
+│                                                                 │
 │ Runtime control: ✗ Fixed method, warning only                   │
 │ File size:       Larger (modules in JIT)                        │
 └─────────────────────────────────────────────────────────────────┘
@@ -194,6 +213,10 @@ The envelope function defines how the SR interaction decays at the cutoff:
     "coulomb_sr_envelope": str | None,
     "d3_params": dict | None,    # DFTD3 params for external use
     "implemented_species": list[int],
+    "has_embedded_lr": bool,
+    "has_embedded_d3ts": bool,
+    "family": str | None,
+    "supports_charged_systems": bool | None,
     "state_dict": dict,          # Model weights (SAE baked in)
 }
 ```
@@ -205,6 +228,8 @@ TorchScript module with attributes:
 - `cutoff`: Model cutoff
 - `cutoff_lr`: Long-range cutoff (if applicable)
 - LRCoulomb and DFTD3/D3BJ modules embedded
+
+The loader synthesizes version-1 metadata with `has_embedded_lr=True`, `coulomb_mode="full_embedded"`, and both external-module action flags disabled.
 
 ## Exporting Models
 
@@ -231,11 +256,13 @@ aimnet export weights.pt model_v2.pt --model config.yaml --sae sae.yaml
 aimnet export weights.pt model.pt \
     --model config.yaml \
     --sae sae.yaml \
-    --needs-coulomb    # Override: force external Coulomb
-    --needs-dispersion # Override: force external DFTD3
+    --needs-coulomb \
+    --needs-dispersion
 ```
 
-Explicit flags override auto-detection from config.
+Explicit flags override auto-detection from config, subject to canonical consistency: `--no-coulomb` is invalid when `sr_embedded` is detected, and enabled dispersion requires `s8`, `a1`, and `a2`. For a trusted local custom constructor, repeat `--model-import-path` with each exact dotted path or trusted namespace pattern required by the model YAML.
+
+Export validates the complete canonical artifact before serialization. It writes a sibling temporary file and atomically replaces the destination only after serialization succeeds, so validation or save failures preserve an existing output file.
 
 ## Converting Legacy Models
 
@@ -252,9 +279,9 @@ aimnet convert model.jpt config.yaml model_v2.pt
 3. Extract `implemented_species` from `afv.weight` (non-NaN entries)
 4. Strip LR modules from config, add SRCoulomb if needed (requires determinable `rc`)
 5. Build core model from modified config
-6. Load weights from JIT state dict
-7. Validate keys (filter expected missing/unexpected)
-8. Convert `atomic_shift` to float64
+6. Convert `atomic_shift` to float64 before loading weights
+7. Load weights from JIT state dict
+8. Validate keys (filter expected missing/unexpected)
 9. Save with metadata
 
 ### Key Changes During Conversion
@@ -279,12 +306,73 @@ print(metadata["needs_coulomb"])
 print(metadata["coulomb_mode"])
 ```
 
+For a trusted legacy model, use the explicit loader:
+
+```python
+from aimnet.models import load_legacy_jit
+
+model, metadata = load_legacy_jit("legacy.jpt", device="cpu")
+```
+
 ### Loading Behavior
 
-- New format: Parses YAML, builds model, loads state dict
-- Legacy format: Returns JIT model directly
+- New format: Restricted-loads the envelope, validates the schema and model YAML, then builds the model and loads its state dict
+- Legacy format: Only a `.jpt` suffix routes to `torch.jit.load()`
 - Metadata always returned as `ModelMetadata` dict
-- `atomic_shift` converted to float64 after loading (precision)
+- v2 and safetensors weights are loaded on CPU; `atomic_shift` is converted to float64 before state loading, then the completed model moves to the requested device once
+- Missing real state-dict keys are fatal. Unexpected real keys warn for direct custom/HF artifacts and fail for registry artifacts; known format-migration keys remain filtered.
+- Direct, registry, and HF v2 paths share the same construction and state-loading behavior while retaining source-specific import and unexpected-key policies. These assembly and registry-policy helpers are implementation contracts, not additional stable top-level `aimnet.models` APIs.
+
+Official models are not currently bundled in wheels or source distributions. Registry artifacts are downloaded on demand and every cached, downstream- bundled, or downloaded candidate must match the registry SHA-256 digest before use. A stale bundled candidate fails closed rather than being replaced by a download.
+
+### Model YAML import policy
+
+Model YAML keys like `class` and `activation_fn` contain dotted references to Python classes or functions. AIMNet validates these references against the public `aimnet.models.ALLOWED_MODEL_IMPORT_PATHS` set:
+
+```python
+ALLOWED_MODEL_IMPORT_PATHS = frozenset({
+    "aimnet.models.AIMNet2",
+    "aimnet.models.aimnet2.AIMNet2",
+    "aimnet.modules.AtomicShift",
+    "aimnet.modules.AtomicSum",
+    "aimnet.modules.Dipole",
+    "aimnet.modules.Output",
+    "aimnet.modules.Quadrupole",
+    "aimnet.modules.SRCoulomb",
+    "torch.nn.GELU",
+    "torch.nn.init.xavier_normal_",
+})
+```
+
+Default imports are role-specific: AIMNet paths are model classes, `torch.nn.GELU` is the activation, and `torch.nn.init.xavier_normal_` is the initializer. Other `torch.nn` symbols such as `Linear`, `ReLU`, or `uniform_` must be supplied explicitly for a direct custom artifact. Training-only keys such as `fn`, `trainer`, and `evaluator` are rejected in inference artifacts.
+
+This release intentionally changes compatibility. To migrate:
+
+- Rename a trusted TorchScript `model.pt` to `model.jpt`, or convert it to v2 with `aimnet convert`.
+- Write `./name`, `../name`, or an absolute path when a local file collides with a registry name.
+- Fix inconsistent metadata and regenerate incomplete artifacts; disabling import checks does not disable metadata or state-dict validation.
+- Add each trusted custom import explicitly through `model_import_paths`; do not restore the broad namespace.
+- Treat registry checksum failures as provenance failures; do not replace the committed digest.
+
+Direct local v2 files and complete Hugging Face repositories support three import modes:
+
+- `extend` (default): trust `ALLOWED_MODEL_IMPORT_PATHS` plus `model_import_paths`.
+- `replace`: trust only `model_import_paths`, which must be nonempty.
+- `unsafe`: skip import-path checks. `model_import_paths` must be `None`. This can execute arbitrary imported code during model construction, so use it only for locally trusted artifacts.
+
+Caller-supplied entries may be exact dotted paths or namespace patterns ending in `.*`; each supplied entry is available to the class, activation, and initializer roles. For example:
+
+```python
+from aimnet.models import load_model
+
+model, metadata = load_model(
+    "custom.pt",
+    model_import_paths={"my_package.models.*"},
+    model_import_mode="extend",
+)
+```
+
+`unsafe` does not relax restricted deserialization, YAML parsing, metadata validation, or state-dict validation. Official registry names, registry metadata fallbacks, raw `nn.Module` inputs, and `.jpt` files accept only the default import settings.
 
 ## Metadata Behavior Summary
 
@@ -303,14 +391,22 @@ print(metadata["coulomb_mode"])
 
 ## API Reference
 
-### `load_model(path, device="cpu")`
+### `load_model(path, device="cpu", *, model_import_paths=None, model_import_mode="extend")`
 
-Load model from file with automatic format detection.
+Load model from file with suffix-based format dispatch.
 
 **Parameters:**
 
 - `path` (`str`): Path to model file (`.pt` or `.jpt`)
 - `device` (`str`): Device to load model on
+- `model_import_paths` (`Collection[str] | None`): Python import paths trusted for a direct v2 artifact. Entries may be exact dotted paths or namespaces ending in `.*`; each entry applies to every supported model-YAML import field.
+- `model_import_mode` (`"extend" | "replace" | "unsafe"`): `extend` adds caller paths to the defaults, `replace` uses only caller paths, and `unsafe` skips import-path checks. See [Model YAML import policy](#model-yaml-import-policy).
+
+Registry protection depends on preserving source information:
+
+- `resolve_model("aimnet2")` and `AIMNet2Calculator("aimnet2")` recognize registry names and aliases.
+- Hugging Face configurations without `model_yaml` retain registry provenance when they fall back to registry metadata.
+- `load_model(get_model_path("aimnet2"))` receives only a file path and therefore treats the file as a direct artifact.
 
 **Returns:**
 
@@ -491,6 +587,9 @@ aimnet export weights.pt model_v2.pt \
 # Override auto-detection
 --needs-coulomb       # Force external Coulomb
 --needs-dispersion    # Force external DFTD3
+--no-coulomb          # Disable external Coulomb when structurally compatible
+--no-dispersion       # Disable external DFTD3
+--model-import-path my_package.models.*  # Trust custom local export constructors
 ```
 
 ## CLI Commands

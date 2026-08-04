@@ -2,6 +2,11 @@
 
 Configuration and model building utilities.
 
+`load_yaml()` and `build_module()` expand nested `.yml`/`.yaml` references by
+default for trusted training and plugin configurations. Production artifact
+loaders pass `allow_file_references=False` so an artifact cannot redirect
+module construction to an untrusted sidecar YAML file.
+
 ## Build Module
 
 ::: aimnet.config.build_module
