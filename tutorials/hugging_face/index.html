@@ -2180,7 +2180,7 @@
 
 <span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;isayevlab/aimnet2-wb97m-d3&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>The first call downloads the model weights to the HF cache directory (<code>~/.cache/huggingface/hub/</code> by default) and reuses them on subsequent runs.</p>
+<p>The first call downloads the repository configuration, derives any omitted <code>SRCoulomb</code> cutoff and envelope metadata from an unambiguous definition in <code>model_yaml</code>, validates the resulting metadata, and only then downloads the selected weights to the HF cache directory (<code>~/.cache/huggingface/hub/</code> by default). Subsequent runs reuse the cache.</p>
 <h2 id="available-models">Available Models<a class="headerlink" href="#available-models" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -2247,11 +2247,11 @@
 <div class="highlight"><pre><span></span><code><span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;/path/to/local/repo&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="mixing-hf-and-registry-models">Mixing HF and Registry Models<a class="headerlink" href="#mixing-hf-and-registry-models" title="Permanent link">&para;</a></h2>
-<p>HF loading and the built-in GCS registry are independent. You can use both in the same script without any conflicts — HF extras are only imported when an HF repo ID is detected:</p>
+<p>Hugging Face repository IDs and registry aliases use separate loading paths and can be used in the same script. Optional HF dependencies are imported only when an HF source is detected:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Loads from Hugging Face (requires aimnet[hf]):</span>
 <span class="n">calc_hf</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;isayevlab/aimnet2-wb97m-d3&quot;</span><span class="p">)</span>
 
-<span class="c1"># Loads from GCS registry (no extra deps needed):</span>
+<span class="c1"># Loads from the official registry (no HF dependencies needed):</span>
 <span class="n">calc_registry</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="expected-repo-layout">Expected Repo Layout<a class="headerlink" href="#expected-repo-layout" title="Permanent link">&para;</a></h2>
@@ -2274,7 +2274,7 @@ ensemble_3.safetensors      # weights for member 3
 <tbody>
 <tr>
 <td><code>cutoff</code></td>
-<td>yes</td>
+<td>yes*</td>
 <td>Neighbor list cutoff in Å</td>
 </tr>
 <tr>
@@ -2298,18 +2298,66 @@ ensemble_3.safetensors      # weights for member 3
 <td><code>"none"</code>, <code>"sr_embedded"</code>, or <code>"full_embedded"</code></td>
 </tr>
 <tr>
+<td><code>format_version</code></td>
+<td>no</td>
+<td>Artifact metadata version; defaults to <code>2</code> for early v2 configs</td>
+</tr>
+<tr>
+<td><code>coulomb_sr_rc</code></td>
+<td>no</td>
+<td>Short-range Coulomb cutoff when <code>coulomb_mode="sr_embedded"</code></td>
+</tr>
+<tr>
+<td><code>coulomb_sr_envelope</code></td>
+<td>no</td>
+<td>Short-range Coulomb envelope, <code>"exp"</code> or <code>"cosine"</code></td>
+</tr>
+<tr>
+<td><code>d3_params</code></td>
+<td>no</td>
+<td>External DFTD3 parameters when <code>needs_dispersion</code> is true</td>
+</tr>
+<tr>
 <td><code>implemented_species</code></td>
 <td>no</td>
 <td>List of supported atomic numbers</td>
 </tr>
+<tr>
+<td><code>has_embedded_lr</code></td>
+<td>no</td>
+<td>Whether long-range behavior is embedded</td>
+</tr>
+<tr>
+<td><code>has_embedded_d3ts</code></td>
+<td>no</td>
+<td>Whether D3TS dispersion is embedded</td>
+</tr>
+<tr>
+<td><code>family</code></td>
+<td>no</td>
+<td>Released model family tag</td>
+</tr>
+<tr>
+<td><code>supports_charged_systems</code></td>
+<td>no</td>
+<td>Whether charged systems are supported</td>
+</tr>
 </tbody>
 </table>
-<p>*If <code>model_yaml</code> is absent, the loader falls back to the GCS registry using <code>member_names</code> (a list of registry keys) — useful for family-level uploads. A warning is issued in this case.</p>
+<p><em>For complete configs, <code>cutoff</code> is required. The loader validates the selected ensemble index, YAML imports, metadata schema, and intrinsic model consistency before resolving weights. For <code>coulomb_mode="sr_embedded"</code>, omitted <code>coulomb_sr_rc</code> or <code>coulomb_sr_envelope</code> can be derived from exactly one distinct complete <code>SRCoulomb</code> parameter pair in <code>model_yaml</code>; conflicting or ambiguous values are rejected.</em></p>
+<p><em>If <code>model_yaml</code> is absent, the loader falls back through the official registry using <code>member_names</code> or the registered family members. The digest-verified registry YAML and metadata are authoritative and receive canonical validation. Family-level HF fields are used only for routing; any repeated artifact metadata must exactly match the registry value. A warning is issued for this fallback.</em></p>
 <div class="admonition note">
-<p class="admonition-title">Security</p>
-<p>All <code>class:</code> entries in <code>model_yaml</code> are validated against an allowlist of <code>aimnet.*</code>
-classes before <code>build_module()</code> is called. Configs referencing arbitrary Python classes
-are rejected to prevent code execution via crafted <code>config.json</code> files.</p>
+<p class="admonition-title">Custom architectures</p>
+<p><code>model_yaml</code> may name Python classes or functions that are imported during
+model construction. AIMNet validates those references before loading
+weights or constructing the model.</p>
+<p>Repositories with their own <code>model_yaml</code> may use custom import settings.
+Registry fallback uses the immutable registry policy and rejects
+customization. See
+<a href="../../model_format/#model-yaml-import-policy">Model YAML import policy</a>.</p>
+<p>Missing real state-dict keys are fatal. Unexpected keys warn for complete
+custom repositories and fail for registry fallback. Weights are loaded on
+CPU, and the finished model is moved to the requested device once.</p>
 </div>
 <h2 id="interactive-demo">Interactive Demo<a class="headerlink" href="#interactive-demo" title="Permanent link">&para;</a></h2>
 <p>Try AIMNet2 directly in your browser without installing anything:</p>

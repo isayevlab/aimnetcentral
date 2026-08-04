@@ -1597,6 +1597,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#model-cache-recovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model cache recovery
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#installation" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2221,6 +2232,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#model-cache-recovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model cache recovery
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#installation" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2602,6 +2624,12 @@
 
 <h1 id="cli-reference">CLI Reference<a class="headerlink" href="#cli-reference" title="Permanent link">&para;</a></h1>
 <p>AIMNet2 provides command-line tools for training, model export, conversion, and data preprocessing.</p>
+<h2 id="model-cache-recovery">Model cache recovery<a class="headerlink" href="#model-cache-recovery" title="Permanent link">&para;</a></h2>
+<p>Official registry downloads are verified against the SHA-256 digest committed with each registry entry. Cache hits are re-hashed, and a failed download is never installed as the final cache file. A corrupt cache hit triggers one verified atomic replacement attempt; if failures persist, remove the cache and retry:</p>
+<div class="highlight"><pre><span></span><code>aimnet<span class="w"> </span>clear_model_cache
+</code></pre></div>
+<p>Do not replace a registry digest to work around a mismatch; investigate the artifact provenance and publish a new immutable filename when bytes change.</p>
+<p>Official wheels and source distributions currently contain no bundled model artifacts; registry models are downloaded on demand. A downstream bundled candidate is still digest-checked and fails closed when stale. Weekly strict fleet CI verifies every official registry digest, loads every artifact with the fixed registry import policy, and checks the exact role-specific YAML defaults.</p>
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
 <p>The <code>aimnet</code> entry point is installed with the core package. Training, export, and self-atomic-energy commands require the <code>train</code> extra:</p>
 <div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;aimnet[train]&quot;</span>
@@ -2778,12 +2806,16 @@ aimnet<span class="w"> </span>train<span class="w"> </span><span class="se">\</s
 <td>Self-atomic energies YAML (required)</td>
 </tr>
 <tr>
-<td><code>--needs-coulomb</code></td>
-<td>Force external Coulomb module</td>
+<td><code>--needs-coulomb</code> / <code>--no-coulomb</code></td>
+<td>Override external Coulomb detection</td>
 </tr>
 <tr>
-<td><code>--needs-dispersion</code></td>
-<td>Force external DFTD3 module</td>
+<td><code>--needs-dispersion</code> / <code>--no-dispersion</code></td>
+<td>Override external DFTD3 detection</td>
+</tr>
+<tr>
+<td><code>--model-import-path PATH</code></td>
+<td>Trust an exact constructor path or namespace for this local export; repeat as needed</td>
 </tr>
 </tbody>
 </table>
@@ -2796,8 +2828,10 @@ aimnet<span class="w"> </span>train<span class="w"> </span><span class="se">\</s
 <li>Loads trained weights</li>
 <li>Bakes SAE into atomic_shift as float64</li>
 <li>Masks unimplemented species</li>
-<li>Saves with metadata</li>
+<li>Validates the complete artifact with canonical distribution rules</li>
+<li>Serializes to a sibling temporary file and atomically replaces the output</li>
 </ol>
+<p><code>--no-coulomb</code> is rejected when an embedded short-range Coulomb subtraction requires an external full-Coulomb correction. Enabled dispersion requires complete <code>s8</code>, <code>a1</code>, and <code>a2</code> parameters. A validation or serialization failure leaves an existing output file unchanged.</p>
 <h3 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h3>
 <p><strong>Basic export:</strong></p>
 <div class="highlight"><pre><span></span><code>aimnet<span class="w"> </span><span class="nb">export</span><span class="w"> </span><span class="se">\</span>
@@ -2812,8 +2846,10 @@ aimnet<span class="w"> </span><span class="nb">export</span><span class="w"> </s
 <span class="w">  </span>--model<span class="w"> </span>config.yaml<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--sae<span class="w"> </span>sae.yaml<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--needs-coulomb<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--needs-dispersion
+<span class="w">  </span>--needs-dispersion<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--model-import-path<span class="w"> </span><span class="s2">&quot;my_package.models.*&quot;</span>
 </code></pre></div>
+<p><code>--model-import-path</code> is an explicit trust decision for local export. It extends the default constructor allowlist; it does not weaken safe YAML parsing, forbidden-key checks, metadata validation, or state-dict validation.</p>
 <p><strong>Export without dispersion:</strong></p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Model without DFTD3 correction</span>
 aimnet<span class="w"> </span><span class="nb">export</span><span class="w"> </span>weights.pt<span class="w"> </span>model_no_d3.pt<span class="w"> </span><span class="se">\</span>

@@ -2209,6 +2209,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#aimnet.models.base.assemble_v2_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        assemble_v2_model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#aimnet.models.base.load_legacy_jit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_legacy_jit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#aimnet.models.base.load_model" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2242,19 +2264,19 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#aimnet.models.base.load_model--notes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Notes
-      
-    </span>
-  </a>
+      </ul>
+    </nav>
   
 </li>
         
-      </ul>
-    </nav>
+          <li class="md-nav__item">
+  <a href="#aimnet.models.base.load_registry_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_registry_model
+      
+    </span>
+  </a>
   
 </li>
         
@@ -2808,6 +2830,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#aimnet.models.base.assemble_v2_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        assemble_v2_model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#aimnet.models.base.load_legacy_jit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_legacy_jit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#aimnet.models.base.load_model" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2841,19 +2885,19 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#aimnet.models.base.load_model--notes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Notes
-      
-    </span>
-  </a>
+      </ul>
+    </nav>
   
 </li>
         
-      </ul>
-    </nav>
+          <li class="md-nav__item">
+  <a href="#aimnet.models.base.load_registry_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_registry_model
+      
+    </span>
+  </a>
   
 </li>
         
@@ -3066,10 +3110,10 @@
     <span class="c1"># hp search hack</span>
     <span class="n">hidden</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">hidden</span> <span class="k">if</span> <span class="n">x</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">activation_fn</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-        <span class="n">activation_fn</span> <span class="o">=</span> <span class="n">get_init_module</span><span class="p">(</span><span class="n">activation_fn</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="n">activation_kwargs</span><span class="p">)</span>
+        <span class="n">activation_fn</span> <span class="o">=</span> <span class="n">get_init_module</span><span class="p">(</span><span class="n">activation_fn</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="n">activation_kwargs</span><span class="p">,</span> <span class="n">role</span><span class="o">=</span><span class="s2">&quot;activation&quot;</span><span class="p">)</span>
     <span class="n">activation</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">activation_fn</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weight_init_fn</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-        <span class="n">weight_init_fn</span> <span class="o">=</span> <span class="n">get_module</span><span class="p">(</span><span class="n">weight_init_fn</span><span class="p">)</span>
+        <span class="n">weight_init_fn</span> <span class="o">=</span> <span class="n">get_module</span><span class="p">(</span><span class="n">weight_init_fn</span><span class="p">,</span> <span class="n">role</span><span class="o">=</span><span class="s2">&quot;initializer&quot;</span><span class="p">)</span>
     <span class="n">weight_init</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">Callable</span><span class="p">[[</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">Any</span><span class="p">],</span> <span class="n">weight_init_fn</span><span class="p">)</span>
     <span class="n">sizes</span> <span class="o">=</span> <span class="p">[</span><span class="n">n_in</span><span class="p">,</span> <span class="o">*</span><span class="n">hidden</span><span class="p">,</span> <span class="n">n_out</span><span class="p">]</span>
     <span class="n">layers</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
@@ -4573,10 +4617,10 @@ converting to right dtype and device, setting nb mode, calculating masks.</p>
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>aimnet/models/base.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">211</span>
-<span class="normal">212</span>
-<span class="normal">213</span>
-<span class="normal">214</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">262</span>
+<span class="normal">263</span>
+<span class="normal">264</span>
+<span class="normal">265</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
     <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
     <span class="c1"># Use object.__setattr__ to avoid TorchScript tracing this attribute</span>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_metadata&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
@@ -4634,16 +4678,16 @@ converting to right dtype and device, setting nb mode, calculating masks.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/models/base.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">230</span>
-<span class="normal">231</span>
-<span class="normal">232</span>
-<span class="normal">233</span>
-<span class="normal">234</span>
-<span class="normal">235</span>
-<span class="normal">236</span>
-<span class="normal">237</span>
-<span class="normal">238</span>
-<span class="normal">239</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">prepare_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">281</span>
+<span class="normal">282</span>
+<span class="normal">283</span>
+<span class="normal">284</span>
+<span class="normal">285</span>
+<span class="normal">286</span>
+<span class="normal">287</span>
+<span class="normal">288</span>
+<span class="normal">289</span>
+<span class="normal">290</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">prepare_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Common operations for input preparation.&quot;&quot;&quot;</span>
     <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_dtype</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
     <span class="n">data</span> <span class="o">=</span> <span class="n">nbops</span><span class="o">.</span><span class="n">set_nb_mode</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
@@ -4720,75 +4764,93 @@ converting to right dtype and device, setting nb mode, calculating masks.</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="aimnet.models.base.load_model" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">load_model</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cpu&#39;</span><span class="p">)</span></code>
+<h3 id="aimnet.models.base.assemble_v2_model" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">assemble_v2_model</span><span class="p">(</span><span class="n">model_config</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">,</span> <span class="n">metadata</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="n">unexpected</span><span class="p">)</span></code>
 
-<a href="#aimnet.models.base.load_model" class="headerlink" title="Permanent link">&para;</a></h3>
+<a href="#aimnet.models.base.assemble_v2_model" class="headerlink" title="Permanent link">&para;</a></h3>
 
 
     <div class="doc doc-contents ">
 
-        <p>Load model from file, supporting both new and legacy formats.</p>
-<p>Automatically detects format:
-- New format: state dict with embedded YAML config and metadata
-- Legacy format: JIT-compiled TorchScript model</p>
-<h5 id="aimnet.models.base.load_model--parameters">Parameters<a class="headerlink" href="#aimnet.models.base.load_model--parameters" title="Permanent link">&para;</a></h5>
-<p>path : str
-    Path to the model file (.pt or .jpt).
-device : str
-    Device to load the model on. Default is "cpu".</p>
-<h5 id="aimnet.models.base.load_model--returns">Returns<a class="headerlink" href="#aimnet.models.base.load_model--returns" title="Permanent link">&para;</a></h5>
-<p>model : nn.Module
-    The loaded model with weights.
-metadata : ModelMetadata
-    Dictionary containing model metadata. See ModelMetadata TypedDict for fields.</p>
-<h5 id="aimnet.models.base.load_model--notes">Notes<a class="headerlink" href="#aimnet.models.base.load_model--notes" title="Permanent link">&para;</a></h5>
-<p>For legacy JIT models (format_version=1), <code>needs_coulomb</code> and <code>needs_dispersion</code>
-are False because LR modules are already embedded in the TorchScript model.</p>
+        <p>Construct and populate a validated v2 model under an explicit policy.</p>
 
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/models/base.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 53</span>
-<span class="normal"> 54</span>
-<span class="normal"> 55</span>
-<span class="normal"> 56</span>
-<span class="normal"> 57</span>
-<span class="normal"> 58</span>
-<span class="normal"> 59</span>
-<span class="normal"> 60</span>
-<span class="normal"> 61</span>
-<span class="normal"> 62</span>
-<span class="normal"> 63</span>
-<span class="normal"> 64</span>
-<span class="normal"> 65</span>
-<span class="normal"> 66</span>
-<span class="normal"> 67</span>
-<span class="normal"> 68</span>
-<span class="normal"> 69</span>
-<span class="normal"> 70</span>
-<span class="normal"> 71</span>
-<span class="normal"> 72</span>
-<span class="normal"> 73</span>
-<span class="normal"> 74</span>
-<span class="normal"> 75</span>
-<span class="normal"> 76</span>
-<span class="normal"> 77</span>
-<span class="normal"> 78</span>
-<span class="normal"> 79</span>
-<span class="normal"> 80</span>
-<span class="normal"> 81</span>
-<span class="normal"> 82</span>
-<span class="normal"> 83</span>
-<span class="normal"> 84</span>
-<span class="normal"> 85</span>
-<span class="normal"> 86</span>
-<span class="normal"> 87</span>
-<span class="normal"> 88</span>
-<span class="normal"> 89</span>
-<span class="normal"> 90</span>
-<span class="normal"> 91</span>
-<span class="normal"> 92</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">65</span>
+<span class="normal">66</span>
+<span class="normal">67</span>
+<span class="normal">68</span>
+<span class="normal">69</span>
+<span class="normal">70</span>
+<span class="normal">71</span>
+<span class="normal">72</span>
+<span class="normal">73</span>
+<span class="normal">74</span>
+<span class="normal">75</span>
+<span class="normal">76</span>
+<span class="normal">77</span>
+<span class="normal">78</span>
+<span class="normal">79</span>
+<span class="normal">80</span>
+<span class="normal">81</span>
+<span class="normal">82</span>
+<span class="normal">83</span>
+<span class="normal">84</span>
+<span class="normal">85</span>
+<span class="normal">86</span>
+<span class="normal">87</span>
+<span class="normal">88</span>
+<span class="normal">89</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">assemble_v2_model</span><span class="p">(</span>
+    <span class="n">model_config</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">state_dict</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">metadata</span><span class="p">:</span> <span class="n">ModelMetadata</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">policy</span><span class="p">:</span> <span class="n">ModelImportPolicy</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">source</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">unexpected</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;warn&quot;</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Construct and populate a validated v2 model under an explicit policy.&quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">):</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">build_module</span><span class="p">(</span>
+            <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">model_config</span><span class="p">),</span>
+            <span class="n">allow_file_references</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">import_authorizer</span><span class="o">=</span><span class="n">policy</span><span class="o">.</span><span class="n">require_allowed</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Built model configuration did not produce an nn.Module.&quot;</span><span class="p">)</span>
+
+    <span class="n">convert_atomic_shifts_to_float64</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+    <span class="n">load_state_dict_checked</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">source</span><span class="p">,</span> <span class="n">unexpected</span><span class="o">=</span><span class="n">unexpected</span><span class="p">)</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">model</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;_metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">metadata</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">model</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="aimnet.models.base.load_legacy_jit" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">load_legacy_jit</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cpu&#39;</span><span class="p">)</span></code>
+
+<a href="#aimnet.models.base.load_legacy_jit" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Load a legacy TorchScript model from a trusted <code>.jpt</code> source.</p>
+<p>TorchScript is format-specific but is not a sandbox. Only load <code>.jpt</code>
+files from sources whose code and provenance the caller trusts.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>aimnet/models/base.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 92</span>
 <span class="normal"> 93</span>
 <span class="normal"> 94</span>
 <span class="normal"> 95</span>
@@ -4809,10 +4871,77 @@ are False because LR modules are already embedded in the TorchScript model.</p>
 <span class="normal">110</span>
 <span class="normal">111</span>
 <span class="normal">112</span>
-<span class="normal">113</span>
-<span class="normal">114</span>
-<span class="normal">115</span>
-<span class="normal">116</span>
+<span class="normal">113</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_legacy_jit</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">ScriptModule</span><span class="p">,</span> <span class="n">ModelMetadata</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load a legacy TorchScript model from a trusted ``.jpt`` source.</span>
+
+<span class="sd">    TorchScript is format-specific but is not a sandbox. Only load ``.jpt``</span>
+<span class="sd">    files from sources whose code and provenance the caller trusts.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">map_location</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">legacy_metadata</span><span class="p">:</span> <span class="n">ModelMetadata</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;format_version&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="s2">&quot;cutoff&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">cutoff</span><span class="p">),</span>
+        <span class="s2">&quot;needs_coulomb&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">&quot;needs_dispersion&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">&quot;coulomb_mode&quot;</span><span class="p">:</span> <span class="s2">&quot;full_embedded&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;has_embedded_lr&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">&quot;d3_params&quot;</span><span class="p">:</span> <span class="n">extract_d3_params</span><span class="p">(</span><span class="n">model</span><span class="p">)</span> <span class="k">if</span> <span class="n">has_externalizable_dftd3</span><span class="p">(</span><span class="n">model</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">&quot;implemented_species&quot;</span><span class="p">:</span> <span class="n">extract_species</span><span class="p">(</span><span class="n">model</span><span class="p">),</span>
+    <span class="p">}</span>
+
+    <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">RuntimeError</span><span class="p">):</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">legacy_metadata</span>  <span class="c1"># type: ignore[attr-defined]</span>
+
+    <span class="k">return</span> <span class="n">model</span><span class="p">,</span> <span class="n">legacy_metadata</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="aimnet.models.base.load_model" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">load_model</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cpu&#39;</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">model_import_paths</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">model_import_mode</span><span class="o">=</span><span class="s1">&#39;extend&#39;</span><span class="p">)</span></code>
+
+<a href="#aimnet.models.base.load_model" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Load a v2 model or explicitly routed legacy <code>.jpt</code> model.</p>
+<p>Files ending in <code>.jpt</code> (case-insensitive) are loaded with
+:func:<code>torch.jit.load</code> and therefore must come from a trusted source.
+Every other suffix is loaded exactly once with restricted
+<code>torch.load(weights_only=True)</code>.</p>
+<h5 id="aimnet.models.base.load_model--parameters">Parameters<a class="headerlink" href="#aimnet.models.base.load_model--parameters" title="Permanent link">&para;</a></h5>
+<p>path : str
+    Path to a v2 <code>.pt</code> or trusted legacy <code>.jpt</code> model.
+device : str
+    Device on which to load the model.
+model_import_paths : Collection[str] | None
+    Python imports trusted when loading a v2 file. Entries are exact dotted
+    paths or namespaces ending in <code>.*</code>, such as
+    <code>{"my_package.models.CustomModel", "my_package.layers.*"}</code>.
+model_import_mode : {"extend", "replace", "unsafe"}
+    <code>extend</code> adds <code>model_import_paths</code> to the default trusted paths;
+    <code>replace</code> requires a nonempty collection and uses only those paths.
+    <code>unsafe</code> cannot be combined with paths and permits arbitrary imported
+    constructors. No mode relaxes restricted deserialization or artifact
+    validation.</p>
+<h5 id="aimnet.models.base.load_model--returns">Returns<a class="headerlink" href="#aimnet.models.base.load_model--returns" title="Permanent link">&para;</a></h5>
+<p>model : nn.Module
+    The loaded model with weights.
+metadata : ModelMetadata
+    Validated model metadata.</p>
+<p>Use <code>unsafe</code> only for locally trusted artifacts. Legacy <code>.jpt</code> files
+accept only <code>model_import_paths=None</code> and <code>model_import_mode="extend"</code>.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>aimnet/models/base.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">116</span>
 <span class="normal">117</span>
 <span class="normal">118</span>
 <span class="normal">119</span>
@@ -4858,118 +4987,92 @@ are False because LR modules are already embedded in the TorchScript model.</p>
 <span class="normal">159</span>
 <span class="normal">160</span>
 <span class="normal">161</span>
-<span class="normal">162</span>
-<span class="normal">163</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_model</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">ModelMetadata</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load model from file, supporting both new and legacy formats.</span>
+<span class="normal">162</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_model</span><span class="p">(</span>
+    <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">model_import_paths</span><span class="p">:</span> <span class="n">Collection</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">model_import_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;extend&quot;</span><span class="p">,</span> <span class="s2">&quot;replace&quot;</span><span class="p">,</span> <span class="s2">&quot;unsafe&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;extend&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">ModelMetadata</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load a v2 model or explicitly routed legacy ``.jpt`` model.</span>
 
-<span class="sd">    Automatically detects format:</span>
-<span class="sd">    - New format: state dict with embedded YAML config and metadata</span>
-<span class="sd">    - Legacy format: JIT-compiled TorchScript model</span>
+<span class="sd">    Files ending in ``.jpt`` (case-insensitive) are loaded with</span>
+<span class="sd">    :func:`torch.jit.load` and therefore must come from a trusted source.</span>
+<span class="sd">    Every other suffix is loaded exactly once with restricted</span>
+<span class="sd">    ``torch.load(weights_only=True)``.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    path : str</span>
-<span class="sd">        Path to the model file (.pt or .jpt).</span>
+<span class="sd">        Path to a v2 ``.pt`` or trusted legacy ``.jpt`` model.</span>
 <span class="sd">    device : str</span>
-<span class="sd">        Device to load the model on. Default is &quot;cpu&quot;.</span>
+<span class="sd">        Device on which to load the model.</span>
+<span class="sd">    model_import_paths : Collection[str] | None</span>
+<span class="sd">        Python imports trusted when loading a v2 file. Entries are exact dotted</span>
+<span class="sd">        paths or namespaces ending in ``.*``, such as</span>
+<span class="sd">        ``{&quot;my_package.models.CustomModel&quot;, &quot;my_package.layers.*&quot;}``.</span>
+<span class="sd">    model_import_mode : {&quot;extend&quot;, &quot;replace&quot;, &quot;unsafe&quot;}</span>
+<span class="sd">        ``extend`` adds ``model_import_paths`` to the default trusted paths;</span>
+<span class="sd">        ``replace`` requires a nonempty collection and uses only those paths.</span>
+<span class="sd">        ``unsafe`` cannot be combined with paths and permits arbitrary imported</span>
+<span class="sd">        constructors. No mode relaxes restricted deserialization or artifact</span>
+<span class="sd">        validation.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    model : nn.Module</span>
 <span class="sd">        The loaded model with weights.</span>
 <span class="sd">    metadata : ModelMetadata</span>
-<span class="sd">        Dictionary containing model metadata. See ModelMetadata TypedDict for fields.</span>
+<span class="sd">        Validated model metadata.</span>
 
-<span class="sd">    Notes</span>
-<span class="sd">    -----</span>
-<span class="sd">    For legacy JIT models (format_version=1), `needs_coulomb` and `needs_dispersion`</span>
-<span class="sd">    are False because LR modules are already embedded in the TorchScript model.</span>
+<span class="sd">    Use ``unsafe`` only for locally trusted artifacts. Legacy ``.jpt`` files</span>
+<span class="sd">    accept only ``model_import_paths=None`` and ``model_import_mode=&quot;extend&quot;``.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">yaml</span>
+    <span class="n">policy</span> <span class="o">=</span> <span class="n">resolve_model_import_policy</span><span class="p">(</span><span class="n">model_import_paths</span><span class="p">,</span> <span class="n">model_import_mode</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">is_legacy_jit_path</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">uses_default_model_import_settings</span><span class="p">(</span><span class="n">model_import_paths</span><span class="p">,</span> <span class="n">model_import_mode</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Import settings are not supported for .jpt sources.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">load_legacy_jit</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_load_v2_model</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">policy</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
 
-    <span class="c1"># Try weights_only=True first (secure for new .pt format).</span>
-    <span class="c1"># Falls back to weights_only=False for legacy TorchScript .jpt archives,</span>
-    <span class="c1"># which require full deserialization to load the frozen computation graph.</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">map_location</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">weights_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-        <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span> <span class="s2">&quot;.*looks like a TorchScript archive.*&quot;</span><span class="p">)</span>
-            <span class="n">data</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">map_location</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">weights_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</div>
 
-    <span class="c1"># Check result type to determine format</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;model_yaml&quot;</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
-        <span class="c1"># New state dict format</span>
-        <span class="n">model_config</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;model_yaml&quot;</span><span class="p">])</span>
-        <span class="n">model</span> <span class="o">=</span> <span class="n">build_module</span><span class="p">(</span><span class="n">model_config</span><span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Built model configuration did not produce an nn.Module.&quot;</span><span class="p">)</span>
+<div class="doc doc-object doc-function">
 
-        <span class="c1"># Atomic shifts store SAE/reference-energy values and may be float64 in</span>
-        <span class="c1"># the file. Cast before load_state_dict so copy_ does not truncate them</span>
-        <span class="c1"># into the default float32 embedding.</span>
-        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;outputs&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">outputs</span><span class="p">,</span> <span class="s2">&quot;atomic_shift&quot;</span><span class="p">):</span>
-            <span class="n">model</span><span class="o">.</span><span class="n">outputs</span><span class="o">.</span><span class="n">atomic_shift</span><span class="o">.</span><span class="n">double</span><span class="p">()</span>
 
-        <span class="c1"># Use strict=False because modules may differ between formats</span>
-        <span class="n">load_result</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;state_dict&quot;</span><span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<h3 id="aimnet.models.base.load_registry_model" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">load_registry_model</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cpu&#39;</span><span class="p">)</span></code>
 
-        <span class="c1"># Check for unexpected missing/extra keys</span>
-        <span class="n">real_missing</span><span class="p">,</span> <span class="n">real_unexpected</span> <span class="o">=</span> <span class="n">validate_state_dict_keys</span><span class="p">(</span><span class="n">load_result</span><span class="o">.</span><span class="n">missing_keys</span><span class="p">,</span> <span class="n">load_result</span><span class="o">.</span><span class="n">unexpected_keys</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">real_missing</span> <span class="ow">or</span> <span class="n">real_unexpected</span><span class="p">:</span>
-            <span class="n">msg_parts</span> <span class="o">=</span> <span class="p">[]</span>
-            <span class="k">if</span> <span class="n">real_missing</span><span class="p">:</span>
-                <span class="n">msg_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Missing keys: </span><span class="si">{</span><span class="n">real_missing</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">real_unexpected</span><span class="p">:</span>
-                <span class="n">msg_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected keys: </span><span class="si">{</span><span class="n">real_unexpected</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;State dict mismatch during model loading. </span><span class="si">{</span><span class="s1">&#39;; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">msg_parts</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<a href="#aimnet.models.base.load_registry_model" class="headerlink" title="Permanent link">&para;</a></h3>
 
-        <span class="n">model</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
 
-        <span class="n">metadata</span><span class="p">:</span> <span class="n">ModelMetadata</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;format_version&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;format_version&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>  <span class="c1"># Default 2 for early v2 files without version</span>
-            <span class="s2">&quot;cutoff&quot;</span><span class="p">:</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;cutoff&quot;</span><span class="p">],</span>
-            <span class="s2">&quot;needs_coulomb&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;needs_coulomb&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
-            <span class="s2">&quot;needs_dispersion&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;needs_dispersion&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
-            <span class="s2">&quot;coulomb_mode&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;coulomb_mode&quot;</span><span class="p">,</span> <span class="s2">&quot;none&quot;</span><span class="p">),</span>
-            <span class="s2">&quot;coulomb_sr_rc&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;coulomb_sr_rc&quot;</span><span class="p">),</span>
-            <span class="s2">&quot;coulomb_sr_envelope&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;coulomb_sr_envelope&quot;</span><span class="p">),</span>
-            <span class="s2">&quot;d3_params&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;d3_params&quot;</span><span class="p">),</span>
-            <span class="s2">&quot;has_embedded_lr&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;has_embedded_lr&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
-            <span class="s2">&quot;implemented_species&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;implemented_species&quot;</span><span class="p">,</span> <span class="p">[]),</span>
-            <span class="s2">&quot;family&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;family&quot;</span><span class="p">),</span>
-            <span class="s2">&quot;supports_charged_systems&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;supports_charged_systems&quot;</span><span class="p">),</span>
-            <span class="s2">&quot;has_embedded_d3ts&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;has_embedded_d3ts&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
-        <span class="p">}</span>
+    <div class="doc doc-contents ">
 
-        <span class="c1"># Attach metadata to model for easy access</span>
-        <span class="n">model</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">metadata</span>  <span class="c1"># type: ignore[assignment]</span>
+        <p>Load a registry artifact with its immutable import policy.</p>
 
-        <span class="k">return</span> <span class="n">model</span><span class="p">,</span> <span class="n">metadata</span>
 
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">ScriptModule</span><span class="p">):</span>
-        <span class="c1"># Legacy JIT format - LR modules are already embedded in the TorchScript model</span>
-        <span class="n">model</span> <span class="o">=</span> <span class="n">data</span>
-        <span class="n">legacy_metadata</span><span class="p">:</span> <span class="n">ModelMetadata</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;format_version&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>  <span class="c1"># Legacy .jpt format is v1</span>
-            <span class="s2">&quot;cutoff&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">cutoff</span><span class="p">),</span>
-            <span class="c1"># Legacy models have LR modules embedded - don&#39;t add external ones</span>
-            <span class="s2">&quot;needs_coulomb&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-            <span class="s2">&quot;needs_dispersion&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-            <span class="s2">&quot;coulomb_mode&quot;</span><span class="p">:</span> <span class="s2">&quot;full_embedded&quot;</span><span class="p">,</span>
-            <span class="c1"># No coulomb_sr_rc/envelope for legacy (full Coulomb is embedded)</span>
-            <span class="s2">&quot;d3_params&quot;</span><span class="p">:</span> <span class="n">extract_d3_params</span><span class="p">(</span><span class="n">model</span><span class="p">)</span> <span class="k">if</span> <span class="n">has_externalizable_dftd3</span><span class="p">(</span><span class="n">model</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-            <span class="s2">&quot;implemented_species&quot;</span><span class="p">:</span> <span class="n">extract_species</span><span class="p">(</span><span class="n">model</span><span class="p">),</span>
-        <span class="p">}</span>
-
-        <span class="c1"># Attempt metadata assignment; silently fails for JIT models</span>
-        <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">RuntimeError</span><span class="p">):</span>
-            <span class="n">model</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">legacy_metadata</span>  <span class="c1"># type: ignore[attr-defined]</span>
-
-        <span class="k">return</span> <span class="n">model</span><span class="p">,</span> <span class="n">legacy_metadata</span>
-
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown model format: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>aimnet/models/base.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span>
+<span class="normal">211</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_registry_model</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">ModelMetadata</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load a registry artifact with its immutable import policy.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_load_v2_model</span><span class="p">(</span>
+        <span class="n">path</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">,</span>
+        <span class="n">REGISTRY_IMPORT_POLICY</span><span class="p">,</span>
+        <span class="n">validation</span><span class="o">=</span><span class="s2">&quot;canonical&quot;</span><span class="p">,</span>
+        <span class="n">unexpected</span><span class="o">=</span><span class="s2">&quot;error&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>

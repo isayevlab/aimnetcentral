@@ -1613,6 +1613,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#validation-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation Semantics
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1936,6 +1947,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#model-yaml-import-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model YAML import policy
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1965,10 +1987,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#load_modelpath-devicecpu" class="md-nav__link">
+  <a href="#load_modelpath-devicecpu-model_import_pathsnone-model_import_modeextend" class="md-nav__link">
     <span class="md-ellipsis">
       
-        load_model(path, device="cpu")
+        load_model(path, device="cpu", *, model_import_paths=None, model_import_mode="extend")
       
     </span>
   </a>
@@ -2539,6 +2561,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#validation-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation Semantics
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2862,6 +2895,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#model-yaml-import-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model YAML import policy
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2891,10 +2935,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#load_modelpath-devicecpu" class="md-nav__link">
+  <a href="#load_modelpath-devicecpu-model_import_pathsnone-model_import_modeextend" class="md-nav__link">
     <span class="md-ellipsis">
       
-        load_model(path, device="cpu")
+        load_model(path, device="cpu", *, model_import_paths=None, model_import_mode="extend")
       
     </span>
   </a>
@@ -3121,11 +3165,13 @@
 </tbody>
 </table>
 <h3 id="format-detection">Format Detection<a class="headerlink" href="#format-detection" title="Permanent link">&para;</a></h3>
-<p>When loading a model via <code>load_model()</code>, the format is automatically detected:</p>
+<p>When loading a model via <code>load_model()</code>, the suffix determines the loader:</p>
 <ul>
-<li><strong>New format</strong>: Dictionary containing <code>"model_yaml"</code> key</li>
-<li><strong>Legacy format</strong>: <code>torch.jit.ScriptModule</code> instance</li>
+<li><strong><code>.jpt</code> (case-insensitive)</strong>: <code>torch.jit.load()</code> through <code>load_legacy_jit()</code></li>
+<li><strong>Every other suffix, including <code>.pt</code></strong>: exactly one restricted <code>torch.load(..., weights_only=True)</code> call, followed by v2 envelope and YAML validation</li>
 </ul>
+<p>A TorchScript archive named <code>.pt</code> is not a legacy model for dispatch purposes: rename it to <code>.jpt</code> or convert it to v2. A v2 dictionary named <code>.jpt</code> is sent to <code>torch.jit.load()</code> and is not retried with pickle loading.</p>
+<p><code>.jpt</code> loading is a trusted-code boundary. TorchScript is not a sandbox, so load only files whose source and embedded code you trust.</p>
 <h2 id="metadata-structure">Metadata Structure<a class="headerlink" href="#metadata-structure" title="Permanent link">&para;</a></h2>
 <p>Model metadata is returned by <code>load_model()</code> as a <code>ModelMetadata</code> TypedDict. For early v2 bundles that predate <code>format_version</code>, <code>load_model()</code> defaults to <code>format_version=2</code>.</p>
 <h3 id="core-fields">Core Fields<a class="headerlink" href="#core-fields" title="Permanent link">&para;</a></h3>
@@ -3153,6 +3199,26 @@
 <td><code>list[int]</code></td>
 <td>Supported atomic numbers</td>
 </tr>
+<tr>
+<td><code>family</code></td>
+<td><code>str \| None</code></td>
+<td>Released model family used for calculator defaults</td>
+</tr>
+<tr>
+<td><code>supports_charged_systems</code></td>
+<td><code>bool \| None</code></td>
+<td>Whether the model supports charged systems</td>
+</tr>
+<tr>
+<td><code>has_embedded_lr</code></td>
+<td><code>bool</code></td>
+<td>Whether long-range behavior is embedded</td>
+</tr>
+<tr>
+<td><code>has_embedded_d3ts</code></td>
+<td><code>bool</code></td>
+<td>Whether D3TS dispersion is embedded</td>
+</tr>
 </tbody>
 </table>
 <h3 id="coulomb-configuration">Coulomb Configuration<a class="headerlink" href="#coulomb-configuration" title="Permanent link">&para;</a></h3>
@@ -3167,6 +3233,15 @@
 | --- | --- | --- | --- |
 | <code>needs_dispersion</code> | <code>bool</code> | If <code>True</code>, calculator should add external DFTD3 |
 | <code>d3_params</code> | <code>dict | None</code> | D3 parameters: <code>{s6, s8, a1, a2}</code> |</p>
+<h3 id="validation-semantics">Validation Semantics<a class="headerlink" href="#validation-semantics" title="Permanent link">&para;</a></h3>
+<p>Validation is deliberately layered:</p>
+<ol>
+<li><strong>Envelope/schema validation</strong> checks the v2 dictionary, safe YAML, forbidden keys, authorized imports, scalar ranges, and tensor-only state values. An omitted v2 <code>format_version</code> defaults to 2; an explicit value must be the integer <code>2</code>.</li>
+<li><strong>Structural validation</strong> checks intrinsic facts that caller flags cannot change. For example, <code>sr_embedded</code> requires a valid SR cutoff/envelope and embedded LR metadata, while embedded D3TS also requires embedded LR.</li>
+<li><strong>Canonical validation</strong> adds distribution invariants for official registry artifacts, registry-backed HF fallback, and newly exported artifacts. It requires action flags and complete external-D3 metadata to agree with the artifact contents.</li>
+<li><strong>Effective validation</strong> runs in the calculator after family defaults and explicit <code>needs_coulomb</code>/<code>needs_dispersion</code> flags are resolved. It permits explicit disabling of external components after structural validation, but rejects incompatible enabled components.</li>
+</ol>
+<p>Direct local v2 artifacts and complete third-party HF repositories require structural consistency rather than canonical action flags, preserving explicit calculator override compatibility.</p>
 <h2 id="which-format-should-i-use">Which Format Should I Use?<a class="headerlink" href="#which-format-should-i-use" title="Permanent link">&para;</a></h2>
 <h3 id="decision-matrix">Decision Matrix<a class="headerlink" href="#decision-matrix" title="Permanent link">&para;</a></h3>
 <table>
@@ -3241,7 +3316,7 @@
 │ Model:      E_NN - E_SR (SR Coulomb subtracted)                 │
 │ Calculator: + E_full (adds full Coulomb externally)             │
 │ Total:      E_NN + E_LR (SR cancels out)                        │
-│                                                                  │
+│                                                                 │
 │ Runtime control: ✓ Can switch simple/DSF/Ewald/PME              │
 │ File size:       Smaller (no LR modules embedded)               │
 └─────────────────────────────────────────────────────────────────┘
@@ -3252,7 +3327,7 @@
 │ Model:      E_NN + E_Coulomb (full Coulomb embedded in JIT)     │
 │ Calculator: (nothing)                                           │
 │ Total:      E_NN + E_Coulomb                                    │
-│                                                                  │
+│                                                                 │
 │ Runtime control: ✗ Fixed method, warning only                   │
 │ File size:       Larger (modules in JIT)                        │
 └─────────────────────────────────────────────────────────────────┘
@@ -3337,6 +3412,10 @@
     <span class="s2">&quot;coulomb_sr_envelope&quot;</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="s2">&quot;d3_params&quot;</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>    <span class="c1"># DFTD3 params for external use</span>
     <span class="s2">&quot;implemented_species&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+    <span class="s2">&quot;has_embedded_lr&quot;</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="s2">&quot;has_embedded_d3ts&quot;</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="s2">&quot;family&quot;</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="s2">&quot;supports_charged_systems&quot;</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="s2">&quot;state_dict&quot;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>          <span class="c1"># Model weights (SAE baked in)</span>
 <span class="p">}</span>
 </code></pre></div>
@@ -3347,6 +3426,7 @@
 <li><code>cutoff_lr</code>: Long-range cutoff (if applicable)</li>
 <li>LRCoulomb and DFTD3/D3BJ modules embedded</li>
 </ul>
+<p>The loader synthesizes version-1 metadata with <code>has_embedded_lr=True</code>, <code>coulomb_mode="full_embedded"</code>, and both external-module action flags disabled.</p>
 <h2 id="exporting-models">Exporting Models<a class="headerlink" href="#exporting-models" title="Permanent link">&para;</a></h2>
 <p>Use the <code>aimnet export</code> CLI command:</p>
 <div class="highlight"><pre><span></span><code>aimnet<span class="w"> </span><span class="nb">export</span><span class="w"> </span>weights.pt<span class="w"> </span>model_v2.pt<span class="w"> </span>--model<span class="w"> </span>config.yaml<span class="w"> </span>--sae<span class="w"> </span>sae.yaml
@@ -3366,10 +3446,11 @@
 <div class="highlight"><pre><span></span><code>aimnet<span class="w"> </span><span class="nb">export</span><span class="w"> </span>weights.pt<span class="w"> </span>model.pt<span class="w"> </span><span class="se">\</span>
 <span class="w">    </span>--model<span class="w"> </span>config.yaml<span class="w"> </span><span class="se">\</span>
 <span class="w">    </span>--sae<span class="w"> </span>sae.yaml<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>--needs-coulomb<span class="w">    </span><span class="c1"># Override: force external Coulomb</span>
-<span class="w">    </span>--needs-dispersion<span class="w"> </span><span class="c1"># Override: force external DFTD3</span>
+<span class="w">    </span>--needs-coulomb<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--needs-dispersion
 </code></pre></div>
-<p>Explicit flags override auto-detection from config.</p>
+<p>Explicit flags override auto-detection from config, subject to canonical consistency: <code>--no-coulomb</code> is invalid when <code>sr_embedded</code> is detected, and enabled dispersion requires <code>s8</code>, <code>a1</code>, and <code>a2</code>. For a trusted local custom constructor, repeat <code>--model-import-path</code> with each exact dotted path or trusted namespace pattern required by the model YAML.</p>
+<p>Export validates the complete canonical artifact before serialization. It writes a sibling temporary file and atomically replaces the destination only after serialization succeeds, so validation or save failures preserve an existing output file.</p>
 <h2 id="converting-legacy-models">Converting Legacy Models<a class="headerlink" href="#converting-legacy-models" title="Permanent link">&para;</a></h2>
 <p>Use the <code>aimnet convert</code> CLI command:</p>
 <div class="highlight"><pre><span></span><code>aimnet<span class="w"> </span>convert<span class="w"> </span>model.jpt<span class="w"> </span>config.yaml<span class="w"> </span>model_v2.pt
@@ -3381,9 +3462,9 @@
 <li>Extract <code>implemented_species</code> from <code>afv.weight</code> (non-NaN entries)</li>
 <li>Strip LR modules from config, add SRCoulomb if needed (requires determinable <code>rc</code>)</li>
 <li>Build core model from modified config</li>
+<li>Convert <code>atomic_shift</code> to float64 before loading weights</li>
 <li>Load weights from JIT state dict</li>
 <li>Validate keys (filter expected missing/unexpected)</li>
-<li>Convert <code>atomic_shift</code> to float64</li>
 <li>Save with metadata</li>
 </ol>
 <h3 id="key-changes-during-conversion">Key Changes During Conversion<a class="headerlink" href="#key-changes-during-conversion" title="Permanent link">&para;</a></h3>
@@ -3423,13 +3504,61 @@
 <span class="nb">print</span><span class="p">(</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;needs_coulomb&quot;</span><span class="p">])</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;coulomb_mode&quot;</span><span class="p">])</span>
 </code></pre></div>
+<p>For a trusted legacy model, use the explicit loader:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_legacy_jit</span>
+
+<span class="n">model</span><span class="p">,</span> <span class="n">metadata</span> <span class="o">=</span> <span class="n">load_legacy_jit</span><span class="p">(</span><span class="s2">&quot;legacy.jpt&quot;</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+</code></pre></div>
 <h3 id="loading-behavior">Loading Behavior<a class="headerlink" href="#loading-behavior" title="Permanent link">&para;</a></h3>
 <ul>
-<li>New format: Parses YAML, builds model, loads state dict</li>
-<li>Legacy format: Returns JIT model directly</li>
+<li>New format: Restricted-loads the envelope, validates the schema and model YAML, then builds the model and loads its state dict</li>
+<li>Legacy format: Only a <code>.jpt</code> suffix routes to <code>torch.jit.load()</code></li>
 <li>Metadata always returned as <code>ModelMetadata</code> dict</li>
-<li><code>atomic_shift</code> converted to float64 after loading (precision)</li>
+<li>v2 and safetensors weights are loaded on CPU; <code>atomic_shift</code> is converted to float64 before state loading, then the completed model moves to the requested device once</li>
+<li>Missing real state-dict keys are fatal. Unexpected real keys warn for direct custom/HF artifacts and fail for registry artifacts; known format-migration keys remain filtered.</li>
+<li>Direct, registry, and HF v2 paths share the same construction and state-loading behavior while retaining source-specific import and unexpected-key policies. These assembly and registry-policy helpers are implementation contracts, not additional stable top-level <code>aimnet.models</code> APIs.</li>
 </ul>
+<p>Official models are not currently bundled in wheels or source distributions. Registry artifacts are downloaded on demand and every cached, downstream- bundled, or downloaded candidate must match the registry SHA-256 digest before use. A stale bundled candidate fails closed rather than being replaced by a download.</p>
+<h3 id="model-yaml-import-policy">Model YAML import policy<a class="headerlink" href="#model-yaml-import-policy" title="Permanent link">&para;</a></h3>
+<p>Model YAML keys like <code>class</code> and <code>activation_fn</code> contain dotted references to Python classes or functions. AIMNet validates these references against the public <code>aimnet.models.ALLOWED_MODEL_IMPORT_PATHS</code> set:</p>
+<div class="highlight"><pre><span></span><code><span class="n">ALLOWED_MODEL_IMPORT_PATHS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span>
+    <span class="s2">&quot;aimnet.models.AIMNet2&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;aimnet.models.aimnet2.AIMNet2&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;aimnet.modules.AtomicShift&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;aimnet.modules.AtomicSum&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;aimnet.modules.Dipole&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;aimnet.modules.Output&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;aimnet.modules.Quadrupole&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;aimnet.modules.SRCoulomb&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;torch.nn.GELU&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;torch.nn.init.xavier_normal_&quot;</span><span class="p">,</span>
+<span class="p">})</span>
+</code></pre></div>
+<p>Default imports are role-specific: AIMNet paths are model classes, <code>torch.nn.GELU</code> is the activation, and <code>torch.nn.init.xavier_normal_</code> is the initializer. Other <code>torch.nn</code> symbols such as <code>Linear</code>, <code>ReLU</code>, or <code>uniform_</code> must be supplied explicitly for a direct custom artifact. Training-only keys such as <code>fn</code>, <code>trainer</code>, and <code>evaluator</code> are rejected in inference artifacts.</p>
+<p>This release intentionally changes compatibility. To migrate:</p>
+<ul>
+<li>Rename a trusted TorchScript <code>model.pt</code> to <code>model.jpt</code>, or convert it to v2 with <code>aimnet convert</code>.</li>
+<li>Write <code>./name</code>, <code>../name</code>, or an absolute path when a local file collides with a registry name.</li>
+<li>Fix inconsistent metadata and regenerate incomplete artifacts; disabling import checks does not disable metadata or state-dict validation.</li>
+<li>Add each trusted custom import explicitly through <code>model_import_paths</code>; do not restore the broad namespace.</li>
+<li>Treat registry checksum failures as provenance failures; do not replace the committed digest.</li>
+</ul>
+<p>Direct local v2 files and complete Hugging Face repositories support three import modes:</p>
+<ul>
+<li><code>extend</code> (default): trust <code>ALLOWED_MODEL_IMPORT_PATHS</code> plus <code>model_import_paths</code>.</li>
+<li><code>replace</code>: trust only <code>model_import_paths</code>, which must be nonempty.</li>
+<li><code>unsafe</code>: skip import-path checks. <code>model_import_paths</code> must be <code>None</code>. This can execute arbitrary imported code during model construction, so use it only for locally trusted artifacts.</li>
+</ul>
+<p>Caller-supplied entries may be exact dotted paths or namespace patterns ending in <code>.*</code>; each supplied entry is available to the class, activation, and initializer roles. For example:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_model</span>
+
+<span class="n">model</span><span class="p">,</span> <span class="n">metadata</span> <span class="o">=</span> <span class="n">load_model</span><span class="p">(</span>
+    <span class="s2">&quot;custom.pt&quot;</span><span class="p">,</span>
+    <span class="n">model_import_paths</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;my_package.models.*&quot;</span><span class="p">},</span>
+    <span class="n">model_import_mode</span><span class="o">=</span><span class="s2">&quot;extend&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p><code>unsafe</code> does not relax restricted deserialization, YAML parsing, metadata validation, or state-dict validation. Official registry names, registry metadata fallbacks, raw <code>nn.Module</code> inputs, and <code>.jpt</code> files accept only the default import settings.</p>
 <h2 id="metadata-behavior-summary">Metadata Behavior Summary<a class="headerlink" href="#metadata-behavior-summary" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -3493,12 +3622,20 @@
 </tbody>
 </table>
 <h2 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h2>
-<h3 id="load_modelpath-devicecpu"><code>load_model(path, device="cpu")</code><a class="headerlink" href="#load_modelpath-devicecpu" title="Permanent link">&para;</a></h3>
-<p>Load model from file with automatic format detection.</p>
+<h3 id="load_modelpath-devicecpu-model_import_pathsnone-model_import_modeextend"><code>load_model(path, device="cpu", *, model_import_paths=None, model_import_mode="extend")</code><a class="headerlink" href="#load_modelpath-devicecpu-model_import_pathsnone-model_import_modeextend" title="Permanent link">&para;</a></h3>
+<p>Load model from file with suffix-based format dispatch.</p>
 <p><strong>Parameters:</strong></p>
 <ul>
 <li><code>path</code> (<code>str</code>): Path to model file (<code>.pt</code> or <code>.jpt</code>)</li>
 <li><code>device</code> (<code>str</code>): Device to load model on</li>
+<li><code>model_import_paths</code> (<code>Collection[str] | None</code>): Python import paths trusted for a direct v2 artifact. Entries may be exact dotted paths or namespaces ending in <code>.*</code>; each entry applies to every supported model-YAML import field.</li>
+<li><code>model_import_mode</code> (<code>"extend" | "replace" | "unsafe"</code>): <code>extend</code> adds caller paths to the defaults, <code>replace</code> uses only caller paths, and <code>unsafe</code> skips import-path checks. See <a href="#model-yaml-import-policy">Model YAML import policy</a>.</li>
+</ul>
+<p>Registry protection depends on preserving source information:</p>
+<ul>
+<li><code>resolve_model("aimnet2")</code> and <code>AIMNet2Calculator("aimnet2")</code> recognize registry names and aliases.</li>
+<li>Hugging Face configurations without <code>model_yaml</code> retain registry provenance when they fall back to registry metadata.</li>
+<li><code>load_model(get_model_path("aimnet2"))</code> receives only a file path and therefore treats the file as a direct artifact.</li>
 </ul>
 <p><strong>Returns:</strong></p>
 <ul>
@@ -3640,6 +3777,9 @@ aimnet<span class="w"> </span>convert<span class="w"> </span>model.jpt<span clas
 <div class="highlight"><pre><span></span><code><span class="c1"># Override auto-detection</span>
 --needs-coulomb<span class="w">       </span><span class="c1"># Force external Coulomb</span>
 --needs-dispersion<span class="w">    </span><span class="c1"># Force external DFTD3</span>
+--no-coulomb<span class="w">          </span><span class="c1"># Disable external Coulomb when structurally compatible</span>
+--no-dispersion<span class="w">       </span><span class="c1"># Disable external DFTD3</span>
+--model-import-path<span class="w"> </span>my_package.models.*<span class="w">  </span><span class="c1"># Trust custom local export constructors</span>
 </code></pre></div>
 <h2 id="cli-commands">CLI Commands<a class="headerlink" href="#cli-commands" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><span class="c1"># Export trained model</span>

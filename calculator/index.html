@@ -1591,6 +1591,23 @@
   
 </li>
         
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-serialized-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom serialized models
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Custom serialized models">
+      <ul class="md-nav__list">
+        
           <li class="md-nav__item">
   <a href="#nb_threshold" class="md-nav__link">
     <span class="md-ellipsis">
@@ -1717,6 +1734,17 @@
     <span class="md-ellipsis">
       
         token
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#model_import_paths-and-model_import_mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        model_import_paths and model_import_mode
       
     </span>
   </a>
@@ -2937,6 +2965,23 @@
   
 </li>
         
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-serialized-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom serialized models
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Custom serialized models">
+      <ul class="md-nav__list">
+        
           <li class="md-nav__item">
   <a href="#nb_threshold" class="md-nav__link">
     <span class="md-ellipsis">
@@ -3063,6 +3108,17 @@
     <span class="md-ellipsis">
       
         token
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#model_import_paths-and-model_import_mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        model_import_paths and model_import_mode
       
     </span>
   </a>
@@ -3881,6 +3937,9 @@
     <span class="n">ensemble_member</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
     <span class="n">revision</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">token</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">model_import_paths</span><span class="p">:</span> <span class="n">Collection</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">model_import_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;extend&quot;</span><span class="p">,</span> <span class="s2">&quot;replace&quot;</span><span class="p">,</span> <span class="s2">&quot;unsafe&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;extend&quot;</span><span class="p">,</span>
 <span class="p">)</span>
 </code></pre></div>
 <h3 id="parameters">Parameters<a class="headerlink" href="#parameters" title="Permanent link">&para;</a></h3>
@@ -3917,6 +3976,12 @@
 </tbody>
 </table>
 <p>For <code>torch.nn.Module</code>, metadata is read from <code>model.metadata</code> attribute if available (v2 models).</p>
+<h3 id="custom-serialized-models">Custom serialized models<a class="headerlink" href="#custom-serialized-models" title="Permanent link">&para;</a></h3>
+<p>Direct local v2 files and complete Hugging Face repositories can extend or replace the trusted model-YAML import paths, or use unsafe loading for locally trusted artifacts. See <a href="../model_format/#model-yaml-import-policy">Model YAML import policy</a> for the default allowlist, modes, examples, and security boundaries.</p>
+<p>Model weights load on CPU before the completed model moves to the requested device once. Missing real state-dict keys are fatal; unexpected keys warn for direct custom/HF artifacts and fail for registry artifacts. Known migration keys remain filtered.</p>
+<p>For a legacy TorchScript file, use <code>AIMNet2Calculator.from_legacy_jit()</code> when you want the trusted-code boundary to be explicit:</p>
+<div class="highlight"><pre><span></span><code><span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="o">.</span><span class="n">from_legacy_jit</span><span class="p">(</span><span class="s2">&quot;trusted-model.jpt&quot;</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+</code></pre></div>
 <h4 id="nb_threshold"><code>nb_threshold</code><a class="headerlink" href="#nb_threshold" title="Permanent link">&para;</a></h4>
 <p>Threshold for batching/flattening decisions. Default: <code>120</code>.</p>
 <p>The calculator uses two input modes:</p>
@@ -3975,7 +4040,7 @@
 </tr>
 </tbody>
 </table>
-<p>Only affects v2 format models. Legacy JIT models have embedded Coulomb. If you override this flag on a model without Coulomb metadata, ensure it is compatible with the expected subtraction for short range Coulomb contribution (see <code>coulomb_mode</code> in model metadata).</p>
+<p>Only affects v2 format models. Legacy JIT models have embedded Coulomb. <code>False</code> may explicitly disable an otherwise valid external Coulomb correction; it does not make structurally inconsistent metadata valid. <code>True</code> is rejected for <code>coulomb_mode="full_embedded"</code>. For a valid <code>coulomb_mode="none"</code> model with Coulomb explicitly enabled and no stored SR parameters, the external module uses <code>rc=4.6</code> Å and <code>envelope="exp"</code>.</p>
 <h4 id="needs_dispersion"><code>needs_dispersion</code><a class="headerlink" href="#needs_dispersion" title="Permanent link">&para;</a></h4>
 <p>Whether to attach external DFTD3 module.</p>
 <table>
@@ -4000,7 +4065,7 @@
 </tr>
 </tbody>
 </table>
-<p>Only affects new-format models. Raises <code>ValueError</code> if <code>needs_dispersion=True</code> but <code>d3_params</code> are missing in metadata.</p>
+<p>Only affects new-format models. <code>False</code> may explicitly disable external dispersion when the artifact is structurally valid. <code>True</code> requires complete <code>s8</code>, <code>a1</code>, and <code>a2</code> parameters and is rejected when D3TS is already embedded.</p>
 <h4 id="device"><code>device</code><a class="headerlink" href="#device" title="Permanent link">&para;</a></h4>
 <p>Device to run the model on.</p>
 <table>
@@ -4108,9 +4173,13 @@
 <p>HF API token for accessing private or gated repositories. Default: <code>None</code>.</p>
 <p>Set via environment variable <code>HF_TOKEN</code> as an alternative to passing it directly.</p>
 <p>Only applies when <code>model</code> is a HF repo ID.</p>
+<h4 id="model_import_paths-and-model_import_mode"><code>model_import_paths</code> and <code>model_import_mode</code><a class="headerlink" href="#model_import_paths-and-model_import_mode" title="Permanent link">&para;</a></h4>
+<p>These settings apply only to direct local v2 artifacts and complete Hugging Face repositories with their own <code>model_yaml</code>. Registry names, registry fallback, raw <code>nn.Module</code> inputs, and <code>.jpt</code> files reject non-default settings.</p>
+<p>See <a href="../model_format/#model-yaml-import-policy">Model YAML import policy</a> for supported paths, modes, examples, and security boundaries.</p>
 <h3 id="metadata-resolution">Metadata Resolution<a class="headerlink" href="#metadata-resolution" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code>Priority: explicit flags &gt; model metadata &gt; no external modules
 </code></pre></div>
+<p>Artifacts are validated before these flags are applied. Direct local and complete custom Hugging Face artifacts must be structurally consistent; official registry artifacts and registry-backed HF fallbacks additionally enforce canonical action flags. The calculator then validates the effective configuration after family defaults and explicit flags are resolved. Explicit <code>False</code> values can disable external components, but cannot bypass intrinsic structural errors.</p>
 <table>
 <thead>
 <tr>
@@ -4730,8 +4799,8 @@
     <span class="n">key_in</span><span class="o">=</span><span class="s2">&quot;charges&quot;</span><span class="p">,</span>
     <span class="n">key_out</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span>
     <span class="n">method</span><span class="o">=</span><span class="s2">&quot;simple&quot;</span><span class="p">,</span>  <span class="c1"># Default, changeable via set_lrcoulomb_method()</span>
-    <span class="n">rc</span><span class="o">=</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;coulomb_sr_rc&quot;</span><span class="p">,</span> <span class="mf">4.6</span><span class="p">),</span>
-    <span class="n">envelope</span><span class="o">=</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;coulomb_sr_envelope&quot;</span><span class="p">,</span> <span class="s2">&quot;exp&quot;</span><span class="p">),</span>
+    <span class="n">rc</span><span class="o">=</span><span class="mf">4.6</span> <span class="k">if</span> <span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;coulomb_sr_rc&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;coulomb_sr_rc&quot;</span><span class="p">],</span>
+    <span class="n">envelope</span><span class="o">=</span><span class="s2">&quot;exp&quot;</span> <span class="k">if</span> <span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;coulomb_sr_envelope&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;coulomb_sr_envelope&quot;</span><span class="p">],</span>
     <span class="n">subtract_sr</span><span class="o">=</span><span class="ow">not</span> <span class="n">sr_embedded</span><span class="p">,</span>  <span class="c1"># Based on coulomb_mode</span>
 <span class="p">)</span>
 </code></pre></div>
@@ -4750,7 +4819,7 @@
 <li>If <code>needs_coulomb=True</code>, an external <code>LRCoulomb</code> is created. If <code>coulomb_mode="sr_embedded"</code>, the model already subtracts SR Coulomb internally and the external module adds full Coulomb on top.</li>
 <li>If <code>needs_dispersion=True</code> and <code>d3_params</code> are present, an external <code>DFTD3</code> is created. If <code>d3_params</code> are missing, initialization raises <code>ValueError</code>.</li>
 </ul>
-<p>Explicit <code>needs_coulomb</code> / <code>needs_dispersion</code> flags override metadata.</p>
+<p>Explicit <code>needs_coulomb</code> / <code>needs_dispersion</code> flags override metadata after structural validation. An explicit <code>False</code> disables the corresponding external module; effective runtime validation still rejects incompatible enabled components.</p>
 <h3 id="cutoff-handling-for-lr-modules">Cutoff Handling for LR Modules<a class="headerlink" href="#cutoff-handling-for-lr-modules" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Coulomb</strong>: <code>set_lrcoulomb_method()</code> selects the method and updates the Coulomb cutoff (<code>inf</code> for <code>"simple"</code>, finite for <code>"dsf"</code>, <code>None</code> for <code>"ewald"</code>/<code>"pme"</code>).</li>
@@ -4819,6 +4888,7 @@
 <p>The envelope function (<code>"exp"</code> or <code>"cosine"</code>) determines how the SR interaction smoothly decays to zero at the cutoff boundary.</p>
 <h2 id="legacy-model-compatibility">Legacy Model Compatibility<a class="headerlink" href="#legacy-model-compatibility" title="Permanent link">&para;</a></h2>
 <p>Legacy JIT models (<code>.jpt</code>) have different behavior:</p>
+<p>Their synthesized runtime metadata remains format version 1 and records <code>has_embedded_lr=True</code>, <code>coulomb_mode="full_embedded"</code>, and no external long-range modules by default. This preserves legacy LR neighbor handling while preventing an additional external Coulomb module from being attached.</p>
 <table>
 <thead>
 <tr>

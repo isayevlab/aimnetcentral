@@ -1647,10 +1647,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#registry-migration-workflow" class="md-nav__link">
+  <a href="#publishing-registry-artifacts" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Registry Migration Workflow
+        Publishing Registry Artifacts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#registry-distribution-and-bundling-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Registry Distribution and Bundling Policy
       
     </span>
   </a>
@@ -2033,10 +2044,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#registry-migration-workflow" class="md-nav__link">
+  <a href="#publishing-registry-artifacts" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Registry Migration Workflow
+        Publishing Registry Artifacts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#registry-distribution-and-bundling-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Registry Distribution and Bundling Policy
       
     </span>
   </a>
@@ -2152,114 +2174,17 @@
 <li>Trained weights with SAE baked into atomic shifts</li>
 <li>Metadata for Coulomb and dispersion handling</li>
 </ul>
-<p><strong>Model Format</strong></p>
-<p>The new model format separates the core neural network from long-range corrections:</p>
-<ul>
-<li>Core model computes NN energy minus short-range Coulomb</li>
-<li>Long-range Coulomb (LRCoulomb) is applied externally by the calculator</li>
-<li>DFTD3 dispersion is applied externally by the calculator</li>
-</ul>
-<p>This allows switching Coulomb methods (simple/DSF/Ewald/PME) at inference time without re-exporting.</p>
-<p><strong>Metadata Schema</strong></p>
-<p>The v2 model format includes the following metadata fields:</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>format_version</code></td>
-<td>int</td>
-<td>2 for new format</td>
-</tr>
-<tr>
-<td><code>cutoff</code></td>
-<td>float</td>
-<td>Model cutoff radius</td>
-</tr>
-<tr>
-<td><code>needs_coulomb</code></td>
-<td>bool</td>
-<td>True if calculator should add external Coulomb</td>
-</tr>
-<tr>
-<td><code>needs_dispersion</code></td>
-<td>bool</td>
-<td>True if calculator should add external DFTD3</td>
-</tr>
-<tr>
-<td><code>coulomb_mode</code></td>
-<td>str</td>
-<td>"sr_embedded" (has SRCoulomb) or "none"</td>
-</tr>
-<tr>
-<td><code>coulomb_sr_rc</code></td>
-<td>float?</td>
-<td>SR Coulomb cutoff (if coulomb_mode="sr_embedded")</td>
-</tr>
-<tr>
-<td><code>coulomb_sr_envelope</code></td>
-<td>str?</td>
-<td>"exp" or "cosine" (if coulomb_mode="sr_embedded")</td>
-</tr>
-<tr>
-<td><code>d3_params</code></td>
-<td>dict?</td>
-<td>D3 parameters {s6, s8, a1, a2} if needs_dispersion=True</td>
-</tr>
-<tr>
-<td><code>implemented_species</code></td>
-<td>list[int]</td>
-<td>Supported atomic numbers</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Runtime Configuration</strong></p>
-<p>For new-format models, the calculator provides methods to configure external modules:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
-
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;model.pt&quot;</span><span class="p">)</span>
-
-<span class="c1"># Switch Coulomb method (only if model uses external Coulomb)</span>
-<span class="k">if</span> <span class="n">calc</span><span class="o">.</span><span class="n">has_external_coulomb</span><span class="p">:</span>
-    <span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">)</span>  <span class="c1"># For PBC systems</span>
-
-<span class="c1"># Adjust DFTD3 cutoff (only if model uses external dispersion)</span>
-<span class="k">if</span> <span class="n">calc</span><span class="o">.</span><span class="n">has_external_dftd3</span><span class="p">:</span>
-    <span class="n">calc</span><span class="o">.</span><span class="n">set_dftd3_cutoff</span><span class="p">(</span><span class="mf">20.0</span><span class="p">,</span> <span class="n">smoothing_fraction</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
-</code></pre></div>
-<p><strong>Backward Compatibility</strong></p>
-<p>The calculator automatically detects and loads both formats:</p>
-<ul>
-<li>New <code>.pt</code> files with embedded metadata (format version 2)</li>
-<li>Legacy JIT-compiled <code>.jpt</code> files (format version 1)</li>
-</ul>
-<p>For legacy models, Coulomb and dispersion modules remain embedded in the model.</p>
+<p><strong>Output format:</strong> <code>aimnet export</code> writes a v2 <code>.pt</code> artifact containing model YAML, weights, and runtime metadata. See <a href="../model_format/">Model Format</a> for the artifact structure, metadata fields, suffix routing, and import policy.</p>
+<p>For inference-time Coulomb and dispersion settings, see the <a href="../calculator/">Calculator</a> guide.</p>
 <h3 id="converting-legacy-jit-models">Converting Legacy JIT Models<a class="headerlink" href="#converting-legacy-jit-models" title="Permanent link">&para;</a></h3>
-<p>To convert existing <code>.jpt</code> models to the new format:</p>
+<p>To convert an existing <code>.jpt</code> model:</p>
 <div class="highlight"><pre><span></span><code>$<span class="w"> </span>aimnet<span class="w"> </span>convert<span class="w"> </span>model.jpt<span class="w"> </span>config.yaml<span class="w"> </span>model_new.pt
 </code></pre></div>
-<p>Arguments:</p>
-<ul>
-<li><code>model.jpt</code>: Legacy JIT-compiled model file</li>
-<li><code>config.yaml</code>: Model YAML configuration file</li>
-<li><code>model_new.pt</code>: Output file in new format</li>
-</ul>
-<p>The conversion:</p>
-<ul>
-<li>Extracts model cutoff and D3 parameters from the JIT model</li>
-<li>Rebuilds the architecture from YAML with SRCoulomb embedded</li>
-<li>Loads weights from the JIT model</li>
-<li>Creates a new-format bundle with all necessary metadata</li>
-</ul>
-<h3 id="registry-migration-workflow">Registry Migration Workflow<a class="headerlink" href="#registry-migration-workflow" title="Permanent link">&para;</a></h3>
-<p>For maintainers migrating the model registry from legacy <code>.jpt</code> to new <code>.pt</code> format:</p>
+<p>See <a href="../model_format/#converting-legacy-models">Converting Legacy Models</a> for the complete conversion and validation workflow.</p>
+<h3 id="publishing-registry-artifacts">Publishing Registry Artifacts<a class="headerlink" href="#publishing-registry-artifacts" title="Permanent link">&para;</a></h3>
+<p>Maintainers publishing a registry artifact must:</p>
 <ol>
-<li><strong>Convert each model:</strong></li>
+<li><strong>Convert the model:</strong></li>
 </ol>
 <div class="highlight"><pre><span></span><code>aimnet<span class="w"> </span>convert<span class="w"> </span>aimnet2_wb97m_d3_0.jpt<span class="w"> </span>aimnet/models/aimnet2_dftd3_wb97m.yaml<span class="w"> </span>aimnet2_wb97m_d3_0.pt
 </code></pre></div>
@@ -2271,19 +2196,25 @@
 </code></pre></div>
 <p>The validation script compares energies and forces between formats and reports any discrepancies.</p>
 <ol>
-<li><strong>Upload to GCS:</strong></li>
-</ol>
-<div class="highlight"><pre><span></span><code>gsutil<span class="w"> </span>cp<span class="w"> </span>aimnet2_wb97m_d3_0.pt<span class="w"> </span>gs://aimnetcentral/AIMNet2/aimnet2_wb97m_d3_0.pt
-</code></pre></div>
-<ol>
-<li><strong>Update model_registry.yaml:</strong></li>
+<li>
+<p><strong>Publish the final artifact</strong> to approved registry storage and record its public HTTPS download URL.</p>
+</li>
+<li>
+<p><strong>Update <code>model_registry.yaml</code>:</strong></p>
+</li>
 </ol>
 <div class="highlight"><pre><span></span><code><span class="nt">models</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">aimnet2-wb97m-d3_0</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">family</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">wb97m-d3</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aimnet2_wb97m_d3_0.pt</span>
-<span class="w">    </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://storage.googleapis.com/aimnetcentral/AIMNet2/aimnet2_wb97m_d3_0.pt</span>
+<span class="w">    </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;public-https-download-url&gt;</span>
+<span class="w">    </span><span class="nt">sha256</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;sha256-of-published-bytes&gt;</span>
 </code></pre></div>
 <p>Registry keys follow the convention <code>aimnet2-&lt;family&gt;_&lt;member&gt;</code> (dash separates <code>aimnet2</code> from the family tag, trailing <code>_&lt;int&gt;</code> is the ensemble member index). The <code>file:</code> field keeps the original filename so cached <code>.pt</code> downloads remain valid.</p>
+<p>The digest is the immutable identity of the uploaded bytes. Calculate it by streaming the final public download URL twice from fresh temporary directories, reject non-HTTPS or cross-origin redirects, and require both passes to agree. Obtain maintainer approval against the authoritative upload/source record before committing the registry change. If bytes change later, publish a new filename and registry entry rather than silently replacing the digest.</p>
+<h3 id="registry-distribution-and-bundling-policy">Registry Distribution and Bundling Policy<a class="headerlink" href="#registry-distribution-and-bundling-policy" title="Permanent link">&para;</a></h3>
+<p>Official AIMNet distributions do not bundle model artifacts. Registry models are downloaded on demand, and cached, bundled, or newly downloaded bytes must match the registry SHA-256 digest before a path is returned. A stale bundled artifact fails closed on a checksum mismatch; it is not replaced by a network download.</p>
+<p>Introducing bundled model artifacts later requires a separate design and release review plus explicit maintainer approval. The approved process must preserve immutable artifact filenames, bytes, and registry digests; require each bundled artifact to match its registry digest; keep checksum failures fail-closed; and add non-vacuous release checks for the actual wheel and source-distribution contents.</p>
 
 
 
