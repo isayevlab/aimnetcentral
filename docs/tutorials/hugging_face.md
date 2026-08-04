@@ -20,7 +20,7 @@ from aimnet.calculators import AIMNet2Calculator
 calc = AIMNet2Calculator("isayevlab/aimnet2-wb97m-d3")
 ```
 
-The first call downloads the model weights to the HF cache directory (`~/.cache/huggingface/hub/` by default) and reuses them on subsequent runs.
+The first call downloads the repository configuration, derives any omitted `SRCoulomb` cutoff and envelope metadata from an unambiguous definition in `model_yaml`, validates the resulting metadata, and only then downloads the selected weights to the HF cache directory (`~/.cache/huggingface/hub/` by default). Subsequent runs reuse the cache.
 
 ## Available Models
 
@@ -75,13 +75,13 @@ calc = AIMNet2Calculator("/path/to/local/repo")
 
 ## Mixing HF and Registry Models
 
-HF loading and the built-in GCS registry are independent. You can use both in the same script without any conflicts — HF extras are only imported when an HF repo ID is detected:
+Hugging Face repository IDs and registry aliases use separate loading paths and can be used in the same script. Optional HF dependencies are imported only when an HF source is detected:
 
 ```python
 # Loads from Hugging Face (requires aimnet[hf]):
 calc_hf = AIMNet2Calculator("isayevlab/aimnet2-wb97m-d3")
 
-# Loads from GCS registry (no extra deps needed):
+# Loads from the official registry (no HF dependencies needed):
 calc_registry = AIMNet2Calculator("aimnet2")
 ```
 
@@ -101,20 +101,39 @@ ensemble_3.safetensors      # weights for member 3
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `cutoff` | yes | Neighbor list cutoff in Å |
+| `cutoff` | yes\* | Neighbor list cutoff in Å |
 | `model_yaml` | yes\* | YAML string of the full model architecture |
 | `needs_coulomb` | no | Whether external Coulomb correction is needed |
 | `needs_dispersion` | no | Whether external D3 dispersion is needed |
 | `coulomb_mode` | no | `"none"`, `"sr_embedded"`, or `"full_embedded"` |
+| `format_version` | no | Artifact metadata version; defaults to `2` for early v2 configs |
+| `coulomb_sr_rc` | no | Short-range Coulomb cutoff when `coulomb_mode="sr_embedded"` |
+| `coulomb_sr_envelope` | no | Short-range Coulomb envelope, `"exp"` or `"cosine"` |
+| `d3_params` | no | External DFTD3 parameters when `needs_dispersion` is true |
 | `implemented_species` | no | List of supported atomic numbers |
+| `has_embedded_lr` | no | Whether long-range behavior is embedded |
+| `has_embedded_d3ts` | no | Whether D3TS dispersion is embedded |
+| `family` | no | Released model family tag |
+| `supports_charged_systems` | no | Whether charged systems are supported |
 
-\*If `model_yaml` is absent, the loader falls back to the GCS registry using `member_names` (a list of registry keys) — useful for family-level uploads. A warning is issued in this case.
+_For complete configs, `cutoff` is required. The loader validates the selected ensemble index, YAML imports, metadata schema, and intrinsic model consistency before resolving weights. For `coulomb_mode="sr_embedded"`, omitted `coulomb_sr_rc` or `coulomb_sr_envelope` can be derived from exactly one distinct complete `SRCoulomb` parameter pair in `model_yaml`; conflicting or ambiguous values are rejected._
 
-!!! note "Security"
+_If `model_yaml` is absent, the loader falls back through the official registry using `member_names` or the registered family members. The digest-verified registry YAML and metadata are authoritative and receive canonical validation. Family-level HF fields are used only for routing; any repeated artifact metadata must exactly match the registry value. A warning is issued for this fallback._
 
-    All `class:` entries in `model_yaml` are validated against an allowlist of `aimnet.*`
-    classes before `build_module()` is called. Configs referencing arbitrary Python classes
-    are rejected to prevent code execution via crafted `config.json` files.
+!!! note "Custom architectures"
+
+    `model_yaml` may name Python classes or functions that are imported during
+    model construction. AIMNet validates those references before loading
+    weights or constructing the model.
+
+    Repositories with their own `model_yaml` may use custom import settings.
+    Registry fallback uses the immutable registry policy and rejects
+    customization. See
+    [Model YAML import policy](../model_format.md#model-yaml-import-policy).
+
+    Missing real state-dict keys are fatal. Unexpected keys warn for complete
+    custom repositories and fail for registry fallback. Weights are loaded on
+    CPU, and the finished model is moved to the requested device once.
 
 ## Interactive Demo
 

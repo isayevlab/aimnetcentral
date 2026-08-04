@@ -72,20 +72,36 @@ def train_cmd(config, model, load=None, save=None, args=None, no_default_config=
 @click.option("--model", "-m", type=click.Path(exists=True), required=True, help="Path to model definition YAML file")
 @click.option("--sae", "-s", type=click.Path(exists=True), required=True, help="Path to the SAE YAML file")
 @click.option(
-    "--needs-coulomb/--no-coulomb", default=None, help="Override Coulomb detection. Default: auto-detect from YAML"
+    "--needs-coulomb/--no-coulomb",
+    default=None,
+    help="Override Coulomb detection. --no-coulomb is invalid for detected sr_embedded Coulomb.",
 )
 @click.option(
     "--needs-dispersion/--no-dispersion",
     default=None,
-    help="Override dispersion detection. Default: auto-detect from YAML",
+    help="Override dispersion detection. Enabled dispersion requires complete D3 parameters.",
 )
-def export_cmd(weights, output, model, sae, needs_coulomb, needs_dispersion):
+@click.option(
+    "--model-import-path",
+    "model_import_paths",
+    multiple=True,
+    help="Explicitly trust an exact constructor path or namespace for this local export.",
+)
+def export_cmd(weights, output, model, sae, needs_coulomb, needs_dispersion, model_import_paths):
     """Export trained model to distributable state dict format."""
     try:
         from .train.export_model import export_model
     except ImportError as exc:
         _missing_train_deps(exc)
-    export_model.callback(weights, output, model, sae, needs_coulomb, needs_dispersion)  # type: ignore[union-attr]
+    export_model.callback(  # type: ignore[union-attr]
+        weights,
+        output,
+        model,
+        sae,
+        needs_coulomb,
+        needs_dispersion,
+        model_import_paths,
+    )
 
 
 @cli.command(name="calc_sae")

@@ -78,6 +78,9 @@ AIMNet2Calculator(
     ensemble_member: int = 0,
     revision: str | None = None,
     token: str | None = None,
+    *,
+    model_import_paths: Collection[str] | None = None,
+    model_import_mode: Literal["extend", "replace", "unsafe"] = "extend",
 )
 ```
 
@@ -96,6 +99,18 @@ Model to use for inference.
 | `torch.nn.Module` | Uses provided module directly |
 
 For `torch.nn.Module`, metadata is read from `model.metadata` attribute if available (v2 models).
+
+### Custom serialized models
+
+Direct local v2 files and complete Hugging Face repositories can extend or replace the trusted model-YAML import paths, or use unsafe loading for locally trusted artifacts. See [Model YAML import policy](model_format.md#model-yaml-import-policy) for the default allowlist, modes, examples, and security boundaries.
+
+Model weights load on CPU before the completed model moves to the requested device once. Missing real state-dict keys are fatal; unexpected keys warn for direct custom/HF artifacts and fail for registry artifacts. Known migration keys remain filtered.
+
+For a legacy TorchScript file, use `AIMNet2Calculator.from_legacy_jit()` when you want the trusted-code boundary to be explicit:
+
+```python
+calc = AIMNet2Calculator.from_legacy_jit("trusted-model.jpt", device="cpu")
+```
 
 #### `nb_threshold`
 
@@ -124,7 +139,7 @@ Whether to attach external Coulomb module.
 | `True`           | Force external Coulomb (overrides metadata) |
 | `False`          | No external Coulomb (overrides metadata)    |
 
-Only affects v2 format models. Legacy JIT models have embedded Coulomb. If you override this flag on a model without Coulomb metadata, ensure it is compatible with the expected subtraction for short range Coulomb contribution (see `coulomb_mode` in model metadata).
+Only affects v2 format models. Legacy JIT models have embedded Coulomb. `False` may explicitly disable an otherwise valid external Coulomb correction; it does not make structurally inconsistent metadata valid. `True` is rejected for `coulomb_mode="full_embedded"`. For a valid `coulomb_mode="none"` model with Coulomb explicitly enabled and no stored SR parameters, the external module uses `rc=4.6` Å and `envelope="exp"`.
 
 #### `needs_dispersion`
 
@@ -136,7 +151,7 @@ Whether to attach external DFTD3 module.
 | `True`           | Force external DFTD3 (overrides metadata) |
 | `False`          | No external DFTD3 (overrides metadata)    |
 
-Only affects new-format models. Raises `ValueError` if `needs_dispersion=True` but `d3_params` are missing in metadata.
+Only affects new-format models. `False` may explicitly disable external dispersion when the artifact is structurally valid. `True` requires complete `s8`, `a1`, and `a2` parameters and is rejected when D3TS is already embedded.
 
 #### `device`
 
@@ -235,11 +250,19 @@ Set via environment variable `HF_TOKEN` as an alternative to passing it directly
 
 Only applies when `model` is a HF repo ID.
 
+#### `model_import_paths` and `model_import_mode`
+
+These settings apply only to direct local v2 artifacts and complete Hugging Face repositories with their own `model_yaml`. Registry names, registry fallback, raw `nn.Module` inputs, and `.jpt` files reject non-default settings.
+
+See [Model YAML import policy](model_format.md#model-yaml-import-policy) for supported paths, modes, examples, and security boundaries.
+
 ### Metadata Resolution
 
 ```
 Priority: explicit flags > model metadata > no external modules
 ```
+
+Artifacts are validated before these flags are applied. Direct local and complete custom Hugging Face artifacts must be structurally consistent; official registry artifacts and registry-backed HF fallbacks additionally enforce canonical action flags. The calculator then validates the effective configuration after family defaults and explicit flags are resolved. Explicit `False` values can disable external components, but cannot bypass intrinsic structural errors.
 
 | Model Source             | Metadata Source            |
 | ------------------------ | -------------------------- |
@@ -681,8 +704,8 @@ LRCoulomb(
     key_in="charges",
     key_out="energy",
     method="simple",  # Default, changeable via set_lrcoulomb_method()
-    rc=metadata.get("coulomb_sr_rc", 4.6),
-    envelope=metadata.get("coulomb_sr_envelope", "exp"),
+    rc=4.6 if metadata.get("coulomb_sr_rc") is None else metadata["coulomb_sr_rc"],
+    envelope="exp" if metadata.get("coulomb_sr_envelope") is None else metadata["coulomb_sr_envelope"],
     subtract_sr=not sr_embedded,  # Based on coulomb_mode
 )
 ```
@@ -707,7 +730,7 @@ External LR modules are attached based on model metadata unless overridden by co
 - If `needs_coulomb=True`, an external `LRCoulomb` is created. If `coulomb_mode="sr_embedded"`, the model already subtracts SR Coulomb internally and the external module adds full Coulomb on top.
 - If `needs_dispersion=True` and `d3_params` are present, an external `DFTD3` is created. If `d3_params` are missing, initialization raises `ValueError`.
 
-Explicit `needs_coulomb` / `needs_dispersion` flags override metadata.
+Explicit `needs_coulomb` / `needs_dispersion` flags override metadata after structural validation. An explicit `False` disables the corresponding external module; effective runtime validation still rejects incompatible enabled components.
 
 ### Cutoff Handling for LR Modules
 
@@ -748,6 +771,8 @@ The envelope function (`"exp"` or `"cosine"`) determines how the SR interaction 
 ## Legacy Model Compatibility
 
 Legacy JIT models (`.jpt`) have different behavior:
+
+Their synthesized runtime metadata remains format version 1 and records `has_embedded_lr=True`, `coulomb_mode="full_embedded"`, and no external long-range modules by default. This preserves legacy LR neighbor handling while preventing an additional external Coulomb module from being attached.
 
 | Feature | Legacy | New Format |
 | --- | --- | --- |
