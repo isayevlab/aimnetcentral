@@ -32,7 +32,7 @@ class AIMNet2Pysis(Calculator):
     ):
         if _PYSIS_IMPORT_ERROR is not None:
             raise ImportError(
-                'AIMNet2Pysis requires PySisyphus. Install it with `pip install pysisyphus` (pysisyphus is not available on conda-forge).'
+                "AIMNet2Pysis requires PySisyphus. Install it with `pip install pysisyphus` (pysisyphus is not available on conda-forge)."
             ) from _PYSIS_IMPORT_ERROR
 
         super().__init__(charge=charge, mult=mult, **kwargs)
@@ -109,7 +109,7 @@ class AIMNet2Pysis(Calculator):
 def run_pysis():
     if _PYSIS_IMPORT_ERROR is not None:
         raise ImportError(
-            'AIMNet2Pysis requires PySisyphus. Install it with `pip install pysisyphus` (pysisyphus is not available on conda-forge).'
+            "AIMNet2Pysis requires PySisyphus. Install it with `pip install pysisyphus` (pysisyphus is not available on conda-forge)."
         ) from _PYSIS_IMPORT_ERROR
 
     pysisyphus.run.CALC_DICT["aimnet"] = AIMNet2Pysis

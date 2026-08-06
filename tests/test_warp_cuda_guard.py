@@ -94,7 +94,11 @@ def test_cpu_import_emits_no_cuda_error_noise():
     env = dict(os.environ, CUDA_VISIBLE_DEVICES="")
     proc = subprocess.run(  # noqa: S603 -- fixed argv, no untrusted input
         [sys.executable, "-c", "import aimnet.kernels"],
-        capture_output=True, text=True, env=env, timeout=120, check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=120,
+        check=True,
     )
     assert "Warp CUDA error" not in proc.stderr
 
