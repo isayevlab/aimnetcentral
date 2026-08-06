@@ -98,6 +98,9 @@ include = [
     "aimnet/**/*.yaml",
     "aimnet/**/*.pt",
 ]
+exclude = [
+    "aimnet/calculators/assets/**",
+]
 
 [tool.hatch.version]
 source = "vcs"
@@ -108,6 +111,9 @@ include = [
     "aimnet/**/*.py",
     "aimnet/**/*.yaml",
     "aimnet/**/*.pt",
+]
+exclude = [
+    "aimnet/calculators/assets/**",
 ]
 
 # UV configuration

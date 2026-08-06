@@ -38,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Excluded the local weight cache (`aimnet/calculators/assets/`) from wheels and sdists explicitly, instead of relying on hatchling's `.gitignore` handling.
 - Fixed `DataGroup.cv_split` corrupting cross-validation folds: building each fold's train split mutated the shared parts in place via `cat()`, so later folds contained duplicated samples and validation splits larger than the dataset. Folds are now built without mutating the shared parts.
 - Fixed a crash when torch has CUDA but warp-lang does not (possible with conda-forge variant packages): the AEV kernel gate now checks warp CUDA availability and falls back to the pure-torch path with a one-time warning.
 
