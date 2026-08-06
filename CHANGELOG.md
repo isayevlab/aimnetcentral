@@ -8,12 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
-- Upgraded transitive lockfile dependencies to patched versions for all open Dependabot alerts with available fixes (GitPython, Mako, Pillow, cryptography, idna, msgpack, pymdown-extensions, setuptools, tornado, urllib3). Remaining open alerts: paramiko (no patch released) and two low-severity torch advisories fixed only in torch 2.13, outside the supported 2.8-2.12 matrix.
+- Upgraded transitive lockfile dependencies to patched versions for all open Dependabot alerts with available fixes (GitPython, Mako, Pillow, cryptography, idna, msgpack, pymdown-extensions, setuptools, tornado, urllib3). Remaining open alerts: paramiko (no patch released) and one low-severity torch advisory (torch.jit.script) fixed in torch 2.13; the supported matrix now includes 2.13 (see below), and the locked version upgrade is tracked separately.
 - Verified official model-registry downloads and cached artifacts against their SHA-256 digests before loading. Registry names and aliases now take precedence over same-named implicit local paths, preventing unverified local files from shadowing registry models. Official distributions currently bundle no model artifacts and continue to download them on demand.
 - Restricted v2 `.pt` artifact deserialization to weights and basic data. Legacy `.jpt` files are loaded only through the TorchScript loader and must come from a trusted source.
 - Validated Python class and function references in model YAML against a default trusted set. Direct local and Hugging Face artifacts can extend or replace that set, or explicitly select unsafe loading for trusted custom code; registry models always use the fixed default set.
 - Enriched and structurally validated complete Hugging Face metadata before weight access, including unambiguous `SRCoulomb` parameter recovery. Registry-backed HF fallback now treats digest-verified registry YAML and metadata as authoritative and rejects conflicting family metadata.
-- Bumped the locked torch from 2.9.1 to 2.12.1 (with triton 3.7.1), staying inside the supported 2.8-2.12 matrix. This clears the low-severity `torch.lstm_cell` memory-corruption advisory (patched in 2.10.0; the earlier note that both torch advisories required 2.13 no longer matches the updated advisory data) and moves the default CI lane onto an inductor with the upstream fusion-legality fix (pytorch/pytorch#172301). The `torch.jit.script` advisory remains open: patched only in 2.13, still outside the supported matrix.
+- Bumped the locked torch from 2.9.1 to 2.12.1 (with triton 3.7.1), staying inside the supported 2.8-2.13 matrix. This clears the low-severity `torch.lstm_cell` memory-corruption advisory (patched in 2.10.0; the earlier note that both torch advisories required 2.13 no longer matches the updated advisory data) and moves the default CI lane onto an inductor with the upstream fusion-legality fix (pytorch/pytorch#172301). The torch.jit.script advisory is resolvable now that the supported matrix includes 2.13; clearing it requires bumping the locked torch to 2.13.
 
 ### Added
 
@@ -22,6 +22,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added weekly and manually dispatched strict fleet CI covering every official registry digest, strict-policy artifact load, and exact role-specific YAML defaults.
 - Added `aimnet info` reporting package/torch/warp versions, CUDA availability, registered kernel ops, and the model cache location.
 - Added a `weights` pytest marker on modules that need model weights, enabling a verified fully-offline test run (`-m "not weights ..."`) for packaging environments.
+- Added unit tests for the public `SizeGroupedDataset.save_h5`, `AIMNet2Calculator.set_lr_cutoff`, and `aimnet.train.loss.mse_loss_fn` APIs, which are kept.
+- Added targeted unit tests for previously untested code: `RegMultiMetric`/`regression_stats`, the `aimnet export` helper functions (`load_sae`, `bake_sae_into_model`, `mask_not_implemented_species`), `SizeGroupedDataset.cv_split`/`concatenate`, `train.utils` config/parameter helpers, and `LRCoulomb` constructor validation.
 
 ### Changed
 
@@ -35,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Marked the expensive tail of the test suite (~60 test nodes ≥2 s each: torch.compile, model-format roundtrips, dense-Hessian/HVP comparisons, multi-model ASE runs) with the `slow` marker; the default CPU test run now completes in under two minutes. Run `pytest -m slow` for the marked tail. The cheapest representative of each critical path (dense Hessian, HVP correctness, legacy `.jpt` loading, torch.compile smoke) stays in the default set.
 - Silenced the spurious "Warp CUDA error 100" stderr line emitted at import on CPU-only hosts.
 - Made optional-dependency install hints installer-neutral (conda equivalents where they exist; pysisyphus named directly since it is pip-only).
+- Extended the supported torch matrix to 2.8-2.13: CI covers torch 2.13 on CPU; GPU-side validation on torch 2.13 is performed on CUDA hardware as part of the release gate.
 
 ### Fixed
 
@@ -49,11 +52,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Removed unused `LRCoulomb.coul_ewald` and `LRCoulomb.coul_pme` convenience wrappers; use `LRCoulomb.forward` with `method="ewald"`/`"pme"`.
 - Removed unused `aimnet.modules.core.DSequential` and `aimnet.constants.get_dftd3_param`.
 - Removed unused `aimnet.models.utils.has_dftd3_in_config` (and its `aimnet.models` re-export).
-
-### Added
-
-- Added unit tests for the public `SizeGroupedDataset.save_h5`, `AIMNet2Calculator.set_lr_cutoff`, and `aimnet.train.loss.mse_loss_fn` APIs, which are kept.
-- Added targeted unit tests for previously untested code: `RegMultiMetric`/`regression_stats`, the `aimnet export` helper functions (`load_sae`, `bake_sae_into_model`, `mask_not_implemented_species`), `SizeGroupedDataset.cv_split`/`concatenate`, `train.utils` config/parameter helpers, and `LRCoulomb` constructor validation.
 
 ### Documentation
 
