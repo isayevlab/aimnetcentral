@@ -50,6 +50,15 @@ jobs:
                   python-version: ${{ matrix.python-version }}
                   groups: dev
 
+            - name: Cache model weights
+              uses: actions/cache@v6
+              with:
+                  path: ~/.cache/aimnet
+                  key: aimnet-weights-${{ hashFiles('aimnet/calculators/model_registry.yaml') }}
+
+            - name: Pre-fetch model weights
+              run: uv run aimnet download --all
+
             - name: Run tests
               run: uv run pytest tests -m "not gpu and not network and not ase and not pysis and not train and not hf and not torch_sim and not slow" --cov --cov-config=pyproject.toml --cov-report=xml
 
@@ -75,7 +84,7 @@ jobs:
         timeout-minutes: 20
         strategy:
             matrix:
-                torch-version: ["2.8.*", "2.9.*", "2.10.*", "2.11.*", "2.12.*"]
+                torch-version: ["2.8.*", "2.9.*", "2.10.*", "2.11.*", "2.12.*", "2.13.*"]
             fail-fast: false
         defaults:
             run:
@@ -103,12 +112,19 @@ jobs:
                       --index-url https://download.pytorch.org/whl/cpu
                   uv run --no-sync python -c "import torch; print('torch', torch.__version__)"
 
+            - name: Cache model weights
+              uses: actions/cache@v6
+              with:
+                  path: ~/.cache/aimnet
+                  key: aimnet-weights-${{ hashFiles('aimnet/calculators/model_registry.yaml') }}
+
             - name: Run core tests against torch ${{ matrix.torch-version }}
               env:
                   UV_NO_SYNC: "1"
                   # Eager only: see job comment — inductor/triton can't be tested via reinstall-on-top.
                   TORCHDYNAMO_DISABLE: "1"
               run: |
+                  uv run --no-sync aimnet download --all
                   uv run --no-sync pytest tests \
                       -m "not gpu and not network and not ase and not pysis and not train and not hf and not torch_sim and not slow"
 
