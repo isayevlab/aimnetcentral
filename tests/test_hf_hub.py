@@ -19,7 +19,7 @@ from aimnet.models import base as model_base
 from aimnet.models.artifact_validation import validate_model_yaml
 from aimnet.modules import AtomicShift
 
-pytestmark = pytest.mark.hf
+pytestmark = [pytest.mark.hf, pytest.mark.weights]
 
 
 @pytest.fixture

@@ -80,7 +80,7 @@ def test_from_legacy_jit_rejects_import_settings_before_loading(monkeypatch: pyt
 
 
 # These are calculator integration tests: most construct and run a model.
-pytestmark = [pytest.mark.ase]
+pytestmark = [pytest.mark.ase, pytest.mark.weights]
 
 
 @pytest.mark.slow

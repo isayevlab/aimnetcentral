@@ -34,6 +34,8 @@ from aimnet.models.artifact_validation import (
     validate_registry_v2_artifact,
 )
 
+pytestmark = pytest.mark.weights
+
 _PACKAGE_ROOT = Path(aimnet.__file__).parent
 _ASSETS_DIR = _PACKAGE_ROOT / "calculators" / "assets"
 

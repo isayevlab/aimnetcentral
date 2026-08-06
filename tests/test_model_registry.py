@@ -20,6 +20,8 @@ from aimnet.calculators.model_registry import (
 )
 from aimnet.models.base import load_registry_model
 
+pytestmark = pytest.mark.weights
+
 
 def test_load_model_registry_respects_registry_file_param(tmp_path):
     """registry_file param should override the default path."""
