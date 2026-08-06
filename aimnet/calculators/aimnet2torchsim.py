@@ -70,7 +70,7 @@ class AIMNet2TorchSim(ModelInterface):
     ) -> None:
         if _TORCHSIM_IMPORT_ERROR is not None:
             raise ImportError(
-                'AIMNet2TorchSim requires TorchSim. Install it on Python 3.12+ with `pip install "aimnet[torchsim]"`.'
+                'AIMNet2TorchSim requires TorchSim (Python 3.12+ only). Install it with `pip install torch-sim-atomistic` (torch-sim-atomistic is not available on conda-forge).'
             ) from _TORCHSIM_IMPORT_ERROR
 
         super().__init__()
