@@ -47,7 +47,7 @@ jobs:
             - name: Run core tests against latest torch
               env:
                   UV_NO_SYNC: "1"
-                  # Eager only: see job comment — inductor/triton can't be tested via reinstall-on-top.
+                  # Eager only: see the tests-torch job comment in main.yml — inductor/triton can't be tested via reinstall-on-top.
                   TORCHDYNAMO_DISABLE: "1"
               run: |
                   uv run --no-sync aimnet download --all

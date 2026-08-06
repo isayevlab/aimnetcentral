@@ -9,7 +9,7 @@
 #   DRY_RUN=1 bash scripts/gpu_validate.sh  # print the per-version commands only
 #
 # Tunables (env vars):
-#   TORCH_VERSIONS  default "2.8 2.9 2.10 2.11 2.12"
+#   TORCH_VERSIONS  default "2.8 2.9 2.10 2.11 2.12 2.13"
 #   CUDA_INDEX      default "https://download.pytorch.org/whl/cu126"
 #   PYTHON          default "python3.12"
 #   RESULTS         default "./gpu-validation-results"
@@ -18,7 +18,7 @@
 #   FORCE_ATOL      default "1e-4"   (Hartree/Angstrom)
 set -u
 
-TORCH_VERSIONS="${TORCH_VERSIONS:-2.8 2.9 2.10 2.11 2.12}"
+TORCH_VERSIONS="${TORCH_VERSIONS:-2.8 2.9 2.10 2.11 2.12 2.13}"
 CUDA_INDEX="${CUDA_INDEX:-https://download.pytorch.org/whl/cu126}"
 PYTHON="${PYTHON:-python3.12}"
 RESULTS="${RESULTS:-./gpu-validation-results}"
