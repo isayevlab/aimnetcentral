@@ -2,7 +2,7 @@ import sys
 
 import click
 
-from .calculators.model_registry import clear_assets
+from .calculators.model_registry import clear_assets, download_assets
 
 
 @click.group()
@@ -12,6 +12,7 @@ def cli():
 
 # Always available commands
 cli.add_command(clear_assets, name="clear_model_cache")
+cli.add_command(download_assets, name="download")
 
 
 # Register convert command (doesn't need heavy training dependencies)
