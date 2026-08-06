@@ -5,12 +5,18 @@ environment on conda-forge; the gate must fall back to the einsum path instead o
 letting conv_sv_2d_sp raise inside forward.
 """
 
+import io
+import os
+import subprocess
+import sys
+
 import pytest
 import torch
 
 import aimnet.kernels
 import aimnet.modules.aev as aev_mod
 from aimnet import nbops
+from aimnet.kernels.conv_sv_2d_sp_wp import _filter_benign_warp_init_noise, _init_warp_quietly
 from aimnet.modules.aev import ConvSV
 
 
@@ -80,3 +86,31 @@ def test_cuda_fallback_matches_kernel_path(monkeypatch):
     with pytest.warns(RuntimeWarning):
         alt = conv(data, a)
     torch.testing.assert_close(ref, alt, rtol=1e-4, atol=1e-5)
+
+
+@pytest.mark.slow
+def test_cpu_import_emits_no_cuda_error_noise():
+    """Importing the kernels on a CUDA-less host must not spam stderr."""
+    env = dict(os.environ, CUDA_VISIBLE_DEVICES="")
+    proc = subprocess.run(  # noqa: S603 -- fixed argv, no untrusted input
+        [sys.executable, "-c", "import aimnet.kernels"],
+        capture_output=True, text=True, env=env, timeout=120, check=True,
+    )
+    assert "Warp CUDA error" not in proc.stderr
+
+
+def test_init_falls_back_when_stderr_has_no_fileno(monkeypatch):
+    """Hosts without a real stderr fd (Jupyter, embedded interpreters) must not crash import."""
+    import aimnet.kernels.conv_sv_2d_sp_wp as wp_mod
+
+    monkeypatch.setattr(wp_mod.sys, "stderr", io.StringIO())
+    # wp.init() is a singleton no-op once initialized, so re-invoking is safe here.
+    _init_warp_quietly()
+
+
+def test_filter_keeps_non_benign_lines():
+    """Only the expected no-CUDA-device line is dropped; other diagnostics survive."""
+    captured = "Warp CUDA error 100: no CUDA-capable device is detected\nWarp CUDA error 999: something real"
+    kept = _filter_benign_warp_init_noise(captured)
+    assert "Warp CUDA error 100" not in kept
+    assert "Warp CUDA error 999: something real" in kept
