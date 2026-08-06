@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added `deterministic=True` calculator option: routes external DFT-D3 and DSF Coulomb through their differentiable pure-torch paths, making repeated identical evaluations bitwise reproducible on the same machine/build (issue #93). Ewald/PME kernels are not covered and warn once.
 - Added weekly and manually dispatched strict fleet CI covering every official registry digest, strict-policy artifact load, and exact role-specific YAML defaults.
 - Added `aimnet info` reporting package/torch/warp versions, CUDA availability, registered kernel ops, and the model cache location.
+- Added a `weights` pytest marker on modules that need model weights, enabling a verified fully-offline test run (`-m "not weights ..."`) for packaging environments.
 
 ### Changed
 

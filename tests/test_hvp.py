@@ -6,6 +6,8 @@ import torch
 
 from aimnet.calculators import AIMNet2Calculator
 
+pytestmark = pytest.mark.weights
+
 
 def _set_method(calc, method):
     with warnings.catch_warnings():
