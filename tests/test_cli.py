@@ -68,6 +68,25 @@ def test_download_all_fetches_every_registry_model(runner, monkeypatch):
     assert sorted(fetched) == sorted(model_registry.load_model_registry()["models"])
 
 
+def test_download_all_continues_after_one_failure(runner, monkeypatch):
+    all_models = sorted(model_registry.load_model_registry()["models"])
+    failing = all_models[0]
+    fetched = []
+
+    def flaky_fetch(name):
+        if name == failing:
+            raise RuntimeError("simulated network failure")
+        fetched.append(name)
+        return f"mock://{name}.pt"
+
+    monkeypatch.setattr(model_registry, "get_registry_model_path", flaky_fetch)
+    result = runner.invoke(cli, ["download", "--all"])
+    assert result.exit_code != 0
+    assert sorted(fetched) == sorted(m for m in all_models if m != failing)
+    assert f"{failing}: FAILED" in result.output
+    assert "1 of" in result.output
+
+
 def test_info_reports_environment(runner):
     result = runner.invoke(cli, ["info"])
     assert result.exit_code == 0, result.output

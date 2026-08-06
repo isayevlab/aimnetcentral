@@ -9,7 +9,7 @@ installed will deselect them automatically.
 import numpy as np
 import pytest
 
-pytestmark = [pytest.mark.sella, pytest.mark.ase]
+pytestmark = [pytest.mark.sella, pytest.mark.ase, pytest.mark.weights]
 
 
 def _h2o2_guess():

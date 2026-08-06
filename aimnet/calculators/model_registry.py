@@ -272,6 +272,14 @@ def download_assets(models: tuple[str, ...], download_all: bool):
     else:
         known = "\n  ".join(sorted(registry["models"]))
         raise click.UsageError(f"Specify model names or --all. Known models:\n  {known}")
+    failed = []
     for name in names:
-        path = get_registry_model_path(name)
+        try:
+            path = get_registry_model_path(name)
+        except Exception as exc:
+            click.echo(f"{name}: FAILED ({exc})", err=True)
+            failed.append(name)
+            continue
         click.echo(f"{name}: {path}")
+    if failed:
+        raise click.ClickException(f"{len(failed)} of {len(names)} downloads failed: {', '.join(failed)}")

@@ -241,18 +241,6 @@ def device():
     return get_device()
 
 
-@pytest.fixture(scope="session")
-def aimnet2_calc():
-    """Session-scoped AIMNet2Calculator with the default aimnet2 model.
-
-    Loaded once per test session. Use this instead of constructing
-    AIMNet2Calculator("aimnet2") inside individual tests.
-    """
-    from aimnet.calculators import AIMNet2Calculator
-
-    return AIMNet2Calculator("aimnet2")
-
-
 @pytest.fixture
 def requires_gpu():
     """Skip test if GPU is not available."""
@@ -785,58 +773,3 @@ def _cache_load_model():
         mp.setattr(_resolve, "load_model", _cached_load_model, raising=False)
         mp.setattr(_resolve, "_load_registry_model", _cached_registry_load_model, raising=False)
         yield _cached_load_model
-
-
-@pytest.fixture(scope="session")
-def model_cache():
-    """Session-scoped loader returning fresh ``(nn.Module, metadata)`` pairs.
-
-    Usage::
-
-        module, metadata = model_cache.load("aimnet2", device="cpu")
-
-    The expensive load is memoized once per ``(name, device)``; each ``load``
-    call returns an independent ``copy.deepcopy`` of the cached module, so
-    callers may freely mutate parameters/buffers without leaking across tests.
-    """
-    import copy
-
-    from aimnet.calculators.model_registry import get_model_path
-    from aimnet.models.base import load_registry_model
-
-    cache: dict = {}
-
-    class _ModelCache:
-        @staticmethod
-        def load(name: str = "aimnet2", device: str = "cpu"):
-            key = (name, str(device))
-            if key not in cache:
-                cache[key] = load_registry_model(get_model_path(name), device)
-            model, metadata = cache[key]
-            return copy.deepcopy(model), metadata
-
-    return _ModelCache()
-
-
-@pytest.fixture
-def make_calc(model_cache):
-    """Factory building a fresh ``AIMNet2Calculator`` around a cached module."""
-    from aimnet.calculators import AIMNet2Calculator
-
-    def _make(name: str = "aimnet2", device: str = "cpu", **kwargs):
-        module, _ = model_cache.load(name, device=device)
-        return AIMNet2Calculator(module, **kwargs)
-
-    return _make
-
-
-@pytest.fixture
-def make_ase_calc(model_cache):
-    """Factory building a fresh ``AIMNet2ASE`` around a cached module."""
-    from aimnet.calculators import AIMNet2ASE
-
-    def _make(name: str = "aimnet2", device: str = "cpu", **kwargs):
-        module, _ = model_cache.load(name, device=device)
-        return AIMNet2ASE(module, **kwargs)
-
-    return _make
