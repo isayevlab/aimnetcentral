@@ -50,7 +50,9 @@ def test_download_unknown_model_fails(runner):
 
 def test_download_named_model_fetches_it(runner, monkeypatch):
     fetched = []
-    monkeypatch.setattr(model_registry, "get_registry_model_path", lambda name: fetched.append(name) or f"mock://{name}.pt")
+    monkeypatch.setattr(
+        model_registry, "get_registry_model_path", lambda name: fetched.append(name) or f"mock://{name}.pt"
+    )
     result = runner.invoke(cli, ["download", "aimnet2"])
     assert result.exit_code == 0, result.output
     assert fetched == [model_registry.resolve_registry_model_name("aimnet2")]
@@ -58,7 +60,9 @@ def test_download_named_model_fetches_it(runner, monkeypatch):
 
 def test_download_all_fetches_every_registry_model(runner, monkeypatch):
     fetched = []
-    monkeypatch.setattr(model_registry, "get_registry_model_path", lambda name: fetched.append(name) or f"mock://{name}.pt")
+    monkeypatch.setattr(
+        model_registry, "get_registry_model_path", lambda name: fetched.append(name) or f"mock://{name}.pt"
+    )
     result = runner.invoke(cli, ["download", "--all"])
     assert result.exit_code == 0, result.output
     assert sorted(fetched) == sorted(model_registry.load_model_registry()["models"])
