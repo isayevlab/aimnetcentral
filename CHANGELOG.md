@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Added `aimnet download <model...|--all>` to prefetch registry model weights into the local cache for offline/HPC use.
 - Added `deterministic=True` calculator option: routes external DFT-D3 and DSF Coulomb through their differentiable pure-torch paths, making repeated identical evaluations bitwise reproducible on the same machine/build (issue #93). Ewald/PME kernels are not covered and warn once.
 - Added weekly and manually dispatched strict fleet CI covering every official registry digest, strict-policy artifact load, and exact role-specific YAML defaults.
 
