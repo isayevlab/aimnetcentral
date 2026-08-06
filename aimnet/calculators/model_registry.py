@@ -251,3 +251,35 @@ def clear_assets():
         if os.path.isfile(fil):
             logging.warning(f"Removing {fil}")
             os.remove(fil)
+
+
+@click.command(short_help="Download model weights into the local cache.")
+@click.argument("models", nargs=-1)
+@click.option("--all", "download_all", is_flag=True, default=False, help="Download every model in the registry.")
+def download_assets(models: tuple[str, ...], download_all: bool):
+    """Prefetch registry model weights for offline use.
+
+    MODELS are registry names or aliases (e.g. ``aimnet2``). With ``--all``,
+    every registered model is fetched. Files are stored in the cache directory
+    (``$AIMNET_CACHE_DIR`` or ``~/.cache/aimnet``) and verified against their
+    registry SHA-256 digests, so a pre-seeded cache works fully offline.
+    """
+    registry = load_model_registry()
+    if download_all:
+        names = sorted(registry["models"])
+    elif models:
+        names = [resolve_registry_model_name(m) for m in models]
+    else:
+        known = "\n  ".join(sorted(registry["models"]))
+        raise click.UsageError(f"Specify model names or --all. Known models:\n  {known}")
+    failed = []
+    for name in names:
+        try:
+            path = get_registry_model_path(name)
+        except Exception as exc:
+            click.echo(f"{name}: FAILED ({exc})", err=True)
+            failed.append(name)
+            continue
+        click.echo(f"{name}: {path}")
+    if failed:
+        raise click.ClickException(f"{len(failed)} of {len(names)} downloads failed: {', '.join(failed)}")

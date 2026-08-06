@@ -51,7 +51,7 @@ class AIMNet2ASE(Calculator):
     ):
         if _ASE_IMPORT_ERROR is not None:
             raise ImportError(
-                'AIMNet2ASE requires ASE. Install it with `pip install "aimnet[ase]"`.'
+                'AIMNet2ASE requires ASE. Install with `pip install "aimnet[ase]"` — or on conda: conda install -c conda-forge ase'
             ) from _ASE_IMPORT_ERROR
 
         super().__init__()

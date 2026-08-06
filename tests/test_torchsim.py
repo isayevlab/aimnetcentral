@@ -15,7 +15,7 @@ from conftest import CAFFEINE_FILE, CIF_SPIRO  # noqa: E402
 
 from aimnet.calculators import AIMNet2Calculator, AIMNet2TorchSim  # noqa: E402
 
-pytestmark = pytest.mark.torch_sim
+pytestmark = [pytest.mark.torch_sim, pytest.mark.weights]
 
 
 class _FakeAIMNet2Calculator:

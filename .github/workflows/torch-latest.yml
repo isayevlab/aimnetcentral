@@ -1,0 +1,55 @@
+name: torch-latest
+
+on:
+    schedule:
+        - cron: "0 6 * * 1" # Mondays 06:00 UTC
+    workflow_dispatch:
+
+jobs:
+    # Early-warning lane for the unbounded `torch>=2.8` pin: reinstalls the
+    # latest stable torch CPU wheel on top of the locked env (same
+    # reinstall-on-top idiom as the tests-torch matrix in main.yml) and runs
+    # the core test suite against it. Non-blocking — this is a scheduled
+    # signal, not a PR gate.
+    tests-torch-latest:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - name: Check out
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+
+            - name: Set up the environment
+              uses: ./.github/actions/setup-uv-env
+              with:
+                  python-version: "3.11"
+                  groups: dev
+
+            - name: Override torch with latest stable (CPU wheel) — desyncs from uv.lock, intentional
+              env:
+                  UV_NO_SYNC: "1"
+              run: |
+                  set -e
+                  uv pip install --python .venv/bin/python --reinstall-package torch \
+                      --upgrade torch --index-url https://download.pytorch.org/whl/cpu
+                  uv run --no-sync python -c "import torch; print('torch', torch.__version__)"
+
+            - name: Cache model weights
+              uses: actions/cache@v6
+              with:
+                  path: ~/.cache/aimnet
+                  key: aimnet-weights-${{ hashFiles('aimnet/calculators/model_registry.yaml') }}
+
+            - name: Run core tests against latest torch
+              env:
+                  UV_NO_SYNC: "1"
+                  # Eager only: see the tests-torch job comment in main.yml — inductor/triton can't be tested via reinstall-on-top.
+                  TORCHDYNAMO_DISABLE: "1"
+              run: |
+                  uv run --no-sync aimnet download --all
+                  uv run --no-sync pytest tests \
+                      -m "not gpu and not network and not ase and not pysis and not train and not hf and not torch_sim and not slow"
