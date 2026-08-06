@@ -29,6 +29,11 @@ _DEFAULT_CLASS_IMPORT_PATHS = frozenset({
     "aimnet.modules.Output",
     "aimnet.modules.Quadrupole",
     "aimnet.modules.SRCoulomb",
+    # Embedded-dispersion modules. Both are first-party nn.Modules in
+    # aimnet/modules/lr.py and both are referenced by the shipped CPCM(water)
+    # solvation artifact, which could not load without them.
+    "aimnet.modules.D3TS",
+    "aimnet.modules.lr.DispParam",
 })
 _DEFAULT_ACTIVATION_IMPORT_PATHS = frozenset({"torch.nn.GELU"})
 _DEFAULT_INITIALIZER_IMPORT_PATHS = frozenset({"torch.nn.init.xavier_normal_"})
