@@ -62,3 +62,13 @@ def test_download_all_fetches_every_registry_model(runner, monkeypatch):
     result = runner.invoke(cli, ["download", "--all"])
     assert result.exit_code == 0, result.output
     assert sorted(fetched) == sorted(model_registry.load_model_registry()["models"])
+
+
+def test_info_reports_environment(runner):
+    result = runner.invoke(cli, ["info"])
+    assert result.exit_code == 0, result.output
+    assert "aimnet" in result.output
+    assert "torch" in result.output
+    assert "warp-lang" in result.output
+    assert "aimnet::conv_sv_2d_sp_fwd" in result.output
+    assert "model cache" in result.output

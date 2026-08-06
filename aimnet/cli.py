@@ -118,6 +118,26 @@ def calc_sae_cmd(ds, output, samples=100000):
     calc_sae.callback(ds, output, samples)  # type: ignore[union-attr]
 
 
+@cli.command(name="info")
+def info_cmd():
+    """Show environment and kernel-path diagnostics."""
+    import torch
+    import warp as wp
+
+    from . import __version__
+    from .calculators.model_registry import get_cache_dir
+    from .kernels import WARP_CUDA_AVAILABLE, load_ops
+
+    click.echo(f"aimnet        {__version__}")
+    click.echo(f"torch         {torch.__version__} (CUDA available: {torch.cuda.is_available()})")
+    click.echo(f"warp-lang     {wp.config.version} (CUDA devices: {wp.get_cuda_device_count()})")
+    ops = load_ops()
+    click.echo(f"registered ops: {', '.join(ops) if ops else 'NONE'}")
+    if torch.cuda.is_available() and not WARP_CUDA_AVAILABLE:
+        click.echo("WARNING: torch has CUDA but warp-lang does not — AEV will use the pure-torch fallback path.")
+    click.echo(f"model cache   {get_cache_dir()}")
+
+
 if __name__ == "__main__":
     import logging
 
