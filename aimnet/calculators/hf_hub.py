@@ -381,7 +381,7 @@ def load_from_hf_repo(
         raise FileNotFoundError(f"{st_name} not found in {local_dir}")
     if _load_safetensors_file is None:
         raise ImportError(
-            'Loading Hugging Face weights requires the "hf" extra. Install with: pip install "aimnet[hf]"'
+            'Hugging Face support requires huggingface_hub and safetensors. Install with `pip install "aimnet[hf]"` — or on conda: conda install -c conda-forge huggingface_hub safetensors'
         )
     state_dict = _load_safetensors_file(str(st_path), device="cpu")
 
@@ -431,7 +431,7 @@ def _resolve_repo(
         allow_patterns.append(f"ensemble_{ensemble_member}.safetensors")
     if _snapshot_download is None:
         raise ImportError(
-            'Loading Hugging Face repositories requires the "hf" extra. Install with: pip install "aimnet[hf]"'
+            'Hugging Face support requires huggingface_hub and safetensors. Install with `pip install "aimnet[hf]"` — or on conda: conda install -c conda-forge huggingface_hub safetensors'
         )
     local_dir = _snapshot_download(
         repo_id=repo_id_or_path,

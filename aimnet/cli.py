@@ -26,7 +26,7 @@ except ImportError:
     def convert_stub():
         """Convert legacy JIT model to new format (requires aimnet[train])"""
         click.echo(
-            "Training dependencies not installed.\nInstall with: pip install aimnet[train]",
+            "Training dependencies not installed.\nInstall with: pip install 'aimnet[train]' — or on conda: conda install -c conda-forge pytorch-ignite omegaconf wandb",
             err=True,
         )
         sys.exit(1)
@@ -34,7 +34,7 @@ except ImportError:
 
 def _missing_train_deps(exc: ImportError):
     click.echo(
-        f"Training dependencies not installed or incomplete: {exc}\nInstall with: pip install aimnet[train]",
+        f"Training dependencies not installed or incomplete: {exc}\nInstall with: pip install 'aimnet[train]' — or on conda: conda install -c conda-forge pytorch-ignite omegaconf wandb",
         err=True,
     )
     sys.exit(1)
