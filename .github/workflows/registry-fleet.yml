@@ -16,8 +16,6 @@ jobs:
     registry-fleet:
         runs-on: ubuntu-latest
         timeout-minutes: 30
-        env:
-            AIMNET_CACHE_DIR: ${{ runner.temp }}/aimnet-registry-cache
         steps:
             - uses: actions/checkout@v7
 
@@ -27,6 +25,8 @@ jobs:
                   groups: dev
 
             - name: Verify registry fleet
+              env:
+                  AIMNET_CACHE_DIR: ${{ runner.temp }}/aimnet-registry-cache
               run: >-
                   uv run pytest -q
                   tests/test_model_registry.py::test_registry_digests_match
