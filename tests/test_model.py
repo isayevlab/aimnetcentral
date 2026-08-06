@@ -11,6 +11,8 @@ from aimnet.config import build_module
 from aimnet.models.base import load_model
 from aimnet.modules.core import Forces
 
+pytestmark = pytest.mark.weights
+
 aimnet2_d3_def = os.path.join(os.path.dirname(__file__), "..", "aimnet", "models", "aimnet2_dftd3_wb97m.yaml")
 model_defs = [aimnet2_d3_def]
 

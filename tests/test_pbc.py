@@ -14,7 +14,7 @@ from aimnet import nbops, ops
 from aimnet.calculators import AIMNet2Calculator
 from aimnet.modules.lr import LRCoulomb
 
-pytestmark = [pytest.mark.ase, pytest.mark.gpu]
+pytestmark = [pytest.mark.ase, pytest.mark.gpu, pytest.mark.weights]
 
 
 def setup_pbc_data_with_nblist(data: dict, device: torch.device, cutoff: float = 8.0) -> dict:

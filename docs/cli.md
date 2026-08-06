@@ -30,6 +30,9 @@ pip install "aimnet[train]"
 | `aimnet export` | Export trained weights to inference format | After training |
 | `aimnet convert` | Convert legacy .jpt to new .pt format | Migrating old models |
 | `aimnet calc_sae` | Calculate self-atomic energies | Before training |
+| `aimnet download` | Prefetch registry model weights into the local cache | Preparing for offline/HPC use |
+| `aimnet info` | Print environment and kernel-path diagnostics | Troubleshooting |
+| `aimnet clear_model_cache` | Remove cached model artifacts | Recovering from a corrupt cache |
 
 ## aimnet train
 
@@ -318,6 +321,45 @@ aimnet train \
 ### How SAE Is Computed
 
 `aimnet calc_sae` does not require a separate single-atom dataset. It operates on the same `SizeGroupedDataset` HDF5 file used for training, fits a per-element energy shift via a least-squares regression on `(numbers, energy)`, trims outliers (2nd/98th percentiles of the residual), and refits. The element list is inferred automatically from the dataset.
+
+## aimnet download
+
+Prefetch registry model weights into the local cache.
+
+### Basic Usage
+
+```bash
+aimnet download aimnet2
+aimnet download aimnet2-wb97m aimnet2-b973c
+aimnet download --all
+```
+
+### Options
+
+```bash
+aimnet download [MODELS]... [OPTIONS]
+```
+
+| Argument/Option | Description |
+| --- | --- |
+| `MODELS` | Registry names or aliases (e.g. `aimnet2`) to fetch. Repeatable. |
+| `--all` | Download every model in the registry. |
+
+Files are stored in the cache directory (`$AIMNET_CACHE_DIR` or `~/.cache/aimnet`) and verified against their registry SHA-256 digests, so a pre-seeded cache works fully offline. When multiple models are requested (including with `--all`), a failure on one model is reported and the remaining models are still downloaded; the command exits non-zero if any model failed.
+
+See [offline_hpc.md](offline_hpc.md) for pre-seeding a cache on air-gapped or HPC compute nodes.
+
+## aimnet info
+
+Print environment and kernel-path diagnostics.
+
+### Basic Usage
+
+```bash
+aimnet info
+```
+
+Reports the `aimnet`, `torch`, and `warp-lang` versions, CUDA availability, the registered kernel ops, and the model cache directory path. Useful for confirming the accelerated kernel path is active before troubleshooting performance or numerics.
 
 ## Common Workflows
 

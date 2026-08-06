@@ -6,6 +6,8 @@ import torch
 from aimnet import nbops, ops
 from aimnet.modules.lr import LRCoulomb, SRCoulomb
 
+pytestmark = pytest.mark.weights
+
 # Coulomb methods for parametrized tests (non-periodic)
 # Note: "ewald" excluded here because it requires cell and flat format (mode 1)
 # Ewald is tested separately in TestLRCoulombEwald and TestLRCoulombEwaldPBC classes

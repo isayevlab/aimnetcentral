@@ -137,8 +137,8 @@ def resolve_model(
                     from aimnet.calculators.hf_hub import is_hf_repo_id, load_from_hf_repo
                 except ImportError:
                     raise ImportError(
-                        f"Loading from HF repo '{model}' requires optional dependencies. "
-                        "Install with: pip install aimnet[hf]"
+                        f"Loading from HF repo '{model}' requires huggingface_hub and safetensors. "
+                        "Install with: pip install 'aimnet[hf]' — or on conda: conda install -c conda-forge huggingface_hub safetensors"
                     ) from None
                 if is_hf_repo_id(model) or _is_hf_dir:
                     module, metadata = load_from_hf_repo(

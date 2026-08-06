@@ -21,11 +21,58 @@
 
 # type: ignore
 
+import os
+import sys
+import tempfile
+
 import torch
 import warp as wp
 from torch import Tensor
 
-wp.init()
+_BENIGN_WARP_INIT_PATTERN = "Warp CUDA error 100"  # CUDA_ERROR_NO_DEVICE: expected on CPU-only hosts
+
+
+def _filter_benign_warp_init_noise(captured: str) -> str:
+    """Drop the expected no-CUDA-device line; keep every other diagnostic."""
+    kept = [line for line in captured.splitlines() if _BENIGN_WARP_INIT_PATTERN not in line]
+    return "\n".join(kept)
+
+
+def _init_warp_quietly() -> None:
+    """Run wp.init() while suppressing only the benign no-CUDA-device stderr line.
+
+    warp 1.15 prints that line from native code (cuda_util.cpp), below the reach of
+    warp.config, so the only handle is the process-level stderr fd. The fd swap is
+    fully guarded: on any host where stderr has no real fd (Jupyter, embedded
+    interpreters) or fd setup fails, fall back to a plain, noisy wp.init().
+    Captured non-benign output is re-emitted so genuine init diagnostics survive.
+    """
+    try:
+        stderr_fileno = sys.stderr.fileno()
+        saved_fd = os.dup(stderr_fileno)
+    except Exception:
+        wp.init()
+        return
+    try:
+        with tempfile.TemporaryFile(mode="w+b") as tmp:
+            os.dup2(tmp.fileno(), stderr_fileno)
+            try:
+                wp.init()
+            finally:
+                os.dup2(saved_fd, stderr_fileno)
+            tmp.seek(0)
+            captured = tmp.read().decode(errors="replace")
+    except Exception:
+        wp.init()  # singleton: no-op if init already succeeded; otherwise a plain retry
+        return
+    finally:
+        os.close(saved_fd)
+    kept = _filter_benign_warp_init_noise(captured)
+    if kept:
+        print(kept, file=sys.stderr)
+
+
+_init_warp_quietly()
 
 
 def _get_stream(device: torch.device):
