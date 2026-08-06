@@ -604,3 +604,13 @@ aimnet convert model.jpt config.yaml output.pt
 # Calculate SAE from dataset
 aimnet calc_sae dataset.h5 sae.yaml
 ```
+
+## Weight hosting and immutability policy
+
+Published model artifacts are hosted under
+`https://storage.googleapis.com/aimnetcentral/aimnet2v2/`. Objects under this
+prefix are immutable: once a file is referenced by a released model registry,
+its bytes are never overwritten or deleted. Updated weights always get a new
+object path and a new registry entry. Released packages pin each artifact's
+SHA-256, so any hosting change that altered bytes would hard-fail rather than
+load silently different physics.

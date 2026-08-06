@@ -56,6 +56,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Documentation
 
 - Documented the rxn dipole origin convention: `center_coord=False` is origin-safe because the family is net-neutral-only; any future charged-system family must ship `center_coord=True`.
+- Documented offline/HPC installation (cache pre-seeding via `aimnet download`, `AIMNET_CACHE_DIR`, `WARP_CACHE_PATH`) and the model weight hosting immutability policy.
 
 ## [0.2.0] - 2026-05-03
 
