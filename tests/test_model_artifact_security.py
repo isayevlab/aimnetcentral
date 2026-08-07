@@ -1366,3 +1366,36 @@ def test_hf_registry_fallback_fails_on_unexpected_key_without_extra(
 
     with pytest.raises(RuntimeError, match=r"Unexpected model parameters.*extra"):
         hf_hub.load_from_hf_repo(str(tmp_path))
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "aimnet.modules.D3TS",
+        "aimnet.modules.lr.DispParam",
+    ],
+)
+def test_embedded_dispersion_modules_are_trusted(path: str) -> None:
+    """The shipped CPCM(water) artifact references these and cannot load without them.
+
+    Both are first-party ``nn.Module`` subclasses in ``aimnet/modules/lr.py``.
+    When the artifact trust boundary was introduced they were absent from the
+    default allowlist, so the solvation model failed to load with
+    ``Untrusted import path for 'class'``. Downstream that surfaced only as a
+    run aborting hours in, since nothing loads the solvation model until it is
+    needed.
+    """
+    assert path in ALLOWED_MODEL_IMPORT_PATHS
+
+
+def test_trusted_dispersion_paths_resolve_to_real_modules() -> None:
+    """An allowlist entry that does not resolve would trade a load failure for
+    an import error, so membership alone is not enough to assert."""
+    import importlib
+
+    from torch import nn
+
+    for path in ("aimnet.modules.D3TS", "aimnet.modules.lr.DispParam"):
+        module_name, class_name = path.rsplit(".", 1)
+        obj = getattr(importlib.import_module(module_name), class_name)
+        assert isinstance(obj, type) and issubclass(obj, nn.Module)
