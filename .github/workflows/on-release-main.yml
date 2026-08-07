@@ -7,6 +7,10 @@ on:
 jobs:
     publish:
         runs-on: ubuntu-latest
+        permissions:
+            # OIDC token for PyPI trusted publishing; no long-lived secret.
+            id-token: write
+            contents: read
         steps:
             - name: Check out
               uses: actions/checkout@v7
@@ -35,7 +39,7 @@ jobs:
                   if not any(pattern.match(name) for name in files):
                       raise SystemExit(f"dist artifacts {files!r} do not match release tag {tag!r}")
                   PY
-                  uv publish --token ${{ secrets.PYPI_TOKEN }}
+                  uv publish --trusted-publishing always
 
     deploy-docs:
         needs: publish
