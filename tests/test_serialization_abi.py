@@ -80,6 +80,11 @@ _FROZEN_CLASS_PATHS = (
     "aimnet.modules.LRCoulomb",
     "aimnet.modules.DFTD3",
     "aimnet.modules.D3TS",
+    # Submodule spelling of the same D3TS class (barrel re-export above and
+    # this fully qualified path resolve to the identical object). The loader
+    # machinery that detects D3TS by class name matches the "D3TS" substring
+    # regardless of spelling, so both spellings must be pinned here too.
+    "aimnet.modules.lr.D3TS",
     # Dispersion-parameter module carried by the shipped CPCM(water) artifact
     # alongside D3TS; released artifacts reference it, so it is ABI.
     "aimnet.modules.lr.DispParam",
@@ -187,6 +192,26 @@ class TestFrozenSerializationAbi:
             "Add them to _FROZEN_CLASS_PATHS (they become part of the serialization ABI)."
         )
 
+    def test_default_class_import_paths_are_frozen(self):
+        """Trusted-by-default class imports must be pinned as serialization ABI.
+
+        `_DEFAULT_CLASS_IMPORT_PATHS` (aimnet/models/artifact_validation.py) is
+        the registry trust boundary; its own admission rule (iv) requires every
+        entry to be simultaneously pinned in `_FROZEN_CLASS_PATHS`. Checking it
+        here closes the drift class where the allowlist and the ABI pin list
+        could gain or lose entries independently without either test noticing.
+        Class role only: `_DEFAULT_CLASS_IMPORT_PATHS` never contains
+        activation or initializer paths, so no exclusion is needed for those.
+        """
+        from aimnet.models.artifact_validation import _DEFAULT_CLASS_IMPORT_PATHS
+
+        frozen = set(_FROZEN_CLASS_PATHS) | set(_FROZEN_FACTORY_PATHS)
+        missing = _DEFAULT_CLASS_IMPORT_PATHS - frozen
+        assert not missing, (
+            f"Default class import paths are trusted but not pinned as ABI: {sorted(missing)}. "
+            "Add them to _FROZEN_CLASS_PATHS (trusted implies frozen)."
+        )
+
 
 _ASSET_FILES = sorted(_ASSETS_DIR.glob("*.pt")) if _ASSETS_DIR.is_dir() else []
 
@@ -208,6 +233,12 @@ def test_allowed_model_import_paths_are_shared_and_immutable():
         # the runtime allowlist did not, and that inconsistency is what stopped
         # the model loading.
         "aimnet.modules.D3TS",
+        # Submodule spelling of the same D3TS class: the loader machinery
+        # matches "D3TS" by substring regardless of which spelling an artifact
+        # uses, so the exact-match allowlist must trust both. DispParam has no
+        # second spelling -- "aimnet.modules.lr.DispParam" is its only
+        # resolvable path (no barrel re-export).
+        "aimnet.modules.lr.D3TS",
         "aimnet.modules.lr.DispParam",
         "torch.nn.GELU",
         "torch.nn.init.xavier_normal_",
