@@ -14,6 +14,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Validated Python class and function references in model YAML against a default trusted set. Direct local and Hugging Face artifacts can extend or replace that set, or explicitly select unsafe loading for trusted custom code; registry models always use the fixed default set.
 - Enriched and structurally validated complete Hugging Face metadata before weight access, including unambiguous `SRCoulomb` parameter recovery. Registry-backed HF fallback now treats digest-verified registry YAML and metadata as authoritative and rejects conflicting family metadata.
 - Bumped the locked torch from 2.9.1 to 2.12.1 (with triton 3.7.1), staying inside the supported 2.8-2.13 matrix. This clears the low-severity `torch.lstm_cell` memory-corruption advisory (patched in 2.10.0; the earlier note that both torch advisories required 2.13 no longer matches the updated advisory data) and moves the default CI lane onto an inductor with the upstream fusion-legality fix (pytorch/pytorch#172301). The torch.jit.script advisory is resolvable now that the supported matrix includes 2.13; clearing it requires bumping the locked torch to 2.13.
+- Forbade the `ptfile` constructor kwarg anywhere in artifact `model_yaml`. `DispParam.__init__` runs `torch.load(ptfile, weights_only=True)` on a YAML-supplied path, and the import-path walker never inspected constructor kwargs, so a default-trusted artifact could carry an arbitrary-path read/probe/DoS primitive. The exporter always strips `ptfile` before an artifact is produced, so no legitimate artifact is affected; training-config loading is untouched.
+- Cross-checked D3TS presence between `model_yaml` and the `has_embedded_d3ts` metadata flag during artifact validation. Previously the two were validated independently, so a mislabeled artifact could silently double-count or entirely lose dispersion depending on which direction it was mislabeled.
+- Validated D3TS damping parameters (`a1`, `a2`, `s8`, `s6`) supplied via artifact `model_yaml`: they must be finite, non-negative real numbers. These are plain constructor floats outside the state dict, so nothing previously stopped a NaN/Inf value or `a1=a2=0` (an undamped `1/d**6` collapse) from loading silently.
 
 ### Added
 
@@ -42,6 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - Excluded the local weight cache (`aimnet/calculators/assets/`) from wheels and sdists explicitly, instead of relying on hatchling's `.gitignore` handling.
+- Trusted the `aimnet.modules.lr.D3TS` submodule spelling of the D3TS class in the default artifact allowlist, alongside the existing `aimnet.modules.D3TS` barrel spelling. The loader machinery that detects D3TS by class name matches the "D3TS" substring regardless of spelling, so an artifact using this spelling was recognized as D3TS by the export layer but rejected by the exact-match allowlist.
 - Fixed `DataGroup.cv_split` corrupting cross-validation folds: building each fold's train split mutated the shared parts in place via `cat()`, so later folds contained duplicated samples and validation splits larger than the dataset. Folds are now built without mutating the shared parts.
 - Fixed a crash when torch has CUDA but warp-lang does not (possible with conda-forge variant packages): the AEV kernel gate now checks warp CUDA availability and falls back to the pure-torch path with a one-time warning.
 

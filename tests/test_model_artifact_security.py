@@ -1372,18 +1372,23 @@ def test_hf_registry_fallback_fails_on_unexpected_key_without_extra(
     "path",
     [
         "aimnet.modules.D3TS",
+        "aimnet.modules.lr.D3TS",
         "aimnet.modules.lr.DispParam",
     ],
 )
 def test_embedded_dispersion_modules_are_trusted(path: str) -> None:
     """The shipped CPCM(water) artifact references these and cannot load without them.
 
-    Both are first-party ``nn.Module`` subclasses in ``aimnet/modules/lr.py``.
-    When the artifact trust boundary was introduced they were absent from the
-    default allowlist, so the solvation model failed to load with
-    ``Untrusted import path for 'class'``. Downstream that surfaced only as a
-    run aborting hours in, since nothing loads the solvation model until it is
-    needed.
+    All are first-party ``nn.Module`` subclasses (or spellings of one) in
+    ``aimnet/modules/lr.py``. When the artifact trust boundary was introduced
+    they were absent from the default allowlist, so the solvation model
+    failed to load with ``Untrusted import path for 'class'``. Downstream that
+    surfaced only as a run aborting hours in, since nothing loads the
+    solvation model until it is needed. ``aimnet.modules.lr.D3TS`` is the
+    fully qualified spelling of the same class as ``aimnet.modules.D3TS``
+    (the barrel re-export); the loader machinery that detects D3TS matches
+    the "D3TS" substring regardless of spelling, so the exact-match allowlist
+    must trust both.
     """
     assert path in ALLOWED_MODEL_IMPORT_PATHS
 
@@ -1395,7 +1400,176 @@ def test_trusted_dispersion_paths_resolve_to_real_modules() -> None:
 
     from torch import nn
 
-    for path in ("aimnet.modules.D3TS", "aimnet.modules.lr.DispParam"):
+    for path in ("aimnet.modules.D3TS", "aimnet.modules.lr.D3TS", "aimnet.modules.lr.DispParam"):
         module_name, class_name = path.rsplit(".", 1)
         obj = getattr(importlib.import_module(module_name), class_name)
         assert isinstance(obj, type) and issubclass(obj, nn.Module)
+
+
+def test_d3ts_barrel_and_submodule_spellings_are_the_same_class() -> None:
+    """Both allowlisted D3TS spellings must resolve to the identical object,
+    not merely to two classes that happen to share a name."""
+    from aimnet.modules import D3TS as barrel_d3ts
+    from aimnet.modules.lr import D3TS as submodule_d3ts
+
+    assert barrel_d3ts is submodule_d3ts
+
+
+# --- Finding 1: ptfile forbidden in artifact model_yaml ---------------------
+
+
+def test_ptfile_kwarg_is_forbidden_in_artifact_yaml() -> None:
+    """DispParam.__init__ runs torch.load(ptfile, weights_only=True) on a
+    YAML-supplied path; the walker must reject it wherever it appears."""
+    with pytest.raises(ValueError, match="ptfile"):
+        validate_model_yaml(
+            "class: aimnet.modules.lr.DispParam\nkwargs:\n  ptfile: /etc/passwd\n",
+        )
+
+
+def test_ptfile_kwarg_is_forbidden_anywhere_in_the_tree() -> None:
+    """The forbidden key is rejected regardless of which class it is nested under."""
+    with pytest.raises(ValueError, match="ptfile"):
+        validate_model_yaml(
+            """
+class: aimnet.models.AIMNet2
+kwargs:
+  nested:
+    - ptfile: /etc/passwd
+"""
+        )
+
+
+def test_dispparam_without_ptfile_passes_import_policy() -> None:
+    validate_model_yaml(
+        "class: aimnet.modules.lr.DispParam\nkwargs:\n  key_in: disp_param\n  key_out: disp_param\n",
+    )
+
+
+def test_ptfile_remains_forbidden_under_unsafe_import_mode() -> None:
+    """Unsafe mode only skips path matching; forbidden-key checks stay active."""
+    with pytest.raises(ValueError, match="ptfile"):
+        validate_model_yaml(
+            "class: aimnet.modules.lr.DispParam\nkwargs:\n  ptfile: /etc/passwd\n",
+            model_import_mode="unsafe",
+        )
+
+
+# --- Finding 2: YAML<->metadata D3TS consistency -----------------------------
+
+_D3TS_MODEL_YAML = """
+class: aimnet.models.AIMNet2
+kwargs:
+  outputs:
+    disp_param:
+      class: aimnet.modules.lr.DispParam
+      kwargs:
+        key_in: disp_param
+        key_out: disp_param
+    d3ts:
+      class: aimnet.modules.D3TS
+      kwargs:
+        a1: 0.55
+        a2: 3.1
+        s8: 1.5
+        s6: 1.0
+"""
+
+
+def test_rejects_d3ts_in_yaml_not_declared_in_metadata() -> None:
+    """D3TS embedded in model_yaml but has_embedded_d3ts=False must be rejected.
+
+    Left unchecked, needs_dispersion could be set True alongside this and the
+    calculator would silently double-count dispersion (embedded D3TS plus an
+    external correction)."""
+    with pytest.raises(ValueError, match="has_embedded_d3ts"):
+        validate_v2_artifact(
+            _v2_data(
+                _D3TS_MODEL_YAML,
+                has_embedded_lr=True,
+                has_embedded_d3ts=False,
+            )
+        )
+
+
+def test_rejects_declared_d3ts_absent_from_yaml() -> None:
+    """has_embedded_d3ts=True with no D3TS in model_yaml must be rejected.
+
+    Left unchecked, the calculator would trust an embedded-dispersion flag
+    that no module actually backs, silently losing dispersion entirely."""
+    with pytest.raises(ValueError, match="has_embedded_d3ts"):
+        validate_v2_artifact(
+            _v2_data(
+                "class: aimnet.models.AIMNet2",
+                has_embedded_lr=True,
+                has_embedded_d3ts=True,
+            )
+        )
+
+
+def test_truthful_embedded_d3ts_config_passes() -> None:
+    model_config, _ = validate_v2_artifact(
+        _v2_data(
+            _D3TS_MODEL_YAML,
+            needs_coulomb=False,
+            needs_dispersion=False,
+            coulomb_mode="none",
+            has_embedded_lr=True,
+            has_embedded_d3ts=True,
+        )
+    )
+    assert model_config["kwargs"]["outputs"]["d3ts"]["class"] == "aimnet.modules.D3TS"
+
+
+def test_registry_policy_admits_embedded_d3ts_and_disp_param_artifact_shape() -> None:
+    """Finding 4 completeness fixture: the allowlist must admit the artifact
+    shape this whole change exists for -- a DispParam module feeding a D3TS
+    module -- validated end-to-end under REGISTRY_IMPORT_POLICY, the fixed
+    default policy the registry loader uses."""
+    model_config, state_dict = validate_registry_v2_artifact(
+        _v2_data(
+            _D3TS_MODEL_YAML,
+            needs_coulomb=False,
+            needs_dispersion=False,
+            coulomb_mode="none",
+            has_embedded_lr=True,
+            has_embedded_d3ts=True,
+        )
+    )
+    assert state_dict == {}
+    outputs = model_config["kwargs"]["outputs"]
+    assert outputs["disp_param"]["class"] == "aimnet.modules.lr.DispParam"
+    assert outputs["d3ts"]["class"] == "aimnet.modules.D3TS"
+
+
+# --- Finding 3: D3TS damping numerics ----------------------------------------
+
+
+@pytest.mark.parametrize("d3ts_class", ["aimnet.modules.D3TS", "aimnet.modules.lr.D3TS"])
+def test_d3ts_rejects_non_finite_damping_kwarg(d3ts_class: str) -> None:
+    with pytest.raises(ValueError, match="s8"):
+        validate_model_yaml(f"class: {d3ts_class}\nkwargs:\n  a1: 0.5\n  a2: 3.0\n  s8: .nan\n")
+
+
+def test_d3ts_rejects_infinite_damping_kwarg() -> None:
+    with pytest.raises(ValueError, match="a2"):
+        validate_model_yaml("class: aimnet.modules.D3TS\nkwargs:\n  a1: 0.5\n  a2: .inf\n  s8: 1.0\n")
+
+
+def test_d3ts_rejects_negative_damping_kwarg() -> None:
+    with pytest.raises(ValueError, match="a1"):
+        validate_model_yaml("class: aimnet.modules.D3TS\nkwargs:\n  a1: -1.0\n  a2: 3.0\n  s8: 1.0\n")
+
+
+def test_d3ts_accepts_normal_damping_kwargs() -> None:
+    validate_model_yaml("class: aimnet.modules.D3TS\nkwargs:\n  a1: 0.55\n  a2: 3.1\n  s8: 1.5\n  s6: 1.0\n")
+
+
+def test_d3ts_accepts_absent_damping_kwargs() -> None:
+    """Absent kwargs fall back to the class's own defaults and are not our concern."""
+    validate_model_yaml("class: aimnet.modules.D3TS\nkwargs:\n  key_in: disp_param\n  key_out: energy\n")
+
+
+def test_d3ts_damping_validation_applies_to_the_submodule_spelling_too() -> None:
+    with pytest.raises(ValueError, match="s6"):
+        validate_model_yaml("class: aimnet.modules.lr.D3TS\nkwargs:\n  s6: -1.0\n")
