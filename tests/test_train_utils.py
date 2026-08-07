@@ -329,9 +329,26 @@ kwargs:
     d3ts:
       class: custom.D3TS
 """
+    # The mocked core_config below stands in for what strip_lr_modules_from_yaml
+    # actually returns: a "d3ts"-keyed output entry passes through unchanged
+    # (aimnet/models/utils.py's rebuild-outputs loop only special-cases
+    # "lrcoulomb"/"dftd3"/"d3bj"). It must keep a D3TS entry -- using the
+    # allowlisted class spelling, since the real exported model_yaml goes
+    # through the artifact-validation import policy -- so this stays
+    # consistent with the has_embedded_d3ts flag the export computes from the
+    # original (unmocked) model_config above.
     core_config = {
         "class": "aimnet.modules.AtomicSum",
-        "kwargs": {"key_in": "energy", "key_out": "energy"},
+        "kwargs": {
+            "key_in": "energy",
+            "key_out": "energy",
+            "outputs": {
+                "d3ts": {
+                    "class": "aimnet.modules.D3TS",
+                    "kwargs": {"a1": 0.5, "a2": 3.0, "s8": 1.0},
+                },
+            },
+        },
     }
     weights, model_config, sae = _write_export_inputs(tmp_path, config)
     output = tmp_path / "export.pt"
@@ -340,6 +357,7 @@ kwargs:
         "strip_lr_modules_from_yaml",
         Mock(return_value=(core_config, "none", False, None, None, "exp", None)),
     )
+    monkeypatch.setattr(export_module, "build_module", Mock(return_value=torch.nn.Identity()))
     _patch_minimal_export_model(monkeypatch)
 
     export_module.export_model.callback(
