@@ -2168,6 +2168,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#weight-hosting-and-immutability-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Weight hosting and immutability policy
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2248,6 +2259,34 @@
     
   
     GPU Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../offline_hpc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Offline / HPC
   
 
     
@@ -3116,6 +3155,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#weight-hosting-and-immutability-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Weight hosting and immutability policy
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -3791,6 +3841,8 @@ aimnet<span class="w"> </span>convert<span class="w"> </span>model.jpt<span clas
 <span class="c1"># Calculate SAE from dataset</span>
 aimnet<span class="w"> </span>calc_sae<span class="w"> </span>dataset.h5<span class="w"> </span>sae.yaml
 </code></pre></div>
+<h2 id="weight-hosting-and-immutability-policy">Weight hosting and immutability policy<a class="headerlink" href="#weight-hosting-and-immutability-policy" title="Permanent link">&para;</a></h2>
+<p>Published model artifacts are hosted under <code>https://storage.googleapis.com/aimnetcentral/aimnet2v2/</code>. Objects under this prefix are immutable: once a file is referenced by a released model registry, its bytes are never overwritten or deleted. Updated weights always get a new object path and a new registry entry. Released packages pin each artifact's SHA-256, so any hosting change that altered bytes would hard-fail rather than load silently different physics.</p>
 
 
 

@@ -1584,6 +1584,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../offline_hpc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Offline / HPC
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2372,6 +2400,17 @@
         
       </ul>
     </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#aimnet.calculators.model_registry.download_assets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        download_assets
+      
+    </span>
+  </a>
   
 </li>
         
@@ -3210,6 +3249,17 @@
         
       </ul>
     </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#aimnet.calculators.model_registry.download_assets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        download_assets
+      
+    </span>
+  </a>
   
 </li>
         
@@ -5210,7 +5260,7 @@ these backends.</p>
 <span class="p">):</span>
     <span class="k">if</span> <span class="n">_ASE_IMPORT_ERROR</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-            <span class="s1">&#39;AIMNet2ASE requires ASE. Install it with `pip install &quot;aimnet[ase]&quot;`.&#39;</span>
+            <span class="s1">&#39;AIMNet2ASE requires ASE. Install with `pip install &quot;aimnet[ase]&quot;` — or on conda: conda install -c conda-forge ase&#39;</span>
         <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">_ASE_IMPORT_ERROR</span>
 
     <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
@@ -5473,7 +5523,7 @@ be updated as a side effect, mirroring the <code>calculate()</code> behavior).</
 <span class="p">):</span>
     <span class="k">if</span> <span class="n">_PYSIS_IMPORT_ERROR</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-            <span class="s1">&#39;AIMNet2Pysis requires PySisyphus. Install it with `pip install &quot;aimnet[pysis]&quot;`.&#39;</span>
+            <span class="s2">&quot;AIMNet2Pysis requires PySisyphus. Install it with `pip install pysisyphus` (pysisyphus is not available on conda-forge).&quot;</span>
         <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">_PYSIS_IMPORT_ERROR</span>
 
     <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">charge</span><span class="o">=</span><span class="n">charge</span><span class="p">,</span> <span class="n">mult</span><span class="o">=</span><span class="n">mult</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -5612,7 +5662,7 @@ validate_species
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="k">if</span> <span class="n">_TORCHSIM_IMPORT_ERROR</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-            <span class="s1">&#39;AIMNet2TorchSim requires TorchSim. Install it on Python 3.12+ with `pip install &quot;aimnet[torchsim]&quot;`.&#39;</span>
+            <span class="s2">&quot;AIMNet2TorchSim requires TorchSim (Python 3.12+ only). Install it with `pip install torch-sim-atomistic` (torch-sim-atomistic is not available on conda-forge).&quot;</span>
         <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">_TORCHSIM_IMPORT_ERROR</span>
 
     <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
@@ -5859,6 +5909,91 @@ members : tuple[str, ...]
 
 </div>
 
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="aimnet.calculators.model_registry.download_assets" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">download_assets</span><span class="p">(</span><span class="n">models</span><span class="p">,</span> <span class="n">download_all</span><span class="p">)</span></code>
+
+<a href="#aimnet.calculators.model_registry.download_assets" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Prefetch registry model weights for offline use.</p>
+<p>MODELS are registry names or aliases (e.g. <code>aimnet2</code>). With <code>--all</code>,
+every registered model is fetched. Files are stored in the cache directory
+(<code>$AIMNET_CACHE_DIR</code> or <code>~/.cache/aimnet</code>) and verified against their
+registry SHA-256 digests, so a pre-seeded cache works fully offline.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>aimnet/calculators/model_registry.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">256</span>
+<span class="normal">257</span>
+<span class="normal">258</span>
+<span class="normal">259</span>
+<span class="normal">260</span>
+<span class="normal">261</span>
+<span class="normal">262</span>
+<span class="normal">263</span>
+<span class="normal">264</span>
+<span class="normal">265</span>
+<span class="normal">266</span>
+<span class="normal">267</span>
+<span class="normal">268</span>
+<span class="normal">269</span>
+<span class="normal">270</span>
+<span class="normal">271</span>
+<span class="normal">272</span>
+<span class="normal">273</span>
+<span class="normal">274</span>
+<span class="normal">275</span>
+<span class="normal">276</span>
+<span class="normal">277</span>
+<span class="normal">278</span>
+<span class="normal">279</span>
+<span class="normal">280</span>
+<span class="normal">281</span>
+<span class="normal">282</span>
+<span class="normal">283</span>
+<span class="normal">284</span>
+<span class="normal">285</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@click</span><span class="o">.</span><span class="n">command</span><span class="p">(</span><span class="n">short_help</span><span class="o">=</span><span class="s2">&quot;Download model weights into the local cache.&quot;</span><span class="p">)</span>
+<span class="nd">@click</span><span class="o">.</span><span class="n">argument</span><span class="p">(</span><span class="s2">&quot;models&quot;</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+<span class="nd">@click</span><span class="o">.</span><span class="n">option</span><span class="p">(</span><span class="s2">&quot;--all&quot;</span><span class="p">,</span> <span class="s2">&quot;download_all&quot;</span><span class="p">,</span> <span class="n">is_flag</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;Download every model in the registry.&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">download_assets</span><span class="p">(</span><span class="n">models</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">download_all</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Prefetch registry model weights for offline use.</span>
+
+<span class="sd">    MODELS are registry names or aliases (e.g. ``aimnet2``). With ``--all``,</span>
+<span class="sd">    every registered model is fetched. Files are stored in the cache directory</span>
+<span class="sd">    (``$AIMNET_CACHE_DIR`` or ``~/.cache/aimnet``) and verified against their</span>
+<span class="sd">    registry SHA-256 digests, so a pre-seeded cache works fully offline.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">registry</span> <span class="o">=</span> <span class="n">load_model_registry</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">download_all</span><span class="p">:</span>
+        <span class="n">names</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">registry</span><span class="p">[</span><span class="s2">&quot;models&quot;</span><span class="p">])</span>
+    <span class="k">elif</span> <span class="n">models</span><span class="p">:</span>
+        <span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="n">resolve_registry_model_name</span><span class="p">(</span><span class="n">m</span><span class="p">)</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">models</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">known</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">  &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">registry</span><span class="p">[</span><span class="s2">&quot;models&quot;</span><span class="p">]))</span>
+        <span class="k">raise</span> <span class="n">click</span><span class="o">.</span><span class="n">UsageError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Specify model names or --all. Known models:</span><span class="se">\n</span><span class="s2">  </span><span class="si">{</span><span class="n">known</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">failed</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="n">get_registry_model_path</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="n">click</span><span class="o">.</span><span class="n">echo</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: FAILED (</span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="n">err</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">failed</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="n">click</span><span class="o">.</span><span class="n">echo</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">failed</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">click</span><span class="o">.</span><span class="n">ClickException</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">failed</span><span class="p">)</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">names</span><span class="p">)</span><span class="si">}</span><span class="s2"> downloads failed: </span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">failed</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-function">
 

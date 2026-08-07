@@ -1885,6 +1885,73 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#aimnet-download" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        aimnet download
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="aimnet download">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#basic-usage_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Basic Usage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#options_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aimnet-info" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        aimnet info
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="aimnet info">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#basic-usage_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Basic Usage
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#common-workflows" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1991,6 +2058,34 @@
     
   
     GPU Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../offline_hpc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Offline / HPC
   
 
     
@@ -2520,6 +2615,73 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#aimnet-download" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        aimnet download
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="aimnet download">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#basic-usage_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Basic Usage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#options_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aimnet-info" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        aimnet info
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="aimnet info">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#basic-usage_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Basic Usage
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#common-workflows" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2663,6 +2825,21 @@
 <td><code>aimnet calc_sae</code></td>
 <td>Calculate self-atomic energies</td>
 <td>Before training</td>
+</tr>
+<tr>
+<td><code>aimnet download</code></td>
+<td>Prefetch registry model weights into the local cache</td>
+<td>Preparing for offline/HPC use</td>
+</tr>
+<tr>
+<td><code>aimnet info</code></td>
+<td>Print environment and kernel-path diagnostics</td>
+<td>Troubleshooting</td>
+</tr>
+<tr>
+<td><code>aimnet clear_model_cache</code></td>
+<td>Remove cached model artifacts</td>
+<td>Recovering from a corrupt cache</td>
 </tr>
 </tbody>
 </table>
@@ -2987,6 +3164,42 @@ aimnet<span class="w"> </span>train<span class="w"> </span><span class="se">\</s
 </code></pre></div>
 <h3 id="how-sae-is-computed">How SAE Is Computed<a class="headerlink" href="#how-sae-is-computed" title="Permanent link">&para;</a></h3>
 <p><code>aimnet calc_sae</code> does not require a separate single-atom dataset. It operates on the same <code>SizeGroupedDataset</code> HDF5 file used for training, fits a per-element energy shift via a least-squares regression on <code>(numbers, energy)</code>, trims outliers (2nd/98th percentiles of the residual), and refits. The element list is inferred automatically from the dataset.</p>
+<h2 id="aimnet-download">aimnet download<a class="headerlink" href="#aimnet-download" title="Permanent link">&para;</a></h2>
+<p>Prefetch registry model weights into the local cache.</p>
+<h3 id="basic-usage_4">Basic Usage<a class="headerlink" href="#basic-usage_4" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code>aimnet<span class="w"> </span>download<span class="w"> </span>aimnet2
+aimnet<span class="w"> </span>download<span class="w"> </span>aimnet2-wb97m<span class="w"> </span>aimnet2-b973c
+aimnet<span class="w"> </span>download<span class="w"> </span>--all
+</code></pre></div>
+<h3 id="options_4">Options<a class="headerlink" href="#options_4" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code>aimnet<span class="w"> </span>download<span class="w"> </span><span class="o">[</span>MODELS<span class="o">]</span>...<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Argument/Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MODELS</code></td>
+<td>Registry names or aliases (e.g. <code>aimnet2</code>) to fetch. Repeatable.</td>
+</tr>
+<tr>
+<td><code>--all</code></td>
+<td>Download every model in the registry.</td>
+</tr>
+</tbody>
+</table>
+<p>Files are stored in the cache directory (<code>$AIMNET_CACHE_DIR</code> or <code>~/.cache/aimnet</code>) and verified against their registry SHA-256 digests, so a pre-seeded cache works fully offline. When multiple models are requested (including with <code>--all</code>), a failure on one model is reported and the remaining models are still downloaded; the command exits non-zero if any model failed.</p>
+<p>See <a href="../offline_hpc/">offline_hpc.md</a> for pre-seeding a cache on air-gapped or HPC compute nodes.</p>
+<h2 id="aimnet-info">aimnet info<a class="headerlink" href="#aimnet-info" title="Permanent link">&para;</a></h2>
+<p>Print environment and kernel-path diagnostics.</p>
+<h3 id="basic-usage_5">Basic Usage<a class="headerlink" href="#basic-usage_5" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code>aimnet<span class="w"> </span>info
+</code></pre></div>
+<p>Reports the <code>aimnet</code>, <code>torch</code>, and <code>warp-lang</code> versions, CUDA availability, the registered kernel ops, and the model cache directory path. Useful for confirming the accelerated kernel path is active before troubleshooting performance or numerics.</p>
 <h2 id="common-workflows">Common Workflows<a class="headerlink" href="#common-workflows" title="Permanent link">&para;</a></h2>
 <h3 id="complete-training-workflow">Complete Training Workflow<a class="headerlink" href="#complete-training-workflow" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="c1"># 1. Calculate SAE</span>
