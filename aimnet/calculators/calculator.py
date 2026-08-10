@@ -595,6 +595,19 @@ class AIMNet2Calculator:
         has_dftd3 = self.external_dftd3 is not None or self._has_embedded_dispersion()
         has_coulomb = self.external_coulomb is not None or self._has_embedded_coulomb()
 
+        if not has_dftd3 and not has_coulomb:
+            # self.lr is set (embedded LR via metadata or a model cutoff_lr
+            # attribute) but neither dispersion nor Coulomb could be identified.
+            # The constructor resolves this case to an all-pairs cutoff_lr
+            # ("unknown legacy LR modules need all pairs"); mirror it here.
+            # Leaving every LR list None makes any flattened (mode-1)
+            # evaluation KeyError on nbmat_lr inside the embedded module.
+            cutoff = self.cutoff_lr if self.cutoff_lr is not None and math.isfinite(self.cutoff_lr) else 1e6
+            self._nblist_lr = AdaptiveNeighborList(cutoff=cutoff)
+            self._nblist_dftd3 = None
+            self._nblist_coulomb = None
+            return
+
         # Determine effective cutoffs (None means no neighbor list needed for that module)
         dftd3_cutoff = self._dftd3_cutoff if has_dftd3 else 0.0
         coulomb_cutoff = self._coulomb_cutoff if has_coulomb and self._coulomb_cutoff is not None else 0.0
