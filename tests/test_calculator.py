@@ -2363,3 +2363,42 @@ def test_from_legacy_jit_routes_once(monkeypatch):
 
     with pytest.raises(TypeError, match="model"):
         AIMNet2Calculator.from_legacy_jit("custom.jpt", model=model)
+
+
+def test_unknown_embedded_lr_metadata_builds_all_pairs_nblist(monkeypatch):
+    """Issue #118: metadata with has_embedded_lr=True but no identifiable
+    dispersion or Coulomb module must still yield an LR neighbor list.
+
+    The constructor resolves this shape to an all-pairs cutoff_lr, but
+    _update_lr_nblists left every LR list as None, so any flattened (mode-1)
+    evaluation KeyError'd on nbmat_lr inside the embedded module -- observed
+    as embedded-D3TS models failing for every molecule above nb_threshold.
+    """
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    patched = {
+        "format_version": 2,
+        "cutoff": 5.0,
+        "needs_coulomb": False,
+        "needs_dispersion": False,
+        "coulomb_mode": "none",
+        "has_embedded_lr": True,
+        "implemented_species": [1, 6],
+    }
+    monkeypatch.setattr(type(calc), "metadata", property(lambda self: patched))
+    calc.external_coulomb = None
+    calc.external_dftd3 = None
+    calc.lr = True
+    calc.cutoff_lr = float("inf")
+    calc._update_lr_nblists()
+
+    assert calc._nblist_lr is not None
+
+    # The flattened path must deliver the shared LR matrices to embedded modules.
+    n = 16
+    coord = torch.zeros(n, 3)
+    coord[:, 0] = torch.arange(n, dtype=torch.float32) * 1.5
+    data = {"coord": coord, "mol_idx": torch.zeros(n, dtype=torch.long)}
+    calc._max_mol_size = n
+    data = calc.make_nbmat(data)
+    assert "nbmat_lr" in data
+    assert "nbmat_dftd3" in data
