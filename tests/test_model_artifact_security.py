@@ -1377,7 +1377,7 @@ def test_hf_registry_fallback_fails_on_unexpected_key_without_extra(
     ],
 )
 def test_embedded_dispersion_modules_are_trusted(path: str) -> None:
-    """The shipped CPCM(water) artifact references these and cannot load without them.
+    """First-party solvation artifacts reference these and cannot load without them.
 
     All are first-party ``nn.Module`` subclasses (or spellings of one) in
     ``aimnet/modules/lr.py``. When the artifact trust boundary was introduced

@@ -85,7 +85,7 @@ _FROZEN_CLASS_PATHS = (
     # machinery that detects D3TS by class name matches the "D3TS" substring
     # regardless of spelling, so both spellings must be pinned here too.
     "aimnet.modules.lr.D3TS",
-    # Dispersion-parameter module carried by the shipped CPCM(water) artifact
+    # Dispersion-parameter module carried by solvation artifacts
     # alongside D3TS; released artifacts reference it, so it is ABI.
     "aimnet.modules.lr.DispParam",
     # Public configuration building blocks (documented in docs/api as intended
@@ -227,8 +227,8 @@ def test_allowed_model_import_paths_are_shared_and_immutable():
         "aimnet.modules.Output",
         "aimnet.modules.Quadrupole",
         "aimnet.modules.SRCoulomb",
-        # Embedded-dispersion modules referenced by the shipped CPCM(water)
-        # solvation artifact. D3TS was already in _FROZEN_CLASS_PATHS above --
+        # Embedded-dispersion modules referenced by first-party solvation
+        # artifacts. D3TS was already in _FROZEN_CLASS_PATHS above --
         # the serialization ABI knew released checkpoints reference it while
         # the runtime allowlist did not, and that inconsistency is what stopped
         # the model loading.
