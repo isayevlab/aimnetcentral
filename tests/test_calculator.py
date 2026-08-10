@@ -2402,3 +2402,37 @@ def test_unknown_embedded_lr_metadata_builds_all_pairs_nblist(monkeypatch):
     data = calc.make_nbmat(data)
     assert "nbmat_lr" in data
     assert "nbmat_dftd3" in data
+
+
+def test_metadataless_embedded_dispersion_model_gets_lr_nblist():
+    """Issue #118 (reopened): a model with an embedded dispersion module but no
+    metadata dict at all must still be detected as long-range.
+
+    Detection previously keyed only on metadata flags or a model ``cutoff_lr``
+    attribute; a pre-metadata artifact with a D3TS submodule had ``lr=False``,
+    no LR neighbor list, and KeyError'd on ``nbmat_lr`` in every flattened
+    evaluation. Detection now falls back to the module tree.
+    """
+    donor = AIMNet2Calculator("aimnet2", device="cpu")
+    model = donor.model
+    model.d3ts = torch.nn.Identity()  # embedded dispersion module by name
+    if hasattr(model, "_metadata"):
+        del model._metadata  # pre-metadata artifact: no metadata dict
+    try:
+        calc = AIMNet2Calculator(model, device="cpu")
+        assert calc.metadata is None
+        assert calc._has_embedded_dispersion()
+        assert calc.lr
+        assert calc.cutoff_lr == calc._default_dftd3_cutoff
+        assert calc._nblist_lr is not None
+
+        n = 16
+        coord = torch.zeros(n, 3)
+        coord[:, 0] = torch.arange(n, dtype=torch.float32) * 1.5
+        data = {"coord": coord, "mol_idx": torch.zeros(n, dtype=torch.long)}
+        calc._max_mol_size = n
+        data = calc.make_nbmat(data)
+        assert "nbmat_lr" in data
+        assert "nbmat_dftd3" in data
+    finally:
+        delattr(model, "d3ts")
