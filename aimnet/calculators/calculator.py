@@ -11,6 +11,7 @@ from torch import Tensor, nn
 
 from aimnet.models.artifact_validation import uses_default_model_import_settings, validate_runtime_model_metadata
 from aimnet.models.base import load_legacy_jit
+from aimnet.models.utils import has_d3ts, has_externalizable_dftd3, has_lrcoulomb
 from aimnet.modules import DFTD3, LRCoulomb
 from aimnet.modules.lr import ExternalDerivativeTerms
 
@@ -246,8 +247,14 @@ class AIMNet2Calculator:
             )
             self.external_dftd3 = self.external_dftd3.to(self.device)
 
-        # Determine if model has long-range modules (embedded or external)
-        has_embedded_lr = metadata.get("has_embedded_lr", False) if metadata is not None else False
+        # Determine if model has long-range modules (embedded or external).
+        # Metadata is authoritative when present; pre-metadata artifacts fall
+        # back to module-tree inspection (issue #118: an embedded-D3TS model
+        # without a metadata dict must still get an LR neighbor list).
+        if metadata is not None:
+            has_embedded_lr = metadata.get("has_embedded_lr", False)
+        else:
+            has_embedded_lr = self._detect_embedded_lr_modules()
         self.lr = (
             hasattr(self.model, "cutoff_lr")
             or self.external_coulomb is not None
@@ -514,6 +521,16 @@ class AIMNet2Calculator:
         """
         return self._dftd3_cutoff
 
+    def _detect_embedded_lr_modules(self) -> bool:
+        """Detect embedded long-range modules from the module tree.
+
+        Fallback for pre-metadata artifacts: a model carrying an LRCoulomb,
+        D3TS, or DFTD3/D3BJ submodule needs a long-range neighbor list even
+        though no metadata flag says so.
+        """
+        model = self.model
+        return has_lrcoulomb(model) or has_d3ts(model) or has_externalizable_dftd3(model)
+
     def _has_embedded_dispersion(self) -> bool:
         """Check if model has embedded dispersion (not externalized).
 
@@ -529,7 +546,8 @@ class AIMNet2Calculator:
         """
         meta = self.metadata
         if meta is None:
-            return False  # Unknown, assume no embedded dispersion
+            # Pre-metadata artifact: fall back to module-tree inspection.
+            return has_d3ts(self.model) or has_externalizable_dftd3(self.model)
 
         # Authoritative path (new conversions): explicit D3TS flag.
         if "has_embedded_d3ts" in meta:
@@ -551,7 +569,8 @@ class AIMNet2Calculator:
         """
         meta = self.metadata
         if meta is None:
-            return False  # Unknown, assume no embedded Coulomb
+            # Pre-metadata artifact: fall back to module-tree inspection.
+            return has_lrcoulomb(self.model)
         # If needs_coulomb=False and coulomb_mode is not "none", Coulomb is embedded
         # (legacy JIT models have full Coulomb embedded)
         return not meta.get("needs_coulomb", False) and meta.get("coulomb_mode", "none") != "none"
