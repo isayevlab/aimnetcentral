@@ -53,8 +53,8 @@ _DEFAULT_CLASS_IMPORT_PATHS = frozenset({
     "aimnet.modules.Quadrupole",
     "aimnet.modules.SRCoulomb",
     # Embedded-dispersion modules. Both are first-party nn.Modules in
-    # aimnet/modules/lr.py and both are referenced by the shipped CPCM(water)
-    # solvation artifact, which could not load without them.
+    # aimnet/modules/lr.py and both are referenced by first-party solvation
+    # artifacts with embedded dispersion, which cannot load without them.
     "aimnet.modules.D3TS",
     # The submodule spelling of the same class. The barrel re-export
     # (aimnet.modules.D3TS, above) and this fully qualified path both resolve
