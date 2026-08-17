@@ -248,13 +248,22 @@ class AIMNet2Calculator:
             self.external_dftd3 = self.external_dftd3.to(self.device)
 
         # Determine if model has long-range modules (embedded or external).
-        # Metadata is authoritative when present; pre-metadata artifacts fall
-        # back to module-tree inspection (issue #118: an embedded-D3TS model
-        # without a metadata dict must still get an LR neighbor list).
-        if metadata is not None:
-            has_embedded_lr = metadata.get("has_embedded_lr", False)
-        else:
-            has_embedded_lr = self._detect_embedded_lr_modules()
+        #
+        # The module tree is ground truth and metadata is a hint, NOT the other
+        # way round. Treating a present metadata dict as authoritative fixed
+        # only the metadata-absent half of #118: the shipped wb97m_cpcm_v2_0.pt
+        # DOES carry a metadata dict, and that dict says has_embedded_lr=False
+        # and has_embedded_d3ts=False while the module tree carries
+        # `outputs.d3bj` and has_externalizable_dftd3() returns True. Believing
+        # it left lr=False, so no LR neighbor list was built and D3BJ.forward
+        # raised KeyError on the flattened path -- i.e. every system above
+        # nb_threshold (measured: 119 atoms works, 125 fails).
+        #
+        # A stale or wrong flag can only ever cause a missing neighbor list,
+        # never a spurious one, so OR-ing is safe in the direction that matters.
+        has_embedded_lr = (
+            bool(metadata.get("has_embedded_lr", False)) if metadata is not None else False
+        ) or self._detect_embedded_lr_modules()
         self.lr = (
             hasattr(self.model, "cutoff_lr")
             or self.external_coulomb is not None
@@ -544,10 +553,18 @@ class AIMNet2Calculator:
         bool
             True if model has embedded dispersion module (D3TS or legacy DFTD3).
         """
+        # Module tree first, and unconditionally: a model that CARRIES a
+        # dispersion module needs a finite D3 cutoff whatever its metadata
+        # says. wb97m_cpcm_v2_0.pt declares has_embedded_d3ts=False while
+        # holding `outputs.d3bj`; believing the flag left cutoff_lr at inf, and
+        # the naive neighbor list then tried to allocate a [125, 8.4e17] matrix
+        # ("Storage size calculation overflowed") on the flattened path.
+        if has_d3ts(self.model) or has_externalizable_dftd3(self.model):
+            return True
+
         meta = self.metadata
         if meta is None:
-            # Pre-metadata artifact: fall back to module-tree inspection.
-            return has_d3ts(self.model) or has_externalizable_dftd3(self.model)
+            return False
 
         # Authoritative path (new conversions): explicit D3TS flag.
         if "has_embedded_d3ts" in meta:
