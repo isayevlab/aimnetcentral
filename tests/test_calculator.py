@@ -2436,3 +2436,70 @@ def test_metadataless_embedded_dispersion_model_gets_lr_nblist():
         assert "nbmat_dftd3" in data
     finally:
         delattr(model, "d3ts")
+
+
+def test_metadata_flag_contradicting_module_tree_still_gets_lr_nblist():
+    """Issue #118, third pass: the flag is PRESENT and WRONG.
+
+    The previous fix consulted the module tree only when ``metadata is None``,
+    which fixed the metadata-absent half. The shipped ``wb97m_cpcm_v2_0.pt``
+    is the other half: it carries a metadata dict declaring
+    ``has_embedded_lr=False`` and ``has_embedded_d3ts=False`` while holding an
+    ``outputs.d3bj`` submodule, so ``_detect_embedded_lr_modules()`` was
+    correct and never called -- ``lr`` stayed False, no LR neighbor list was
+    built, and every system above ``nb_threshold`` raised
+    ``KeyError: ['_dftd3', '_lr']``.
+
+    Both ``has_embedded_lr`` and ``_has_embedded_dispersion`` must consult the
+    module tree unconditionally. Fixing only the first replaces the KeyError
+    with ``cutoff_lr = inf`` and a "Storage size calculation overflowed"
+    allocation in the naive neighbor list.
+
+    A wrong flag can only ever cause a MISSING long-range neighbor list, never
+    a spurious one, so trusting the module tree is safe in the direction that
+    matters.
+    """
+    donor = AIMNet2Calculator("aimnet2", device="cpu")
+    model = donor.model
+    model.d3ts = torch.nn.Identity()
+    # A metadata dict that actively denies what the module tree carries.
+    # Field-for-field the shape dumped from the shipped wb97m_cpcm_v2_0.pt,
+    # so the test fails for the reason it names rather than for a missing
+    # required key.
+    model._metadata = {
+        "format_version": 2,
+        "cutoff": 5.0,
+        "needs_coulomb": False,
+        "needs_dispersion": False,
+        "coulomb_mode": "none",
+        "coulomb_sr_rc": None,
+        "coulomb_sr_envelope": None,
+        "d3_params": None,
+        "has_embedded_lr": False,
+        "has_embedded_d3ts": False,
+        "family": None,
+        "supports_charged_systems": None,
+    }
+    try:
+        calc = AIMNet2Calculator(model, device="cpu")
+        assert calc.metadata is not None, "the flag is present -- that is the point"
+        assert calc.metadata["has_embedded_lr"] is False
+        assert calc._has_embedded_dispersion(), "module tree must win over the flag"
+        assert calc.lr
+        # Not inf: the D3 branch of the cutoff chain must be reached, or the
+        # naive neighbor list allocates an absurd matrix.
+        assert calc.cutoff_lr == calc._default_dftd3_cutoff
+        assert calc._nblist_lr is not None
+
+        n = 16
+        coord = torch.zeros(n, 3)
+        coord[:, 0] = torch.arange(n, dtype=torch.float32) * 1.5
+        data = {"coord": coord, "mol_idx": torch.zeros(n, dtype=torch.long)}
+        calc._max_mol_size = n
+        data = calc.make_nbmat(data)
+        assert "nbmat_lr" in data
+        assert "nbmat_dftd3" in data
+    finally:
+        delattr(model, "d3ts")
+        if hasattr(model, "_metadata"):
+            del model._metadata
