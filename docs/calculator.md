@@ -404,10 +404,9 @@ For both Ewald and PME, `ewald_accuracy` (default `1e-6`, matching the nvalchemi
 
 **Derivative Support:**
 
-- `simple` and `dsf`: inference forces/stress are supported. DSF force/stress losses (`train=True` with `forces` or `stress`) and Hessian calculations raise `NotImplementedError`.
-- `ewald` and `pme`: forces, stress, and force/stress losses in `train=True` are supported. Hessian requests raise `NotImplementedError` because nvalchemiops exposes explicit first coordinate derivatives, not second coordinate derivatives.
+All external Coulomb methods support inference forces/stress, force/stress losses in `train=True`, and Hessian/HVP requests. DSF routes training and Hessians through its differentiable closed-form torch path; `ewald` and `pme` keep their nvalchemiops energy in the autograd graph (nvalchemi-toolkit-ops >= 0.4.1; selecting `pme` on 0.4.0 raises `RuntimeError`), so all derivatives come from the calculator's total-energy autograd and are relaxed-charge.
 
-See [Long-Range Methods → Derivative Support](long_range.md#derivative-support) for the rationale.
+See [Long-Range Methods → Derivative Support](long_range.md#derivative-support) for details.
 
 **Notes:**
 
@@ -533,9 +532,9 @@ H = torch.autograd.functional.hessian(energy_fn, coords)  # shape (N, 3, N, 3)
 
     When computing higher-order derivatives from outside the calculator, pass `forces=False`. Requesting `forces=True` triggers an internal backward pass that frees intermediate activations, preventing a second differentiation through the graph.
 
-!!! note "Long-range backend limitations"
+!!! note "Long-range backends and external differentiation"
 
-    External higher-order differentiation depends on the selected long-range backend. Ewald and PME use nvalchemiops explicit first coordinate derivatives and do not provide complete Coulomb Hessians.
+    Every long-range backend keeps its energy in the autograd graph for higher-order differentiation: DSF routes through its differentiable torch path, and Ewald/PME (nvalchemi-toolkit-ops >= 0.4.1) are energy-graph-only, so external `torch.autograd.functional.hessian` captures the complete relaxed-charge Coulomb Hessian.
 
 When `coord` does **not** have `requires_grad=True` (the default), inputs are detached as before — optimization loops that call the calculator repeatedly incur no graph accumulation overhead.
 
@@ -792,7 +791,7 @@ Their synthesized runtime metadata remains format version 1 and records `has_emb
 | Invalid model type                          | `TypeError`           |
 | Missing required input key                  | `KeyError`            |
 | Hessian with multiple molecules             | `NotImplementedError` |
-| Hessian with DSF/Ewald/PME Coulomb          | `NotImplementedError` |
+| PME with nvalchemi-toolkit-ops < 0.4.1      | `RuntimeError`        |
 | PBC with multiple molecules                 | `NotImplementedError` |
 | Invalid Coulomb method                      | `ValueError`          |
 | `needs_dispersion=True` without `d3_params` | `ValueError`          |

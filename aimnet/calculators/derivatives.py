@@ -40,7 +40,6 @@ def combine_external_terms(
     return ExternalDerivativeTerms(
         forces=sum_optional_tensor(a.forces, b.forces),
         virial=sum_optional_tensor(a.virial, b.virial),
-        hessian=sum_optional_tensor(a.hessian, b.hessian),
     )
 
 
@@ -56,8 +55,10 @@ def set_grad_tensors(
     Returns ``(data, saved_for_grad, external_strain_inputs)``:
     ``saved_for_grad`` holds the tensors :func:`get_derivatives`
     differentiates with respect to; ``external_strain_inputs`` carries the
-    unstrained coordinates/cell for external LR modules, or ``None`` when
-    no stress is requested.
+    unstrained coordinates/cell (``None`` when no stress is requested). No
+    caller consumes ``external_strain_inputs`` since the Ewald/PME
+    energy-graph migrations; it is kept for external modules that may need
+    explicit strain differentiation (e.g. a future DFTD3 strain path).
     """
     saved_for_grad: dict[str, Tensor] = {}
     external_strain_inputs: dict[str, Tensor] | None = None
@@ -136,13 +137,7 @@ def get_derivatives(
                 volume = torch.linalg.det(cell).abs().unsqueeze(-1).unsqueeze(-1)  # (B, 1, 1)
             data["stress"] = dedc / volume
     if hessian:
-        H = calculate_hessian(data["forces"], saved_for_grad["coord"])
-        if coulomb_terms is not None and getattr(coulomb_terms, "hessian", None) is not None:
-            # The LR coulomb hessian is computed in float64 via finite
-            # differences. Accumulate in that (higher) precision rather than
-            # downcasting it to H's dtype, which would discard the FD precision.
-            H = H.to(dtype=coulomb_terms.hessian.dtype, device=H.device) + coulomb_terms.hessian.to(device=H.device)
-        data["hessian"] = H
+        data["hessian"] = calculate_hessian(data["forces"], saved_for_grad["coord"])
     return data
 
 
@@ -153,11 +148,11 @@ def calculate_hessian(forces: Tensor, coord: Tensor) -> Tensor:
     The returned dense Hessian is a **detached value**: it carries no
     autograd graph back to the coordinates or model parameters. This is by
     design (it is materialized via ``torch.func.vmap`` over a vjp of the
-    already-built force graph, and the periodic PME block is a fixed-charge
-    finite-difference term that is non-differentiable; Ewald is a full
-    relaxed-charge autograd term since the 0.4 energy-graph migration). Forces
-    DO compose with an upstream coordinate-builder graph, but the Hessian
-    does not, so you cannot backpropagate through ``eval(..., hessian=True)``.
+    already-built force graph). Every long-range block (DSF torch path and
+    the periodic Ewald/PME energy-graph terms) is a full relaxed-charge
+    autograd term since the 0.4/0.4.1 energy-graph migrations. Forces DO
+    compose with an upstream coordinate-builder graph, but the Hessian does
+    not, so you cannot backpropagate through ``eval(..., hessian=True)``.
 
     If you need the Hessian to *compose* (e.g. ``H @ v`` that scales with /
     differentiates through an outer computation) or to avoid forming the
@@ -165,9 +160,7 @@ def calculate_hessian(forces: Tensor, coord: Tensor) -> Tensor:
     :meth:`AIMNet2Calculator.hessian_vector_product` instead. For a
     fully-differentiable Hessian, build one externally with
     ``torch.autograd.functional.hessian(energy_fn, coords)`` over a closure
-    that calls the model on differentiable coordinates (note that the
-    periodic Ewald/PME long-range block remains a fixed-charge FD term in
-    either case).
+    that calls the model on differentiable coordinates.
     """
     # Coord includes padding atom (shape N+1), forces only for real atoms (shape N).
     # Hessian computed only for actual atoms: (N, 3, N, 3).

@@ -78,7 +78,7 @@ calc.set_lrcoulomb_method("dsf", cutoff=15.0, dsf_alpha=0.2)
 - O(N) scaling with neighbor lists
 - Energy and forces continuous at cutoff
 - Based on Wolf summation method
-- Inference forces and stress are supported; force/stress training and Hessians are not (see [Derivative Support](#derivative-support))
+- Inference forces and stress use explicit terms; force/stress training and Hessians route through the differentiable torch path (see [Derivative Support](#derivative-support))
 
 ### Ewald Summation
 
@@ -160,17 +160,17 @@ PME shares the `ewald_accuracy` knob with Ewald (default `1e-6`). The real-space
 
 ### Derivative Support
 
-The nvalchemiops-backed external methods differ in how they expose derivatives:
+All nvalchemiops-backed external methods support inference forces/stress, force/stress training, and Hessians/HVPs:
 
-| Backend | Inference forces/stress | Force/stress training | Hessian |
+| Backend | Inference forces/stress | Force/stress training | Hessian / HVP |
 | --- | --- | --- | --- |
-| DSF | Yes | No | No |
-| Ewald | Yes | Yes | No |
-| PME | Yes | Yes | No |
-| DFT-D3 | Yes | Not applicable; no trainable DFT-D3 parameters | Yes |
+| DSF | Yes (explicit terms) | Yes (torch path) | Yes (torch path, relaxed-charge) |
+| Ewald | Yes (autograd) | Yes | Yes (autograd, relaxed-charge) |
+| PME | Yes (autograd) | Yes | Yes (autograd, relaxed-charge) |
+| DFT-D3 | Yes (explicit terms) | Not applicable; no trainable DFT-D3 parameters | Yes (torch path) |
 
-- **DSF**: energy is autograd-connected through charges only. The calculator assembles inference forces and stress by combining PyTorch autograd for the NN and the charge chain with explicit DSF forces/virial. Force/stress losses (`train=True` with `forces=True` or `stress=True`) and Hessian requests raise `NotImplementedError`.
-- **Ewald / PME**: support inference forces/stress and force/stress losses in `train=True`. Hessian requests raise `NotImplementedError` because nvalchemiops exposes explicit first coordinate derivatives, not the second coordinate derivatives needed for a complete Coulomb Hessian.
+- **DSF**: plain inference combines PyTorch autograd for the NN and the charge chain with explicit fixed-charge DSF forces/virial. Force/stress training and Hessian requests route through the closed-form differentiable torch path, which is relaxed-charge (includes the `d²E/(dq·dr)` charge-response coupling).
+- **Ewald / PME**: a single energy-only nvalchemiops call (>= 0.4.1) leaves positions, charges, and cell in the autograd graph; inference forces/stress, training losses, dense Hessians, and Hessian-vector products all come from the calculator's total-energy autograd and are relaxed-charge, the same contract as the DSF torch path (Ewald and PME are directly comparable with each other; DSF's shifted-force truncation still differs from the full lattice sum near the cutoff). Selecting PME on nvalchemiops 0.4.0 raises `RuntimeError`: its charge-gradient backward silently corrupts train-mode forces inside the full calculator graph (fixed upstream in 0.4.1).
 - **DFT-D3**: inference forces and stress come from detached nvalchemiops force/virial terms. Hessian requests use the pure-torch differentiable DFT-D3 path.
 
 ## Method Comparison
@@ -178,7 +178,7 @@ The nvalchemiops-backed external methods differ in how they expose derivatives:
 | Method | Complexity | PBC Support | Typical Use Case | Notes |
 | --- | --- | --- | --- | --- |
 | Simple | O(N²) fully connected | No | Small molecules, quick tests | Auto-switches for PBC |
-| DSF | O(N) with neighbor lists | Yes | Production MD, large systems | Inference derivatives only |
+| DSF | O(N) with neighbor lists | Yes | Production MD, large systems | Training/Hessian via torch path |
 | Ewald | O(N · K) reciprocal + O(N) real-space | Yes | High-accuracy benchmarks | Default `ewald_accuracy=1e-6` |
 | PME | O(N log N) via B-spline + FFT | Yes | Large-cell production MD | Scales better than Ewald |
 

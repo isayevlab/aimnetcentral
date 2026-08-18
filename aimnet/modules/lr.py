@@ -1,8 +1,10 @@
 import math
 import os
+import re
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
+import nvalchemiops
 import torch
 from nvalchemiops.neighbors import NeighborOverflowError
 from nvalchemiops.torch.interactions.dispersion import dftd3
@@ -68,144 +70,32 @@ class ExternalDerivativeTerms:
 
     forces: Tensor | None = None
     virial: Tensor | None = None
-    hessian: Tensor | None = None
 
 
-def _periodic_coulomb_hybrid(
-    *,
-    coord: Tensor,
-    cell: Tensor,
-    charges: Tensor,
-    batch_idx: Tensor,
-    neighbor_matrix: Tensor,
-    shifts: Tensor,
-    mask_value: int,
-    num_systems: int,
-    accuracy: float,
-    compute_virial: bool,
-    is_pme: bool,
-) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-    """Call nvalchemiops Ewald/PME in hybrid mode and convert outputs to eV."""
-    fn = particle_mesh_ewald if is_pme else ewald_summation
-    result = fn(
-        positions=coord,
-        charges=charges,
-        cell=cell,
-        batch_idx=batch_idx,
-        neighbor_matrix=neighbor_matrix,
-        neighbor_matrix_shifts=shifts,
-        mask_value=mask_value,
-        accuracy=accuracy,
-        compute_forces=True,
-        compute_charge_gradients=True,
-        compute_virial=compute_virial,
-        hybrid_forces=True,
-    )
-
-    ke = constants.Hartree * constants.Bohr
-    energies_per_atom = result[0] * ke
-    forces = result[1] * ke
-    charge_grad = result[2] * ke
-    virial = result[3] * ke if compute_virial else coord.new_empty(0)
-
-    batch_idx_long = batch_idx.to(torch.int64)
-    energies = torch.zeros(num_systems, dtype=torch.float64, device=coord.device)
-    energies = energies.scatter_add(0, batch_idx_long, energies_per_atom.double())
-    return energies, forces, charge_grad, virial
+_PME_MIN_NVALCHEMIOPS = (0, 4, 1)
 
 
-class _PeriodicCoulombFunction(Function):
-    """Local training wrapper for Ewald/PME force and strain losses."""
+def _require_pme_capable_nvalchemiops() -> None:
+    """Refuse PME on nvalchemiops < 0.4.1.
 
-    @staticmethod
-    def forward(
-        ctx: Any,
-        coord: Tensor,
-        cell: Tensor,
-        scaling: Tensor | None,
-        charges: Tensor,
-        batch_idx: Tensor,
-        neighbor_matrix: Tensor,
-        shifts: Tensor,
-        mask_value: int,
-        num_systems: int,
-        accuracy: float,
-        is_pme: bool,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        batch_idx_long = batch_idx.to(torch.int64)
-        if scaling is None:
-            coord_eval = coord
-            cell_eval = cell
-        else:
-            if scaling.ndim == 2:
-                coord_eval = coord @ scaling
-                cell_eval = cell @ scaling
-            elif scaling.ndim == 3:
-                atom_scaling = scaling.index_select(0, batch_idx_long)
-                coord_eval = (coord.unsqueeze(1) @ atom_scaling).squeeze(1)
-                cell_eval = cell @ scaling
-            else:
-                raise ValueError("scaling must have shape (3, 3) or (B, 3, 3)")
-
-        energies, forces, charge_grad, virial = _periodic_coulomb_hybrid(
-            coord=coord_eval,
-            cell=cell_eval,
-            charges=charges,
-            batch_idx=batch_idx,
-            neighbor_matrix=neighbor_matrix,
-            shifts=shifts,
-            mask_value=mask_value,
-            num_systems=num_systems,
-            accuracy=accuracy,
-            compute_virial=scaling is not None,
-            is_pme=is_pme,
-        )
-        if scaling is None:
-            ctx.save_for_backward(forces, charge_grad, batch_idx_long)
-        else:
-            ctx.save_for_backward(forces, charge_grad, virial, batch_idx_long, scaling)
-        return energies, forces, charge_grad, virial
-
-    @staticmethod
-    def backward(
-        ctx: Any,
-        grad_energies: Tensor,
-        _grad_forces: Tensor,
-        _grad_charge_grad: Tensor,
-        _grad_virial: Tensor,
-    ) -> tuple[Tensor | None, ...]:
-        if len(ctx.saved_tensors) == 5:
-            forces, charge_grad, virial, batch_idx, scaling = ctx.saved_tensors
-        else:
-            forces, charge_grad, batch_idx = ctx.saved_tensors
-            scaling = None
-        g = grad_energies.to(forces.dtype).index_select(0, batch_idx)
-        grad_coord_eval = -forces * g.unsqueeze(-1)
-        grad_charges = charge_grad * g
-
-        if scaling is None:
-            grad_coord = grad_coord_eval
-            grad_scaling = None
-        elif scaling.ndim == 2:
-            grad_coord = grad_coord_eval @ scaling.mT
-            grad_scaling = (-virial.mT * grad_energies.to(virial.dtype).view(-1, 1, 1)).sum(dim=0)
-        elif scaling.ndim == 3:
-            atom_scaling = scaling.index_select(0, batch_idx)
-            grad_coord = (grad_coord_eval.unsqueeze(1) @ atom_scaling.mT).squeeze(1)
-            grad_scaling = -virial.mT * grad_energies.to(virial.dtype).view(-1, 1, 1)
-
-        return (
-            grad_coord,
-            None,
-            grad_scaling,
-            grad_charges,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
+    On 0.4.0 the PME charge-gradient backward silently corrupts train-mode
+    forces inside the full calculator graph (create_graph=True). The pyproject
+    pin does not protect already-installed environments, so fail loudly at
+    method selection. The leading numeric release is compared, so
+    pre-releases of too-old versions (e.g. ``0.4.0rc1``) are refused as well;
+    ``X.Y.Z.dev``/local builds pass on their release triple, and versions with
+    no leading numeric release at all are assumed new enough.
+    """
+    version = getattr(nvalchemiops, "__version__", "")
+    match = re.match(r"(\d+)\.(\d+)(?:\.(\d+))?", version)
+    if match is None:
+        return
+    parts = tuple(int(p) for p in match.groups(default="0"))
+    if parts < _PME_MIN_NVALCHEMIOPS:
+        raise RuntimeError(
+            f"PME requires nvalchemi-toolkit-ops >= 0.4.1, found {version}: on 0.4.0 "
+            "the PME charge-gradient backward silently corrupts train-mode forces. "
+            "Upgrade with 'pip install -U nvalchemi-toolkit-ops'."
         )
 
 
@@ -257,23 +147,15 @@ class LRCoulomb(nn.Module):
     through the model-predicted charges, so its Hessian includes the
     charge-response (the d^2E / (dq . dr) coupling).
 
-    Ewald calls ``nvalchemiops`` (>=0.4) energy-only with positions,
-    charges, and cell left in the autograd graph: forces, stress, dense
-    Hessians, and HVPs come from the calculator's total-energy autograd and
-    are RELAXED-CHARGE (they include the d^2E / (dq . dr) charge-response
-    coupling), directly comparable with the DSF torch path.
+    Ewald and PME call ``nvalchemiops`` (>=0.4.1) energy-only with
+    positions, charges, and cell left in the autograd graph: forces, stress,
+    dense Hessians, and HVPs come from the calculator's total-energy
+    autograd and are RELAXED-CHARGE (they include the d^2E / (dq . dr)
+    charge-response coupling), the same contract as the DSF torch path.
 
-    PME remains on the legacy path for now: inference uses
-    ``hybrid_forces=True`` (energy differentiable through charges,
-    fixed-charge geometry derivatives as explicit terms), training uses the
-    local ``_PeriodicCoulombFunction`` wrapper, and Hessians come from
-    finite-difference of the analytic forces
-    (:meth:`_coul_nvalchemi_fd_hessian`) and are FIXED-CHARGE. The PME
-    energy-graph route is blocked on a charge-gradient backward anomaly that
-    appears only inside the full calculator graph under
-    ``create_graph=True``; see the migration tracking issue. Until then, PME
-    Hessians differ slightly from DSF/Ewald relaxed-charge Hessians, which
-    matters when comparing vibrational frequencies / IR across backends.
+    Selecting PME raises on ``nvalchemiops`` < 0.4.1: on 0.4.0 the PME
+    charge-gradient backward silently corrupts train-mode forces inside the
+    full calculator graph (``create_graph=True``), fixed upstream in 0.4.1.
     """
 
     def __init__(
@@ -307,6 +189,8 @@ class LRCoulomb(nn.Module):
             self.method = method
         else:
             raise ValueError(f"Unknown method {method}")
+        if method == "pme":
+            _require_pme_capable_nvalchemiops()
 
     def coul_simple(self, data: dict[str, Tensor]) -> Tensor:
         """Compute pairwise Coulomb energy.
@@ -572,13 +456,13 @@ class LRCoulomb(nn.Module):
         advisable so that no chemically relevant pair sits near the cutoff where
         this Hessian discontinuity occurs.
 
-        RELAXED-CHARGE Hessian: unlike the Ewald/PME finite-difference Hessian,
-        this DSF torch energy is fully autograd-differentiable through the
-        model-predicted charges, so its Hessian INCLUDES the charge-response
-        (the d^2E / (dq . dr) coupling). Consequently the DSF (relaxed-charge)
-        and Ewald/PME (fixed-charge long-range) Hessians differ slightly even
-        for an otherwise-equivalent system; this is relevant when comparing
-        vibrational frequencies / IR across LR backends.
+        RELAXED-CHARGE Hessian: this DSF torch energy is fully
+        autograd-differentiable through the model-predicted charges, so its
+        Hessian INCLUDES the charge-response (the d^2E / (dq . dr) coupling)
+        -- the same relaxed-charge contract as the Ewald/PME energy-graph
+        Hessians. DSF remains a shifted-force truncation of the PES, so its
+        curvature still differs from the full Ewald/PME lattice sum for pairs
+        near the cutoff (see the C^1 note above).
         """
         suffix = nbops.resolve_suffix(data, ["_coulomb", "_lr"])
         data = ops.lazy_calc_dij(data, suffix)
@@ -614,32 +498,20 @@ class LRCoulomb(nn.Module):
             e = e - self.coul_simple_sr(data)
         return e
 
-    def _coul_nvalchemi(
-        self,
-        data: dict[str, Tensor],
-        backend: str,
-        *,
-        compute_forces: bool = False,
-        compute_virial: bool = False,
-        training_derivatives: bool = False,
-        scaling: Tensor | None = None,
-        coord_unstrained: Tensor | None = None,
-        cell_unstrained: Tensor | None = None,
-    ) -> tuple[Tensor, ExternalDerivativeTerms | None]:
+    def _coul_nvalchemi(self, data: dict[str, Tensor], backend: str) -> Tensor:
         """Compute periodic Coulomb energy via nvalchemiops Ewald/PME.
 
-        ``training_derivatives=True`` uses a local autograd wrapper only when
-        coordinate, charge, or strain inputs require gradients. This keeps
-        force/stress training on the explicit nvalchemiops forces/virial while
-        avoiding an autograd wrapper for plain energy calls. ``False`` returns
-        detached fixed-charge geometry derivatives as explicit terms while
-        energy stays differentiable through charges.
+        Energy-graph contract (nvalchemiops >=0.4.1): a single energy-only
+        call with positions, charges, and cell left in the autograd graph.
+        Forces, stress, charge-relaxation, dense Hessians, and HVPs all flow
+        through the calculator's total-energy autograd; when stress is
+        requested the strained coord/cell from ``set_grad_tensors`` carry the
+        strain gradients.
 
         Requires ``cell`` in ``data`` and a PBC neighbor list under
         ``nbmat_coulomb``/``shifts_coulomb`` (preferred) or the shared
         ``nbmat_lr``/``shifts_lr``. Drops the trailing padding row before
-        invoking the backend and re-adds a zero pad row so downstream
-        ``unpad_output`` contracts are preserved.
+        invoking the backend.
         """
         suffix = nbops.resolve_suffix(data, ["_coulomb", "_lr"])
 
@@ -672,258 +544,27 @@ class LRCoulomb(nn.Module):
             raise ValueError(f"backend must be 'ewald' or 'pme', got {backend!r}")
         num_systems = int(mol_idx_real.max().item()) + 1
         fn = particle_mesh_ewald if backend == "pme" else ewald_summation
-
-        if backend == "ewald":
-            # nvalchemiops >=0.4 energy-graph contract (Ewald only for now):
-            # a single energy-only call with positions, charges, and cell left
-            # in the autograd graph. Forces, stress, charge-relaxation, dense
-            # Hessians, and HVPs all flow through the calculator's
-            # total-energy autograd; when stress is requested the strained
-            # coord/cell from set_grad_tensors carry the strain gradients.
-            # PME intentionally stays on the legacy explicit-terms path below:
-            # its charge-gradient backward misbehaves inside the full
-            # calculator graph under create_graph=True (train mode), see the
-            # migration notes in docs and the tracking issue.
-            energies_per_atom = fn(
-                positions=coord_real,
-                charges=charges_real,
-                cell=cell,
-                batch_idx=mol_idx_real,
-                neighbor_matrix=nbmat_real,
-                neighbor_matrix_shifts=shifts_real,
-                mask_value=N,
-                accuracy=float(self.ewald_accuracy),
-            )
-            ke = constants.Hartree * constants.Bohr
-            energies_per_system = torch.zeros(num_systems, dtype=torch.float64, device=coord.device)
-            e_periodic = energies_per_system.scatter_add(
-                0,
-                mol_idx_real.to(torch.int64),
-                (energies_per_atom * ke).double(),
-            )
-            if self.subtract_sr:
-                data = ops.lazy_calc_dij(data, "")
-                e_periodic = e_periodic - self.coul_simple_sr(data)
-            return e_periodic, None
-
-        if training_derivatives:
-            is_pme = backend == "pme"
-            needs_strain_grad = scaling is not None and scaling.requires_grad
-            needs_coord_or_charge_grad = coord_real.requires_grad or charges_real.requires_grad
-            if needs_strain_grad:
-                if coord_unstrained is None or cell_unstrained is None:
-                    raise ValueError("scaling-aware Coulomb requires coord_unstrained and cell_unstrained")
-                e_periodic, _forces, _charge_grad, _virial = _PeriodicCoulombFunction.apply(
-                    coord_unstrained[:-1],
-                    cell_unstrained,
-                    scaling,
-                    charges_real,
-                    mol_idx_real,
-                    nbmat_real,
-                    shifts_real,
-                    N,
-                    num_systems,
-                    float(self.ewald_accuracy),
-                    is_pme,
-                )
-            elif needs_coord_or_charge_grad:
-                e_periodic, _forces, _charge_grad, _virial = _PeriodicCoulombFunction.apply(
-                    coord_real,
-                    cell,
-                    None,
-                    charges_real,
-                    mol_idx_real,
-                    nbmat_real,
-                    shifts_real,
-                    N,
-                    num_systems,
-                    float(self.ewald_accuracy),
-                    is_pme,
-                )
-            else:
-                e_periodic = None
-
-            if e_periodic is not None:
-                if self.subtract_sr:
-                    data = ops.lazy_calc_dij(data, "")
-                    e_periodic = e_periodic - self.coul_simple_sr(data)
-                return e_periodic, None
-
-        result = fn(
-            positions=coord_real.detach(),
+        energies_per_atom = fn(
+            positions=coord_real,
             charges=charges_real,
-            cell=cell.detach(),
+            cell=cell,
             batch_idx=mol_idx_real,
             neighbor_matrix=nbmat_real,
             neighbor_matrix_shifts=shifts_real,
             mask_value=N,
             accuracy=float(self.ewald_accuracy),
-            compute_forces=compute_forces,
-            compute_charge_gradients=True,
-            compute_virial=compute_virial,
-            hybrid_forces=True,
         )
-
-        result_tuple = result if isinstance(result, tuple) else (result,)
-        idx = 0
-        energies_per_atom = result_tuple[idx]
-        idx += 1
-
-        forces_real: Tensor | None = None
-        if compute_forces:
-            forces_real = result_tuple[idx]
-            idx += 1
-
-        # Charge gradients are injected into ``energies_per_atom`` by
-        # nvalchemiops when charges require grad; the explicit tensor is not
-        # needed by AIMNet.
-        idx += 1
-
-        virial: Tensor | None = None
-        if compute_virial:
-            virial = result_tuple[idx]
-
         ke = constants.Hartree * constants.Bohr
-        energies_per_atom = energies_per_atom * ke
         energies_per_system = torch.zeros(num_systems, dtype=torch.float64, device=coord.device)
-        energies_per_system = energies_per_system.scatter_add(
+        e_periodic = energies_per_system.scatter_add(
             0,
             mol_idx_real.to(torch.int64),
-            energies_per_atom.double(),
+            (energies_per_atom * ke).double(),
         )
-
-        terms = None
-        if compute_forces or compute_virial:
-            forces = None
-            if forces_real is not None:
-                forces = torch.cat([forces_real.detach() * ke, forces_real.new_zeros((1, 3))], dim=0)
-            virial_ev = virial.detach() * ke if virial is not None else None
-            terms = ExternalDerivativeTerms(forces=forces, virial=virial_ev)
-        e_periodic = energies_per_system
-
         if self.subtract_sr:
             data = ops.lazy_calc_dij(data, "")
             e_periodic = e_periodic - self.coul_simple_sr(data)
-        return e_periodic, terms
-
-    def _periodic_fd_setup(self, data: dict[str, Tensor], backend: str):
-        """Shared marshalling for the periodic-Coulomb finite-difference Hessian
-        and Hessian-vector-product paths. Returns ``(forces_at, coord_real, N)``
-        where ``forces_at(positions)`` evaluates the analytic full-periodic
-        Coulomb forces (N, 3) in eV/Ang at float64, with neighbor list, cell, and
-        (detached) charges held fixed."""
-        suffix = nbops.resolve_suffix(data, ["_coulomb", "_lr"])
-        coord = data["coord"]
-        cell = data["cell"]
-        if cell is None:
-            raise ValueError("nvalchemi Coulomb requires periodic cell data")
-        if backend not in ("ewald", "pme"):
-            raise ValueError(f"backend must be 'ewald' or 'pme', got {backend!r}")
-        N = coord.shape[0] - 1
-        coord_real = coord[:-1].detach().double()
-        charges_real = data[self.key_in][:-1].detach().double()
-        mol_idx_real = data["mol_idx"][:-1].to(torch.int32)
-        nbmat_real = data[f"nbmat{suffix}"][:-1].to(torch.int32)
-        shifts_real = data[f"shifts{suffix}"][:-1].to(torch.int32)
-        cell_det = cell.detach().double()
-        num_systems = int(mol_idx_real.max().item()) + 1
-        is_pme = backend == "pme"
-
-        def forces_at(positions: Tensor) -> Tensor:
-            _e, f, _cg, _v = _periodic_coulomb_hybrid(
-                coord=positions,
-                cell=cell_det,
-                charges=charges_real,
-                batch_idx=mol_idx_real,
-                neighbor_matrix=nbmat_real,
-                shifts=shifts_real,
-                mask_value=N,
-                num_systems=num_systems,
-                accuracy=float(self.ewald_accuracy),
-                compute_virial=False,
-                is_pme=is_pme,
-            )
-            return f  # (N, 3) eV/Ang (already scaled by k_e in the helper)
-
-        return forces_at, coord_real, N
-
-    def _coul_nvalchemi_fd_hessian(self, data: dict[str, Tensor], backend: str, *, step: float = 5e-4) -> Tensor:
-        """Central finite-difference Hessian of the FULL periodic Coulomb energy.
-
-        Differences the analytic nvalchemiops forces with the neighbor list and
-        cell held fixed and coordinates detached. Returns the (N, 3, N, 3)
-        full-periodic block in eV/Ang^2 for the real atoms. The short-range
-        subtraction (if any) is differentiated by autograd in the calculator, so
-        only the full-periodic block is built here.
-
-        FIXED-CHARGE Hessian: the charges are detached before differencing, so
-        this long-range block does NOT include the charge-response coupling
-        (the d^2E / (dq . dr) term through the model's predicted charges). Only
-        the short-range subtraction (handled by autograd in the calculator)
-        carries any charge-response. Consequently the Ewald/PME (fixed-charge
-        long-range) Hessian differs slightly from the DSF torch (relaxed-charge,
-        fully-autograd) Hessian even for an otherwise-equivalent system; this is
-        relevant when comparing vibrational frequencies / IR across LR backends.
-
-        The finite difference is performed in float64: the detached positions,
-        cell, and charges are upcast to double so the kernel returns float64
-        forces and the ``(F(+h) - F(-h))`` cancellation happens in float64,
-        avoiding the ~3-4 digit accuracy cap of float32 subtraction.
-
-        The displacement ``step`` (default 5e-4 Ang) is fixed, so the resulting
-        Hessian accuracy is truncation-limited (the central-difference O(step^2)
-        error) and additionally coupled to ``ewald_accuracy`` through the
-        kernel-force accuracy; neither error is reduced below those limits.
-
-        The Coulomb neighbor list is built at the Ewald real-space cutoff with no
-        geometric skin, so a pair within ``step`` of the cutoff could cross during
-        the +-step displacement. This is numerically negligible because the Ewald
-        real-space term is erfc-damped to ~``ewald_accuracy`` (default 1e-6) at the
-        cutoff, bounding any discontinuity introduced by such a crossing. This
-        bound scales with ``ewald_accuracy``: loosening ``ewald_accuracy``
-        raises the erfc residual at the cutoff and weakens the guarantee.
-        """
-        forces_at, coord_real, N = self._periodic_fd_setup(data, backend)
-        hessian = coord_real.new_zeros((N, 3, N, 3), dtype=torch.float64)
-        with torch.no_grad():
-            scratch = coord_real.clone()
-            for j in range(N):
-                for b in range(3):
-                    orig = scratch[j, b].item()
-                    scratch[j, b] = orig + step
-                    fp = forces_at(scratch)
-                    scratch[j, b] = orig - step
-                    fm = forces_at(scratch)
-                    scratch[j, b] = orig
-                    # H_{ia,jb} = d^2E/dr_ia dr_jb = -dF_ia/dr_jb
-                    dF = (fp - fm) / (2.0 * step)
-                    hessian[:, :, j, b] = (-dF).double()
-        return hessian
-
-    def _coul_nvalchemi_fd_hvp(
-        self, data: dict[str, Tensor], backend: str, vec: Tensor, *, step: float = 5e-4
-    ) -> Tensor:
-        """Directional finite-difference of the FULL periodic Coulomb forces.
-
-        Returns ``H_LR @ vec`` for the real atoms, shape ``(N, 3)`` in
-        eV/Ang^2, where ``H_LR`` is the full-periodic Coulomb Hessian block.
-        This is the matrix-free, single-direction analogue of
-        :meth:`_coul_nvalchemi_fd_hessian`: it costs 2 force evaluations
-        instead of 2*3N. ``vec`` is the displacement direction over the real
-        atoms, shape ``(N, 3)``.
-
-        Like the dense version this is a FIXED-CHARGE term (charges detached);
-        see :meth:`_coul_nvalchemi_fd_hessian` for the charge-response and
-        step/``ewald_accuracy`` caveats, which apply identically here.
-        """
-        forces_at, coord_real, _N = self._periodic_fd_setup(data, backend)
-        vec_real = vec.detach().double()
-        with torch.no_grad():
-            fp = forces_at(coord_real + step * vec_real)
-            fm = forces_at(coord_real - step * vec_real)
-            # H_LR @ vec = d^2E/dr dr . vec = -dF/dr . vec  (directional)
-            hv = -(fp - fm) / (2.0 * step)
-        return hv  # (N, 3), float64
+        return e_periodic
 
     def forward(
         self,
@@ -933,10 +574,14 @@ class LRCoulomb(nn.Module):
         compute_virial: bool = False,
         training_derivatives: bool = False,
         hessian: bool = False,
-        scaling: Tensor | None = None,
-        coord_unstrained: Tensor | None = None,
-        cell_unstrained: Tensor | None = None,
     ) -> dict[str, Tensor] | tuple[dict[str, Tensor], ExternalDerivativeTerms | None]:
+        """Add the long-range Coulomb energy to ``data[self.key_out]``.
+
+        The mode flags select between explicit-terms and differentiable paths
+        for ``simple``/``dsf``. ``ewald``/``pme`` are energy-graph-only and
+        ignore all four flags: they never return explicit terms (``terms`` is
+        ``None``), and every derivative comes from autograd of the energy.
+        """
         if self.method == "simple":
             e = self.coul_simple(data)
             terms = None
@@ -952,25 +597,11 @@ class LRCoulomb(nn.Module):
                     compute_forces=compute_forces,
                     compute_virial=compute_virial,
                 )
-        elif self.method == "ewald":
+        elif self.method in ("ewald", "pme"):
             # Energy stays in the autograd graph; all derivatives come from
-            # the calculator's autograd (nvalchemiops >=0.4).
-            e, terms = self._coul_nvalchemi(data, backend="ewald")
-        elif self.method == "pme":
-            e, terms = self._coul_nvalchemi(
-                data,
-                backend="pme",
-                compute_forces=compute_forces or hessian,
-                compute_virial=compute_virial,
-                training_derivatives=training_derivatives,
-                scaling=scaling,
-                coord_unstrained=coord_unstrained,
-                cell_unstrained=cell_unstrained,
-            )
-            if hessian:
-                if terms is None:
-                    terms = ExternalDerivativeTerms()
-                terms.hessian = self._coul_nvalchemi_fd_hessian(data, backend="pme")
+            # the calculator's autograd (nvalchemiops >=0.4.1).
+            e = self._coul_nvalchemi(data, backend=self.method)
+            terms = None
         else:
             raise ValueError(f"Unknown method {self.method}")
 

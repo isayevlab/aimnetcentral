@@ -889,9 +889,9 @@ class TestLRCoulombPMEPBC:
 class TestLRCoulombBackendInterface:
     """Tests for the common external Coulomb derivative interface."""
 
-    @pytest.mark.parametrize("method", ["pme"])  # ewald is energy-in-graph; see ewald-specific tests
-    def test_ewald_pme_inference_returns_explicit_terms(self, pbc_crystal_small, device, method):
-        """Inference-style Ewald/PME returns explicit fixed-charge terms."""
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_ewald_pme_inference_returns_no_explicit_terms(self, pbc_crystal_small, device, method):
+        """Ewald/PME are energy-in-graph: no explicit terms even when requested."""
         module = LRCoulomb(method=method).to(device)
         data = setup_pbc_data(pbc_crystal_small, device)
 
@@ -902,15 +902,11 @@ class TestLRCoulombBackendInterface:
 
         assert "e_h" in result
         assert torch.isfinite(result["e_h"]).all()
-        assert terms is not None
-        assert terms.forces is not None
-        assert terms.forces.shape == data["coord"].shape
-        assert terms.virial is not None
-        assert terms.virial.shape[-2:] == (3, 3)
+        assert terms is None
 
     @pytest.mark.parametrize("method", ["ewald", "pme"])
     def test_training_derivative_mode_returns_no_explicit_terms(self, pbc_crystal_small, device, method):
-        """Training mode uses the local autograd wrapper and no explicit terms."""
+        """Training mode keeps the energy in the autograd graph, no explicit terms."""
         data = setup_pbc_data(pbc_crystal_small, device)
         data["coord"] = data["coord"].detach().clone().requires_grad_(True)
         n_atoms = data["coord"].shape[0]
@@ -1085,7 +1081,7 @@ class TestLRCoulombTraining:
     with ``aimnet.modules.core.Forces``, which runs
     ``torch.autograd.grad(energy, coord, create_graph=self.training)`` and
     then ``loss.backward()`` on a force-dependent loss. These tests lock in
-    the local Ewald/PME training wrapper contract: 1st-order forces, 2nd-order
+    the Ewald/PME energy-graph training contract: 1st-order forces, 2nd-order
     force loss, and param-gradient flow through the charge chain all work.
     """
 
@@ -1157,25 +1153,39 @@ class TestLRCoulombTraining:
         for g in param_grads:
             assert torch.isfinite(g).all()
 
-    @pytest.mark.parametrize("method", ["pme"])  # ewald is energy-in-graph; see ewald-specific tests
-    def test_energy_backward_matches_hybrid_explicit_forces(self, pbc_crystal_small, device, method):
-        """Native autograd forces match hybrid fixed-charge explicit forces."""
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_energy_backward_matches_finite_difference(self, pbc_crystal_small, device, method):
+        """Native autograd forces match central finite differences of the energy."""
         torch.manual_seed(1)
         data = pbc_crystal_small.copy()
         data["coord"] = data["coord"].clone().requires_grad_(True)
         data = setup_pbc_data(data, device)
         n_atoms = data["coord"].shape[0]
         data["charges"] = _neutral_padded_charges(n_atoms, device)
+        # Run the kernel in float64 so the FD cancellation is not noise-limited.
+        data["coord"] = data["coord"].detach().double().requires_grad_(True)
+        data["cell"] = data["cell"].double()
+        data["charges"] = data["charges"].double()
 
         coulomb = LRCoulomb(method=method, subtract_sr=False).to(device)
-        energy = coulomb(data, training_derivatives=True)["e_h"].sum()
+        energy = coulomb(dict(data), training_derivatives=True)["e_h"].sum()
         f_autograd = -torch.autograd.grad(energy, data["coord"])[0]
+        assert torch.allclose(f_autograd[-1], torch.zeros(3, dtype=torch.float64, device=device))
 
-        data_hybrid = {**data, "coord": data["coord"].detach(), "charges": data["charges"].detach()}
-        _result, terms = coulomb(data_hybrid, compute_forces=True)
-        assert terms is not None and terms.forces is not None
-        torch.testing.assert_close(f_autograd, terms.forces, atol=1e-5, rtol=1e-5)
-        assert torch.allclose(f_autograd[-1], torch.zeros(3, device=device))
+        def energy_at(coord_val):
+            d = {k: v for k, v in data.items() if k != "e_h"}
+            d["coord"] = coord_val
+            d["charges"] = data["charges"].detach()
+            return coulomb(d)["e_h"].sum()
+
+        step = 1e-3
+        for atom, axis in [(0, 0), (1, 2)]:
+            coord_p = data["coord"].detach().clone()
+            coord_p[atom, axis] += step
+            coord_m = data["coord"].detach().clone()
+            coord_m[atom, axis] -= step
+            f_fd = -(energy_at(coord_p) - energy_at(coord_m)) / (2 * step)
+            torch.testing.assert_close(f_autograd[atom, axis], f_fd, atol=1e-5, rtol=1e-4)
 
     @pytest.mark.parametrize("method", ["ewald", "pme"])
     def test_double_backward_smoke(self, pbc_crystal_small, device, method):
@@ -1211,10 +1221,11 @@ def test_lrcoulomb_rejects_unknown_method_and_envelope():
         LRCoulomb(envelope="not-an-envelope")
 
 
-class TestEwaldEnergyGraph:
-    """Contract tests for the Ewald energy-in-graph migration (nvalchemiops >=0.4)."""
+class TestEwaldPmeEnergyGraph:
+    """Contract tests for the Ewald/PME energy-in-graph migration (nvalchemiops >=0.4.1)."""
 
-    def test_ewald_inference_returns_energy_in_graph_no_terms(self, pbc_crystal_small, device):
+    @pytest.mark.parametrize("method", ["ewald", "pme"])
+    def test_inference_returns_energy_in_graph(self, pbc_crystal_small, device, method):
         import warnings
 
         from aimnet.calculators import AIMNet2Calculator
@@ -1222,17 +1233,16 @@ class TestEwaldEnergyGraph:
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True, device=device)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
-            calc.set_lrcoulomb_method("ewald")
+            calc.set_lrcoulomb_method(method)
         module = calc.external_coulomb
 
         captured = {}
         orig = module._coul_nvalchemi
 
         def spy(data, backend, **kw):
-            e, terms = orig(data, backend, **kw)
-            captured["terms"] = terms
+            e = orig(data, backend, **kw)
             captured["e_requires_grad"] = e.requires_grad
-            return e, terms
+            return e
 
         module._coul_nvalchemi = spy
         data_calc = {
@@ -1242,6 +1252,55 @@ class TestEwaldEnergyGraph:
             "charge": 0.0,
         }
         res = calc(data_calc, forces=True)
-        assert captured["terms"] is None
         assert captured["e_requires_grad"]
         assert torch.isfinite(res["forces"]).all()
+
+
+class TestPmeNvalchemiopsVersionGuard:
+    """PME selection must refuse nvalchemiops versions with the corrupt backward."""
+
+    def test_pme_raises_on_0_4_0(self, monkeypatch):
+        import nvalchemiops
+
+        from aimnet.modules import LRCoulomb
+
+        monkeypatch.setattr(nvalchemiops, "__version__", "0.4.0")
+        with pytest.raises(RuntimeError, match=r"0\.4\.1"):
+            LRCoulomb(method="pme")
+
+    def test_pme_accepts_0_4_1(self, monkeypatch):
+        import nvalchemiops
+
+        from aimnet.modules import LRCoulomb
+
+        monkeypatch.setattr(nvalchemiops, "__version__", "0.4.1")
+        LRCoulomb(method="pme")
+
+    def test_pme_raises_on_0_4_0_prerelease(self, monkeypatch):
+        import nvalchemiops
+
+        from aimnet.modules import LRCoulomb
+
+        monkeypatch.setattr(nvalchemiops, "__version__", "0.4.0rc1")
+        with pytest.raises(RuntimeError, match=r"0\.4\.1"):
+            LRCoulomb(method="pme")
+
+    def test_pme_allows_unparsable_version(self, monkeypatch):
+        import nvalchemiops
+
+        from aimnet.modules import LRCoulomb
+
+        monkeypatch.setattr(nvalchemiops, "__version__", "unknown")
+        LRCoulomb(method="pme")
+
+    def test_set_lrcoulomb_method_pme_raises_on_0_4_0(self, monkeypatch):
+        import nvalchemiops
+
+        from aimnet.calculators import AIMNet2Calculator
+
+        # The guard fires before any calculator state is touched, so a bare
+        # instance suffices and no model load is needed.
+        calc = AIMNet2Calculator.__new__(AIMNet2Calculator)
+        monkeypatch.setattr(nvalchemiops, "__version__", "0.4.0")
+        with pytest.raises(RuntimeError, match=r"0\.4\.1"):
+            calc.set_lrcoulomb_method("pme")
