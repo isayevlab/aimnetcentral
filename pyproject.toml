@@ -36,7 +36,7 @@ dependencies = [
     "torch>=2.8",
     "numpy",
     "warp-lang>=1.13,<2",
-    "nvalchemi-toolkit-ops>=0.4.0",
+    "nvalchemi-toolkit-ops>=0.4.1",
     "requests>=2.32.3",
     "click>=8.1.7",
     "pyyaml>=6.0.2",
