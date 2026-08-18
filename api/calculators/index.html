@@ -4123,75 +4123,75 @@ for each key (molecules are independent and generally ragged).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">928</span>
-<span class="normal">929</span>
-<span class="normal">930</span>
-<span class="normal">931</span>
-<span class="normal">932</span>
-<span class="normal">933</span>
-<span class="normal">934</span>
-<span class="normal">935</span>
-<span class="normal">936</span>
-<span class="normal">937</span>
-<span class="normal">938</span>
-<span class="normal">939</span>
-<span class="normal">940</span>
-<span class="normal">941</span>
-<span class="normal">942</span>
-<span class="normal">943</span>
-<span class="normal">944</span>
-<span class="normal">945</span>
-<span class="normal">946</span>
-<span class="normal">947</span>
-<span class="normal">948</span>
-<span class="normal">949</span>
-<span class="normal">950</span>
-<span class="normal">951</span>
-<span class="normal">952</span>
-<span class="normal">953</span>
-<span class="normal">954</span>
-<span class="normal">955</span>
-<span class="normal">956</span>
-<span class="normal">957</span>
-<span class="normal">958</span>
-<span class="normal">959</span>
-<span class="normal">960</span>
-<span class="normal">961</span>
-<span class="normal">962</span>
-<span class="normal">963</span>
-<span class="normal">964</span>
-<span class="normal">965</span>
-<span class="normal">966</span>
-<span class="normal">967</span>
-<span class="normal">968</span>
-<span class="normal">969</span>
-<span class="normal">970</span>
-<span class="normal">971</span>
-<span class="normal">972</span>
-<span class="normal">973</span>
-<span class="normal">974</span>
-<span class="normal">975</span>
-<span class="normal">976</span>
-<span class="normal">977</span>
-<span class="normal">978</span>
-<span class="normal">979</span>
-<span class="normal">980</span>
-<span class="normal">981</span>
-<span class="normal">982</span>
-<span class="normal">983</span>
-<span class="normal">984</span>
-<span class="normal">985</span>
-<span class="normal">986</span>
-<span class="normal">987</span>
-<span class="normal">988</span>
-<span class="normal">989</span>
-<span class="normal">990</span>
-<span class="normal">991</span>
-<span class="normal">992</span>
-<span class="normal">993</span>
-<span class="normal">994</span>
-<span class="normal">995</span>
-<span class="normal">996</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">eval</span><span class="p">(</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 935</span>
+<span class="normal"> 936</span>
+<span class="normal"> 937</span>
+<span class="normal"> 938</span>
+<span class="normal"> 939</span>
+<span class="normal"> 940</span>
+<span class="normal"> 941</span>
+<span class="normal"> 942</span>
+<span class="normal"> 943</span>
+<span class="normal"> 944</span>
+<span class="normal"> 945</span>
+<span class="normal"> 946</span>
+<span class="normal"> 947</span>
+<span class="normal"> 948</span>
+<span class="normal"> 949</span>
+<span class="normal"> 950</span>
+<span class="normal"> 951</span>
+<span class="normal"> 952</span>
+<span class="normal"> 953</span>
+<span class="normal"> 954</span>
+<span class="normal"> 955</span>
+<span class="normal"> 956</span>
+<span class="normal"> 957</span>
+<span class="normal"> 958</span>
+<span class="normal"> 959</span>
+<span class="normal"> 960</span>
+<span class="normal"> 961</span>
+<span class="normal"> 962</span>
+<span class="normal"> 963</span>
+<span class="normal"> 964</span>
+<span class="normal"> 965</span>
+<span class="normal"> 966</span>
+<span class="normal"> 967</span>
+<span class="normal"> 968</span>
+<span class="normal"> 969</span>
+<span class="normal"> 970</span>
+<span class="normal"> 971</span>
+<span class="normal"> 972</span>
+<span class="normal"> 973</span>
+<span class="normal"> 974</span>
+<span class="normal"> 975</span>
+<span class="normal"> 976</span>
+<span class="normal"> 977</span>
+<span class="normal"> 978</span>
+<span class="normal"> 979</span>
+<span class="normal"> 980</span>
+<span class="normal"> 981</span>
+<span class="normal"> 982</span>
+<span class="normal"> 983</span>
+<span class="normal"> 984</span>
+<span class="normal"> 985</span>
+<span class="normal"> 986</span>
+<span class="normal"> 987</span>
+<span class="normal"> 988</span>
+<span class="normal"> 989</span>
+<span class="normal"> 990</span>
+<span class="normal"> 991</span>
+<span class="normal"> 992</span>
+<span class="normal"> 993</span>
+<span class="normal"> 994</span>
+<span class="normal"> 995</span>
+<span class="normal"> 996</span>
+<span class="normal"> 997</span>
+<span class="normal"> 998</span>
+<span class="normal"> 999</span>
+<span class="normal">1000</span>
+<span class="normal">1001</span>
+<span class="normal">1002</span>
+<span class="normal">1003</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">eval</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">forces</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">stress</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">hessian</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">validate_species</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Run the model on ``data`` and return the output dict.</span>
@@ -4348,7 +4348,7 @@ rejected because the model is supplied by <code>path</code>.</p>
 
 
 <h3 id="aimnet.calculators.AIMNet2Calculator.hessian_vector_product" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">hessian_vector_product</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">vectors</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">0.0005</span><span class="p">,</span> <span class="n">validate_species</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">create_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">hessian_vector_product</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">vectors</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">validate_species</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">create_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
 
 <a href="#aimnet.calculators.AIMNet2Calculator.hessian_vector_product" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -4365,31 +4365,28 @@ preconditioning on large systems.</p>
     multi-molecule <code>mol_idx</code> inputs are not supported.
 vectors : Tensor
     Direction(s), shape <code>(N, 3)</code> or <code>(K, N, 3)</code> over the real atoms.
-eps : float
-    Central-difference step (Angstrom) for the periodic PME
-    long-range term. Ignored for <code>simple</code>/<code>dsf</code>/<code>ewald</code>
-    (their products are exact reverse-mode autograd).
+eps : float, optional
+    Deprecated and unused since the PME energy-graph migration (every
+    backend's product is exact reverse-mode autograd). Passing any
+    value emits a <code>DeprecationWarning</code>.
 create_graph : bool
-    If <code>True</code>, keep the differentiable autograd block of the HVP in
-    the graph so it can compose with an outer loss. The Ewald/PME
-    fixed-position finite-difference block remains detached. Default
-    <code>False</code> preserves the numeric/detached operator-action behavior.</p>
+    If <code>True</code>, keep the HVP in the graph so it can compose with an
+    outer loss. Default <code>False</code> preserves the numeric/detached
+    operator-action behavior.</p>
 <h5 id="aimnet.calculators.AIMNet2Calculator.hessian_vector_product--returns">Returns<a class="headerlink" href="#aimnet.calculators.AIMNet2Calculator.hessian_vector_product--returns" title="Permanent link">&para;</a></h5>
 <p>Tensor
     <code>H @ v</code>, shape <code>(N, 3)</code> or <code>(K, N, 3)</code>, matching <code>vectors</code>.</p>
 <h5 id="aimnet.calculators.AIMNet2Calculator.hessian_vector_product--notes">Notes<a class="headerlink" href="#aimnet.calculators.AIMNet2Calculator.hessian_vector_product--notes" title="Permanent link">&para;</a></h5>
-<p>The autograd part (NN + short-range + <code>simple</code>/<code>dsf</code> Coulomb +
-DFTD3) is an exact reverse-mode product. For <code>ewald</code>/<code>pme</code> the
-long-range block is a fixed-charge directional finite difference (2
-force evals per vector); the same charge-response and step caveats as
-the dense Ewald/PME Hessian apply (see
-:meth:<code>aimnet.modules.lr.LRCoulomb._coul_nvalchemi_fd_hessian</code>). This
-mirrors the dense :meth:<code>calculate_hessian</code> assembly term-by-term, so
-<code>hessian_vector_product(v)</code> equals <code>H.reshape(3N, 3N) @ v</code> to the
-backend's tolerance. The default return is detached; set
-<code>create_graph=True</code> when the differentiable autograd block must
-compose with an outer computation. See :meth:<code>calculate_hessian</code> for
-the detached-Hessian contract and the fully-differentiable recipe.</p>
+<p>The product is an exact reverse-mode autograd computation for every
+backend: the NN, short-range, <code>simple</code>/<code>dsf</code> Coulomb, DFTD3, and
+periodic <code>ewald</code>/<code>pme</code> energies are all in the autograd graph, so
+the vjp captures the full curvature, including the relaxed-charge
+response <code>d^2E/(dq.dr)</code>. This mirrors the dense
+:meth:<code>calculate_hessian</code> assembly, so <code>hessian_vector_product(v)</code>
+equals <code>H.reshape(3N, 3N) @ v</code> to the backend's tolerance. The
+default return is detached; set <code>create_graph=True</code> when the HVP
+must compose with an outer computation. See :meth:<code>calculate_hessian</code>
+for the detached-Hessian contract and the fully-differentiable recipe.</p>
 <p>Integration note: the external modules run via
 <code>_run_external_modules(forces=False, hessian=(method == 'dsf'))</code> --
 ENERGY-GRAPH mode so every external term (DFTD3 + Coulomb) stays
@@ -4397,48 +4394,24 @@ differentiable w.r.t. <code>coord</code> and its curvature is captured by the
 autograd vjp. <code>forces=False</code> (not <code>True</code>) is required: with
 <code>forces=True</code> the DFTD3 branch takes its detached explicit-force path
 and its second-derivative curvature is silently dropped from <code>H @ v</code>.
-The <code>hessian</code> flag controls the dsf-vs-ewald/pme split: dsf passes
-<code>hessian=True</code> so <code>LRCoulomb.forward</code> routes through its
-differentiable closed-form torch path (<code>_coul_dsf_torch</code>), keeping the
-dsf curvature in the autograd graph (dsf has no dense FD block, so this is
-free); ewald/pme pass <code>hessian=False</code> so the dense O(2*3N) FD block is
-NOT computed, while the periodic energy is still added
-differentiable-through-charges (capturing the charge-response curvature).
-The autograd vjp of the differentiable forces equals the dense autograd
-Hessian block (NN + short-range + DFTD3 + Coulomb-charge-response), and
-the directional FD helper adds the remaining full-periodic block --
-matching the dense assembly term-by-term.</p>
-<p>Dtype / differentiability / eigensolver caveats:</p>
+The <code>hessian</code> flag routes dsf through its differentiable closed-form
+torch path (<code>_coul_dsf_torch</code>); ewald/pme energies are always in the
+graph.</p>
+<p>Dtype / differentiability caveats:</p>
 <ul>
 <li>Return dtype is the model dtype (typically float32) for <code>simple</code> and
-  <code>dsf</code>, and <strong>float64</strong> for <code>ewald</code>/<code>pme</code> (the periodic
-  finite-difference block is accumulated in double precision, matching the
-  dense Ewald/PME Hessian).</li>
+  <code>dsf</code>, and <strong>float64</strong> for <code>ewald</code>/<code>pme</code> (preserving the
+  contract established when the periodic block was finite-difference).</li>
 <li>With <code>create_graph=False</code> the returned product is detached numeric
-  operator action. With <code>create_graph=True</code> the autograd block remains
+  operator action. With <code>create_graph=True</code> the HVP remains
   differentiable w.r.t. graph-attached coordinates / model parameters;
-  vectors are still treated as numeric directions, and the periodic FD
-  block remains detached.</li>
-<li>For <code>ewald</code>/<code>pme</code> the operator is symmetric only to
-  finite-difference accuracy (O(eps^2)); for Lanczos/LOBPCG
-  smallest/most-negative-eigenvalue (transition-state) work, pass all
-  probe vectors together as a single <code>(K, N, 3)</code> batch so the charge
-  state is frozen across the iteration, and consider symmetrizing the
-  operator or tuning <code>eps</code>.</li>
-<li>The fixed-charge periodic approximation (and the <code>dsf</code> relaxed-charge
-  vs <code>ewald</code>/<code>pme</code> fixed-charge asymmetry) is inherited from the dense
-  Ewald/PME Hessian and can shift near-zero/negative eigenvalues for
-  strongly polar periodic systems; see
-  :meth:<code>aimnet.modules.lr.LRCoulomb._coul_nvalchemi_fd_hessian</code>.</li>
+  vectors are still treated as numeric directions.</li>
 </ul>
 
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1802</span>
-<span class="normal">1803</span>
-<span class="normal">1804</span>
-<span class="normal">1805</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1805</span>
 <span class="normal">1806</span>
 <span class="normal">1807</span>
 <span class="normal">1808</span>
@@ -4554,28 +4527,14 @@ matching the dense assembly term-by-term.</p>
 <span class="normal">1918</span>
 <span class="normal">1919</span>
 <span class="normal">1920</span>
-<span class="normal">1921</span>
-<span class="normal">1922</span>
-<span class="normal">1923</span>
-<span class="normal">1924</span>
-<span class="normal">1925</span>
-<span class="normal">1926</span>
-<span class="normal">1927</span>
-<span class="normal">1928</span>
-<span class="normal">1929</span>
-<span class="normal">1930</span>
-<span class="normal">1931</span>
-<span class="normal">1932</span>
-<span class="normal">1933</span>
-<span class="normal">1934</span>
-<span class="normal">1935</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@torch</span><span class="o">.</span><span class="n">inference_mode</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+<span class="normal">1921</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@torch</span><span class="o">.</span><span class="n">inference_mode</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
 <span class="nd">@torch</span><span class="o">.</span><span class="n">enable_grad</span><span class="p">()</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">hessian_vector_product</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
     <span class="n">vectors</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
-    <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5e-4</span><span class="p">,</span>
+    <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">validate_species</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">create_graph</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
@@ -4592,15 +4551,14 @@ matching the dense assembly term-by-term.</p>
 <span class="sd">        multi-molecule ``mol_idx`` inputs are not supported.</span>
 <span class="sd">    vectors : Tensor</span>
 <span class="sd">        Direction(s), shape ``(N, 3)`` or ``(K, N, 3)`` over the real atoms.</span>
-<span class="sd">    eps : float</span>
-<span class="sd">        Central-difference step (Angstrom) for the periodic PME</span>
-<span class="sd">        long-range term. Ignored for ``simple``/``dsf``/``ewald``</span>
-<span class="sd">        (their products are exact reverse-mode autograd).</span>
+<span class="sd">    eps : float, optional</span>
+<span class="sd">        Deprecated and unused since the PME energy-graph migration (every</span>
+<span class="sd">        backend&#39;s product is exact reverse-mode autograd). Passing any</span>
+<span class="sd">        value emits a ``DeprecationWarning``.</span>
 <span class="sd">    create_graph : bool</span>
-<span class="sd">        If ``True``, keep the differentiable autograd block of the HVP in</span>
-<span class="sd">        the graph so it can compose with an outer loss. The Ewald/PME</span>
-<span class="sd">        fixed-position finite-difference block remains detached. Default</span>
-<span class="sd">        ``False`` preserves the numeric/detached operator-action behavior.</span>
+<span class="sd">        If ``True``, keep the HVP in the graph so it can compose with an</span>
+<span class="sd">        outer loss. Default ``False`` preserves the numeric/detached</span>
+<span class="sd">        operator-action behavior.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -4609,18 +4567,16 @@ matching the dense assembly term-by-term.</p>
 
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
-<span class="sd">    The autograd part (NN + short-range + ``simple``/``dsf`` Coulomb +</span>
-<span class="sd">    DFTD3) is an exact reverse-mode product. For ``ewald``/``pme`` the</span>
-<span class="sd">    long-range block is a fixed-charge directional finite difference (2</span>
-<span class="sd">    force evals per vector); the same charge-response and step caveats as</span>
-<span class="sd">    the dense Ewald/PME Hessian apply (see</span>
-<span class="sd">    :meth:`aimnet.modules.lr.LRCoulomb._coul_nvalchemi_fd_hessian`). This</span>
-<span class="sd">    mirrors the dense :meth:`calculate_hessian` assembly term-by-term, so</span>
-<span class="sd">    ``hessian_vector_product(v)`` equals ``H.reshape(3N, 3N) @ v`` to the</span>
-<span class="sd">    backend&#39;s tolerance. The default return is detached; set</span>
-<span class="sd">    ``create_graph=True`` when the differentiable autograd block must</span>
-<span class="sd">    compose with an outer computation. See :meth:`calculate_hessian` for</span>
-<span class="sd">    the detached-Hessian contract and the fully-differentiable recipe.</span>
+<span class="sd">    The product is an exact reverse-mode autograd computation for every</span>
+<span class="sd">    backend: the NN, short-range, ``simple``/``dsf`` Coulomb, DFTD3, and</span>
+<span class="sd">    periodic ``ewald``/``pme`` energies are all in the autograd graph, so</span>
+<span class="sd">    the vjp captures the full curvature, including the relaxed-charge</span>
+<span class="sd">    response ``d^2E/(dq.dr)``. This mirrors the dense</span>
+<span class="sd">    :meth:`calculate_hessian` assembly, so ``hessian_vector_product(v)``</span>
+<span class="sd">    equals ``H.reshape(3N, 3N) @ v`` to the backend&#39;s tolerance. The</span>
+<span class="sd">    default return is detached; set ``create_graph=True`` when the HVP</span>
+<span class="sd">    must compose with an outer computation. See :meth:`calculate_hessian`</span>
+<span class="sd">    for the detached-Hessian contract and the fully-differentiable recipe.</span>
 
 <span class="sd">    Integration note: the external modules run via</span>
 <span class="sd">    ``_run_external_modules(forces=False, hessian=(method == &#39;dsf&#39;))`` --</span>
@@ -4629,41 +4585,27 @@ matching the dense assembly term-by-term.</p>
 <span class="sd">    autograd vjp. ``forces=False`` (not ``True``) is required: with</span>
 <span class="sd">    ``forces=True`` the DFTD3 branch takes its detached explicit-force path</span>
 <span class="sd">    and its second-derivative curvature is silently dropped from ``H @ v``.</span>
-<span class="sd">    The ``hessian`` flag controls the dsf-vs-ewald/pme split: dsf passes</span>
-<span class="sd">    ``hessian=True`` so ``LRCoulomb.forward`` routes through its</span>
-<span class="sd">    differentiable closed-form torch path (``_coul_dsf_torch``), keeping the</span>
-<span class="sd">    dsf curvature in the autograd graph (dsf has no dense FD block, so this is</span>
-<span class="sd">    free); ewald/pme pass ``hessian=False`` so the dense O(2*3N) FD block is</span>
-<span class="sd">    NOT computed, while the periodic energy is still added</span>
-<span class="sd">    differentiable-through-charges (capturing the charge-response curvature).</span>
-<span class="sd">    The autograd vjp of the differentiable forces equals the dense autograd</span>
-<span class="sd">    Hessian block (NN + short-range + DFTD3 + Coulomb-charge-response), and</span>
-<span class="sd">    the directional FD helper adds the remaining full-periodic block --</span>
-<span class="sd">    matching the dense assembly term-by-term.</span>
+<span class="sd">    The ``hessian`` flag routes dsf through its differentiable closed-form</span>
+<span class="sd">    torch path (``_coul_dsf_torch``); ewald/pme energies are always in the</span>
+<span class="sd">    graph.</span>
 
-<span class="sd">    Dtype / differentiability / eigensolver caveats:</span>
+<span class="sd">    Dtype / differentiability caveats:</span>
 
 <span class="sd">    * Return dtype is the model dtype (typically float32) for ``simple`` and</span>
-<span class="sd">      ``dsf``, and **float64** for ``ewald``/``pme`` (the periodic</span>
-<span class="sd">      finite-difference block is accumulated in double precision, matching the</span>
-<span class="sd">      dense Ewald/PME Hessian).</span>
+<span class="sd">      ``dsf``, and **float64** for ``ewald``/``pme`` (preserving the</span>
+<span class="sd">      contract established when the periodic block was finite-difference).</span>
 <span class="sd">    * With ``create_graph=False`` the returned product is detached numeric</span>
-<span class="sd">      operator action. With ``create_graph=True`` the autograd block remains</span>
+<span class="sd">      operator action. With ``create_graph=True`` the HVP remains</span>
 <span class="sd">      differentiable w.r.t. graph-attached coordinates / model parameters;</span>
-<span class="sd">      vectors are still treated as numeric directions, and the periodic FD</span>
-<span class="sd">      block remains detached.</span>
-<span class="sd">    * For ``ewald``/``pme`` the operator is symmetric only to</span>
-<span class="sd">      finite-difference accuracy (O(eps^2)); for Lanczos/LOBPCG</span>
-<span class="sd">      smallest/most-negative-eigenvalue (transition-state) work, pass all</span>
-<span class="sd">      probe vectors together as a single ``(K, N, 3)`` batch so the charge</span>
-<span class="sd">      state is frozen across the iteration, and consider symmetrizing the</span>
-<span class="sd">      operator or tuning ``eps``.</span>
-<span class="sd">    * The fixed-charge periodic approximation (and the ``dsf`` relaxed-charge</span>
-<span class="sd">      vs ``ewald``/``pme`` fixed-charge asymmetry) is inherited from the dense</span>
-<span class="sd">      Ewald/PME Hessian and can shift near-zero/negative eigenvalues for</span>
-<span class="sd">      strongly polar periodic systems; see</span>
-<span class="sd">      :meth:`aimnet.modules.lr.LRCoulomb._coul_nvalchemi_fd_hessian`.</span>
+<span class="sd">      vectors are still treated as numeric directions.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">eps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;hessian_vector_product(eps=...) is unused since the PME energy-graph &quot;</span>
+            <span class="s2">&quot;migration (all backends are exact reverse-mode autograd) and will be removed.&quot;</span><span class="p">,</span>
+            <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
     <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_was_compiled&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
             <span class="s2">&quot;hessian_vector_product is incompatible with compile_model=True &quot;</span>
@@ -4695,7 +4637,7 @@ matching the dense assembly term-by-term.</p>
     <span class="c1"># restored.</span>
     <span class="n">eval_state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_snapshot_eval_state</span><span class="p">()</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hessian_vector_product_impl</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">vectors</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="n">eps</span><span class="p">,</span> <span class="n">create_graph</span><span class="o">=</span><span class="n">create_graph</span><span class="p">)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hessian_vector_product_impl</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">vectors</span><span class="p">,</span> <span class="n">create_graph</span><span class="o">=</span><span class="n">create_graph</span><span class="p">)</span>
     <span class="k">finally</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_restore_eval_state</span><span class="p">(</span><span class="n">eval_state</span><span class="p">)</span>
         <span class="c1"># _restore_eval_state already undid any PBC auto-switch from</span>
@@ -4725,10 +4667,7 @@ Will not flatten for batched input and molecule size below threshold.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1524</span>
-<span class="normal">1525</span>
-<span class="normal">1526</span>
-<span class="normal">1527</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1527</span>
 <span class="normal">1528</span>
 <span class="normal">1529</span>
 <span class="normal">1530</span>
@@ -4761,7 +4700,10 @@ Will not flatten for batched input and molecule size below threshold.</p>
 <span class="normal">1557</span>
 <span class="normal">1558</span>
 <span class="normal">1559</span>
-<span class="normal">1560</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">mol_flatten</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span> <span class="n">hessian</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]:</span>
+<span class="normal">1560</span>
+<span class="normal">1561</span>
+<span class="normal">1562</span>
+<span class="normal">1563</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">mol_flatten</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span> <span class="n">hessian</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Flatten the input data for multiple molecules.</span>
 <span class="sd">    Will not flatten for batched input and molecule size below threshold.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -4832,14 +4774,7 @@ the smoothing is fixed.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">801</span>
-<span class="normal">802</span>
-<span class="normal">803</span>
-<span class="normal">804</span>
-<span class="normal">805</span>
-<span class="normal">806</span>
-<span class="normal">807</span>
-<span class="normal">808</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">808</span>
 <span class="normal">809</span>
 <span class="normal">810</span>
 <span class="normal">811</span>
@@ -4863,7 +4798,14 @@ the smoothing is fixed.</p>
 <span class="normal">829</span>
 <span class="normal">830</span>
 <span class="normal">831</span>
-<span class="normal">832</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_dftd3_cutoff</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">smoothing_fraction</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">832</span>
+<span class="normal">833</span>
+<span class="normal">834</span>
+<span class="normal">835</span>
+<span class="normal">836</span>
+<span class="normal">837</span>
+<span class="normal">838</span>
+<span class="normal">839</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_dftd3_cutoff</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">smoothing_fraction</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Set DFTD3 cutoff and smoothing.</span>
 
 <span class="sd">    Parameters</span>
@@ -4923,14 +4865,7 @@ Ewald/PME use their own per-call neighbor lists and ignore this cutoff.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">778</span>
-<span class="normal">779</span>
-<span class="normal">780</span>
-<span class="normal">781</span>
-<span class="normal">782</span>
-<span class="normal">783</span>
-<span class="normal">784</span>
-<span class="normal">785</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">785</span>
 <span class="normal">786</span>
 <span class="normal">787</span>
 <span class="normal">788</span>
@@ -4944,7 +4879,14 @@ Ewald/PME use their own per-call neighbor lists and ignore this cutoff.</p>
 <span class="normal">796</span>
 <span class="normal">797</span>
 <span class="normal">798</span>
-<span class="normal">799</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_lr_cutoff</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">799</span>
+<span class="normal">800</span>
+<span class="normal">801</span>
+<span class="normal">802</span>
+<span class="normal">803</span>
+<span class="normal">804</span>
+<span class="normal">805</span>
+<span class="normal">806</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_lr_cutoff</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Set the unified long-range cutoff for all LR modules.</span>
 
 <span class="sd">    Parameters</span>
@@ -5010,12 +4952,16 @@ cannot be modified at runtime.</p>
 <p><code>"ewald"</code> and <code>"pme"</code> both require periodic systems (<code>cell</code> set);
 invoking the calculator without a cell raises <code>ValueError</code> at
 <code>prepare_input</code>.</p>
-<p>Hessian note: <code>"ewald"</code>/<code>"pme"</code> Hessians are computed at fixed charge
-(finite-difference of the analytic forces; the charge-response coupling
-<code>d^2E/(dq.dr)</code> through the model's predicted charges is omitted), while
-<code>"dsf"</code> Hessians are relaxed-charge (fully autograd). Vibrational
-frequencies / IR intensities are therefore not directly comparable across
-these backends.</p>
+<p>Hessian note: <code>"dsf"</code>, <code>"ewald"</code>, and <code>"pme"</code> Hessians are all
+computed under the same relaxed-charge contract (fully autograd,
+including the charge-response coupling <code>d^2E/(dq.dr)</code> through the
+model's predicted charges). Ewald and PME evaluate the same lattice
+sum and are directly comparable; DSF remains a shifted-force
+truncation of the PES, so its curvature still differs from the full
+lattice sum for pairs near the cutoff.</p>
+<p><code>"pme"</code> requires nvalchemi-toolkit-ops &gt;= 0.4.1 and raises
+<code>RuntimeError</code> on older versions (0.4.0 silently corrupts train-mode
+PME forces).</p>
 
 
             <details class="mkdocstrings-source">
@@ -5109,7 +5055,14 @@ these backends.</p>
 <span class="normal">773</span>
 <span class="normal">774</span>
 <span class="normal">775</span>
-<span class="normal">776</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_lrcoulomb_method</span><span class="p">(</span>
+<span class="normal">776</span>
+<span class="normal">777</span>
+<span class="normal">778</span>
+<span class="normal">779</span>
+<span class="normal">780</span>
+<span class="normal">781</span>
+<span class="normal">782</span>
+<span class="normal">783</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_lrcoulomb_method</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;simple&quot;</span><span class="p">,</span> <span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="s2">&quot;pme&quot;</span><span class="p">],</span>
     <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">15.0</span><span class="p">,</span>
@@ -5149,15 +5102,22 @@ these backends.</p>
 <span class="sd">    invoking the calculator without a cell raises ``ValueError`` at</span>
 <span class="sd">    ``prepare_input``.</span>
 
-<span class="sd">    Hessian note: ``&quot;ewald&quot;``/``&quot;pme&quot;`` Hessians are computed at fixed charge</span>
-<span class="sd">    (finite-difference of the analytic forces; the charge-response coupling</span>
-<span class="sd">    ``d^2E/(dq.dr)`` through the model&#39;s predicted charges is omitted), while</span>
-<span class="sd">    ``&quot;dsf&quot;`` Hessians are relaxed-charge (fully autograd). Vibrational</span>
-<span class="sd">    frequencies / IR intensities are therefore not directly comparable across</span>
-<span class="sd">    these backends.</span>
+<span class="sd">    Hessian note: ``&quot;dsf&quot;``, ``&quot;ewald&quot;``, and ``&quot;pme&quot;`` Hessians are all</span>
+<span class="sd">    computed under the same relaxed-charge contract (fully autograd,</span>
+<span class="sd">    including the charge-response coupling ``d^2E/(dq.dr)`` through the</span>
+<span class="sd">    model&#39;s predicted charges). Ewald and PME evaluate the same lattice</span>
+<span class="sd">    sum and are directly comparable; DSF remains a shifted-force</span>
+<span class="sd">    truncation of the PES, so its curvature still differs from the full</span>
+<span class="sd">    lattice sum for pairs near the cutoff.</span>
+
+<span class="sd">    ``&quot;pme&quot;`` requires nvalchemi-toolkit-ops &gt;= 0.4.1 and raises</span>
+<span class="sd">    ``RuntimeError`` on older versions (0.4.0 silently corrupts train-mode</span>
+<span class="sd">    PME forces).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">method</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;simple&quot;</span><span class="p">,</span> <span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="s2">&quot;pme&quot;</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid method: </span><span class="si">{</span><span class="n">method</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;pme&quot;</span><span class="p">:</span>
+        <span class="n">_require_pme_capable_nvalchemiops</span><span class="p">()</span>
 
     <span class="c1"># Warn if model has embedded Coulomb (legacy models)</span>
     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_embedded_coulomb</span><span class="p">()</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">external_coulomb</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>

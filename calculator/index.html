@@ -4428,11 +4428,8 @@
 <p><strong>Ewald / PME Accuracy:</strong></p>
 <p>For both Ewald and PME, <code>ewald_accuracy</code> (default <code>1e-6</code>, matching the nvalchemiops default) controls the splitting parameter, real-space cutoff, and reciprocal-space resolution. The calculator estimates these per call from the cell geometry; smaller values give tighter convergence at higher cost.</p>
 <p><strong>Derivative Support:</strong></p>
-<ul>
-<li><code>simple</code> and <code>dsf</code>: inference forces/stress are supported. DSF force/stress losses (<code>train=True</code> with <code>forces</code> or <code>stress</code>) and Hessian calculations raise <code>NotImplementedError</code>.</li>
-<li><code>ewald</code> and <code>pme</code>: forces, stress, and force/stress losses in <code>train=True</code> are supported. Hessian requests raise <code>NotImplementedError</code> because nvalchemiops exposes explicit first coordinate derivatives, not second coordinate derivatives.</li>
-</ul>
-<p>See <a href="../long_range/#derivative-support">Long-Range Methods → Derivative Support</a> for the rationale.</p>
+<p>All external Coulomb methods support inference forces/stress, force/stress losses in <code>train=True</code>, and Hessian/HVP requests. DSF routes training and Hessians through its differentiable closed-form torch path; <code>ewald</code> and <code>pme</code> keep their nvalchemiops energy in the autograd graph (nvalchemi-toolkit-ops &gt;= 0.4.1; selecting <code>pme</code> on 0.4.0 raises <code>RuntimeError</code>), so all derivatives come from the calculator's total-energy autograd and are relaxed-charge.</p>
+<p>See <a href="../long_range/#derivative-support">Long-Range Methods → Derivative Support</a> for details.</p>
 <p><strong>Notes:</strong></p>
 <ul>
 <li>Updates external <code>LRCoulomb</code> module if present</li>
@@ -4623,8 +4620,8 @@
 <p>When computing higher-order derivatives from outside the calculator, pass <code>forces=False</code>. Requesting <code>forces=True</code> triggers an internal backward pass that frees intermediate activations, preventing a second differentiation through the graph.</p>
 </div>
 <div class="admonition note">
-<p class="admonition-title">Long-range backend limitations</p>
-<p>External higher-order differentiation depends on the selected long-range backend. Ewald and PME use nvalchemiops explicit first coordinate derivatives and do not provide complete Coulomb Hessians.</p>
+<p class="admonition-title">Long-range backends and external differentiation</p>
+<p>Every long-range backend keeps its energy in the autograd graph for higher-order differentiation: DSF routes through its differentiable torch path, and Ewald/PME (nvalchemi-toolkit-ops &gt;= 0.4.1) are energy-graph-only, so external <code>torch.autograd.functional.hessian</code> captures the complete relaxed-charge Coulomb Hessian.</p>
 </div>
 <p>When <code>coord</code> does <strong>not</strong> have <code>requires_grad=True</code> (the default), inputs are detached as before — optimization loops that call the calculator repeatedly incur no graph accumulation overhead.</p>
 <h2 id="output-format">Output Format<a class="headerlink" href="#output-format" title="Permanent link">&para;</a></h2>
@@ -4981,8 +4978,8 @@
 <td><code>NotImplementedError</code></td>
 </tr>
 <tr>
-<td>Hessian with DSF/Ewald/PME Coulomb</td>
-<td><code>NotImplementedError</code></td>
+<td>PME with nvalchemi-toolkit-ops &lt; 0.4.1</td>
+<td><code>RuntimeError</code></td>
 </tr>
 <tr>
 <td>PBC with multiple molecules</td>

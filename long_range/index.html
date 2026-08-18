@@ -2557,7 +2557,7 @@
 <li>O(N) scaling with neighbor lists</li>
 <li>Energy and forces continuous at cutoff</li>
 <li>Based on Wolf summation method</li>
-<li>Inference forces and stress are supported; force/stress training and Hessians are not (see <a href="#derivative-support">Derivative Support</a>)</li>
+<li>Inference forces and stress use explicit terms; force/stress training and Hessians route through the differentiable torch path (see <a href="#derivative-support">Derivative Support</a>)</li>
 </ul>
 <h3 id="ewald-summation">Ewald Summation<a class="headerlink" href="#ewald-summation" title="Permanent link">&para;</a></h3>
 <p><strong>When to use:</strong></p>
@@ -2622,46 +2622,46 @@
 <li>Same <code>ewald_accuracy</code> semantics as Ewald</li>
 </ul>
 <h3 id="derivative-support">Derivative Support<a class="headerlink" href="#derivative-support" title="Permanent link">&para;</a></h3>
-<p>The nvalchemiops-backed external methods differ in how they expose derivatives:</p>
+<p>All nvalchemiops-backed external methods support inference forces/stress, force/stress training, and Hessians/HVPs:</p>
 <table>
 <thead>
 <tr>
 <th>Backend</th>
 <th>Inference forces/stress</th>
 <th>Force/stress training</th>
-<th>Hessian</th>
+<th>Hessian / HVP</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>DSF</td>
-<td>Yes</td>
-<td>No</td>
-<td>No</td>
+<td>Yes (explicit terms)</td>
+<td>Yes (torch path)</td>
+<td>Yes (torch path, relaxed-charge)</td>
 </tr>
 <tr>
 <td>Ewald</td>
+<td>Yes (autograd)</td>
 <td>Yes</td>
-<td>Yes</td>
-<td>No</td>
+<td>Yes (autograd, relaxed-charge)</td>
 </tr>
 <tr>
 <td>PME</td>
+<td>Yes (autograd)</td>
 <td>Yes</td>
-<td>Yes</td>
-<td>No</td>
+<td>Yes (autograd, relaxed-charge)</td>
 </tr>
 <tr>
 <td>DFT-D3</td>
-<td>Yes</td>
+<td>Yes (explicit terms)</td>
 <td>Not applicable; no trainable DFT-D3 parameters</td>
-<td>Yes</td>
+<td>Yes (torch path)</td>
 </tr>
 </tbody>
 </table>
 <ul>
-<li><strong>DSF</strong>: energy is autograd-connected through charges only. The calculator assembles inference forces and stress by combining PyTorch autograd for the NN and the charge chain with explicit DSF forces/virial. Force/stress losses (<code>train=True</code> with <code>forces=True</code> or <code>stress=True</code>) and Hessian requests raise <code>NotImplementedError</code>.</li>
-<li><strong>Ewald / PME</strong>: support inference forces/stress and force/stress losses in <code>train=True</code>. Hessian requests raise <code>NotImplementedError</code> because nvalchemiops exposes explicit first coordinate derivatives, not the second coordinate derivatives needed for a complete Coulomb Hessian.</li>
+<li><strong>DSF</strong>: plain inference combines PyTorch autograd for the NN and the charge chain with explicit fixed-charge DSF forces/virial. Force/stress training and Hessian requests route through the closed-form differentiable torch path, which is relaxed-charge (includes the <code>d²E/(dq·dr)</code> charge-response coupling).</li>
+<li><strong>Ewald / PME</strong>: a single energy-only nvalchemiops call (&gt;= 0.4.1) leaves positions, charges, and cell in the autograd graph; inference forces/stress, training losses, dense Hessians, and Hessian-vector products all come from the calculator's total-energy autograd and are relaxed-charge, the same contract as the DSF torch path (Ewald and PME are directly comparable with each other; DSF's shifted-force truncation still differs from the full lattice sum near the cutoff). Selecting PME on nvalchemiops 0.4.0 raises <code>RuntimeError</code>: its charge-gradient backward silently corrupts train-mode forces inside the full calculator graph (fixed upstream in 0.4.1).</li>
 <li><strong>DFT-D3</strong>: inference forces and stress come from detached nvalchemiops force/virial terms. Hessian requests use the pure-torch differentiable DFT-D3 path.</li>
 </ul>
 <h2 id="method-comparison">Method Comparison<a class="headerlink" href="#method-comparison" title="Permanent link">&para;</a></h2>
@@ -2688,7 +2688,7 @@
 <td>O(N) with neighbor lists</td>
 <td>Yes</td>
 <td>Production MD, large systems</td>
-<td>Inference derivatives only</td>
+<td>Training/Hessian via torch path</td>
 </tr>
 <tr>
 <td>Ewald</td>
