@@ -84,7 +84,7 @@ requires-dist = [
     { name = "huggingface-hub", marker = "extra == 'hf'", specifier = ">=0.20" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "numpy" },
-    { name = "nvalchemi-toolkit-ops", specifier = ">=0.4.0" },
+    { name = "nvalchemi-toolkit-ops", specifier = ">=0.4.1" },
     { name = "omegaconf", marker = "extra == 'train'", specifier = ">=2.3.0" },
     { name = "pysisyphus", marker = "extra == 'pysis'", specifier = ">=1.0.0" },
     { name = "pytorch-ignite", marker = "extra == 'train'", specifier = ">=0.5.1" },
@@ -2497,7 +2497,7 @@ wheels = [
 
 [[package]]
 name = "nvalchemi-toolkit-ops"
-version = "0.4.0"
+version = "0.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
@@ -2505,7 +2505,7 @@ dependencies = [
     { name = "warp-lang" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9c/ff/d0b5333356a9a3efda851ffb23820b874b05fbe1caabaa6fad3c4005bda6/nvalchemi_toolkit_ops-0.4.0-py3-none-any.whl", hash = "sha256:f245c393c210a78160eab783d01c3d2d7fda54014bad1885c4210ced8000a3f7", size = 1254925, upload-time = "2026-07-13T18:03:52.887Z" },
+    { url = "https://files.pythonhosted.org/packages/6d/9e/ba3b01e6345247f19d904cbfffba5a56132a2d313eec77c356a8b9f8afde/nvalchemi_toolkit_ops-0.4.1-py3-none-any.whl", hash = "sha256:f2f1e195f90d7a27ec52c26484ef727d734cc34cab15d45a3a38e2077c046c88", size = 1287584, upload-time = "2026-08-04T17:02:54.259Z" },
 ]
 
 [package.optional-dependencies]

@@ -179,12 +179,13 @@ def test_hvp_validates_unsupported_element():
 
 
 @pytest.mark.slow
-def test_hvp_periodic_returns_float64():
+@pytest.mark.parametrize("method", ["ewald", "pme"])
+def test_hvp_periodic_returns_float64(method):
     calc = AIMNet2Calculator("aimnet2", nb_threshold=0, needs_coulomb=True)
     calc.external_dftd3 = None
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="Model has embedded Coulomb module", category=UserWarning)
-        calc.set_lrcoulomb_method("ewald")
+        calc.set_lrcoulomb_method(method)
     data = {
         "coord": np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
         "numbers": np.array([8, 1, 1]),

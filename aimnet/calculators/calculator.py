@@ -13,7 +13,7 @@ from aimnet.models.artifact_validation import uses_default_model_import_settings
 from aimnet.models.base import load_legacy_jit
 from aimnet.models.utils import has_d3ts, has_externalizable_dftd3, has_lrcoulomb
 from aimnet.modules import DFTD3, LRCoulomb
-from aimnet.modules.lr import ExternalDerivativeTerms
+from aimnet.modules.lr import ExternalDerivativeTerms, _require_pme_capable_nvalchemiops
 
 from . import derivatives
 from .neighbors import (  # noqa: F401  (re-exported for backwards compatibility)
@@ -724,15 +724,22 @@ class AIMNet2Calculator:
         invoking the calculator without a cell raises ``ValueError`` at
         ``prepare_input``.
 
-        Hessian note: ``"ewald"``/``"pme"`` Hessians are computed at fixed charge
-        (finite-difference of the analytic forces; the charge-response coupling
-        ``d^2E/(dq.dr)`` through the model's predicted charges is omitted), while
-        ``"dsf"`` Hessians are relaxed-charge (fully autograd). Vibrational
-        frequencies / IR intensities are therefore not directly comparable across
-        these backends.
+        Hessian note: ``"dsf"``, ``"ewald"``, and ``"pme"`` Hessians are all
+        computed under the same relaxed-charge contract (fully autograd,
+        including the charge-response coupling ``d^2E/(dq.dr)`` through the
+        model's predicted charges). Ewald and PME evaluate the same lattice
+        sum and are directly comparable; DSF remains a shifted-force
+        truncation of the PES, so its curvature still differs from the full
+        lattice sum for pairs near the cutoff.
+
+        ``"pme"`` requires nvalchemi-toolkit-ops >= 0.4.1 and raises
+        ``RuntimeError`` on older versions (0.4.0 silently corrupts train-mode
+        PME forces).
         """
         if method not in ("simple", "dsf", "ewald", "pme"):
             raise ValueError(f"Invalid method: {method}")
+        if method == "pme":
+            _require_pme_capable_nvalchemiops()
 
         # Warn if model has embedded Coulomb (legacy models)
         if self._has_embedded_coulomb() and self.external_coulomb is None:
@@ -1006,16 +1013,17 @@ class AIMNet2Calculator:
         """Run external Coulomb and DFTD3 modules if attached.
 
         External backends return ``(data, terms)`` when explicit force/virial
-        derivatives are requested. Ewald/PME switch to their local training
-        wrapper for force/stress training.
+        derivatives are requested. Ewald/PME are energy-in-graph and never
+        return explicit terms; DSF switches to its differentiable torch path
+        for force/stress training.
         """
         coulomb_terms = None
         deterministic = getattr(self, "_deterministic", False)
         if self.external_coulomb is not None:
-            # Ewald is always energy-in-graph now; the flag selects the DSF
-            # closed-form torch path or the legacy PME training wrapper.
+            # Ewald and PME are always energy-in-graph now; the flag selects
+            # the DSF closed-form torch path for force/stress training.
             training_derivatives = (
-                self.external_coulomb.method in ("pme", "dsf") and getattr(self, "_train", False) and (forces or stress)
+                self.external_coulomb.method == "dsf" and getattr(self, "_train", False) and (forces or stress)
             )
             if deterministic:
                 if self.external_coulomb.method == "dsf":
@@ -1035,10 +1043,6 @@ class AIMNet2Calculator:
                 "training_derivatives": training_derivatives,
                 "hessian": hessian,
             }
-            if training_derivatives and stress and self.external_coulomb.method == "pme":
-                strain_inputs = getattr(self, "_external_strain_inputs", None)
-                if strain_inputs is not None:
-                    kwargs.update(strain_inputs)
             result = self.external_coulomb(data, **kwargs)
             if forces or stress:
                 data, coulomb_terms = result
@@ -1427,7 +1431,6 @@ class AIMNet2Calculator:
             "_coulomb_method",
             "_coulomb_cutoff",
             "cutoff_lr",
-            "_external_strain_inputs",
         )
         copied_attrs = ("_nblist_lr", "_nblist_dftd3", "_nblist_coulomb")
         state = {name: getattr(self, name, _SENTINEL) for name in shallow_attrs}
@@ -1766,7 +1769,7 @@ class AIMNet2Calculator:
         return data
 
     def set_grad_tensors(self, data: dict[str, Tensor], forces=False, stress=False, hessian=False) -> dict[str, Tensor]:
-        data, self._saved_for_grad, self._external_strain_inputs = derivatives.set_grad_tensors(
+        data, self._saved_for_grad, _ = derivatives.set_grad_tensors(
             data, forces=forces, stress=stress, hessian=hessian
         )
         return data
@@ -1806,7 +1809,7 @@ class AIMNet2Calculator:
         data: dict[str, Any],
         vectors: Tensor,
         *,
-        eps: float = 5e-4,
+        eps: float | None = None,
         validate_species: bool = True,
         create_graph: bool = False,
     ) -> Tensor:
@@ -1823,15 +1826,14 @@ class AIMNet2Calculator:
             multi-molecule ``mol_idx`` inputs are not supported.
         vectors : Tensor
             Direction(s), shape ``(N, 3)`` or ``(K, N, 3)`` over the real atoms.
-        eps : float
-            Central-difference step (Angstrom) for the periodic PME
-            long-range term. Ignored for ``simple``/``dsf``/``ewald``
-            (their products are exact reverse-mode autograd).
+        eps : float, optional
+            Deprecated and unused since the PME energy-graph migration (every
+            backend's product is exact reverse-mode autograd). Passing any
+            value emits a ``DeprecationWarning``.
         create_graph : bool
-            If ``True``, keep the differentiable autograd block of the HVP in
-            the graph so it can compose with an outer loss. The Ewald/PME
-            fixed-position finite-difference block remains detached. Default
-            ``False`` preserves the numeric/detached operator-action behavior.
+            If ``True``, keep the HVP in the graph so it can compose with an
+            outer loss. Default ``False`` preserves the numeric/detached
+            operator-action behavior.
 
         Returns
         -------
@@ -1840,18 +1842,16 @@ class AIMNet2Calculator:
 
         Notes
         -----
-        The autograd part (NN + short-range + ``simple``/``dsf`` Coulomb +
-        DFTD3) is an exact reverse-mode product. For ``ewald``/``pme`` the
-        long-range block is a fixed-charge directional finite difference (2
-        force evals per vector); the same charge-response and step caveats as
-        the dense Ewald/PME Hessian apply (see
-        :meth:`aimnet.modules.lr.LRCoulomb._coul_nvalchemi_fd_hessian`). This
-        mirrors the dense :meth:`calculate_hessian` assembly term-by-term, so
-        ``hessian_vector_product(v)`` equals ``H.reshape(3N, 3N) @ v`` to the
-        backend's tolerance. The default return is detached; set
-        ``create_graph=True`` when the differentiable autograd block must
-        compose with an outer computation. See :meth:`calculate_hessian` for
-        the detached-Hessian contract and the fully-differentiable recipe.
+        The product is an exact reverse-mode autograd computation for every
+        backend: the NN, short-range, ``simple``/``dsf`` Coulomb, DFTD3, and
+        periodic ``ewald``/``pme`` energies are all in the autograd graph, so
+        the vjp captures the full curvature, including the relaxed-charge
+        response ``d^2E/(dq.dr)``. This mirrors the dense
+        :meth:`calculate_hessian` assembly, so ``hessian_vector_product(v)``
+        equals ``H.reshape(3N, 3N) @ v`` to the backend's tolerance. The
+        default return is detached; set ``create_graph=True`` when the HVP
+        must compose with an outer computation. See :meth:`calculate_hessian`
+        for the detached-Hessian contract and the fully-differentiable recipe.
 
         Integration note: the external modules run via
         ``_run_external_modules(forces=False, hessian=(method == 'dsf'))`` --
@@ -1860,41 +1860,27 @@ class AIMNet2Calculator:
         autograd vjp. ``forces=False`` (not ``True``) is required: with
         ``forces=True`` the DFTD3 branch takes its detached explicit-force path
         and its second-derivative curvature is silently dropped from ``H @ v``.
-        The ``hessian`` flag controls the dsf-vs-ewald/pme split: dsf passes
-        ``hessian=True`` so ``LRCoulomb.forward`` routes through its
-        differentiable closed-form torch path (``_coul_dsf_torch``), keeping the
-        dsf curvature in the autograd graph (dsf has no dense FD block, so this is
-        free); ewald/pme pass ``hessian=False`` so the dense O(2*3N) FD block is
-        NOT computed, while the periodic energy is still added
-        differentiable-through-charges (capturing the charge-response curvature).
-        The autograd vjp of the differentiable forces equals the dense autograd
-        Hessian block (NN + short-range + DFTD3 + Coulomb-charge-response), and
-        the directional FD helper adds the remaining full-periodic block --
-        matching the dense assembly term-by-term.
+        The ``hessian`` flag routes dsf through its differentiable closed-form
+        torch path (``_coul_dsf_torch``); ewald/pme energies are always in the
+        graph.
 
-        Dtype / differentiability / eigensolver caveats:
+        Dtype / differentiability caveats:
 
         * Return dtype is the model dtype (typically float32) for ``simple`` and
-          ``dsf``, and **float64** for ``ewald``/``pme`` (the periodic
-          finite-difference block is accumulated in double precision, matching the
-          dense Ewald/PME Hessian).
+          ``dsf``, and **float64** for ``ewald``/``pme`` (preserving the
+          contract established when the periodic block was finite-difference).
         * With ``create_graph=False`` the returned product is detached numeric
-          operator action. With ``create_graph=True`` the autograd block remains
+          operator action. With ``create_graph=True`` the HVP remains
           differentiable w.r.t. graph-attached coordinates / model parameters;
-          vectors are still treated as numeric directions, and the periodic FD
-          block remains detached.
-        * For ``ewald``/``pme`` the operator is symmetric only to
-          finite-difference accuracy (O(eps^2)); for Lanczos/LOBPCG
-          smallest/most-negative-eigenvalue (transition-state) work, pass all
-          probe vectors together as a single ``(K, N, 3)`` batch so the charge
-          state is frozen across the iteration, and consider symmetrizing the
-          operator or tuning ``eps``.
-        * The fixed-charge periodic approximation (and the ``dsf`` relaxed-charge
-          vs ``ewald``/``pme`` fixed-charge asymmetry) is inherited from the dense
-          Ewald/PME Hessian and can shift near-zero/negative eigenvalues for
-          strongly polar periodic systems; see
-          :meth:`aimnet.modules.lr.LRCoulomb._coul_nvalchemi_fd_hessian`.
+          vectors are still treated as numeric directions.
         """
+        if eps is not None:
+            warnings.warn(
+                "hessian_vector_product(eps=...) is unused since the PME energy-graph "
+                "migration (all backends are exact reverse-mode autograd) and will be removed.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         if getattr(self, "_was_compiled", False):
             raise RuntimeError(
                 "hessian_vector_product is incompatible with compile_model=True "
@@ -1926,7 +1912,7 @@ class AIMNet2Calculator:
         # restored.
         eval_state = self._snapshot_eval_state()
         try:
-            result = self._hessian_vector_product_impl(data, vectors, eps=eps, create_graph=create_graph)
+            result = self._hessian_vector_product_impl(data, vectors, create_graph=create_graph)
         finally:
             self._restore_eval_state(eval_state)
             # _restore_eval_state already undid any PBC auto-switch from
@@ -1934,14 +1920,12 @@ class AIMNet2Calculator:
             self._pbc_coulomb_restore = None
         return result
 
-    def _hessian_vector_product_impl(
-        self, data: dict[str, Any], vectors: Tensor, *, eps: float, create_graph: bool
-    ) -> Tensor:
+    def _hessian_vector_product_impl(self, data: dict[str, Any], vectors: Tensor, *, create_graph: bool) -> Tensor:
         """Core HVP computation; instance-state snapshot/restore is handled by
         :meth:`hessian_vector_product`. See that method for the contract."""
         # Deliberate parallel forward path: this mirrors `eval` +
         # `_run_external_modules` but builds an autograd-differentiable energy
-        # WITHOUT the dense periodic FD Hessian. Keep it in sync if the main
+        # WITHOUT the dense Hessian assembly. Keep it in sync if the main
         # forward path changes.
         prepared = self.prepare_input(data, hessian=True)
         if "mol_idx" in prepared and prepared["mol_idx"][-1] > 0:
@@ -1974,16 +1958,16 @@ class AIMNet2Calculator:
         #     ``hessian=True`` adds no wasteful work, and this guarantees correct
         #     routing regardless of how the (process-wide cached) model's embedded
         #     Coulomb method was last set by another caller.
-        #   * ewald/pme/simple: ``hessian=False`` and ``forces=False`` so the dense
-        #     O(2*3N) Ewald/PME FD block is NOT computed; the periodic energy is
-        #     still added differentiable-through-charges (capturing the
-        #     charge-response curvature d^2E/(dq.dr)). The full-periodic
-        #     fixed-position curvature is supplied per-vector by the directional FD
-        #     helper below. The Coulomb branch returns just ``data`` (no terms) for
-        #     forces=False, but ``_run_external_modules`` always returns the
-        #     ``(data, terms)`` 2-tuple, so the unpacking below is safe.
-        # The autograd vjp therefore captures NN + short-range + DFTD3 +
-        # Coulomb-charge-response, matching the dense assembly term-by-term.
+        #   * ewald/pme/simple: their energies are always in the autograd graph
+        #     (Ewald/PME are energy-graph-only since the nvalchemiops >=0.4.1
+        #     migration), so the vjp below carries the FULL periodic curvature
+        #     including the charge-response d^2E/(dq.dr); no FD supplement
+        #     exists or is needed. The Coulomb branch returns just ``data`` (no
+        #     terms) for forces=False, but ``_run_external_modules`` always
+        #     returns the ``(data, terms)`` 2-tuple, so the unpacking below is
+        #     safe.
+        # The autograd vjp therefore captures NN + short-range + DFTD3 + the
+        # full Coulomb curvature, matching the dense assembly term-by-term.
         external_hessian = method == "dsf"
         prepared, _coulomb_terms = self._run_external_modules(
             prepared, forces=False, stress=False, hessian=external_hessian
@@ -1991,10 +1975,9 @@ class AIMNet2Calculator:
 
         coord = self._saved_for_grad["coord"]  # (N+1, 3), requires_grad
         tot_energy = prepared["energy"].sum()
-        # Differentiable part of the forces only. The detached ``coulomb_terms``
-        # forces are a constant w.r.t. coord (zero second derivative), so they are
-        # intentionally excluded from the vjp; the periodic curvature they would
-        # have carried is supplied by the directional FD helper instead.
+        # Every external LR energy (DSF torch path, Ewald/PME energy-graph) is
+        # differentiable w.r.t. coord here, so this vjp carries the full
+        # curvature of the total energy.
         forces_diff = -torch.autograd.grad(tot_energy, coord, create_graph=True)[0]  # (N+1, 3)
         N = coord.shape[0] - 1
 
@@ -2012,7 +1995,7 @@ class AIMNet2Calculator:
             v_full = torch.zeros_like(coord)
             v_full[:N] = v
             # autograd Hv = -d(forces . v)/dcoord = d^2E/dr^2 . v
-            # (NN + short-range + dsf/simple charge-response + dftd3)
+            # (NN + short-range + dsf/simple/ewald/pme Coulomb + dftd3)
             hv_full = -torch.autograd.grad(
                 forces_diff.flatten(),
                 coord,
@@ -2022,16 +2005,11 @@ class AIMNet2Calculator:
                 allow_unused=True,
             )[0]
             hv = hv_full[:N]
-            if method == "pme" and self.external_coulomb is not None:
-                # Full-periodic fixed-position curvature (directional FD).
-                # Ewald needs no FD block: its energy is in the autograd graph
-                # and the vjp above captures the full periodic curvature.
-                hv = hv.to(torch.float64) + self.external_coulomb._coul_nvalchemi_fd_hvp(
-                    prepared, backend=method, vec=v, step=eps
-                )
-            elif method == "ewald":
-                # Preserve the documented float64 return contract for periodic
-                # systems (established by the former FD block).
+            if method in ("ewald", "pme"):
+                # Ewald/PME energies are in the autograd graph, so the vjp
+                # above captures the full periodic curvature. Preserve the
+                # documented float64 return contract for periodic systems
+                # (established by the former FD block).
                 hv = hv.to(torch.float64)
             outs.append(hv)
         result = torch.stack(outs, 0)
