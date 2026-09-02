@@ -2440,7 +2440,7 @@ def test_metadata_flag_contradicting_module_tree_still_gets_lr_nblist():
     """Issue #118, third pass: the flag is PRESENT and WRONG.
 
     The previous fix consulted the module tree only when ``metadata is None``,
-    which fixed the metadata-absent half. The shipped ``wb97m_cpcm_v2_0.pt``
+    which fixed the metadata-absent half. A shipped solvation artifact
     is the other half: it carries a metadata dict declaring
     ``has_embedded_lr=False`` and ``has_embedded_d3ts=False`` while holding an
     ``outputs.d3bj`` submodule, so ``_detect_embedded_lr_modules()`` was
@@ -2461,7 +2461,7 @@ def test_metadata_flag_contradicting_module_tree_still_gets_lr_nblist():
     model = donor.model
     model.d3ts = torch.nn.Identity()
     # A metadata dict that actively denies what the module tree carries.
-    # Field-for-field the shape dumped from the shipped wb97m_cpcm_v2_0.pt,
+    # Field-for-field the shape dumped from a shipped solvation artifact,
     # so the test fails for the reason it names rather than for a missing
     # required key.
     model._metadata = {
