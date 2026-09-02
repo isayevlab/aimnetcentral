@@ -1455,6 +1455,57 @@ def test_ptfile_remains_forbidden_under_unsafe_import_mode() -> None:
         )
 
 
+# --- Positional `args` bypass of the constructor-kwarg guards ----------------
+#
+# `build_module` forwards `args` into `func(*args, **kwargs)`, but the guards
+# above match keyword names only. `ptfile` is DispParam's third positional
+# parameter and D3TS takes its damping parameters positionally, so without a
+# blanket rejection of `args` both guards are evadable by respelling.
+
+
+def test_positional_args_are_forbidden_in_artifact_yaml() -> None:
+    with pytest.raises(ValueError, match="args"):
+        validate_model_yaml(
+            "class: aimnet.modules.lr.DispParam\nargs: [null, null, /etc/passwd]\n",
+        )
+
+
+def test_positional_args_are_forbidden_anywhere_in_the_tree() -> None:
+    """Rejected regardless of nesting depth, matching the ptfile guard."""
+    with pytest.raises(ValueError, match="args"):
+        validate_model_yaml(
+            """
+class: aimnet.models.AIMNet2
+kwargs:
+  outputs:
+    disp_param:
+      class: aimnet.modules.lr.DispParam
+      args: [null, null, /etc/passwd]
+"""
+        )
+
+
+def test_positional_args_cannot_smuggle_d3ts_damping_parameters() -> None:
+    """`a1=-1.0, a2=nan, s8=inf` positionally must fail like the kwarg spelling."""
+    with pytest.raises(ValueError, match="args"):
+        validate_model_yaml("class: aimnet.modules.D3TS\nargs: [-1.0, .nan, .inf]\n")
+
+
+def test_positional_args_remain_forbidden_under_unsafe_import_mode() -> None:
+    with pytest.raises(ValueError, match="args"):
+        validate_model_yaml(
+            "class: aimnet.modules.lr.DispParam\nargs: [null, null, /etc/passwd]\n",
+            model_import_mode="unsafe",
+        )
+
+
+def test_kwargs_key_is_not_confused_with_args() -> None:
+    """The guard must match the `args` key exactly, not the `kwargs` substring."""
+    validate_model_yaml(
+        "class: aimnet.modules.lr.DispParam\nkwargs:\n  key_in: disp_param\n  key_out: disp_param\n",
+    )
+
+
 # --- Finding 2: YAML<->metadata D3TS consistency -----------------------------
 
 _D3TS_MODEL_YAML = """
