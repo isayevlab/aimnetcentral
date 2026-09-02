@@ -132,6 +132,22 @@ class AdaptiveNeighborList:
             # Get actual max neighbors from result
             actual_max = int(num_neighbors.max().item())
 
+            # Grow and rebuild when the buffer was too small. In matrix mode
+            # nvalchemiops does NOT raise NeighborOverflowError -- it reports
+            # the true count in `num_neighbors` while returning only
+            # `max_neighbors` columns -- so the retry above never fires here
+            # and the trim below is a silent no-op on an already-truncated
+            # list. Without this branch the dropped neighbors just vanish from
+            # the energy: with the shrink heuristic feeding an undersized
+            # buffer forward, a calculator reused across systems returns
+            # different energies for the same geometry depending on what it
+            # evaluated before (measured: +79.7 eV on a periodic cell after one
+            # sparser evaluation, and never recovering, because nothing here
+            # can grow the buffer back).
+            if actual_max > nbmat.shape[1]:
+                self.max_neighbors = self._round_to_16(int(actual_max * 1.5))
+                continue
+
             # Adjust buffer if under-utilized (shrink at 2/3 of target for hysteresis)
             # Use 2/3 threshold to prevent thrashing from small fluctuations
             if actual_max < (2 / 3) * self.target_utilization * self.max_neighbors:
