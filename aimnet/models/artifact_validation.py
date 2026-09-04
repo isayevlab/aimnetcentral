@@ -114,9 +114,10 @@ _FORBIDDEN_CONSTRUCTOR_KEYS = frozenset({"ptfile"})
 # Rejecting the positional spelling outright is what makes the keyword guards
 # sound rather than advisory, and it costs nothing: artifact model_yaml is
 # keyword-only in practice -- no in-repo YAML and none of the shipped or
-# registry-distributed artifacts use `args`. Training configs may use it and
-# never route through this walker (aimnet/config.py does not import this
-# module).
+# registry-distributed artifacts use `args`. Training-time construction never
+# routes through this walker (aimnet/config.py does not import this module);
+# `aimnet export` does, so a training YAML that spells a module positionally
+# fails at export with this message rather than at load.
 _FORBIDDEN_POSITIONAL_KEYS = frozenset({"args"})
 
 # Class paths recognized as the D3TS dispersion module for the purpose of
