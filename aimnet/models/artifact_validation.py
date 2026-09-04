@@ -99,6 +99,27 @@ _RECOGNIZED_IMPORT_KEYS = frozenset(_MODEL_IMPORT_KEYS) | _ALWAYS_FORBIDDEN_IMPO
 # through this walker (aimnet/config.py does not import this module).
 _FORBIDDEN_CONSTRUCTOR_KEYS = frozenset({"ptfile"})
 
+# Positional constructor arguments are forbidden anywhere in artifact
+# model_yaml. `aimnet.config.build_module` forwards a sibling `args` list
+# straight into `func(*args, **kwargs)`, but every constructor-argument guard
+# here inspects keyword arguments only: `_FORBIDDEN_CONSTRUCTOR_KEYS` matches
+# mapping keys and `_validate_d3ts_damping_kwargs` reads `kwargs`. A positional
+# spelling slips both, because the parameters those guards protect are not
+# keyword-only -- `DispParam(ref_c6, ref_alpha, ptfile, ...)` takes `ptfile`
+# third and `D3TS(a1, a2, s8, s6, ...)` takes its damping parameters first. So
+# `args: [null, null, /some/path]` reopens the `torch.load` arbitrary-path
+# read primitive and `args: [-1.0, .nan, .inf]` reopens the undamped `1/d**6`
+# collapse, both under the default trust policy.
+#
+# Rejecting the positional spelling outright is what makes the keyword guards
+# sound rather than advisory, and it costs nothing: artifact model_yaml is
+# keyword-only in practice -- no in-repo YAML and none of the shipped or
+# registry-distributed artifacts use `args`. Training-time construction never
+# routes through this walker (aimnet/config.py does not import this module);
+# `aimnet export` does, so a training YAML that spells a module positionally
+# fails at export with this message rather than at load.
+_FORBIDDEN_POSITIONAL_KEYS = frozenset({"args"})
+
 # Class paths recognized as the D3TS dispersion module for the purpose of
 # validating its damping-parameter kwargs (see `_validate_d3ts_damping_kwargs`
 # below). Both spellings that resolve to the same class must be matched here.
@@ -266,6 +287,11 @@ def _walk_model_yaml(model_yaml: str, policy: ModelImportPolicy) -> dict[str, An
             for key, child in value.items():
                 if key in _FORBIDDEN_CONSTRUCTOR_KEYS:
                     raise ValueError(f"Key {key!r} is forbidden in model artifacts.")
+                if key in _FORBIDDEN_POSITIONAL_KEYS:
+                    raise ValueError(
+                        f"Key {key!r} is forbidden in model artifacts: constructor arguments must be "
+                        "passed by keyword under 'kwargs' so they can be validated."
+                    )
                 if key in _RECOGNIZED_IMPORT_KEYS:
                     if key in _ALWAYS_FORBIDDEN_IMPORT_KEYS:
                         raise ValueError(f"Import key {key!r} is forbidden in model artifacts.")
