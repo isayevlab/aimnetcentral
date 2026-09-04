@@ -124,26 +124,32 @@ class AdaptiveNeighborList:
                         method="batch_naive",
                     )
                     shifts = None
-            except NeighborOverflowError:
-                # Increase buffer by 1.5x and retry
-                self.max_neighbors = self._round_to_16(int(self.max_neighbors * 1.5))
+            except NeighborOverflowError as e:
+                # The cluster-tile kernels (selected on CUDA for fully periodic
+                # float32 input) raise instead of truncating and report the
+                # count they found, so grow straight to it with headroom rather
+                # than by 1.5x of the current width per attempt (measured: 12
+                # rebuilds to reach 2240 from 16 the old way, 1 this way). The
+                # max() keeps the retry strictly growing if the exception came
+                # from a tile-capacity overflow, whose reported count is not a
+                # per-atom neighbor count.
+                self.max_neighbors = self._round_to_16(int(max(e.num_neighbors, self.max_neighbors) * 1.5))
                 continue
 
             # Get actual max neighbors from result
             actual_max = int(num_neighbors.max().item())
 
-            # Grow and rebuild when the buffer was too small. In matrix mode
-            # nvalchemiops does NOT raise NeighborOverflowError -- it reports
-            # the true count in `num_neighbors` while returning only
-            # `max_neighbors` columns -- so the retry above never fires here
-            # and the trim below is a silent no-op on an already-truncated
-            # list. Without this branch the dropped neighbors just vanish from
-            # the energy: with the shrink heuristic feeding an undersized
-            # buffer forward, a calculator reused across systems returns
-            # different energies for the same geometry depending on what it
-            # evaluated before (measured: +79.7 eV on a periodic cell after one
-            # sparser evaluation, and never recovering, because nothing here
-            # can grow the buffer back).
+            # Grow and rebuild when the buffer was too small. The naive and
+            # cell-list matrix kernels do not raise NeighborOverflowError --
+            # they report the true count in `num_neighbors` while returning
+            # only `max_neighbors` columns -- so for them the retry above never
+            # fires and the trim below is a silent no-op on an already
+            # truncated list. Without this branch the dropped neighbors just
+            # vanish from the energy, and with the shrink heuristic feeding an
+            # undersized buffer forward, a calculator reused across systems
+            # returns different energies for the same geometry depending on
+            # what it evaluated before, with nothing here able to grow the
+            # buffer back.
             if actual_max > nbmat.shape[1]:
                 self.max_neighbors = self._round_to_16(int(actual_max * 1.5))
                 continue
