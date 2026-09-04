@@ -198,6 +198,21 @@ else:
     print(f"\nWARNING: {n_imaginary} imaginary frequency(ies) found -> not a minimum")
 ```
 
+!!! tip "Projecting out translations and rotations"
+
+    The recipe above discards the six lowest frequencies. That fails for linear molecules, which have only five rigid-body modes, and it silently drops a genuine imaginary mode whenever one sorts below the rigid-body block. The `aimnet.calculators.vibrations` helper handles both cases: it mass-weights the Hessian, projects the translations and rotations out explicitly (five for a linear molecule, six otherwise), diagonalizes only the vibrational subspace, and reports imaginary modes as negative wavenumbers.
+
+    ```python
+    from aimnet.calculators.vibrations import analyze_hessian, masses_amu
+
+    vib = analyze_hessian(result["hessian"], aspirin.get_positions(), masses_amu(numbers))
+    print(vib.frequencies_cm1)  # shape (3N - 6,), ascending; negative values are imaginary
+    print(vib.n_imaginary, vib.is_linear, vib.n_tr_removed)
+    modes = vib.modes  # unit-norm Cartesian normal modes, shape (n_modes, N, 3)
+    ```
+
+    `analyze_hessian` accepts the `(N, 3, N, 3)` tensor returned with `hessian=True` or the `(3N, 3N)` matrix from `AIMNet2ASE.get_hessian`, both in eV/Å^2 with positions in Å, and needs only numpy (`atoms.get_masses()` works in place of `masses_amu`). `vibrational_analysis(base_calc, data)` runs the Hessian call and the analysis in one step. The positive entries of `vib.energies_ev` can be passed straight to `IdealGasThermo(vib_energies=...)` in Step 5.
+
 !!! warning "Hessian limitations"
 
     The Hessian calculation in AIMNet2 is limited to **single molecules** and scales as O(N^2) in memory. It is practical for molecules up to roughly 200 atoms. For larger systems, use finite-difference approaches or specialized phonon tools.
