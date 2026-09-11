@@ -2229,7 +2229,6 @@
 <p>A structure is a true energy minimum only if all vibrational frequencies are real (positive). Imaginary frequencies indicate a saddle point or transition state. We compute frequencies from the Hessian matrix.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">ase.units</span><span class="w"> </span><span class="kn">import</span> <span class="n">invcm</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
 
 <span class="c1"># Use the base calculator directly for the Hessian calculation.</span>
@@ -2286,6 +2285,18 @@
 <span class="k">else</span><span class="p">:</span>
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">WARNING: </span><span class="si">{</span><span class="n">n_imaginary</span><span class="si">}</span><span class="s2"> imaginary frequency(ies) found -&gt; not a minimum&quot;</span><span class="p">)</span>
 </code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title">Projecting out translations and rotations</p>
+<p>The recipe above discards the six lowest frequencies. That fails for linear molecules, which have only five rigid-body modes, and it silently drops a genuine imaginary mode whenever one sorts below the rigid-body block. The <code>aimnet.calculators.vibrations</code> helper handles both cases: it mass-weights the Hessian, projects the translations and rotations out explicitly (five for a linear molecule, six otherwise), diagonalizes only the vibrational subspace, and reports imaginary modes as negative wavenumbers.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators.vibrations</span><span class="w"> </span><span class="kn">import</span> <span class="n">analyze_hessian</span><span class="p">,</span> <span class="n">masses_amu</span>
+
+<span class="n">vib</span> <span class="o">=</span> <span class="n">analyze_hessian</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;hessian&quot;</span><span class="p">],</span> <span class="n">aspirin</span><span class="o">.</span><span class="n">get_positions</span><span class="p">(),</span> <span class="n">masses_amu</span><span class="p">(</span><span class="n">numbers</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">vib</span><span class="o">.</span><span class="n">frequencies_cm1</span><span class="p">)</span>  <span class="c1"># shape (3N - 6,), ascending; negative values are imaginary</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">vib</span><span class="o">.</span><span class="n">n_imaginary</span><span class="p">,</span> <span class="n">vib</span><span class="o">.</span><span class="n">is_linear</span><span class="p">,</span> <span class="n">vib</span><span class="o">.</span><span class="n">n_tr_removed</span><span class="p">)</span>
+<span class="n">modes</span> <span class="o">=</span> <span class="n">vib</span><span class="o">.</span><span class="n">modes</span>  <span class="c1"># unit-norm Cartesian normal modes, shape (n_modes, N, 3)</span>
+</code></pre></div>
+<p><code>analyze_hessian</code> accepts the <code>(N, 3, N, 3)</code> tensor returned with <code>hessian=True</code> or the <code>(3N, 3N)</code> matrix from <code>AIMNet2ASE.get_hessian</code>, both in eV/Å^2 with positions in Å, and needs only numpy (<code>atoms.get_masses()</code> works in place of <code>masses_amu</code>). <code>vibrational_analysis(base_calc, {"coord": coords, "numbers": numbers, "charge": 0})</code> runs the Hessian call and the analysis in one step. For thermochemistry, proceed only when <code>vib.n_imaginary == 0</code> and then pass <strong>all</strong> of <code>vib.energies_ev</code> to <code>IdealGasThermo</code> with <code>geometry</code> taken from <code>vib.is_linear</code>, as Step 5 does; never drop or take the absolute value of an imaginary mode, since <code>IdealGasThermo</code> accepts a short or negative list without complaint and returns a wrong ZPE or a <code>nan</code> entropy.</p>
+</div>
 <div class="admonition warning">
 <p class="admonition-title">Hessian limitations</p>
 <p>The Hessian calculation in AIMNet2 is limited to <strong>single molecules</strong> and scales as O(N^2) in memory. It is practical for molecules up to roughly 200 atoms. For larger systems, use finite-difference approaches or specialized phonon tools.</p>
@@ -2293,25 +2304,25 @@
 <h2 id="step-5-thermochemistry-from-frequencies">Step 5: Thermochemistry from Frequencies<a class="headerlink" href="#step-5-thermochemistry-from-frequencies" title="Permanent link">&para;</a></h2>
 <p>Once you have confirmed a true minimum (all real frequencies), you can compute thermochemical quantities -- enthalpy and Gibbs free energy corrections -- using ASE's <code>IdealGasThermo</code> module.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ase.thermochemistry</span><span class="w"> </span><span class="kn">import</span> <span class="n">IdealGasThermo</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators.vibrations</span><span class="w"> </span><span class="kn">import</span> <span class="n">analyze_hessian</span><span class="p">,</span> <span class="n">masses_amu</span>
 
 <span class="c1"># Get the electronic energy (potential energy at the minimum)</span>
 <span class="n">electronic_energy</span> <span class="o">=</span> <span class="n">aspirin</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span>  <span class="c1"># eV</span>
 
-<span class="c1"># Filter out translations/rotations (keep only vibrational modes)</span>
-<span class="c1"># Use absolute values and filter small near-zero modes</span>
-<span class="n">vib_energies</span> <span class="o">=</span> <span class="p">[]</span>
-<span class="k">for</span> <span class="n">freq</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">frequencies</span><span class="p">)[</span><span class="mi">6</span><span class="p">:]:</span>
-    <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">freq</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">10</span><span class="p">:</span>  <span class="c1"># Skip near-zero modes (numerical noise)</span>
-        <span class="c1"># Convert cm^-1 to eV: E = h * c * nu</span>
-        <span class="n">energy_ev</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">freq</span><span class="p">)</span> <span class="o">*</span> <span class="n">invcm</span>
-        <span class="n">vib_energies</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">energy_ev</span><span class="p">)</span>
+<span class="c1"># Projected vibrational analysis of the Step 4 Hessian: translations and</span>
+<span class="c1"># rotations are removed explicitly, so every entry is a genuine vibrational</span>
+<span class="c1"># mode and an imaginary one cannot hide below the rigid-body block.</span>
+<span class="n">vib</span> <span class="o">=</span> <span class="n">analyze_hessian</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;hessian&quot;</span><span class="p">],</span> <span class="n">aspirin</span><span class="o">.</span><span class="n">get_positions</span><span class="p">(),</span> <span class="n">masses_amu</span><span class="p">(</span><span class="n">numbers</span><span class="p">))</span>
+<span class="k">if</span> <span class="n">vib</span><span class="o">.</span><span class="n">n_imaginary</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">vib</span><span class="o">.</span><span class="n">n_imaginary</span><span class="si">}</span><span class="s2"> imaginary mode(s): not a minimum, thermochemistry is not meaningful&quot;</span><span class="p">)</span>
+<span class="n">vib_energies</span> <span class="o">=</span> <span class="n">vib</span><span class="o">.</span><span class="n">energies_ev</span>  <span class="c1"># eV, ascending</span>
 
 <span class="c1"># Create the thermochemistry object</span>
 <span class="n">thermo</span> <span class="o">=</span> <span class="n">IdealGasThermo</span><span class="p">(</span>
     <span class="n">vib_energies</span><span class="o">=</span><span class="n">vib_energies</span><span class="p">,</span>
     <span class="n">potentialenergy</span><span class="o">=</span><span class="n">electronic_energy</span><span class="p">,</span>
     <span class="n">atoms</span><span class="o">=</span><span class="n">aspirin</span><span class="p">,</span>
-    <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;nonlinear&quot;</span><span class="p">,</span>
+    <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;monatomic&quot;</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">vib</span><span class="o">.</span><span class="n">frequencies_cm1</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="p">(</span><span class="s2">&quot;linear&quot;</span> <span class="k">if</span> <span class="n">vib</span><span class="o">.</span><span class="n">is_linear</span> <span class="k">else</span> <span class="s2">&quot;nonlinear&quot;</span><span class="p">),</span>
     <span class="n">symmetrynumber</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>  <span class="c1"># aspirin has no rotational symmetry (C1)</span>
     <span class="n">spin</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>            <span class="c1"># singlet ground state</span>
 <span class="p">)</span>
@@ -2326,8 +2337,8 @@
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Electronic energy:     </span><span class="si">{</span><span class="n">electronic_energy</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Enthalpy (H, 298 K):   </span><span class="si">{</span><span class="n">H</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Gibbs free energy (G): </span><span class="si">{</span><span class="n">G</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Thermal correction:    </span><span class="si">{</span><span class="p">(</span><span class="n">H</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">electronic_energy</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">23.0609</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> kcal/mol&quot;</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;-T*S contribution:     </span><span class="si">{</span><span class="p">(</span><span class="n">G</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">H</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">23.0609</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> kcal/mol&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Thermal correction:    </span><span class="si">{</span><span class="p">(</span><span class="n">H</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">electronic_energy</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">23.0605</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> kcal/mol&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;-T*S contribution:     </span><span class="si">{</span><span class="p">(</span><span class="n">G</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">H</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">23.0605</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> kcal/mol&quot;</span><span class="p">)</span>
 </code></pre></div>
 <p>This workflow -- optimize, compute Hessian, extract thermochemistry -- is the standard approach for obtaining reaction enthalpies and free energies with AIMNet2.</p>
 <div class="admonition tip">
