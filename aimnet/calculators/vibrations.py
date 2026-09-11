@@ -27,6 +27,7 @@ import numpy as np
 import torch
 
 from aimnet.constants import get_masses
+from aimnet.models.utils import has_externalizable_dftd3
 
 if TYPE_CHECKING:
     from .calculator import AIMNet2Calculator
@@ -97,10 +98,15 @@ def is_linear_molecule(positions: np.ndarray, masses: np.ndarray, tol: float = 1
 
     This is the single place that decides how many rigid-body vectors
     :func:`translation_rotation_basis` keeps (5 or 6); the basis itself applies
-    no second threshold. The default ``tol`` corresponds to roughly one degree
-    off-axis. A molecule wrongly flagged non-linear would have a null sixth
-    vector projected out of the vibrational space, so the generous default is
-    the safe direction.
+    no second threshold. The default ``tol`` treats a triatomic within about two
+    degrees of 180° (each bond about one degree off the axis) as linear. Either
+    misclassification is wrong, so choose ``tol`` for the molecule at hand:
+    flagging a linear molecule non-linear projects out one bend, because the
+    sixth rigid-body vector is the axial rotation of the slightly bent geometry
+    and coincides with a bend of the linear reference; flagging a slightly bent
+    minimum linear leaves one rigid rotation in the vibrational space as a
+    spurious near-zero mode. Optimized linear molecules land far inside the
+    default (measured ``I_min/I_max`` below 1e-7 at ``fmax=0.01``).
 
     Args:
         positions: Cartesian coordinates, shape ``(N, 3)``, in Å.
@@ -154,6 +160,9 @@ def translation_rotation_basis(positions: np.ndarray, masses: np.ndarray, is_lin
     # molecule, whatever its lab orientation. Unpivoted QR normalizes that tiny
     # column into noise and contaminates the rotations that follow it, which
     # for an x- or y-aligned linear molecule silently corrupts a bend.
+    # The singular values are sqrt(M) (three times) and sqrt(I_k), so "smallest
+    # is the axial rotation" assumes I_min < M, i.e. a mass-weighted radius under
+    # ~100 A at the default tolerance -- far beyond any dense-Hessian system.
     u, _, _ = np.linalg.svd(np.array(vectors).T, full_matrices=False)
     expected = 3 if n == 1 else (5 if is_linear else 6)
     return u[:, :expected].T
@@ -182,6 +191,7 @@ def analyze_hessian(
     masses: np.ndarray,
     *,
     project_tr: bool = True,
+    linear_tol: float = 1e-4,
 ) -> VibrationalAnalysis:
     """Harmonic frequencies and normal modes from a Cartesian Hessian.
 
@@ -196,10 +206,12 @@ def analyze_hessian(
         hessian: Cartesian Hessian in eV/Å^2 with shape ``(3N, 3N)`` or ``(N, 3, N, 3)``, as a numpy
             array or torch tensor. This is the layout and unit of
             ``AIMNet2Calculator.eval(data, hessian=True)["hessian"]``.
-        positions: Cartesian coordinates, shape ``(N, 3)``, in Å.
-        masses: Atomic masses, shape ``(N,)``, in amu (see :func:`masses_amu`).
+        positions: Cartesian coordinates, shape ``(N, 3)``, in Å; numpy array or torch tensor.
+        masses: Atomic masses, shape ``(N,)``, in amu (see :func:`masses_amu`); numpy array or torch tensor.
         project_tr: Project out translations and rotations. When ``False`` all ``3N`` modes are
             returned, including the near-zero rigid-body ones.
+        linear_tol: Passed to :func:`is_linear_molecule`; see there for what each
+            misclassification costs.
 
     Returns:
         :class:`VibrationalAnalysis` with ``3N - n_tr_removed`` modes.
@@ -215,7 +227,7 @@ def analyze_hessian(
     h = 0.5 * (h + h.T)
     inv_sqrt_m = np.repeat(1.0 / np.sqrt(masses), 3)
     h_mw = h * inv_sqrt_m[:, None] * inv_sqrt_m[None, :]
-    linear = is_linear_molecule(positions, masses)
+    linear = is_linear_molecule(positions, masses, tol=linear_tol)
     removed = 0
     if project_tr:
         basis = translation_rotation_basis(positions, masses, linear)
@@ -242,7 +254,7 @@ def analyze_hessian(
 
 
 def vibrational_analysis(
-    calc: "AIMNet2Calculator", data: dict[str, Any], *, project_tr: bool = True
+    calc: "AIMNet2Calculator", data: dict[str, Any], *, project_tr: bool = True, linear_tol: float = 1e-4
 ) -> VibrationalAnalysis:
     """Compute the Hessian of a single structure with ``calc.eval(data, hessian=True)`` and analyze it.
 
@@ -255,16 +267,26 @@ def vibrational_analysis(
     coord = torch.as_tensor(data["coord"]).detach().cpu()
     if coord.ndim == 3 and coord.shape[0] > 1:
         raise ValueError("vibrational_analysis handles one structure at a time; loop over the batch")
-    if getattr(calc, "_has_embedded_dispersion", lambda: False)():
-        # The calculator's Hessian currently omits the curvature of an embedded
-        # dispersion module (its energy enters autograd through a first-order-only
-        # Function), so low-frequency modes of dispersion-bound systems come out
-        # too soft. Registry models externalize dispersion and are unaffected.
+    mol_idx = data.get("mol_idx")
+    if mol_idx is not None and torch.as_tensor(mol_idx).numel() and int(torch.as_tensor(mol_idx).max()) > 0:
+        # A flat multi-molecule input makes the calculator return one Hessian per
+        # molecule; mirror its split check here instead of failing after the work.
+        raise ValueError("vibrational_analysis handles one structure at a time; split the input by mol_idx")
+    model = getattr(calc, "model", None)
+    if model is not None and has_externalizable_dftd3(model):
+        # Only the tabulated DFT-D3/D3BJ module is affected: its energy enters
+        # autograd through a first-order-only Function, so the calculator's
+        # Hessian currently omits its curvature and low-frequency modes of
+        # dispersion-bound systems come out too soft. D3TS is plain torch and
+        # differentiates correctly; registry models externalize dispersion and
+        # are unaffected.
         warnings.warn(
-            "This model embeds a dispersion module whose curvature the calculator's Hessian "
-            "currently omits; low-frequency modes of dispersion-bound systems will be off.",
+            "This model embeds a tabulated DFT-D3 (D3BJ) module whose curvature the calculator's "
+            "Hessian currently omits; low-frequency modes of dispersion-bound systems will be off.",
             stacklevel=2,
         )
     numbers = torch.as_tensor(data["numbers"]).detach().cpu().numpy().reshape(-1)
     hessian = calc.eval(data, hessian=True)["hessian"]
-    return analyze_hessian(hessian, coord.numpy().reshape(-1, 3), masses_amu(numbers), project_tr=project_tr)
+    return analyze_hessian(
+        hessian, coord.numpy().reshape(-1, 3), masses_amu(numbers), project_tr=project_tr, linear_tol=linear_tol
+    )

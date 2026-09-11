@@ -140,7 +140,6 @@ A structure is a true energy minimum only if all vibrational frequencies are rea
 ```python
 import torch
 import numpy as np
-from ase.units import invcm
 from aimnet.calculators import AIMNet2Calculator
 
 # Use the base calculator directly for the Hessian calculation.
@@ -241,7 +240,7 @@ thermo = IdealGasThermo(
     vib_energies=vib_energies,
     potentialenergy=electronic_energy,
     atoms=aspirin,
-    geometry="linear" if vib.is_linear else "nonlinear",
+    geometry="monatomic" if len(vib.frequencies_cm1) == 0 else ("linear" if vib.is_linear else "nonlinear"),
     symmetrynumber=1,  # aspirin has no rotational symmetry (C1)
     spin=0,            # singlet ground state
 )
@@ -256,8 +255,8 @@ G = thermo.get_gibbs_energy(temperature=T, pressure=p)
 print(f"Electronic energy:     {electronic_energy:.4f} eV")
 print(f"Enthalpy (H, 298 K):   {H:.4f} eV")
 print(f"Gibbs free energy (G): {G:.4f} eV")
-print(f"Thermal correction:    {(H - electronic_energy) * 23.0609:.2f} kcal/mol")
-print(f"-T*S contribution:     {(G - H) * 23.0609:.2f} kcal/mol")
+print(f"Thermal correction:    {(H - electronic_energy) * 23.0605:.2f} kcal/mol")
+print(f"-T*S contribution:     {(G - H) * 23.0605:.2f} kcal/mol")
 ```
 
 This workflow -- optimize, compute Hessian, extract thermochemistry -- is the standard approach for obtaining reaction enthalpies and free energies with AIMNet2.
