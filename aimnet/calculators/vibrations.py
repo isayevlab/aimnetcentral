@@ -53,7 +53,8 @@ class VibrationalAnalysis:
         energies_ev: Vibrational quanta ``h*nu`` in eV with the same ordering and sign convention.
         modes: Unit-norm Cartesian displacement vectors, shape ``(n_modes, N, 3)``.
         is_linear: Whether the geometry was detected as linear.
-        n_tr_removed: Number of rigid-body modes projected out (0, 5 or 6).
+        n_tr_removed: Number of rigid-body modes projected out: 0 when ``project_tr=False``,
+            otherwise 3 for a single atom, 5 for a linear molecule and 6 for any other.
     """
 
     frequencies_cm1: np.ndarray
@@ -88,6 +89,13 @@ def masses_amu(atomic_numbers: Any) -> np.ndarray:
 
 def is_linear_molecule(positions: np.ndarray, masses: np.ndarray, tol: float = 1e-4) -> bool:
     """Return ``True`` when the smallest principal moment of inertia is negligible.
+
+    This is the single place that decides how many rigid-body vectors
+    :func:`translation_rotation_basis` keeps (5 or 6); the basis itself applies
+    no second threshold. The default ``tol`` corresponds to roughly one degree
+    off-axis. A molecule wrongly flagged non-linear would have a null sixth
+    vector projected out of the vibrational space, so the generous default is
+    the safe direction.
 
     Args:
         positions: Cartesian coordinates, shape ``(N, 3)``, in Å.
@@ -136,11 +144,14 @@ def translation_rotation_basis(positions: np.ndarray, masses: np.ndarray, is_lin
         axis = np.zeros(3)
         axis[k] = 1.0
         vectors.append((np.cross(axis, r) * sqm[:, None]).ravel())
-    q, rr = np.linalg.qr(np.array(vectors).T)  # columns are the orthonormalized vectors
-    diag = np.abs(np.diag(rr))
-    q = q[:, diag > 1e-6 * max(diag.max(), 1e-12)]
-    expected = 5 if is_linear else 6
-    return q.T[:expected]
+    # SVD, not QR: singular values come out descending, so keeping the leading
+    # columns always discards the near-null axial rotation of a (near-)linear
+    # molecule, whatever its lab orientation. Unpivoted QR normalizes that tiny
+    # column into noise and contaminates the rotations that follow it, which
+    # for an x- or y-aligned linear molecule silently corrupts a bend.
+    u, _, _ = np.linalg.svd(np.array(vectors).T, full_matrices=False)
+    expected = 3 if n == 1 else (5 if is_linear else 6)
+    return u[:, :expected].T
 
 
 def _as_square_hessian(hessian: Any, n: int) -> np.ndarray:
@@ -192,7 +203,7 @@ def analyze_hessian(
     h_mw = h * inv_sqrt_m[:, None] * inv_sqrt_m[None, :]
     linear = is_linear_molecule(positions, masses)
     removed = 0
-    if project_tr and n > 1:
+    if project_tr:
         basis = translation_rotation_basis(positions, masses, linear)
         projector = np.eye(3 * n) - basis.T @ basis
         h_mw = projector @ h_mw @ projector
@@ -205,7 +216,7 @@ def analyze_hessian(
         omega2, vecs = omega2[keep], vecs[:, keep]
     energies = _EV_PER_SQRT_EIGENVALUE * np.sqrt(np.abs(omega2)) * np.where(omega2 < 0, -1.0, 1.0)
     modes = (vecs * inv_sqrt_m[:, None]).T.reshape(-1, n, 3)
-    norms = np.linalg.norm(modes.reshape(len(modes), -1), axis=1)
+    norms = np.linalg.norm(modes.reshape(len(modes), 3 * n), axis=1)  # explicit width: 0 modes for one atom
     modes = modes / np.where(norms > 0, norms, 1.0)[:, None, None]
     return VibrationalAnalysis(
         frequencies_cm1=energies / _INVCM,

@@ -168,3 +168,99 @@ def test_vibrational_analysis_wraps_calculator_eval():
     expected = analyze_hessian(hessian.astype(np.float32), WATER, masses)
     np.testing.assert_allclose(result.frequencies_cm1, expected.frequencies_cm1)
     assert result.n_tr_removed == 6 and result.n_imaginary == 0
+
+
+# --- Rigid-body basis must span the rotations of a near-linear molecule -----
+#
+# The isotropic fixtures above cannot see a wrong basis: every subspace of the
+# right dimension has the same eigenvalue. These two tests use a noisy,
+# axis-aligned linear molecule -- the geometry every optimizer and file parser
+# actually produces -- and assert span and orientation independence against
+# known reference values rather than against the module's own basis.
+
+
+def _rigid_rotation_vector(positions: np.ndarray, masses: np.ndarray, axis: np.ndarray) -> np.ndarray:
+    """Raw (un-orthonormalized) mass-weighted rigid rotation about ``axis`` through the center of mass."""
+    r = positions - (positions * masses[:, None]).sum(axis=0) / masses.sum()
+    return (np.cross(axis, r) * np.sqrt(masses)[:, None]).ravel()
+
+
+@pytest.mark.parametrize("axis_index", [0, 1, 2])
+def test_basis_spans_rotations_of_a_noisy_axis_aligned_linear_molecule(axis_index: int):
+    rng = np.random.default_rng(axis_index)
+    positions = np.zeros((3, 3))
+    positions[:, axis_index] = [-1.16, 0.0, 1.16]
+    positions += 1e-6 * rng.standard_normal((3, 3))
+    masses = masses_amu(CO2_NUMBERS)
+    basis = translation_rotation_basis(positions, masses, is_linear=True)
+    assert basis.shape == (5, 9)
+    np.testing.assert_allclose(basis @ basis.T, np.eye(5), atol=1e-10)
+    for k in range(3):
+        if k == axis_index:
+            continue  # the near-null rotation about the molecular axis is the one to drop
+        v = _rigid_rotation_vector(positions, masses, np.eye(3)[k])
+        residual = np.linalg.norm(v - basis.T @ (basis @ v))
+        assert residual < 1e-9 * np.linalg.norm(v), f"rotation about {'xyz'[k]} not in span, residual {residual:.2e}"
+
+
+def test_frequencies_of_a_noisy_linear_molecule_are_orientation_independent():
+    """A structured Hessian with distinct eigenvalues on the vibrational subspace,
+    rotated to lie along x, y and z with 1e-6 Å off-axis noise on the positions,
+    must give the same four frequencies in every orientation."""
+    masses = masses_amu(CO2_NUMBERS)
+    sqrt_m = np.sqrt(np.repeat(masses, 3))
+    # Reference eigenvalues in eV A^-2 amu^-1: a degenerate bend pair, the symmetric and the asymmetric stretch.
+    eigenvalues = np.array([0.6, 0.6, 2.5, 7.0])
+    expected = np.array([_wavenumber_cm1(k) for k in eigenvalues])
+    # Build the mass-weighted Hessian for the exactly linear geometry along x, where
+    # the vibrational subspace can be taken from the projector without ambiguity.
+    vib = _vibrational_subspace(CO2, masses)
+    assert vib.shape[1] == 4
+    h_mw = vib @ np.diag(eigenvalues) @ vib.T
+    hessian_x = h_mw * sqrt_m[:, None] * sqrt_m[None, :]
+
+    rotations = {
+        "x": np.eye(3),
+        "y": np.array([[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]),  # x -> y
+        "z": np.array([[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]]),  # x -> z
+    }
+    rng = np.random.default_rng(7)
+    for name, rot in rotations.items():
+        positions = CO2 @ rot.T + 1e-6 * rng.standard_normal((3, 3))
+        big = np.kron(np.eye(3), rot)  # rotate each atom's Cartesian block
+        hessian = big @ hessian_x @ big.T
+        result = analyze_hessian(hessian, positions, masses)
+        assert result.is_linear and result.n_tr_removed == 5, name
+        np.testing.assert_allclose(result.frequencies_cm1, expected, rtol=1e-6, err_msg=f"orientation {name}")
+
+
+def test_single_atom_has_no_vibrational_modes():
+    result = analyze_hessian(1e-6 * np.eye(3), np.zeros((1, 3)), masses_amu([8]))
+    assert result.n_tr_removed == 3
+    assert result.frequencies_cm1.shape == (0,) and result.modes.shape == (0, 1, 3)
+    assert result.n_imaginary == 0
+
+
+@pytest.mark.weights
+@pytest.mark.ase
+def test_vibrational_analysis_matches_ase_on_a_real_model(model_calculator):
+    """The wrapper's frequencies from a real calculator Hessian agree with ASE's
+    ``VibrationsData`` on the three vibrational modes of water. ASE does not project
+    out translations and rotations, so only its three largest modes are compared."""
+    from ase import Atoms
+    from ase.vibrations import VibrationsData
+
+    positions = np.array([[0.0, 0.0, 0.1173], [0.0, 0.7572, -0.4692], [0.0, -0.7572, -0.4692]])
+    numbers = np.array([8, 1, 1])
+    data = {
+        "coord": torch.tensor(positions, dtype=torch.float32),
+        "numbers": torch.tensor(numbers),
+        "charge": torch.tensor(0.0),
+    }
+    vib = vibrational_analysis(model_calculator, dict(data))
+    assert vib.n_tr_removed == 6 and vib.frequencies_cm1.shape == (3,)
+    assert vib.n_imaginary == 0
+
+    hessian = model_calculator.eval(dict(data), hessian=True)["hessian"].detach().cpu().numpy()
+    ase_freqs = VibrationsData(Atoms(numbers=numbers, positions=positions), hessian).get_frequencies()
+    np.testing.assert_allclose(vib.frequencies_cm1, np.sort(ase_freqs.real)[-3:], atol=1.0)
