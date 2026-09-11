@@ -1,4 +1,8 @@
-"""Tests for the harmonic vibrational analysis helper (CPU only, no model weights)."""
+"""Tests for the harmonic vibrational analysis helper.
+
+Everything is CPU-only synthetic data except the one ``weights``/``ase``-marked
+cross-check of the calculator wrapper against ASE on a real model.
+"""
 
 import math
 
@@ -170,13 +174,17 @@ def test_vibrational_analysis_wraps_calculator_eval():
     assert result.n_tr_removed == 6 and result.n_imaginary == 0
 
 
-# --- Rigid-body basis must span the rotations of a near-linear molecule -----
+# --- Rigid-body basis must span the rigid motions of a near-linear molecule --
 #
 # The isotropic fixtures above cannot see a wrong basis: every subspace of the
-# right dimension has the same eigenvalue. These two tests use a noisy,
+# right dimension has the same eigenvalue. The tests below use a noisy,
 # axis-aligned linear molecule -- the geometry every optimizer and file parser
-# actually produces -- and assert span and orientation independence against
-# known reference values rather than against the module's own basis.
+# actually produces. The span test checks the basis directly against raw rigid
+# vectors built here; the orientation test takes its vibrational subspace from
+# the module on the exact geometry (where the projector is unambiguous) and
+# checks the frequencies stay put under rotation plus noise; the Wilson GF tests
+# are fully independent of the module, deriving the reference from internal
+# force constants.
 
 
 def _rigid_rotation_vector(positions: np.ndarray, masses: np.ndarray, axis: np.ndarray) -> np.ndarray:
@@ -195,12 +203,15 @@ def test_basis_spans_rotations_of_a_noisy_axis_aligned_linear_molecule(axis_inde
     basis = translation_rotation_basis(positions, masses, is_linear=True)
     assert basis.shape == (5, 9)
     np.testing.assert_allclose(basis @ basis.T, np.eye(5), atol=1e-10)
+    sqrt_m = np.sqrt(masses)
+    rigid = {f"translation {'xyz'[k]}": np.outer(sqrt_m, np.eye(3)[k]).ravel() for k in range(3)}
     for k in range(3):
         if k == axis_index:
             continue  # the near-null rotation about the molecular axis is the one to drop
-        v = _rigid_rotation_vector(positions, masses, np.eye(3)[k])
+        rigid[f"rotation {'xyz'[k]}"] = _rigid_rotation_vector(positions, masses, np.eye(3)[k])
+    for name, v in rigid.items():
         residual = np.linalg.norm(v - basis.T @ (basis @ v))
-        assert residual < 1e-9 * np.linalg.norm(v), f"rotation about {'xyz'[k]} not in span, residual {residual:.2e}"
+        assert residual < 1e-9 * np.linalg.norm(v), f"{name} not in span, residual {residual:.2e}"
 
 
 def test_frequencies_of_a_noisy_linear_molecule_are_orientation_independent():
@@ -221,17 +232,115 @@ def test_frequencies_of_a_noisy_linear_molecule_are_orientation_independent():
 
     rotations = {
         "x": np.eye(3),
-        "y": np.array([[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]),  # x -> y
-        "z": np.array([[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]]),  # x -> z
+        "y": np.array([[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]),  # proper rotation taking x to -y
+        "z": np.array([[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]]),  # proper rotation taking x to -z
     }
     rng = np.random.default_rng(7)
     for name, rot in rotations.items():
         positions = CO2 @ rot.T + 1e-6 * rng.standard_normal((3, 3))
-        big = np.kron(np.eye(3), rot)  # rotate each atom's Cartesian block
+        big = np.kron(np.eye(len(masses)), rot)  # rotate each atom's Cartesian block
         hessian = big @ hessian_x @ big.T
         result = analyze_hessian(hessian, positions, masses)
         assert result.is_linear and result.n_tr_removed == 5, name
         np.testing.assert_allclose(result.frequencies_cm1, expected, rtol=1e-6, err_msg=f"orientation {name}")
+
+
+_MDYN_PER_A = 6.241509074  # 1 mdyn/A in eV/A^2
+
+
+def _stretch_row(positions: np.ndarray, i: int, j: int) -> np.ndarray:
+    """Wilson B-matrix row for the bond length |r_i - r_j|."""
+    e = positions[i] - positions[j]
+    e = e / np.linalg.norm(e)
+    row = np.zeros(positions.size)
+    row[3 * i : 3 * i + 3] = e
+    row[3 * j : 3 * j + 3] = -e
+    return row
+
+
+def _bend_row(positions: np.ndarray, i: int, c: int, j: int) -> np.ndarray:
+    """Wilson B-matrix row for the valence angle i-c-j (Wilson, Decius and Cross)."""
+    e1 = positions[i] - positions[c]
+    e2 = positions[j] - positions[c]
+    r1, r2 = np.linalg.norm(e1), np.linalg.norm(e2)
+    e1, e2 = e1 / r1, e2 / r2
+    cos = e1 @ e2
+    sin = math.sqrt(1.0 - cos * cos)
+    s_i = (cos * e1 - e2) / (r1 * sin)
+    s_j = (cos * e2 - e1) / (r2 * sin)
+    row = np.zeros(positions.size)
+    row[3 * i : 3 * i + 3] = s_i
+    row[3 * j : 3 * j + 3] = s_j
+    row[3 * c : 3 * c + 3] = -s_i - s_j
+    return row
+
+
+def _gf_wavenumbers(b_matrix: np.ndarray, force_constants: np.ndarray, masses: np.ndarray) -> np.ndarray:
+    """Wilson GF frequencies in cm^-1 for internal-coordinate force constants, independent of the module."""
+    g_matrix = b_matrix @ np.diag(np.repeat(1.0 / masses, 3)) @ b_matrix.T
+    eigenvalues = np.sort(np.linalg.eigvals(g_matrix @ force_constants).real)
+    return np.array([_wavenumber_cm1(k) for k in eigenvalues])
+
+
+def _random_rotation(rng: np.random.Generator) -> np.ndarray:
+    q, _ = np.linalg.qr(rng.standard_normal((3, 3)))
+    if np.linalg.det(q) < 0:
+        q[:, 0] *= -1
+    return q
+
+
+@pytest.mark.parametrize("orientation", ["x", "y", "z", "random"])
+def test_linear_triatomic_matches_wilson_gf_reference(orientation: str):
+    """O-C-O with two stretches (coupled) and a degenerate linear bend, built from
+    internal force constants via the Wilson B matrix, must reproduce the GF
+    frequencies in every orientation with off-axis noise on the positions."""
+    d = 1.16
+    masses = masses_amu(CO2_NUMBERS)
+    positions = np.array([[-d, 0.0, 0.0], [0.0, 0.0, 0.0], [d, 0.0, 0.0]])
+    b_matrix = np.zeros((4, 9))
+    b_matrix[0] = _stretch_row(positions, 0, 1)
+    b_matrix[1] = _stretch_row(positions, 2, 1)
+    b_matrix[2, [1, 4, 7]] = [1 / d, -2 / d, 1 / d]  # linear bend in y
+    b_matrix[3, [2, 5, 8]] = [1 / d, -2 / d, 1 / d]  # linear bend in z
+    force_constants = np.diag([16.0, 16.0, 0.62, 0.62]) * _MDYN_PER_A
+    force_constants[0, 1] = force_constants[1, 0] = 1.3 * _MDYN_PER_A
+    hessian = b_matrix.T @ force_constants @ b_matrix
+    expected = _gf_wavenumbers(b_matrix, force_constants, masses)
+
+    rng = np.random.default_rng(11)
+    rot = {
+        "x": np.eye(3),
+        "y": np.array([[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]),
+        "z": np.array([[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]]),
+        "random": _random_rotation(rng),
+    }[orientation]
+    big = np.kron(np.eye(len(masses)), rot)
+    result = analyze_hessian(big @ hessian @ big.T, positions @ rot.T + 1e-6 * rng.standard_normal((3, 3)), masses)
+    assert result.is_linear and result.n_tr_removed == 5
+    np.testing.assert_allclose(result.frequencies_cm1, expected, rtol=1e-6)
+
+
+def test_bent_triatomic_outside_tolerance_keeps_all_three_modes():
+    """A bent stationary point well outside the linearity tolerance (170 degrees) is
+    treated as non-linear: six rigid modes removed, three GF frequencies reproduced."""
+    d, half = 1.16, math.radians(180.0 - 170.0) / 2
+    masses = masses_amu(CO2_NUMBERS)
+    positions = np.array([
+        [-d * math.cos(half), d * math.sin(half), 0.0],
+        [0.0, 0.0, 0.0],
+        [d * math.cos(half), d * math.sin(half), 0.0],
+    ])
+    b_matrix = np.array([_stretch_row(positions, 0, 1), _stretch_row(positions, 2, 1), _bend_row(positions, 0, 1, 2)])
+    force_constants = np.diag([16.0, 16.0, 0.62]) * _MDYN_PER_A
+    force_constants[0, 1] = force_constants[1, 0] = 1.3 * _MDYN_PER_A
+    hessian = b_matrix.T @ force_constants @ b_matrix
+    expected = _gf_wavenumbers(b_matrix, force_constants, masses)
+
+    rot = _random_rotation(np.random.default_rng(5))
+    big = np.kron(np.eye(len(masses)), rot)
+    result = analyze_hessian(big @ hessian @ big.T, positions @ rot.T, masses)
+    assert not result.is_linear and result.n_tr_removed == 6
+    np.testing.assert_allclose(result.frequencies_cm1, expected, rtol=1e-6)
 
 
 def test_single_atom_has_no_vibrational_modes():
@@ -264,3 +373,91 @@ def test_vibrational_analysis_matches_ase_on_a_real_model(model_calculator):
     hessian = model_calculator.eval(dict(data), hessian=True)["hessian"].detach().cpu().numpy()
     ase_freqs = VibrationsData(Atoms(numbers=numbers, positions=positions), hessian).get_frequencies()
     np.testing.assert_allclose(vib.frequencies_cm1, np.sort(ase_freqs.real)[-3:], atol=1.0)
+
+
+# --- Input validation, batch guards, and the embedded-dispersion warning -----
+
+
+def test_masses_amu_rejects_padding_negative_and_out_of_range_numbers():
+    np.testing.assert_allclose(masses_amu([1, 118]), [1.008, 294.21398926], rtol=1e-6)
+    assert masses_amu([]).shape == (0,)
+    for bad in ([0], [119], [-1]):
+        with pytest.raises(ValueError, match=r"1\.\.118"):
+            masses_amu(bad)
+    with pytest.raises(ValueError, match=r"1\.\.118, got 0\.\.8"):
+        masses_amu([8, 0])
+
+
+def test_analyze_hessian_rejects_nonfinite_inputs_and_bad_masses():
+    masses = masses_amu(WATER_NUMBERS)
+    hessian = _mass_weighted_isotropic_hessian(masses)
+    with pytest.raises(ValueError, match="NaN or Inf"):
+        analyze_hessian(np.full((9, 9), np.nan), WATER, masses)
+    with pytest.raises(ValueError, match="finite and positive"):
+        analyze_hessian(hessian, WATER, np.array([16.0, 0.0, 1.0]))
+    with pytest.raises(ValueError, match="finite and positive"):
+        analyze_hessian(hessian, WATER, np.array([16.0, np.nan, 1.0]))
+
+
+def test_analyze_hessian_accepts_tensors_for_every_input():
+    masses = masses_amu(WATER_NUMBERS)
+    hessian = _mass_weighted_isotropic_hessian(masses)
+    reference = analyze_hessian(hessian, WATER, masses)
+    result = analyze_hessian(
+        torch.tensor(hessian, dtype=torch.float32),
+        torch.tensor(WATER, requires_grad=True),
+        torch.tensor(masses),
+    )
+    np.testing.assert_allclose(result.frequencies_cm1, reference.frequencies_cm1, rtol=1e-5)
+
+
+def test_result_is_frozen():
+    import dataclasses
+
+    result = analyze_hessian(0.02 * np.eye(9), WATER, masses_amu(WATER_NUMBERS))
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        result.is_linear = True  # type: ignore[misc]
+
+
+class _FakeCalculator:
+    """Minimal stand-in: returns a fixed isotropic water Hessian for any input."""
+
+    def __init__(self, model=None):
+        self.model = model
+        masses = masses_amu(WATER_NUMBERS)
+        self._hessian = torch.tensor(_mass_weighted_isotropic_hessian(masses).reshape(3, 3, 3, 3), dtype=torch.float32)
+
+    def eval(self, data, **kwargs):
+        return {"hessian": self._hessian}
+
+
+def _water_data(coord):
+    return {"coord": coord, "numbers": torch.tensor(WATER_NUMBERS), "charge": 0.0}
+
+
+def test_vibrational_analysis_rejects_batches_up_front():
+    with pytest.raises(ValueError, match="one structure"):
+        vibrational_analysis(_FakeCalculator(), _water_data(np.stack([WATER, WATER])))
+    flat = _water_data(np.concatenate([WATER, WATER]))
+    flat["mol_idx"] = torch.tensor([0, 0, 0, 1, 1, 1])
+    with pytest.raises(ValueError, match="mol_idx"):
+        vibrational_analysis(_FakeCalculator(), flat)
+    # A leading batch dimension of one is a single structure.
+    assert vibrational_analysis(_FakeCalculator(), _water_data(WATER[None])).n_tr_removed == 6
+
+
+def test_vibrational_analysis_warns_only_for_embedded_tabulated_dftd3():
+    import warnings
+
+    from torch import nn
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        vibrational_analysis(_FakeCalculator(), _water_data(WATER))  # no model attribute: silent
+        d3ts_model = nn.Module()
+        d3ts_model.add_module("d3ts", nn.Identity())
+        vibrational_analysis(_FakeCalculator(d3ts_model), _water_data(WATER))  # D3TS differentiates correctly
+    dftd3_model = nn.Module()
+    dftd3_model.add_module("dftd3", nn.Identity())
+    with pytest.warns(UserWarning, match="tabulated DFT-D3"):
+        vibrational_analysis(_FakeCalculator(dftd3_model), _water_data(WATER))

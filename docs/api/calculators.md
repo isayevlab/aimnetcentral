@@ -149,4 +149,4 @@ Harmonic frequency analysis of the dense Hessian returned by `AIMNet2Calculator.
 ::: aimnet.calculators.vibrations
     options:
       show_root_heading: true
-      show_source: false
+      show_source: true
