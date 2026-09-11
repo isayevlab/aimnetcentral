@@ -251,7 +251,7 @@ class AIMNet2Calculator:
         #
         # The module tree is ground truth and metadata is a hint, NOT the other
         # way round. Treating a present metadata dict as authoritative fixed
-        # only the metadata-absent half of #118: the shipped wb97m_cpcm_v2_0.pt
+        # only the metadata-absent half of #118: a shipped solvation artifact
         # DOES carry a metadata dict, and that dict says has_embedded_lr=False
         # and has_embedded_d3ts=False while the module tree carries
         # `outputs.d3bj` and has_externalizable_dftd3() returns True. Believing
@@ -555,7 +555,7 @@ class AIMNet2Calculator:
         """
         # Module tree first, and unconditionally: a model that CARRIES a
         # dispersion module needs a finite D3 cutoff whatever its metadata
-        # says. wb97m_cpcm_v2_0.pt declares has_embedded_d3ts=False while
+        # says. A shipped solvation artifact declares has_embedded_d3ts=False while
         # holding `outputs.d3bj`; believing the flag left cutoff_lr at inf, and
         # the naive neighbor list then tried to allocate a [125, 8.4e17] matrix
         # ("Storage size calculation overflowed") on the flattened path.
