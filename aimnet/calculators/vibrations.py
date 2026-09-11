@@ -19,6 +19,7 @@ the module works with or without the ``ase`` extra; ASE users can pass
 """
 
 import math
+import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -39,11 +40,11 @@ _C = 299792458.0  # speed of light in vacuum, m/s
 
 # hbar*omega in eV for a mass-weighted Hessian eigenvalue omega^2 in eV A^-2 amu^-1.
 _EV_PER_SQRT_EIGENVALUE = _HBAR * 1e10 / math.sqrt(_E * _AMU)
-# Energy of a photon with wavenumber 1 cm^-1, in eV (``ase.units.invcm``).
+# Energy of a photon with wavenumber 1 cm^-1, in eV (``ase.units.create_units("2018")["invcm"]``).
 _INVCM = 100.0 * 2.0 * math.pi * _HBAR * _C / _E
 
 
-@dataclass
+@dataclass(frozen=True, eq=False)
 class VibrationalAnalysis:
     """Result of :func:`analyze_hessian`.
 
@@ -84,7 +85,11 @@ def masses_amu(atomic_numbers: Any) -> np.ndarray:
         Array of shape ``(N,)`` with dtype float64.
     """
     numbers = np.asarray(atomic_numbers, dtype=np.int64).reshape(-1)
-    return get_masses().double().numpy()[numbers]
+    table = get_masses().double().numpy()
+    if numbers.size and (numbers.min() < 1 or numbers.max() >= len(table)):
+        # Z=0 is the calculator's padding value (mass 0); negative Z would wrap around the table.
+        raise ValueError(f"atomic numbers must be in 1..{len(table) - 1}, got {numbers.min()}..{numbers.max()}")
+    return table[numbers]
 
 
 def is_linear_molecule(positions: np.ndarray, masses: np.ndarray, tol: float = 1e-4) -> bool:
@@ -154,13 +159,20 @@ def translation_rotation_basis(positions: np.ndarray, masses: np.ndarray, is_lin
     return u[:, :expected].T
 
 
+def _to_numpy(value: Any) -> np.ndarray:
+    """Float64 numpy view of an array-like, detaching and moving torch tensors off the device first."""
+    if isinstance(value, torch.Tensor):
+        value = value.detach().cpu().numpy()
+    return np.asarray(value, dtype=np.float64)
+
+
 def _as_square_hessian(hessian: Any, n: int) -> np.ndarray:
     """Return ``hessian`` as a float64 ``(3N, 3N)`` array, accepting the ``(N, 3, N, 3)`` layout too."""
-    if isinstance(hessian, torch.Tensor):
-        hessian = hessian.detach().cpu().numpy()
-    h = np.asarray(hessian, dtype=np.float64)
+    h = _to_numpy(hessian)
     if h.shape not in ((3 * n, 3 * n), (n, 3, n, 3)):
         raise ValueError(f"Expected a Hessian of shape (3N, 3N) or (N, 3, N, 3) with N={n}, got {h.shape}")
+    if not np.isfinite(h).all():
+        raise ValueError("Hessian contains NaN or Inf")
     return h.reshape(3 * n, 3 * n)
 
 
@@ -192,11 +204,13 @@ def analyze_hessian(
     Returns:
         :class:`VibrationalAnalysis` with ``3N - n_tr_removed`` modes.
     """
-    positions = np.asarray(positions, dtype=np.float64).reshape(-1, 3)
-    masses = np.asarray(masses, dtype=np.float64).reshape(-1)
+    positions = _to_numpy(positions).reshape(-1, 3)
+    masses = _to_numpy(masses).reshape(-1)
     n = len(masses)
     if positions.shape[0] != n:
         raise ValueError(f"positions has {positions.shape[0]} atoms but masses has {n}")
+    if not np.isfinite(masses).all() or np.any(masses <= 0):
+        raise ValueError("masses must be finite and positive")
     h = _as_square_hessian(hessian, n)
     h = 0.5 * (h + h.T)
     inv_sqrt_m = np.repeat(1.0 / np.sqrt(masses), 3)
@@ -238,7 +252,19 @@ def vibrational_analysis(
             shape ``(N, 3)`` in Å and ``numbers`` of shape ``(N,)``.
         project_tr: Passed to :func:`analyze_hessian`.
     """
-    coord = torch.as_tensor(data["coord"]).detach().cpu().numpy().reshape(-1, 3)
+    coord = torch.as_tensor(data["coord"]).detach().cpu()
+    if coord.ndim == 3 and coord.shape[0] > 1:
+        raise ValueError("vibrational_analysis handles one structure at a time; loop over the batch")
+    if getattr(calc, "_has_embedded_dispersion", lambda: False)():
+        # The calculator's Hessian currently omits the curvature of an embedded
+        # dispersion module (its energy enters autograd through a first-order-only
+        # Function), so low-frequency modes of dispersion-bound systems come out
+        # too soft. Registry models externalize dispersion and are unaffected.
+        warnings.warn(
+            "This model embeds a dispersion module whose curvature the calculator's Hessian "
+            "currently omits; low-frequency modes of dispersion-bound systems will be off.",
+            stacklevel=2,
+        )
     numbers = torch.as_tensor(data["numbers"]).detach().cpu().numpy().reshape(-1)
     hessian = calc.eval(data, hessian=True)["hessian"]
-    return analyze_hessian(hessian, coord, masses_amu(numbers), project_tr=project_tr)
+    return analyze_hessian(hessian, coord.numpy().reshape(-1, 3), masses_amu(numbers), project_tr=project_tr)
