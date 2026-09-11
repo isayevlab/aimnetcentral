@@ -141,3 +141,12 @@ aimnet clear_model_cache
     options:
       show_root_heading: true
       show_source: true
+
+## Vibrational analysis
+
+Harmonic frequency analysis of the dense Hessian returned by `AIMNet2Calculator.eval(data, hessian=True)`: mass-weighting, projection of rigid translations and rotations (five for a linear molecule, six otherwise), and conversion to wavenumbers with imaginary modes reported as negative values. Requires only numpy; ASE is not needed.
+
+::: aimnet.calculators.vibrations
+    options:
+      show_root_heading: true
+      show_source: true
