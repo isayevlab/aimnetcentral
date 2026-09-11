@@ -211,7 +211,7 @@ else:
     modes = vib.modes  # unit-norm Cartesian normal modes, shape (n_modes, N, 3)
     ```
 
-    `analyze_hessian` accepts the `(N, 3, N, 3)` tensor returned with `hessian=True` or the `(3N, 3N)` matrix from `AIMNet2ASE.get_hessian`, both in eV/Å^2 with positions in Å, and needs only numpy (`atoms.get_masses()` works in place of `masses_amu`). `vibrational_analysis(base_calc, data)` runs the Hessian call and the analysis in one step. The positive entries of `vib.energies_ev` can be passed straight to `IdealGasThermo(vib_energies=...)` in Step 5.
+    `analyze_hessian` accepts the `(N, 3, N, 3)` tensor returned with `hessian=True` or the `(3N, 3N)` matrix from `AIMNet2ASE.get_hessian`, both in eV/Å^2 with positions in Å, and needs only numpy (`atoms.get_masses()` works in place of `masses_amu`). `vibrational_analysis(base_calc, {"coord": coords, "numbers": numbers, "charge": 0})` runs the Hessian call and the analysis in one step. For thermochemistry, proceed only when `vib.n_imaginary == 0` and then pass **all** of `vib.energies_ev` to `IdealGasThermo` with `geometry` taken from `vib.is_linear`, as Step 5 does; never drop or take the absolute value of an imaginary mode, since `IdealGasThermo` accepts a short or negative list without complaint and returns a wrong ZPE or a `nan` entropy.
 
 !!! warning "Hessian limitations"
 
@@ -223,25 +223,25 @@ Once you have confirmed a true minimum (all real frequencies), you can compute t
 
 ```python
 from ase.thermochemistry import IdealGasThermo
+from aimnet.calculators.vibrations import analyze_hessian, masses_amu
 
 # Get the electronic energy (potential energy at the minimum)
 electronic_energy = aspirin.get_potential_energy()  # eV
 
-# Filter out translations/rotations (keep only vibrational modes)
-# Use absolute values and filter small near-zero modes
-vib_energies = []
-for freq in sorted(frequencies)[6:]:
-    if abs(freq) > 10:  # Skip near-zero modes (numerical noise)
-        # Convert cm^-1 to eV: E = h * c * nu
-        energy_ev = abs(freq) * invcm
-        vib_energies.append(energy_ev)
+# Projected vibrational analysis of the Step 4 Hessian: translations and
+# rotations are removed explicitly, so every entry is a genuine vibrational
+# mode and an imaginary one cannot hide below the rigid-body block.
+vib = analyze_hessian(result["hessian"], aspirin.get_positions(), masses_amu(numbers))
+if vib.n_imaginary:
+    raise RuntimeError(f"{vib.n_imaginary} imaginary mode(s): not a minimum, thermochemistry is not meaningful")
+vib_energies = vib.energies_ev  # eV, ascending
 
 # Create the thermochemistry object
 thermo = IdealGasThermo(
     vib_energies=vib_energies,
     potentialenergy=electronic_energy,
     atoms=aspirin,
-    geometry="nonlinear",
+    geometry="linear" if vib.is_linear else "nonlinear",
     symmetrynumber=1,  # aspirin has no rotational symmetry (C1)
     spin=0,            # singlet ground state
 )
