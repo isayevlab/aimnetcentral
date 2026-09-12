@@ -168,7 +168,15 @@ def _energy_graph_forces_and_virial(backend: str, data: dict[str, torch.Tensor])
 
 @pytest.mark.parametrize("backend", ["dsf", "dftd3", "ewald", "pme"])
 def test_global_mode2_periodic_hessian_diagonal_matches_independent(backend: str):
-    data = _periodic_mode2_data(torch.device("cpu"))
+    # A second-order central difference divides the energy's rounding error by
+    # epsilon**2, so in float32 (~1e-7 of a ~0.9 eV energy) the quotient is
+    # O(0.1) noise and the batch and single paths only agree when they round
+    # bit-identically, which a different torch build need not reproduce. In
+    # float64 the same quotient is accurate to ~1e-6.
+    data = {
+        key: value.to(torch.float64) if value.is_floating_point() else value
+        for key, value in _periodic_mode2_data(torch.device("cpu")).items()
+    }
     energy_key = "energy" if backend == "dftd3" else "e_h"
     epsilon = 1e-3
 
