@@ -35,13 +35,14 @@ def normalize_mode2_periodic_geometry(data: dict[str, Tensor], *, B: int) -> dic
 
     if not isinstance(cell, Tensor):
         cell = torch.as_tensor(cell)
-    if B == 1:
-        if cell.ndim == 2 and cell.shape == (3, 3):
-            cell = cell.unsqueeze(0)
-        elif cell.ndim != 3 or cell.shape != (1, 3, 3):
-            raise ValueError("cell must have shape (3, 3) or (1, 3, 3) for B=1.")
-    elif cell.ndim != 3 or cell.shape != (B, 3, 3):
-        raise ValueError("cell must have shape (B, 3, 3) for batched mode-2 input.")
+    # A single cell shared by the batch is broadcast to every system, the
+    # same way a (3,) pbc is below; the batched kernels index cell[system].
+    if cell.ndim == 2 and cell.shape == (3, 3):
+        cell = cell.unsqueeze(0)
+    if cell.ndim != 3 or cell.shape[-2:] != (3, 3) or cell.shape[0] not in (1, B):
+        raise ValueError(f"cell must have shape (3, 3), (1, 3, 3), or (B, 3, 3) with B={B}.")
+    if cell.shape[0] == 1 and B > 1:
+        cell = cell.expand(B, -1, -1)
     data["cell"] = cell
 
     if pbc is None:
