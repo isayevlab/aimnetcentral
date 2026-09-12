@@ -178,7 +178,15 @@ class ConvSV(nn.Module):
                     num_centers=b * n,
                 ).unflatten(0, (b, n))
             else:
-                a_j = a_flat.index_select(0, gather_flat.flatten()).unflatten(0, data["_nbmat_gather"].shape)
+                if self.d2features and a.device.type == "cuda" and a.dtype == torch.float32 and not WARP_CUDA_AVAILABLE:
+                    _warn_warp_cuda_unavailable()
+                # Masked slots gather index 0 (system 0's first real atom), so
+                # the gathered features are zeroed explicitly instead of relying
+                # on ``g_sv`` having been masked by its producer.
+                mask_ij = data["mask_ij"]
+                a_j = a_flat.index_select(0, gather_flat.flatten()).unflatten(0, mask_ij.shape)
+                # In place: a_j is a fresh index_select output, so no autograd hazard.
+                a_j.masked_fill_(mask_ij.reshape(*mask_ij.shape, *([1] * (a_j.ndim - 3))), 0.0)
                 if self.d2features:
                     avf_sv = torch.einsum("...mag,...mgd->...agd", a_j, g_sv)
                 else:
@@ -191,13 +199,7 @@ class ConvSV(nn.Module):
                 if WARP_CUDA_AVAILABLE:
                     avf_sv = conv_sv_2d_sp(a, data["nbmat"], g_sv)
                 else:
-                    warnings.warn(
-                        "warp-lang has no CUDA support in this environment; "
-                        "using the slower pure-torch AEV path on CUDA tensors. "
-                        "Install a CUDA build of warp-lang (conda-forge: warp-lang=*=cuda*).",
-                        RuntimeWarning,
-                        stacklevel=2,
-                    )
+                    _warn_warp_cuda_unavailable()
                     a_j = a.index_select(0, data["nbmat"].flatten()).unflatten(0, data["nbmat"].shape)
                     avf_sv = torch.einsum("...mag,...mgd->...agd", a_j, g_sv)
             elif mode > 0:
@@ -217,6 +219,16 @@ class ConvSV(nn.Module):
         if mode == 1:
             return out
         return nbops.mask_i_(out, data, mask_value=0.0, inplace=False)
+
+
+def _warn_warp_cuda_unavailable() -> None:
+    warnings.warn(
+        "warp-lang has no CUDA support in this environment; "
+        "using the slower pure-torch AEV path on CUDA tensors. "
+        "Install a CUDA build of warp-lang (conda-forge: warp-lang=*=cuda*).",
+        RuntimeWarning,
+        stacklevel=3,
+    )
 
 
 def _flatten_mode2(tensor: Tensor, name: str) -> Tensor:

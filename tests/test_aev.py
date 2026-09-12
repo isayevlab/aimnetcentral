@@ -144,3 +144,26 @@ def test_global_mode2_convsv_cuda_float64_fallback():
     a = a.unsqueeze(-1).expand(-1, -1, -1, 3).contiguous().requires_grad_()
     out = ConvSV(nshifts_s=3, nchannel=2, d2features=True).cuda().double()(data, a.cuda())
     assert out.device.type == "cuda"
+
+
+def _mode2_aev_data_d2(device: str = "cpu"):
+    """Mode-2 data with 4-D features for the ``d2features`` einsum branch."""
+    data, a = _mode2_aev_data(device)
+    B, N, C = a.shape
+    G = data["g_sv"].shape[3]
+    a4 = torch.arange(B * N * C * G, device=device, dtype=torch.float64).reshape(B, N, C, G).requires_grad_()
+    return data, a4
+
+
+@pytest.mark.parametrize("d2features", [False, True])
+def test_global_mode2_convsv_einsum_fallback_does_not_leak_across_systems(d2features: bool):
+    """Masked neighbor slots gather index 0 (system 0's first atom); with an
+    unmasked ``g_sv`` that value must still contribute nothing to another system."""
+    data, a = _mode2_aev_data_d2() if d2features else _mode2_aev_data()
+    conv = ConvSV(nshifts_s=3, nchannel=2, d2features=d2features).double()
+    baseline = conv(data, a).detach()
+    shifted = a.detach().clone()
+    shifted[0] += 100.0
+    changed = conv(data, shifted.requires_grad_()).detach()
+    torch.testing.assert_close(changed[1], baseline[1])
+    assert not torch.allclose(changed[0], baseline[0])
