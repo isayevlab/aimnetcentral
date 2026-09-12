@@ -97,8 +97,17 @@ def _mode2_backend_inputs(data: dict[str, Tensor], suffix: str) -> _Mode2Backend
     shifts_source = data.get(f"shifts{suffix}")
     shifts = _flatten_backend_view(shifts_source, f"mode-2 shifts{suffix}") if shifts_source is not None else None
     cell = data.get("cell")
-    if cell is not None and cell.ndim == 2:
-        cell = cell.unsqueeze(0)
+    if cell is not None:
+        # The batched kernels index ``cell[system]`` unchecked, so a shared
+        # cell must be broadcast to every system rather than left at (1, 3, 3).
+        if cell.ndim == 2:
+            cell = cell.unsqueeze(0)
+        if cell.ndim != 3 or cell.shape[-2:] != (3, 3):
+            raise ValueError("mode-2 cell must have shape (3, 3), (1, 3, 3), or (B, 3, 3).")
+        if cell.shape[0] == 1 and B > 1:
+            cell = cell.expand(B, -1, -1)
+        elif cell.shape[0] != B:
+            raise ValueError(f"mode-2 cell has {cell.shape[0]} systems but the batch has {B}.")
     batch_idx = torch.arange(B, device=coord.device, dtype=torch.int32).repeat_interleave(N)
     return _Mode2BackendInputs(
         coord=coord_flat,

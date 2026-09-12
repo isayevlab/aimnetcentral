@@ -448,3 +448,31 @@ def test_global_mode2_mixed_size_batch_matches_flat_batch(backend: str):
     torch.testing.assert_close(energies, e_flat, atol=1e-9, rtol=0.0)
     torch.testing.assert_close(-grad[0, :4], f_flat[:4], atol=1e-9, rtol=0.0)
     torch.testing.assert_close(-grad[1, :3], f_flat[4:7], atol=1e-9, rtol=0.0)
+
+
+@pytest.mark.parametrize("backend", ["dsf", "dftd3", "ewald", "pme"])
+@pytest.mark.parametrize("cell_shape", [(3, 3), (1, 3, 3)])
+def test_global_mode2_shared_cell_broadcasts_to_every_system(backend: str, cell_shape: tuple[int, ...]):
+    """A single shared cell must apply to every system, not only to system 0.
+
+    A shared cell must reproduce the per-system ``(B, 3, 3)`` result exactly.
+    The two systems of ``_periodic_mode2_data`` are translation-equivalent, so
+    their energies must also agree (to float32 rounding, and for PME to the
+    mesh-interpolation error, which is not translation-invariant).
+    """
+    data = _periodic_mode2_data(torch.device("cpu"))
+    key = "energy" if backend == "dftd3" else "e_h"
+    reference = _module(backend)(dict(data))[key].detach()
+    shared = dict(data)
+    shared["cell"] = data["cell"][0].reshape(cell_shape).clone()
+    result = _module(backend)(shared)[key].detach()
+    torch.testing.assert_close(result, reference)
+    torch.testing.assert_close(result[0], result[1], atol=1e-5, rtol=1e-5)
+
+
+@pytest.mark.parametrize("backend", ["dsf", "dftd3", "ewald", "pme"])
+def test_global_mode2_rejects_cell_batch_mismatch(backend: str):
+    data = _periodic_mode2_data(torch.device("cpu"))
+    data["cell"] = data["cell"][0].expand(3, -1, -1).clone()
+    with pytest.raises(ValueError, match="cell"):
+        _module(backend)(data)
