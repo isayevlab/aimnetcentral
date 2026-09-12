@@ -2,16 +2,19 @@ import copy
 import math
 import warnings
 import weakref
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from types import MappingProxyType
-from typing import Any, ClassVar, Literal, cast
+from typing import Any, ClassVar, Literal, Self, cast
 
 import torch
 from torch import Tensor, nn
 
 from aimnet import nbops
+from aimnet.models.artifact_validation import uses_default_model_import_settings, validate_runtime_model_metadata
+from aimnet.models.base import load_legacy_jit
+from aimnet.models.utils import has_d3ts, has_externalizable_dftd3, has_lrcoulomb
 from aimnet.modules import DFTD3, LRCoulomb
-from aimnet.modules.lr import ExternalDerivativeTerms
+from aimnet.modules.lr import ExternalDerivativeTerms, _require_pme_capable_nvalchemiops
 
 from . import derivatives
 from .neighbors import (  # noqa: F401  (re-exported for backwards compatibility)
@@ -81,6 +84,25 @@ class AIMNet2Calculator:
         giving run-to-run noise of ~1e-7 eV that iterative optimizers can
         amplify. Ewald/PME Coulomb is not covered (a one-time warning fires);
         the static DFTD3 cache does not apply in this mode.
+    ensemble_member : int
+        Zero-based member selected from a Hugging Face ensemble.
+    revision : str | None
+        Hugging Face repository revision, branch, or tag.
+    token : str | None
+        Hugging Face access token for private repositories.
+    model_import_paths : Collection[str] | None
+        Python imports trusted for a direct local v2 artifact or complete
+        Hugging Face repository. Each entry is an exact dotted path or a
+        namespace ending in ``.*``, for example
+        ``{"my_package.models.CustomModel", "my_package.layers.*"}``.
+    model_import_mode : {"extend", "replace", "unsafe"}
+        ``extend`` adds ``model_import_paths`` to the default trusted paths;
+        ``replace`` requires a nonempty collection and uses only those paths.
+        ``unsafe`` cannot be combined with paths and permits arbitrary imported
+        constructors, so use it only for locally trusted artifacts. Registry
+        names and aliases, registry HF fallback, raw modules, and ``.jpt``
+        files accept only the default settings. No mode relaxes artifact or
+        metadata validation.
 
     Attributes
     ----------
@@ -145,6 +167,9 @@ class AIMNet2Calculator:
         ensemble_member: int = 0,
         revision: str | None = None,
         token: str | None = None,
+        *,
+        model_import_paths: Collection[str] | None = None,
+        model_import_mode: Literal["extend", "replace", "unsafe"] = "extend",
     ):
         # Device selection: use provided or auto-detect
         if device is None:
@@ -165,6 +190,8 @@ class AIMNet2Calculator:
             ensemble_member=ensemble_member,
             revision=revision,
             token=token,
+            model_import_paths=model_import_paths,
+            model_import_mode=model_import_mode,
         )
 
         # Compile model if requested
@@ -184,10 +211,18 @@ class AIMNet2Calculator:
             if needs_dispersion is not None
             else (metadata.get("needs_dispersion", False) if metadata is not None else False)
         )
+        if metadata is not None:
+            validate_runtime_model_metadata(
+                metadata,
+                needs_coulomb=final_needs_coulomb,
+                needs_dispersion=final_needs_dispersion,
+            )
 
         # Set up external Coulomb if needed
         if final_needs_coulomb:
             sr_embedded = metadata.get("coulomb_mode") == "sr_embedded" if metadata is not None else False
+            coulomb_sr_rc = metadata.get("coulomb_sr_rc") if metadata is not None else None
+            coulomb_sr_envelope = metadata.get("coulomb_sr_envelope") if metadata is not None else None
             # For PBC, user can switch to DSF/Ewald via set_lrcoulomb_method()
             # When sr_embedded=True: model has SRCoulomb which subtracts SR, so external
             # should compute FULL (subtract_sr=False) to give: (NN - SR) + FULL = NN + LR
@@ -197,8 +232,8 @@ class AIMNet2Calculator:
                 key_in="charges",
                 key_out="energy",
                 method="simple",
-                rc=metadata.get("coulomb_sr_rc", 4.6) if metadata is not None else 4.6,
-                envelope=metadata.get("coulomb_sr_envelope", "exp") if metadata is not None else "exp",
+                rc=4.6 if coulomb_sr_rc is None else coulomb_sr_rc,
+                envelope="exp" if coulomb_sr_envelope is None else coulomb_sr_envelope,
                 subtract_sr=not sr_embedded,
             )
             self.external_coulomb = self.external_coulomb.to(self.device)
@@ -219,8 +254,23 @@ class AIMNet2Calculator:
             )
             self.external_dftd3 = self.external_dftd3.to(self.device)
 
-        # Determine if model has long-range modules (embedded or external)
-        has_embedded_lr = metadata.get("has_embedded_lr", False) if metadata is not None else False
+        # Determine if model has long-range modules (embedded or external).
+        #
+        # The module tree is ground truth and metadata is a hint, NOT the other
+        # way round. Treating a present metadata dict as authoritative fixed
+        # only the metadata-absent half of #118: a shipped solvation artifact
+        # DOES carry a metadata dict, and that dict says has_embedded_lr=False
+        # and has_embedded_d3ts=False while the module tree carries
+        # `outputs.d3bj` and has_externalizable_dftd3() returns True. Believing
+        # it left lr=False, so no LR neighbor list was built and D3BJ.forward
+        # raised KeyError on the flattened path -- i.e. every system above
+        # nb_threshold (measured: 119 atoms works, 125 fails).
+        #
+        # A stale or wrong flag can only ever cause a missing neighbor list,
+        # never a spurious one, so OR-ing is safe in the direction that matters.
+        has_embedded_lr = (
+            bool(metadata.get("has_embedded_lr", False)) if metadata is not None else False
+        ) or self._detect_embedded_lr_modules()
         self.lr = (
             hasattr(self.model, "cutoff_lr")
             or self.external_coulomb is not None
@@ -236,11 +286,12 @@ class AIMNet2Calculator:
                 self.cutoff_lr = float("inf")
             else:
                 self.cutoff_lr = self._default_dsf_cutoff
-        elif self.external_dftd3 is not None:
+        elif self.external_dftd3 is not None or self._has_embedded_dispersion():
             self.cutoff_lr = self._default_dftd3_cutoff
         elif has_embedded_lr:
-            # Embedded LR modules (D3TS, SRCoulomb) need nbmat_lr
-            self.cutoff_lr = self._default_dftd3_cutoff
+            # Embedded Coulomb and unknown legacy LR modules need all pairs;
+            # do not silently apply the finite D3 cutoff.
+            self.cutoff_lr = float("inf")
         else:
             self.cutoff_lr = None
         self.nb_threshold = nb_threshold
@@ -264,6 +315,8 @@ class AIMNet2Calculator:
                 self._coulomb_cutoff = None  # Ewald/PME manage their own cutoff
             else:
                 self._coulomb_cutoff = self.external_coulomb.dsf_rc
+        elif self._has_embedded_coulomb():
+            self._coulomb_cutoff = float("inf")
         if self.external_dftd3 is not None:
             self._dftd3_cutoff = self.external_dftd3.smoothing_off
 
@@ -317,6 +370,32 @@ class AIMNet2Calculator:
                     param.requires_grad_(False)
 
         self._maybe_warn_family_mix((metadata or {}).get("family") if metadata else None)
+
+    @classmethod
+    def from_legacy_jit(
+        cls,
+        path: str,
+        *,
+        device: str | None = None,
+        **calculator_kwargs: Any,
+    ) -> Self:
+        """Construct a calculator from a trusted legacy TorchScript model.
+
+        ``path`` must point to a trusted ``.jpt`` source. Additional keyword
+        arguments are forwarded to :class:`AIMNet2Calculator`; ``model`` is
+        rejected because the model is supplied by ``path``.
+        """
+        if "model" in calculator_kwargs:
+            raise TypeError("from_legacy_jit() does not accept a model keyword argument.")
+        if not uses_default_model_import_settings(
+            calculator_kwargs.get("model_import_paths"),
+            calculator_kwargs.get("model_import_mode", "extend"),
+        ):
+            raise ValueError("Import settings are not supported for .jpt sources.")
+        resolved_device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        resolved_device = str(torch.device(resolved_device))
+        loaded_model, _ = load_legacy_jit(path, resolved_device)
+        return cls(model=loaded_model, device=resolved_device, **calculator_kwargs)
 
     def __call__(self, *args, **kwargs) -> dict[str, Any]:
         return self.eval(*args, **kwargs)
@@ -458,6 +537,16 @@ class AIMNet2Calculator:
         """
         return self._dftd3_cutoff
 
+    def _detect_embedded_lr_modules(self) -> bool:
+        """Detect embedded long-range modules from the module tree.
+
+        Fallback for pre-metadata artifacts: a model carrying an LRCoulomb,
+        D3TS, or DFTD3/D3BJ submodule needs a long-range neighbor list even
+        though no metadata flag says so.
+        """
+        model = self.model
+        return has_lrcoulomb(model) or has_d3ts(model) or has_externalizable_dftd3(model)
+
     def _has_embedded_dispersion(self) -> bool:
         """Check if model has embedded dispersion (not externalized).
 
@@ -471,23 +560,25 @@ class AIMNet2Calculator:
         bool
             True if model has embedded dispersion module (D3TS or legacy DFTD3).
         """
+        # Module tree first, and unconditionally: a model that CARRIES a
+        # dispersion module needs a finite D3 cutoff whatever its metadata
+        # says. A shipped solvation artifact declares has_embedded_d3ts=False while
+        # holding `outputs.d3bj`; believing the flag left cutoff_lr at inf, and
+        # the naive neighbor list then tried to allocate a [125, 8.4e17] matrix
+        # ("Storage size calculation overflowed") on the flattened path.
+        if has_d3ts(self.model) or has_externalizable_dftd3(self.model):
+            return True
+
         meta = self.metadata
         if meta is None:
-            return False  # Unknown, assume no embedded dispersion
+            return False
 
-        # Authoritative path (new conversions): explicit flag.
-        if meta.get("has_embedded_d3ts", False):
-            return True
+        # Authoritative path (new conversions): explicit D3TS flag.
+        if "has_embedded_d3ts" in meta:
+            return bool(meta["has_embedded_d3ts"])
 
-        # Legacy heuristic (pre-explicit-flag .pt files): if has_embedded_lr=True
-        # AND coulomb_mode != "sr_embedded", the LR module must be D3TS — but
-        # this misses the both-set case (D3TS + SRCoulomb), which is exactly the
-        # bug fixed by the explicit flag above. Kept here only as a fallback for
-        # legacy files; new conversions take the path above.
-        if meta.get("has_embedded_lr", False) and meta.get("coulomb_mode", "none") != "sr_embedded":
-            return True
-
-        # Legacy JIT format: needs_dispersion=False + d3_params present means dispersion is embedded.
+        # Legacy format: embedded D3 parameters identify dispersion without
+        # conflating it with the independent has_embedded_lr transport flag.
         return not meta.get("needs_dispersion", False) and meta.get("d3_params") is not None
 
     def _has_embedded_coulomb(self) -> bool:
@@ -502,7 +593,8 @@ class AIMNet2Calculator:
         """
         meta = self.metadata
         if meta is None:
-            return False  # Unknown, assume no embedded Coulomb
+            # Pre-metadata artifact: fall back to module-tree inspection.
+            return has_lrcoulomb(self.model)
         # If needs_coulomb=False and coulomb_mode is not "none", Coulomb is embedded
         # (legacy JIT models have full Coulomb embedded)
         return not meta.get("needs_coulomb", False) and meta.get("coulomb_mode", "none") != "none"
@@ -545,6 +637,19 @@ class AIMNet2Calculator:
 
         has_dftd3 = self.external_dftd3 is not None or self._has_embedded_dispersion()
         has_coulomb = self.external_coulomb is not None or self._has_embedded_coulomb()
+
+        if not has_dftd3 and not has_coulomb:
+            # self.lr is set (embedded LR via metadata or a model cutoff_lr
+            # attribute) but neither dispersion nor Coulomb could be identified.
+            # The constructor resolves this case to an all-pairs cutoff_lr
+            # ("unknown legacy LR modules need all pairs"); mirror it here.
+            # Leaving every LR list None makes any flattened (mode-1)
+            # evaluation KeyError on nbmat_lr inside the embedded module.
+            cutoff = self.cutoff_lr if self.cutoff_lr is not None and math.isfinite(self.cutoff_lr) else 1e6
+            self._nblist_lr = AdaptiveNeighborList(cutoff=cutoff)
+            self._nblist_dftd3 = None
+            self._nblist_coulomb = None
+            return
 
         # Determine effective cutoffs (None means no neighbor list needed for that module)
         dftd3_cutoff = self._dftd3_cutoff if has_dftd3 else 0.0
@@ -626,15 +731,22 @@ class AIMNet2Calculator:
         invoking the calculator without a cell raises ``ValueError`` at
         ``prepare_input``.
 
-        Hessian note: ``"ewald"``/``"pme"`` Hessians are computed at fixed charge
-        (finite-difference of the analytic forces; the charge-response coupling
-        ``d^2E/(dq.dr)`` through the model's predicted charges is omitted), while
-        ``"dsf"`` Hessians are relaxed-charge (fully autograd). Vibrational
-        frequencies / IR intensities are therefore not directly comparable across
-        these backends.
+        Hessian note: ``"dsf"``, ``"ewald"``, and ``"pme"`` Hessians are all
+        computed under the same relaxed-charge contract (fully autograd,
+        including the charge-response coupling ``d^2E/(dq.dr)`` through the
+        model's predicted charges). Ewald and PME evaluate the same lattice
+        sum and are directly comparable; DSF remains a shifted-force
+        truncation of the PES, so its curvature still differs from the full
+        lattice sum for pairs near the cutoff.
+
+        ``"pme"`` requires nvalchemi-toolkit-ops >= 0.4.1 and raises
+        ``RuntimeError`` on older versions (0.4.0 silently corrupts train-mode
+        PME forces).
         """
         if method not in ("simple", "dsf", "ewald", "pme"):
             raise ValueError(f"Invalid method: {method}")
+        if method == "pme":
+            _require_pme_capable_nvalchemiops()
 
         # Warn if model has embedded Coulomb (legacy models)
         if self._has_embedded_coulomb() and self.external_coulomb is None:
@@ -916,16 +1028,17 @@ class AIMNet2Calculator:
         """Run external Coulomb and DFTD3 modules if attached.
 
         External backends return ``(data, terms)`` when explicit force/virial
-        derivatives are requested. Ewald/PME switch to their local training
-        wrapper for force/stress training.
+        derivatives are requested. Ewald/PME are energy-in-graph and never
+        return explicit terms; DSF switches to its differentiable torch path
+        for force/stress training.
         """
         coulomb_terms = None
         deterministic = getattr(self, "_deterministic", False)
         if self.external_coulomb is not None:
-            # Ewald is always energy-in-graph now; the flag selects the DSF
-            # closed-form torch path or the legacy PME training wrapper.
+            # Ewald and PME are always energy-in-graph now; the flag selects
+            # the DSF closed-form torch path for force/stress training.
             training_derivatives = (
-                self.external_coulomb.method in ("pme", "dsf") and getattr(self, "_train", False) and (forces or stress)
+                self.external_coulomb.method == "dsf" and getattr(self, "_train", False) and (forces or stress)
             )
             if deterministic:
                 if self.external_coulomb.method == "dsf":
@@ -945,10 +1058,6 @@ class AIMNet2Calculator:
                 "training_derivatives": training_derivatives,
                 "hessian": hessian,
             }
-            if training_derivatives and stress and self.external_coulomb.method == "pme":
-                strain_inputs = getattr(self, "_external_strain_inputs", None)
-                if strain_inputs is not None:
-                    kwargs.update(strain_inputs)
             result = self.external_coulomb(data, **kwargs)
             if forces or stress:
                 data, coulomb_terms = result
@@ -1358,7 +1467,6 @@ class AIMNet2Calculator:
             "_coulomb_method",
             "_coulomb_cutoff",
             "cutoff_lr",
-            "_external_strain_inputs",
         )
         copied_attrs = ("_nblist_lr", "_nblist_dftd3", "_nblist_coulomb")
         state = {name: getattr(self, name, _SENTINEL) for name in shallow_attrs}
@@ -1713,7 +1821,7 @@ class AIMNet2Calculator:
         return data
 
     def set_grad_tensors(self, data: dict[str, Tensor], forces=False, stress=False, hessian=False) -> dict[str, Tensor]:
-        data, self._saved_for_grad, self._external_strain_inputs = derivatives.set_grad_tensors(
+        data, self._saved_for_grad, _ = derivatives.set_grad_tensors(
             data, forces=forces, stress=stress, hessian=hessian
         )
         return data
@@ -1753,7 +1861,7 @@ class AIMNet2Calculator:
         data: dict[str, Any],
         vectors: Tensor,
         *,
-        eps: float = 5e-4,
+        eps: float | None = None,
         validate_species: bool = True,
         create_graph: bool = False,
     ) -> Tensor:
@@ -1770,15 +1878,14 @@ class AIMNet2Calculator:
             multi-molecule ``mol_idx`` inputs are not supported.
         vectors : Tensor
             Direction(s), shape ``(N, 3)`` or ``(K, N, 3)`` over the real atoms.
-        eps : float
-            Central-difference step (Angstrom) for the periodic PME
-            long-range term. Ignored for ``simple``/``dsf``/``ewald``
-            (their products are exact reverse-mode autograd).
+        eps : float, optional
+            Deprecated and unused since the PME energy-graph migration (every
+            backend's product is exact reverse-mode autograd). Passing any
+            value emits a ``DeprecationWarning``.
         create_graph : bool
-            If ``True``, keep the differentiable autograd block of the HVP in
-            the graph so it can compose with an outer loss. The Ewald/PME
-            fixed-position finite-difference block remains detached. Default
-            ``False`` preserves the numeric/detached operator-action behavior.
+            If ``True``, keep the HVP in the graph so it can compose with an
+            outer loss. Default ``False`` preserves the numeric/detached
+            operator-action behavior.
 
         Returns
         -------
@@ -1787,18 +1894,16 @@ class AIMNet2Calculator:
 
         Notes
         -----
-        The autograd part (NN + short-range + ``simple``/``dsf`` Coulomb +
-        DFTD3) is an exact reverse-mode product. For ``ewald``/``pme`` the
-        long-range block is a fixed-charge directional finite difference (2
-        force evals per vector); the same charge-response and step caveats as
-        the dense Ewald/PME Hessian apply (see
-        :meth:`aimnet.modules.lr.LRCoulomb._coul_nvalchemi_fd_hessian`). This
-        mirrors the dense :meth:`calculate_hessian` assembly term-by-term, so
-        ``hessian_vector_product(v)`` equals ``H.reshape(3N, 3N) @ v`` to the
-        backend's tolerance. The default return is detached; set
-        ``create_graph=True`` when the differentiable autograd block must
-        compose with an outer computation. See :meth:`calculate_hessian` for
-        the detached-Hessian contract and the fully-differentiable recipe.
+        The product is an exact reverse-mode autograd computation for every
+        backend: the NN, short-range, ``simple``/``dsf`` Coulomb, DFTD3, and
+        periodic ``ewald``/``pme`` energies are all in the autograd graph, so
+        the vjp captures the full curvature, including the relaxed-charge
+        response ``d^2E/(dq.dr)``. This mirrors the dense
+        :meth:`calculate_hessian` assembly, so ``hessian_vector_product(v)``
+        equals ``H.reshape(3N, 3N) @ v`` to the backend's tolerance. The
+        default return is detached; set ``create_graph=True`` when the HVP
+        must compose with an outer computation. See :meth:`calculate_hessian`
+        for the detached-Hessian contract and the fully-differentiable recipe.
 
         Integration note: the external modules run via
         ``_run_external_modules(forces=False, hessian=(method == 'dsf'))`` --
@@ -1807,41 +1912,27 @@ class AIMNet2Calculator:
         autograd vjp. ``forces=False`` (not ``True``) is required: with
         ``forces=True`` the DFTD3 branch takes its detached explicit-force path
         and its second-derivative curvature is silently dropped from ``H @ v``.
-        The ``hessian`` flag controls the dsf-vs-ewald/pme split: dsf passes
-        ``hessian=True`` so ``LRCoulomb.forward`` routes through its
-        differentiable closed-form torch path (``_coul_dsf_torch``), keeping the
-        dsf curvature in the autograd graph (dsf has no dense FD block, so this is
-        free); ewald/pme pass ``hessian=False`` so the dense O(2*3N) FD block is
-        NOT computed, while the periodic energy is still added
-        differentiable-through-charges (capturing the charge-response curvature).
-        The autograd vjp of the differentiable forces equals the dense autograd
-        Hessian block (NN + short-range + DFTD3 + Coulomb-charge-response), and
-        the directional FD helper adds the remaining full-periodic block --
-        matching the dense assembly term-by-term.
+        The ``hessian`` flag routes dsf through its differentiable closed-form
+        torch path (``_coul_dsf_torch``); ewald/pme energies are always in the
+        graph.
 
-        Dtype / differentiability / eigensolver caveats:
+        Dtype / differentiability caveats:
 
         * Return dtype is the model dtype (typically float32) for ``simple`` and
-          ``dsf``, and **float64** for ``ewald``/``pme`` (the periodic
-          finite-difference block is accumulated in double precision, matching the
-          dense Ewald/PME Hessian).
+          ``dsf``, and **float64** for ``ewald``/``pme`` (preserving the
+          contract established when the periodic block was finite-difference).
         * With ``create_graph=False`` the returned product is detached numeric
-          operator action. With ``create_graph=True`` the autograd block remains
+          operator action. With ``create_graph=True`` the HVP remains
           differentiable w.r.t. graph-attached coordinates / model parameters;
-          vectors are still treated as numeric directions, and the periodic FD
-          block remains detached.
-        * For ``ewald``/``pme`` the operator is symmetric only to
-          finite-difference accuracy (O(eps^2)); for Lanczos/LOBPCG
-          smallest/most-negative-eigenvalue (transition-state) work, pass all
-          probe vectors together as a single ``(K, N, 3)`` batch so the charge
-          state is frozen across the iteration, and consider symmetrizing the
-          operator or tuning ``eps``.
-        * The fixed-charge periodic approximation (and the ``dsf`` relaxed-charge
-          vs ``ewald``/``pme`` fixed-charge asymmetry) is inherited from the dense
-          Ewald/PME Hessian and can shift near-zero/negative eigenvalues for
-          strongly polar periodic systems; see
-          :meth:`aimnet.modules.lr.LRCoulomb._coul_nvalchemi_fd_hessian`.
+          vectors are still treated as numeric directions.
         """
+        if eps is not None:
+            warnings.warn(
+                "hessian_vector_product(eps=...) is unused since the PME energy-graph "
+                "migration (all backends are exact reverse-mode autograd) and will be removed.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         if getattr(self, "_was_compiled", False):
             raise RuntimeError(
                 "hessian_vector_product is incompatible with compile_model=True "
@@ -1873,7 +1964,7 @@ class AIMNet2Calculator:
         # restored.
         eval_state = self._snapshot_eval_state()
         try:
-            result = self._hessian_vector_product_impl(data, vectors, eps=eps, create_graph=create_graph)
+            result = self._hessian_vector_product_impl(data, vectors, create_graph=create_graph)
         finally:
             self._restore_eval_state(eval_state)
             # _restore_eval_state already undid any PBC auto-switch from
@@ -1881,14 +1972,12 @@ class AIMNet2Calculator:
             self._pbc_coulomb_restore = None
         return result
 
-    def _hessian_vector_product_impl(
-        self, data: dict[str, Any], vectors: Tensor, *, eps: float, create_graph: bool
-    ) -> Tensor:
+    def _hessian_vector_product_impl(self, data: dict[str, Any], vectors: Tensor, *, create_graph: bool) -> Tensor:
         """Core HVP computation; instance-state snapshot/restore is handled by
         :meth:`hessian_vector_product`. See that method for the contract."""
         # Deliberate parallel forward path: this mirrors `eval` +
         # `_run_external_modules` but builds an autograd-differentiable energy
-        # WITHOUT the dense periodic FD Hessian. Keep it in sync if the main
+        # WITHOUT the dense Hessian assembly. Keep it in sync if the main
         # forward path changes.
         prepared = self.prepare_input(data, hessian=True)
         if "mol_idx" in prepared and prepared["mol_idx"][-1] > 0:
@@ -1921,16 +2010,16 @@ class AIMNet2Calculator:
         #     ``hessian=True`` adds no wasteful work, and this guarantees correct
         #     routing regardless of how the (process-wide cached) model's embedded
         #     Coulomb method was last set by another caller.
-        #   * ewald/pme/simple: ``hessian=False`` and ``forces=False`` so the dense
-        #     O(2*3N) Ewald/PME FD block is NOT computed; the periodic energy is
-        #     still added differentiable-through-charges (capturing the
-        #     charge-response curvature d^2E/(dq.dr)). The full-periodic
-        #     fixed-position curvature is supplied per-vector by the directional FD
-        #     helper below. The Coulomb branch returns just ``data`` (no terms) for
-        #     forces=False, but ``_run_external_modules`` always returns the
-        #     ``(data, terms)`` 2-tuple, so the unpacking below is safe.
-        # The autograd vjp therefore captures NN + short-range + DFTD3 +
-        # Coulomb-charge-response, matching the dense assembly term-by-term.
+        #   * ewald/pme/simple: their energies are always in the autograd graph
+        #     (Ewald/PME are energy-graph-only since the nvalchemiops >=0.4.1
+        #     migration), so the vjp below carries the FULL periodic curvature
+        #     including the charge-response d^2E/(dq.dr); no FD supplement
+        #     exists or is needed. The Coulomb branch returns just ``data`` (no
+        #     terms) for forces=False, but ``_run_external_modules`` always
+        #     returns the ``(data, terms)`` 2-tuple, so the unpacking below is
+        #     safe.
+        # The autograd vjp therefore captures NN + short-range + DFTD3 + the
+        # full Coulomb curvature, matching the dense assembly term-by-term.
         external_hessian = method == "dsf"
         prepared, _coulomb_terms = self._run_external_modules(
             prepared, forces=False, stress=False, hessian=external_hessian
@@ -1941,10 +2030,9 @@ class AIMNet2Calculator:
         real_indices = (~prepared["mask_i"].reshape(-1)).nonzero(as_tuple=False).flatten()
         n_real = real_indices.numel()
         tot_energy = prepared["energy"].sum()
-        # Differentiable part of the forces only. The detached ``coulomb_terms``
-        # forces are a constant w.r.t. coord (zero second derivative), so they are
-        # intentionally excluded from the vjp; the periodic curvature they would
-        # have carried is supplied by the directional FD helper instead.
+        # Every external LR energy (DSF torch path, Ewald/PME energy-graph) is
+        # differentiable w.r.t. coord here, so this vjp carries the full
+        # curvature of the total energy.
         forces_diff = -torch.autograd.grad(tot_energy, coord, create_graph=True)[0]
 
         device = coord.device
@@ -1960,7 +2048,7 @@ class AIMNet2Calculator:
             v = vecs[k].to(forces_diff.dtype)
             v_full = torch.zeros_like(coord_flat).index_copy(0, real_indices, v).reshape_as(coord)
             # autograd Hv = -d(forces . v)/dcoord = d^2E/dr^2 . v
-            # (NN + short-range + dsf/simple charge-response + dftd3)
+            # (NN + short-range + dsf/simple/ewald/pme Coulomb + dftd3)
             hv_full = -torch.autograd.grad(
                 forces_diff.flatten(),
                 coord,
@@ -1970,16 +2058,11 @@ class AIMNet2Calculator:
                 allow_unused=True,
             )[0]
             hv = hv_full.reshape(-1, 3).index_select(0, real_indices)
-            if method == "pme" and self.external_coulomb is not None:
-                # Full-periodic fixed-position curvature (directional FD).
-                # Ewald needs no FD block: its energy is in the autograd graph
-                # and the vjp above captures the full periodic curvature.
-                hv = hv.to(torch.float64) + self.external_coulomb._coul_nvalchemi_fd_hvp(
-                    prepared, backend=method, vec=v, step=eps
-                )
-            elif method == "ewald":
-                # Preserve the documented float64 return contract for periodic
-                # systems (established by the former FD block).
+            if method in ("ewald", "pme"):
+                # Ewald/PME energies are in the autograd graph, so the vjp
+                # above captures the full periodic curvature. Preserve the
+                # documented float64 return contract for periodic systems
+                # (established by the former FD block).
                 hv = hv.to(torch.float64)
             outs.append(hv)
         result = torch.stack(outs, 0)

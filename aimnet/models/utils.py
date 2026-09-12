@@ -10,10 +10,14 @@ This module provides helper functions for:
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Iterator
+import warnings
+from collections.abc import Iterator, Mapping
+from typing import Literal
 
 import torch
-from torch import nn
+from torch import Tensor, nn
+
+from aimnet.modules import AtomicShift
 
 
 def named_children_rec(module: nn.Module) -> Iterator[tuple[str, nn.Module]]:
@@ -338,6 +342,35 @@ def validate_state_dict_keys(
     real_missing = [k for k in missing_keys if not is_expected_missing(k)]
     real_unexpected = [k for k in unexpected_keys if not is_expected_unexpected(k)]
     return real_missing, real_unexpected
+
+
+def load_state_dict_checked(
+    model: nn.Module,
+    state_dict: Mapping[str, Tensor],
+    *,
+    source: str,
+    unexpected: Literal["warn", "error"] = "warn",
+) -> None:
+    """Load model weights and fail on incomplete or policy-selected artifacts."""
+    if unexpected not in {"warn", "error"}:
+        raise ValueError(f"Invalid unexpected-key policy: {unexpected!r}.")
+
+    load_result = model.load_state_dict(state_dict, strict=False)
+    real_missing, real_unexpected = validate_state_dict_keys(load_result.missing_keys, load_result.unexpected_keys)
+    if real_missing:
+        raise RuntimeError(f"Missing model parameters in {source}: {real_missing}")
+    if real_unexpected:
+        message = f"Unexpected model parameters in {source}: {real_unexpected}"
+        if unexpected == "error":
+            raise RuntimeError(message)
+        warnings.warn(message, UserWarning, stacklevel=2)
+
+
+def convert_atomic_shifts_to_float64(model: nn.Module) -> None:
+    """Prepare every serialized AtomicShift module before copying weights."""
+    for module in model.modules():
+        if isinstance(module, AtomicShift):
+            module.double()
 
 
 # --- YAML config manipulation ---

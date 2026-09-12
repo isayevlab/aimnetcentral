@@ -1,11 +1,12 @@
 import math
+import warnings
 from typing import cast
 
 import torch
 from torch import Tensor, nn
 
 from aimnet import nbops, ops
-from aimnet.kernels import conv_sv_2d_sp
+from aimnet.kernels import WARP_CUDA_AVAILABLE, conv_sv_2d_sp
 
 
 class AEVSV(nn.Module):
@@ -161,26 +162,44 @@ class ConvSV(nn.Module):
             gather_flat = _flatten_mode2(data["_nbmat_gather"], "ConvSV gather indices")
             kernel_flat = _flatten_mode2(data["_nbmat_kernel"], "ConvSV kernel indices")
             b, n = a.shape[:2]
-            if self.d2features:
-                if a.device.type == "cuda" and a.dtype == torch.float32 and g_sv.dtype == torch.float32:
-                    avf_sv = conv_sv_2d_sp(
-                        a_flat,
-                        kernel_flat,
-                        g_flat,
-                        padding_value=b * n,
-                        num_centers=b * n,
-                    ).unflatten(0, (b, n))
-                else:
-                    a_j = a_flat.index_select(0, gather_flat.flatten()).unflatten(0, data["_nbmat_gather"].shape)
-                    avf_sv = torch.einsum("...mag,...mgd->...agd", a_j, g_sv)
+            use_warp = (
+                self.d2features
+                and a.device.type == "cuda"
+                and a.dtype == torch.float32
+                and g_sv.dtype == torch.float32
+                and WARP_CUDA_AVAILABLE
+            )
+            if use_warp:
+                avf_sv = conv_sv_2d_sp(
+                    a_flat,
+                    kernel_flat,
+                    g_flat,
+                    padding_value=b * n,
+                    num_centers=b * n,
+                ).unflatten(0, (b, n))
             else:
                 a_j = a_flat.index_select(0, gather_flat.flatten()).unflatten(0, data["_nbmat_gather"].shape)
-                avf_sv = torch.einsum("...ma,...mgd->...agd", a_j, g_sv)
+                if self.d2features:
+                    avf_sv = torch.einsum("...mag,...mgd->...agd", a_j, g_sv)
+                else:
+                    avf_sv = torch.einsum("...ma,...mgd->...agd", a_j, g_sv)
         elif self.d2features:
-            # The Warp kernel is float32-only; float64 (and mixed-dtype) inputs
-            # fall through to the pure-torch einsum branch below.
+            # The Warp kernel is float32-only and needs a CUDA-capable warp-lang
+            # build (a CUDA pytorch + CPU warp-lang env is solver-reachable on
+            # conda-forge); anything else falls through to the pure-torch einsum.
             if mode > 0 and a.device.type == "cuda" and a.dtype == torch.float32 and g_sv.dtype == torch.float32:
-                avf_sv = conv_sv_2d_sp(a, data["nbmat"], g_sv)
+                if WARP_CUDA_AVAILABLE:
+                    avf_sv = conv_sv_2d_sp(a, data["nbmat"], g_sv)
+                else:
+                    warnings.warn(
+                        "warp-lang has no CUDA support in this environment; "
+                        "using the slower pure-torch AEV path on CUDA tensors. "
+                        "Install a CUDA build of warp-lang (conda-forge: warp-lang=*=cuda*).",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+                    a_j = a.index_select(0, data["nbmat"].flatten()).unflatten(0, data["nbmat"].shape)
+                    avf_sv = torch.einsum("...mag,...mgd->...agd", a_j, g_sv)
             elif mode > 0:
                 a_j = a.index_select(0, data["nbmat"].flatten()).unflatten(0, data["nbmat"].shape)
                 avf_sv = torch.einsum("...mag,...mgd->...agd", a_j, g_sv)

@@ -2,6 +2,18 @@
 
 AIMNet2 provides command-line tools for training, model export, conversion, and data preprocessing.
 
+## Model cache recovery
+
+Official registry downloads are verified against the SHA-256 digest committed with each registry entry. Cache hits are re-hashed, and a failed download is never installed as the final cache file. A corrupt cache hit triggers one verified atomic replacement attempt; if failures persist, remove the cache and retry:
+
+```bash
+aimnet clear_model_cache
+```
+
+Do not replace a registry digest to work around a mismatch; investigate the artifact provenance and publish a new immutable filename when bytes change.
+
+Official wheels and source distributions currently contain no bundled model artifacts; registry models are downloaded on demand. A downstream bundled candidate is still digest-checked and fails closed when stale. Weekly strict fleet CI verifies every official registry digest, loads every artifact with the fixed registry import policy, and checks the exact role-specific YAML defaults.
+
 ## Installation
 
 The `aimnet` entry point is installed with the core package. Training, export, and self-atomic-energy commands require the `train` extra:
@@ -18,6 +30,9 @@ pip install "aimnet[train]"
 | `aimnet export` | Export trained weights to inference format | After training |
 | `aimnet convert` | Convert legacy .jpt to new .pt format | Migrating old models |
 | `aimnet calc_sae` | Calculate self-atomic energies | Before training |
+| `aimnet download` | Prefetch registry model weights into the local cache | Preparing for offline/HPC use |
+| `aimnet info` | Print environment and kernel-path diagnostics | Troubleshooting |
+| `aimnet clear_model_cache` | Remove cached model artifacts | Recovering from a corrupt cache |
 
 ## aimnet train
 
@@ -129,12 +144,13 @@ aimnet export INPUT OUTPUT [OPTIONS]
 
 **Options:**
 
-| Option               | Description                          |
-| -------------------- | ------------------------------------ |
-| `--model PATH`       | Model architecture YAML (required)   |
-| `--sae PATH`         | Self-atomic energies YAML (required) |
-| `--needs-coulomb`    | Force external Coulomb module        |
-| `--needs-dispersion` | Force external DFTD3 module          |
+| Option | Description |
+| --- | --- |
+| `--model PATH` | Model architecture YAML (required) |
+| `--sae PATH` | Self-atomic energies YAML (required) |
+| `--needs-coulomb` / `--no-coulomb` | Override external Coulomb detection |
+| `--needs-dispersion` / `--no-dispersion` | Override external DFTD3 detection |
+| `--model-import-path PATH` | Trust an exact constructor path or namespace for this local export; repeat as needed |
 
 ### Export Process
 
@@ -146,7 +162,10 @@ The export process:
 4. Loads trained weights
 5. Bakes SAE into atomic_shift as float64
 6. Masks unimplemented species
-7. Saves with metadata
+7. Validates the complete artifact with canonical distribution rules
+8. Serializes to a sibling temporary file and atomically replaces the output
+
+`--no-coulomb` is rejected when an embedded short-range Coulomb subtraction requires an external full-Coulomb correction. Enabled dispersion requires complete `s8`, `a1`, and `a2` parameters. A validation or serialization failure leaves an existing output file unchanged.
 
 ### Examples
 
@@ -168,8 +187,11 @@ aimnet export weights.pt model.pt \
   --model config.yaml \
   --sae sae.yaml \
   --needs-coulomb \
-  --needs-dispersion
+  --needs-dispersion \
+  --model-import-path "my_package.models.*"
 ```
+
+`--model-import-path` is an explicit trust decision for local export. It extends the default constructor allowlist; it does not weaken safe YAML parsing, forbidden-key checks, metadata validation, or state-dict validation.
 
 **Export without dispersion:**
 
@@ -299,6 +321,45 @@ aimnet train \
 ### How SAE Is Computed
 
 `aimnet calc_sae` does not require a separate single-atom dataset. It operates on the same `SizeGroupedDataset` HDF5 file used for training, fits a per-element energy shift via a least-squares regression on `(numbers, energy)`, trims outliers (2nd/98th percentiles of the residual), and refits. The element list is inferred automatically from the dataset.
+
+## aimnet download
+
+Prefetch registry model weights into the local cache.
+
+### Basic Usage
+
+```bash
+aimnet download aimnet2
+aimnet download aimnet2-wb97m aimnet2-b973c
+aimnet download --all
+```
+
+### Options
+
+```bash
+aimnet download [MODELS]... [OPTIONS]
+```
+
+| Argument/Option | Description |
+| --- | --- |
+| `MODELS` | Registry names or aliases (e.g. `aimnet2`) to fetch. Repeatable. |
+| `--all` | Download every model in the registry. |
+
+Files are stored in the cache directory (`$AIMNET_CACHE_DIR` or `~/.cache/aimnet`) and verified against their registry SHA-256 digests, so a pre-seeded cache works fully offline. When multiple models are requested (including with `--all`), a failure on one model is reported and the remaining models are still downloaded; the command exits non-zero if any model failed.
+
+See [offline_hpc.md](offline_hpc.md) for pre-seeding a cache on air-gapped or HPC compute nodes.
+
+## aimnet info
+
+Print environment and kernel-path diagnostics.
+
+### Basic Usage
+
+```bash
+aimnet info
+```
+
+Reports the `aimnet`, `torch`, and `warp-lang` versions, CUDA availability, the registered kernel ops, and the model cache directory path. Useful for confirming the accelerated kernel path is active before troubleshooting performance or numerics.
 
 ## Common Workflows
 

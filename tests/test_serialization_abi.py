@@ -4,9 +4,9 @@ Released AIMNet2 model files (.pt) embed a YAML document (``model_yaml``) with
 fully qualified class paths such as ``aimnet.models.aimnet2.AIMNet2``,
 ``aimnet.modules.Output``, and ``torch.nn.GELU``. At load time,
 ``aimnet.config.build_module`` resolves these strings with
-``importlib.import_module`` (aimnet/config.py), and the Hugging Face loader
-allowlists the ``aimnet.`` prefix (aimnet/calculators/hf_hub.py). Every dotted
-path reachable this way is therefore a serialization ABI shared with all
+``importlib.import_module`` (aimnet/config.py), and the loader applies a
+shared import policy (aimnet/models/artifact_validation.py). Every
+dotted path reachable this way is therefore a serialization ABI shared with all
 released checkpoints: renaming or moving one of these classes breaks every
 published .pt file that references it.
 
@@ -27,7 +27,14 @@ import yaml
 
 import aimnet
 from aimnet import config
-from aimnet.calculators.hf_hub import _validate_model_yaml
+from aimnet.calculators.model_registry import get_registry_model_path, load_model_registry
+from aimnet.models.artifact_validation import (
+    ALLOWED_MODEL_IMPORT_PATHS,
+    validate_model_yaml,
+    validate_registry_v2_artifact,
+)
+
+pytestmark = pytest.mark.weights
 
 _PACKAGE_ROOT = Path(aimnet.__file__).parent
 _ASSETS_DIR = _PACKAGE_ROOT / "calculators" / "assets"
@@ -73,6 +80,14 @@ _FROZEN_CLASS_PATHS = (
     "aimnet.modules.LRCoulomb",
     "aimnet.modules.DFTD3",
     "aimnet.modules.D3TS",
+    # Submodule spelling of the same D3TS class (barrel re-export above and
+    # this fully qualified path resolve to the identical object). The loader
+    # machinery that detects D3TS by class name matches the "D3TS" substring
+    # regardless of spelling, so both spellings must be pinned here too.
+    "aimnet.modules.lr.D3TS",
+    # Dispersion-parameter module carried by solvation artifacts
+    # alongside D3TS; released artifacts reference it, so it is ABI.
+    "aimnet.modules.lr.DispParam",
     # Public configuration building blocks (documented in docs/api as intended
     # for configuration and extension); external configs may reference them.
     "aimnet.modules.AEVSV",
@@ -177,8 +192,117 @@ class TestFrozenSerializationAbi:
             "Add them to _FROZEN_CLASS_PATHS (they become part of the serialization ABI)."
         )
 
+    def test_default_class_import_paths_are_frozen(self):
+        """Trusted-by-default class imports must be pinned as serialization ABI.
+
+        `_DEFAULT_CLASS_IMPORT_PATHS` (aimnet/models/artifact_validation.py) is
+        the registry trust boundary; its own admission rule (iv) requires every
+        entry to be simultaneously pinned in `_FROZEN_CLASS_PATHS`. Checking it
+        here closes the drift class where the allowlist and the ABI pin list
+        could gain or lose entries independently without either test noticing.
+        Class role only: `_DEFAULT_CLASS_IMPORT_PATHS` never contains
+        activation or initializer paths, so no exclusion is needed for those.
+        """
+        from aimnet.models.artifact_validation import _DEFAULT_CLASS_IMPORT_PATHS
+
+        frozen = set(_FROZEN_CLASS_PATHS) | set(_FROZEN_FACTORY_PATHS)
+        missing = _DEFAULT_CLASS_IMPORT_PATHS - frozen
+        assert not missing, (
+            f"Default class import paths are trusted but not pinned as ABI: {sorted(missing)}. "
+            "Add them to _FROZEN_CLASS_PATHS (trusted implies frozen)."
+        )
+
 
 _ASSET_FILES = sorted(_ASSETS_DIR.glob("*.pt")) if _ASSETS_DIR.is_dir() else []
+
+
+def test_allowed_model_import_paths_are_shared_and_immutable():
+    """The reviewed registry allowlist is immutable and contains exact paths."""
+    expected = {
+        "aimnet.models.AIMNet2",
+        "aimnet.models.aimnet2.AIMNet2",
+        "aimnet.modules.AtomicShift",
+        "aimnet.modules.AtomicSum",
+        "aimnet.modules.Dipole",
+        "aimnet.modules.Output",
+        "aimnet.modules.Quadrupole",
+        "aimnet.modules.SRCoulomb",
+        # Embedded-dispersion modules referenced by first-party solvation
+        # artifacts. D3TS was already in _FROZEN_CLASS_PATHS above --
+        # the serialization ABI knew released checkpoints reference it while
+        # the runtime allowlist did not, and that inconsistency is what stopped
+        # the model loading.
+        "aimnet.modules.D3TS",
+        # Submodule spelling of the same D3TS class: the loader machinery
+        # matches "D3TS" by substring regardless of which spelling an artifact
+        # uses, so the exact-match allowlist must trust both. DispParam has no
+        # second spelling -- "aimnet.modules.lr.DispParam" is its only
+        # resolvable path (no barrel re-export).
+        "aimnet.modules.lr.D3TS",
+        "aimnet.modules.lr.DispParam",
+        "torch.nn.GELU",
+        "torch.nn.init.xavier_normal_",
+    }
+    assert frozenset(expected) == ALLOWED_MODEL_IMPORT_PATHS
+    assert isinstance(ALLOWED_MODEL_IMPORT_PATHS, frozenset)
+    assert not any(path.endswith(".*") for path in ALLOWED_MODEL_IMPORT_PATHS)
+
+
+def test_allowed_model_import_paths_cover_exact_torch_paths():
+    validate_model_yaml("activation_fn: torch.nn.GELU")
+    validate_model_yaml("weight_init_fn: torch.nn.init.xavier_normal_")
+
+
+def test_registry_allowlist_is_role_specific():
+    with pytest.raises(ValueError, match="Untrusted"):
+        validate_model_yaml("class: torch.nn.GELU")
+    with pytest.raises(ValueError, match="Untrusted"):
+        validate_model_yaml("activation_fn: torch.nn.init.xavier_normal_")
+    with pytest.raises(ValueError, match="Untrusted"):
+        validate_model_yaml("weight_init_fn: torch.nn.GELU")
+
+
+@pytest.mark.network
+def test_digest_verified_registry_yaml_uses_exact_role_defaults():
+    role_by_key = {
+        "class": "class",
+        "activation_fn": "activation",
+        "weight_init_fn": "initializer",
+    }
+    paths = {role: set() for role in role_by_key.values()}
+
+    def visit(value: object) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                role = role_by_key.get(key)
+                if role is not None and isinstance(child, str):
+                    paths[role].add(child)
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    registry = load_model_registry()
+    for name in sorted(registry["models"]):
+        path = get_registry_model_path(name)
+        data = torch.load(path, map_location="cpu", weights_only=True)
+        model_yaml, _ = validate_registry_v2_artifact(data)
+        visit(model_yaml)
+
+    paths["initializer"].add("torch.nn.init.xavier_normal_")
+    expected_classes = {
+        "aimnet.models.AIMNet2",
+        "aimnet.models.aimnet2.AIMNet2",
+        "aimnet.modules.AtomicShift",
+        "aimnet.modules.AtomicSum",
+        "aimnet.modules.Dipole",
+        "aimnet.modules.Output",
+        "aimnet.modules.Quadrupole",
+        "aimnet.modules.SRCoulomb",
+    }
+    assert paths["class"] <= expected_classes
+    assert paths["activation"] == {"torch.nn.GELU"}
+    assert paths["initializer"] == {"torch.nn.init.xavier_normal_"}
 
 
 class TestBundledAssetEmbeddedYaml:
@@ -195,7 +319,7 @@ class TestBundledAssetEmbeddedYaml:
 
         model_yaml = data["model_yaml"]
         # Released YAML must stay within the HF loader allowlist (hf_hub.py).
-        _validate_model_yaml(model_yaml)
+        validate_model_yaml(model_yaml)
 
         entries = list(_iter_import_paths(yaml.safe_load(model_yaml)))
         assert any(key == "class" for key, _ in entries), f"{asset.name}: no 'class' entries in embedded YAML"

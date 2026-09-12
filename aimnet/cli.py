@@ -2,7 +2,7 @@ import sys
 
 import click
 
-from .calculators.model_registry import clear_assets
+from .calculators.model_registry import clear_assets, download_assets
 
 
 @click.group()
@@ -12,6 +12,7 @@ def cli():
 
 # Always available commands
 cli.add_command(clear_assets, name="clear_model_cache")
+cli.add_command(download_assets, name="download")
 
 
 # Register convert command (doesn't need heavy training dependencies)
@@ -25,7 +26,7 @@ except ImportError:
     def convert_stub():
         """Convert legacy JIT model to new format (requires aimnet[train])"""
         click.echo(
-            "Training dependencies not installed.\nInstall with: pip install aimnet[train]",
+            "Training dependencies not installed.\nInstall with: pip install 'aimnet[train]' — or on conda: conda install -c conda-forge pytorch-ignite omegaconf wandb",
             err=True,
         )
         sys.exit(1)
@@ -33,7 +34,7 @@ except ImportError:
 
 def _missing_train_deps(exc: ImportError):
     click.echo(
-        f"Training dependencies not installed or incomplete: {exc}\nInstall with: pip install aimnet[train]",
+        f"Training dependencies not installed or incomplete: {exc}\nInstall with: pip install 'aimnet[train]' — or on conda: conda install -c conda-forge pytorch-ignite omegaconf wandb",
         err=True,
     )
     sys.exit(1)
@@ -72,20 +73,36 @@ def train_cmd(config, model, load=None, save=None, args=None, no_default_config=
 @click.option("--model", "-m", type=click.Path(exists=True), required=True, help="Path to model definition YAML file")
 @click.option("--sae", "-s", type=click.Path(exists=True), required=True, help="Path to the SAE YAML file")
 @click.option(
-    "--needs-coulomb/--no-coulomb", default=None, help="Override Coulomb detection. Default: auto-detect from YAML"
+    "--needs-coulomb/--no-coulomb",
+    default=None,
+    help="Override Coulomb detection. --no-coulomb is invalid for detected sr_embedded Coulomb.",
 )
 @click.option(
     "--needs-dispersion/--no-dispersion",
     default=None,
-    help="Override dispersion detection. Default: auto-detect from YAML",
+    help="Override dispersion detection. Enabled dispersion requires complete D3 parameters.",
 )
-def export_cmd(weights, output, model, sae, needs_coulomb, needs_dispersion):
+@click.option(
+    "--model-import-path",
+    "model_import_paths",
+    multiple=True,
+    help="Explicitly trust an exact constructor path or namespace for this local export.",
+)
+def export_cmd(weights, output, model, sae, needs_coulomb, needs_dispersion, model_import_paths):
     """Export trained model to distributable state dict format."""
     try:
         from .train.export_model import export_model
     except ImportError as exc:
         _missing_train_deps(exc)
-    export_model.callback(weights, output, model, sae, needs_coulomb, needs_dispersion)  # type: ignore[union-attr]
+    export_model.callback(  # type: ignore[union-attr]
+        weights,
+        output,
+        model,
+        sae,
+        needs_coulomb,
+        needs_dispersion,
+        model_import_paths,
+    )
 
 
 @cli.command(name="calc_sae")
@@ -99,6 +116,26 @@ def calc_sae_cmd(ds, output, samples=100000):
     except ImportError as exc:
         _missing_train_deps(exc)
     calc_sae.callback(ds, output, samples)  # type: ignore[union-attr]
+
+
+@cli.command(name="info")
+def info_cmd():
+    """Show environment and kernel-path diagnostics."""
+    import torch
+    import warp as wp
+
+    from . import __version__
+    from .calculators.model_registry import get_cache_dir
+    from .kernels import WARP_CUDA_AVAILABLE, load_ops
+
+    click.echo(f"aimnet        {__version__}")
+    click.echo(f"torch         {torch.__version__} (CUDA available: {torch.cuda.is_available()})")
+    click.echo(f"warp-lang     {wp.config.version} (CUDA devices: {wp.get_cuda_device_count()})")
+    ops = load_ops()
+    click.echo(f"registered ops: {', '.join(ops) if ops else 'NONE'}")
+    if torch.cuda.is_available() and not WARP_CUDA_AVAILABLE:
+        click.echo("WARNING: torch has CUDA but warp-lang does not — AEV will use the pure-torch fallback path.")
+    click.echo(f"model cache   {get_cache_dir()}")
 
 
 if __name__ == "__main__":

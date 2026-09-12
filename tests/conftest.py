@@ -241,18 +241,6 @@ def device():
     return get_device()
 
 
-@pytest.fixture(scope="session")
-def aimnet2_calc():
-    """Session-scoped AIMNet2Calculator with the default aimnet2 model.
-
-    Loaded once per test session. Use this instead of constructing
-    AIMNet2Calculator("aimnet2") inside individual tests.
-    """
-    from aimnet.calculators import AIMNet2Calculator
-
-    return AIMNet2Calculator("aimnet2")
-
-
 @pytest.fixture
 def requires_gpu():
     """Skip test if GPU is not available."""
@@ -704,12 +692,12 @@ def simple_periodic_system(device) -> dict[str, Tensor]:
 # Cached model loading to speed up the test suite
 # =============================================================================
 #
-# Constructing an ``AIMNet2Calculator`` / ``AIMNet2ASE`` re-runs
-# ``load_model(get_model_path(name))`` every time, which deserializes the model
-# and triggers TorchScript / Warp kernel JIT on first forward. That dominates
+# Constructing an ``AIMNet2Calculator`` / ``AIMNet2ASE`` reloads the model,
+# which deserializes the artifact and triggers
+# TorchScript / Warp kernel JIT on first forward. That dominates
 # CI wall time (the ASE suite constructs a calculator per test). We memoize
-# ``load_model`` for the duration of the test session so repeated calculator
-# constructions reuse the already-loaded ``nn.Module``.
+# direct and strict-registry loading for the test session so repeated
+# calculator constructions reuse the already-loaded ``nn.Module``.
 #
 # This is safe because:
 #   * the cached object is the loaded model only; every test still builds its
@@ -723,12 +711,12 @@ def simple_periodic_system(device) -> dict[str, Tensor]:
 
 @pytest.fixture(scope="session", autouse=True)
 def _cache_load_model():
-    """Memoize the expensive part of ``load_model`` for the whole test session.
+    """Memoize direct and registry model loading for the test session.
 
-    The dominant cost of ``load_model`` is the on-disk deserialize plus the
-    first-forward TorchScript / Warp kernel JIT. We memoize that work once per
-    ``(path, device)`` and hand each caller a fresh ``copy.deepcopy`` of the
-    cached module.
+    The dominant cost is on-disk deserialization plus first-forward TorchScript
+    or Warp kernel JIT. We memoize that work once per ``(path, device)`` and
+    hand each caller a fresh ``copy.deepcopy`` of the cached module. Calls with
+    custom import settings and legacy ``.jpt`` loads bypass the direct cache.
 
     Returning a *copy* (rather than the shared instance) is required for
     correctness: tests construct calculators in both eval (``train=False``,
@@ -741,20 +729,33 @@ def _cache_load_model():
     still skipping the disk read and kernel JIT.
 
     Each xdist worker is a separate process with its own session, so each
-    worker pays the load cost at most once per model. ``AIMNet2Calculator``
-    does a module-level ``from aimnet.models.base import load_model``, so we
-    patch both the source module and the calculator's bound reference.
+    worker pays the load cost at most once per model. Callers use module-level
+    imports, so the fixture patches the source module and bound resolver
+    references.
     """
     import copy as _copy
 
     import aimnet.calculators.calculator as _calc
+    import aimnet.calculators.resolve as _resolve
     import aimnet.models.base as _base
+    from aimnet.models.artifact_validation import is_legacy_jit_path, uses_default_model_import_settings
 
     _real_load_model = _base.load_model
+    _real_registry_load_model = _base.load_registry_model
     _store: dict = {}
+    _registry_store: dict = {}
 
     @functools.wraps(_real_load_model)
-    def _cached_load_model(path, device="cpu"):
+    def _cached_load_model(path, device="cpu", *, model_import_paths=None, model_import_mode="extend"):
+        if not uses_default_model_import_settings(model_import_paths, model_import_mode):
+            return _real_load_model(
+                path,
+                device,
+                model_import_paths=model_import_paths,
+                model_import_mode=model_import_mode,
+            )
+        if is_legacy_jit_path(path):
+            return _real_load_model(path, device)
         key = (path, str(device))
         if key not in _store:
             _store[key] = _real_load_model(path, device)
@@ -763,63 +764,20 @@ def _cache_load_model():
         # (requires_grad toggling, accumulated .grad) never leaks across tests.
         return _copy.deepcopy(model), metadata
 
+    @functools.wraps(_real_registry_load_model)
+    def _cached_registry_load_model(path, device="cpu"):
+        key = (path, str(device))
+        if key not in _registry_store:
+            _registry_store[key] = _real_registry_load_model(path, device)
+        model, metadata = _registry_store[key]
+        return _copy.deepcopy(model), metadata
+
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(_base, "load_model", _cached_load_model, raising=False)
+        mp.setattr(_base, "load_registry_model", _cached_registry_load_model, raising=False)
+        mp.setattr(_base, "_load_registry_model", _cached_registry_load_model, raising=False)
         if hasattr(_calc, "load_model"):
             mp.setattr(_calc, "load_model", _cached_load_model, raising=False)
+        mp.setattr(_resolve, "load_model", _cached_load_model, raising=False)
+        mp.setattr(_resolve, "_load_registry_model", _cached_registry_load_model, raising=False)
         yield _cached_load_model
-
-
-@pytest.fixture(scope="session")
-def model_cache():
-    """Session-scoped loader returning fresh ``(nn.Module, metadata)`` pairs.
-
-    Usage::
-
-        module, metadata = model_cache.load("aimnet2", device="cpu")
-
-    The expensive load is memoized once per ``(name, device)``; each ``load``
-    call returns an independent ``copy.deepcopy`` of the cached module, so
-    callers may freely mutate parameters/buffers without leaking across tests.
-    """
-    import copy
-
-    from aimnet.calculators.model_registry import get_model_path
-    from aimnet.models.base import load_model as _load_model
-
-    cache: dict = {}
-
-    class _ModelCache:
-        @staticmethod
-        def load(name: str = "aimnet2", device: str = "cpu"):
-            key = (name, str(device))
-            if key not in cache:
-                cache[key] = _load_model(get_model_path(name), device)
-            model, metadata = cache[key]
-            return copy.deepcopy(model), metadata
-
-    return _ModelCache()
-
-
-@pytest.fixture
-def make_calc(model_cache):
-    """Factory building a fresh ``AIMNet2Calculator`` around a cached module."""
-    from aimnet.calculators import AIMNet2Calculator
-
-    def _make(name: str = "aimnet2", device: str = "cpu", **kwargs):
-        module, _ = model_cache.load(name, device=device)
-        return AIMNet2Calculator(module, **kwargs)
-
-    return _make
-
-
-@pytest.fixture
-def make_ase_calc(model_cache):
-    """Factory building a fresh ``AIMNet2ASE`` around a cached module."""
-    from aimnet.calculators import AIMNet2ASE
-
-    def _make(name: str = "aimnet2", device: str = "cpu", **kwargs):
-        module, _ = model_cache.load(name, device=device)
-        return AIMNet2ASE(module, **kwargs)
-
-    return _make

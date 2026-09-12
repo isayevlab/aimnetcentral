@@ -50,6 +50,7 @@ nav:
           - Training: train.md
           - CLI Tools: cli.md
           - GPU Validation: gpu_validation.md
+          - Offline / HPC: offline_hpc.md
     - API Reference:
           - Overview: api/index.md
           - Calculators: api/calculators.md

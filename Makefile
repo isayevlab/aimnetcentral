@@ -23,7 +23,7 @@ test-gpu: ## Run GPU-marked tests serially on CUDA
 	@uv run pytest -m gpu
 
 .PHONY: gpu-validate
-gpu-validate: ## Validate torch/warp-lang/nvalchemiops coupling across torch 2.8-2.12 on a CUDA box
+gpu-validate: ## Validate torch/warp-lang/nvalchemiops coupling across torch 2.8-2.13 on a CUDA box
 	@bash scripts/gpu_validate.sh
 
 .PHONY: typecheck

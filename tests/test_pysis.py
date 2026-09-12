@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 import torch
 
-pytestmark = pytest.mark.pysis
+pytestmark = [pytest.mark.pysis, pytest.mark.weights]
 
 pytest.importorskip("pysisyphus", reason="pysisyphus not installed")
 

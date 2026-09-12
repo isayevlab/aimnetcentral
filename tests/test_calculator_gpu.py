@@ -12,7 +12,7 @@ from aimnet.calculators import AIMNet2Calculator
 from aimnet.modules.lr import _mode2_backend_inputs
 
 # Skip entire module if CUDA is not available
-pytestmark = pytest.mark.gpu
+pytestmark = [pytest.mark.gpu, pytest.mark.weights]
 
 if not torch.cuda.is_available():
     pytest.skip("CUDA not available", allow_module_level=True)
