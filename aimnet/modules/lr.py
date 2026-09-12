@@ -1,6 +1,7 @@
 import math
 import os
 import re
+import warnings
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
@@ -10,12 +11,10 @@ from nvalchemiops.neighbors import NeighborOverflowError
 from nvalchemiops.torch.interactions.dispersion import dftd3
 from nvalchemiops.torch.interactions.electrostatics import (
     dsf_coulomb,
-    ewald_summation,
-    particle_mesh_ewald,
-)
-from nvalchemiops.torch.interactions.electrostatics.parameters import (
     estimate_ewald_parameters,
     estimate_pme_parameters,
+    ewald_summation,
+    particle_mesh_ewald,
 )
 from nvalchemiops.torch.neighbors import neighbor_list
 from torch import Tensor, nn
@@ -134,8 +133,8 @@ def _real_atom_periodic_parameters(
     batch_idx: Tensor,
     real_mask: Tensor,
     accuracy: float,
-) -> dict[str, Any]:
-    """Estimate Ewald/PME parameters from the real atoms of each system.
+) -> tuple[dict[str, Any], Tensor]:
+    """Estimate Ewald/PME parameters from the real atoms of the non-empty systems.
 
     nvalchemiops estimates the splitting parameter ``alpha`` (and the k-space
     cutoff or PME mesh) from the per-system atom count of the ``batch_idx`` it
@@ -144,14 +143,50 @@ def _real_atom_periodic_parameters(
     system would change with the size of the largest molecule in its batch.
     Running the same estimator over the real atoms only reproduces what the
     flat mode-1 call gets, so mode 1 and mode 2 agree to rounding.
+
+    A system made of dummy rows only is left out of the estimate: with a zero
+    atom count the Ewald estimate degenerates to ``alpha = 0`` (a ``nan``
+    background term) and PME's batch median can hit a zero division.  Such a
+    system has no charge, so any finite parameters give it exactly zero
+    energy; it receives a placeholder ``alpha`` and does not shift the
+    parameters of the others.
+
+    Returns the keyword arguments for the kernel call and the per-system
+    real-space cutoff the estimate assumes (one entry per non-empty system).
     """
     with torch.no_grad():
-        batch_idx_real = batch_idx[real_mask]
+        B = cell.shape[0]
+        real_idx = real_mask.nonzero(as_tuple=False).flatten()
+        batch_real = batch_idx.index_select(0, real_idx)
+        counts = torch.zeros(B, dtype=torch.long, device=cell.device)
+        counts.scatter_add_(0, batch_real.to(torch.long), torch.ones_like(batch_real, dtype=torch.long))
+        nonempty = counts > 0
+        # Compact system indices over the non-empty systems.
+        compact = torch.cumsum(nonempty.to(torch.int32), 0) - 1
+        batch_compact = compact.index_select(0, batch_real.to(torch.long)).to(torch.int32)
+        positions_real = positions.detach().index_select(0, real_idx)
+        cell_nonempty = cell.detach()[nonempty]
+        if cell_nonempty.shape[0] == 0:
+            alpha = positions.new_ones(B)
+            if backend == "ewald":
+                return {"alpha": alpha, "k_cutoff": torch.ones_like(alpha)}, positions.new_zeros(0)
+            return {"alpha": alpha, "mesh_dimensions": (8, 8, 8)}, positions.new_zeros(0)
         if backend == "ewald":
-            params = estimate_ewald_parameters(positions.detach(), cell.detach(), batch_idx_real, accuracy)
-            return {"alpha": params.alpha, "k_cutoff": params.reciprocal_space_cutoff}
-        params = estimate_pme_parameters(positions.detach(), cell.detach(), batch_idx_real, accuracy)
-        return {"alpha": params.alpha, "mesh_dimensions": tuple(params.mesh_dimensions)}
+            params = estimate_ewald_parameters(positions_real, cell_nonempty, batch_compact, accuracy)
+            alpha_real = params.alpha.reshape(-1).to(positions.dtype)
+            k_cutoff_real = params.reciprocal_space_cutoff.reshape(-1).to(positions.dtype)
+            # Placeholders for empty systems: the kernel sizes the shared
+            # k-vector set from the batch maximum, so use the batch minimum
+            # rather than a constant that could exceed every real cutoff.
+            alpha = alpha_real.min().expand(B).clone()
+            k_cutoff = k_cutoff_real.min().expand(B).clone()
+            alpha[nonempty] = alpha_real
+            k_cutoff[nonempty] = k_cutoff_real
+            return {"alpha": alpha, "k_cutoff": k_cutoff}, params.real_space_cutoff.reshape(-1)
+        params = estimate_pme_parameters(positions_real, cell_nonempty, batch_compact, accuracy)
+        # PME shares one alpha across the batch; extend it to the empty systems.
+        alpha = params.alpha.reshape(-1)[:1].expand(B).to(positions.dtype)
+        return {"alpha": alpha, "mesh_dimensions": tuple(params.mesh_dimensions)}, params.real_space_cutoff.reshape(-1)
 
 
 _PME_MIN_NVALCHEMIOPS = (0, 4, 1)
@@ -596,9 +631,24 @@ class LRCoulomb(nn.Module):
             num_systems = mode2_inputs.num_systems
             # The dummy rows stay in the kernel call (zero charge, sentinel-only
             # neighbors) but must not enter the parameter estimate.
-            backend_kwargs = _real_atom_periodic_parameters(
+            backend_kwargs, rc_needed = _real_atom_periodic_parameters(
                 backend, coord_real, cell, mol_idx_real, real_mask, float(self.ewald_accuracy)
             )
+            # Mode-2 callers build nbmat_coulomb themselves; the estimate above
+            # assumes a real-space cutoff the supplied list may not reach.
+            supplied_cutoff = data.get("cutoff_coulomb")
+            if supplied_cutoff is not None and rc_needed.numel():
+                supplied = float(torch.as_tensor(supplied_cutoff).min())
+                needed = float(rc_needed.max())
+                if supplied < needed * (1.0 - 1e-6):
+                    warnings.warn(
+                        f"nbmat_coulomb was built with cutoff {supplied:.2f} A, but the {backend} real-space "
+                        f"sum at ewald_accuracy={float(self.ewald_accuracy):g} assumes {needed:.2f} A; the "
+                        "truncated real-space term is missing from the energy. Rebuild the Coulomb neighbor "
+                        "list at the estimated cutoff.",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
         else:
             charges = data[self.key_in]
             mol_idx = data["mol_idx"]
