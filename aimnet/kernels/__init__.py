@@ -21,8 +21,14 @@
 """AIMNet Kernels Package - GPU-accelerated custom operations."""
 
 import torch
+import warp as wp
 
 from .conv_sv_2d_sp_wp import conv_sv_2d_sp  # type: ignore[attr-defined]
+
+# Computed once after wp.init(); conda-forge can legally solve a CUDA pytorch
+# together with a CPU-only warp-lang build, so torch.cuda alone is not proof
+# that the Warp kernels can execute.
+WARP_CUDA_AVAILABLE: bool = wp.get_cuda_device_count() > 0
 
 
 def load_ops():
@@ -56,6 +62,7 @@ def load_ops():
 
 
 __all__ = [
+    "WARP_CUDA_AVAILABLE",
     "conv_sv_2d_sp",
     "load_ops",
 ]

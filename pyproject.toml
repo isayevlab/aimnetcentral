@@ -36,7 +36,7 @@ dependencies = [
     "torch>=2.8",
     "numpy",
     "warp-lang>=1.13,<2",
-    "nvalchemi-toolkit-ops>=0.4.0",
+    "nvalchemi-toolkit-ops>=0.4.1",
     "requests>=2.32.3",
     "click>=8.1.7",
     "pyyaml>=6.0.2",
@@ -98,6 +98,9 @@ include = [
     "aimnet/**/*.yaml",
     "aimnet/**/*.pt",
 ]
+exclude = [
+    "aimnet/calculators/assets/**",
+]
 
 [tool.hatch.version]
 source = "vcs"
@@ -108,6 +111,9 @@ include = [
     "aimnet/**/*.py",
     "aimnet/**/*.yaml",
     "aimnet/**/*.pt",
+]
+exclude = [
+    "aimnet/calculators/assets/**",
 ]
 
 # UV configuration
@@ -133,7 +139,7 @@ docs = [
     "mkdocs-material>=9.2.7",
     "mkdocstrings[python]>=0.26.1",
     "griffe<3",
-    "pygments<2.21",
+    "pygments<2.22",
 ]
 
 # Ruff configuration
@@ -217,6 +223,7 @@ markers = [
     "slow: marks tests that are intentionally expensive (deselect with: -m 'not slow')",
     "torch_sim: marks tests that require TorchSim (deselect with: -m 'not torch_sim')",
     "train: marks tests that require training dependencies (deselect with: -m 'not train')",
+    "weights: marks tests that need model weights (registry download or pre-seeded cache; deselect with: -m 'not weights')",
 ]
 
 # Coverage configuration

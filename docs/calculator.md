@@ -61,7 +61,7 @@ nbmat[b, i, k] == b * N + j       # valid neighbor
 nbmat[b, i, k] == B * N           # excluded slot
 ```
 
-Periodic mode 2 uses full three-dimensional cells with shape `(B, 3, 3)` for batches, or `(1, 3, 3)` for one system. `pbc` is optional when a cell is supplied; if present, all three components must be true. Each periodic neighbor matrix must have aligned integral lattice coefficients in `shifts.shape == (B, N, M, 3)`. Energy, forces, stress, and Hessian requests preserve the 3D execution path; Hessians select only real atoms and return `(R, 3, R, 3)` per system, where `R` excludes the padded tail. Batched Hessians stack when all systems have the same `R`, otherwise they return a list. Slab, mixed-periodicity, and partial-PBC inputs are deferred to PR 03.
+Periodic mode 2 uses full three-dimensional cells with shape `(B, 3, 3)` for batches, or `(1, 3, 3)` for one system. `pbc` is optional when a cell is supplied; if present, all three components must be true. Each periodic neighbor matrix must have aligned integral lattice coefficients in `shifts.shape == (B, N, M, 3)`. Energy, forces, stress, and Hessian requests preserve the 3D execution path; Hessians select only real atoms and return `(R, 3, R, 3)` per system, where `R` excludes the padded tail. Batched Hessians stack when all systems have the same `R`, otherwise they return a list. Slab, mixed-periodicity, and partial-PBC inputs are not supported yet and are rejected with `ValueError`.
 
 All four periodic long-range producers—DSF, DFT-D3, Ewald, and PME—use the same global indices and aligned shifts. Their periodic neighbor lists must represent each physical interaction symmetrically: if an edge uses shift `s`, the reverse edge must use the opposite shift `-s`. A directed or half neighbor list is not a valid input for these long-range observables. A full-observable request can be made directly:
 
@@ -131,6 +131,9 @@ AIMNet2Calculator(
     ensemble_member: int = 0,
     revision: str | None = None,
     token: str | None = None,
+    *,
+    model_import_paths: Collection[str] | None = None,
+    model_import_mode: Literal["extend", "replace", "unsafe"] = "extend",
 )
 ```
 
@@ -149,6 +152,18 @@ Model to use for inference.
 | `torch.nn.Module` | Uses provided module directly |
 
 For `torch.nn.Module`, metadata is read from `model.metadata` attribute if available (v2 models).
+
+### Custom serialized models
+
+Direct local v2 files and complete Hugging Face repositories can extend or replace the trusted model-YAML import paths, or use unsafe loading for locally trusted artifacts. See [Model YAML import policy](model_format.md#model-yaml-import-policy) for the default allowlist, modes, examples, and security boundaries.
+
+Model weights load on CPU before the completed model moves to the requested device once. Missing real state-dict keys are fatal; unexpected keys warn for direct custom/HF artifacts and fail for registry artifacts. Known migration keys remain filtered.
+
+For a legacy TorchScript file, use `AIMNet2Calculator.from_legacy_jit()` when you want the trusted-code boundary to be explicit:
+
+```python
+calc = AIMNet2Calculator.from_legacy_jit("trusted-model.jpt", device="cpu")
+```
 
 #### `nb_threshold`
 
@@ -177,7 +192,7 @@ Whether to attach external Coulomb module.
 | `True`           | Force external Coulomb (overrides metadata) |
 | `False`          | No external Coulomb (overrides metadata)    |
 
-Only affects v2 format models. Legacy JIT models have embedded Coulomb. If you override this flag on a model without Coulomb metadata, ensure it is compatible with the expected subtraction for short range Coulomb contribution (see `coulomb_mode` in model metadata).
+Only affects v2 format models. Legacy JIT models have embedded Coulomb. `False` may explicitly disable an otherwise valid external Coulomb correction; it does not make structurally inconsistent metadata valid. `True` is rejected for `coulomb_mode="full_embedded"`. For a valid `coulomb_mode="none"` model with Coulomb explicitly enabled and no stored SR parameters, the external module uses `rc=4.6` Å and `envelope="exp"`.
 
 #### `needs_dispersion`
 
@@ -189,7 +204,7 @@ Whether to attach external DFTD3 module.
 | `True`           | Force external DFTD3 (overrides metadata) |
 | `False`          | No external DFTD3 (overrides metadata)    |
 
-Only affects new-format models. Raises `ValueError` if `needs_dispersion=True` but `d3_params` are missing in metadata.
+Only affects new-format models. `False` may explicitly disable external dispersion when the artifact is structurally valid. `True` requires complete `s8`, `a1`, and `a2` parameters and is rejected when D3TS is already embedded.
 
 #### `device`
 
@@ -288,11 +303,19 @@ Set via environment variable `HF_TOKEN` as an alternative to passing it directly
 
 Only applies when `model` is a HF repo ID.
 
+#### `model_import_paths` and `model_import_mode`
+
+These settings apply only to direct local v2 artifacts and complete Hugging Face repositories with their own `model_yaml`. Registry names, registry fallback, raw `nn.Module` inputs, and `.jpt` files reject non-default settings.
+
+See [Model YAML import policy](model_format.md#model-yaml-import-policy) for supported paths, modes, examples, and security boundaries.
+
 ### Metadata Resolution
 
 ```
 Priority: explicit flags > model metadata > no external modules
 ```
+
+Artifacts are validated before these flags are applied. Direct local and complete custom Hugging Face artifacts must be structurally consistent; official registry artifacts and registry-backed HF fallbacks additionally enforce canonical action flags. The calculator then validates the effective configuration after family defaults and explicit flags are resolved. Explicit `False` values can disable external components, but cannot bypass intrinsic structural errors.
 
 | Model Source             | Metadata Source            |
 | ------------------------ | -------------------------- |
@@ -434,10 +457,9 @@ For both Ewald and PME, `ewald_accuracy` (default `1e-6`, matching the nvalchemi
 
 **Derivative Support:**
 
-- `simple` and `dsf`: inference forces/stress are supported. DSF force/stress losses (`train=True` with `forces` or `stress`) remain unsupported; periodic Hessians select real atoms.
-- `ewald` and `pme`: forces, stress, force/stress losses in `train=True`, and real-atom Hessians are supported. PME includes its fixed-charge finite-difference long-range block.
+All external Coulomb methods support inference forces/stress, force/stress losses in `train=True`, and Hessian/HVP requests. DSF routes training and Hessians through its differentiable closed-form torch path; `ewald` and `pme` keep their nvalchemiops energy in the autograd graph (nvalchemi-toolkit-ops >= 0.4.1; selecting `pme` on 0.4.0 raises `RuntimeError`), so all derivatives come from the calculator's total-energy autograd and are relaxed-charge. Global mode-2 batches (see [Batched sparse neighbor matrices (mode 2)](#batched-sparse-neighbor-matrices-mode-2)) support the same observables on the 3D execution path; their Hessians select real atoms.
 
-See [Long-Range Methods → Derivative Support](long_range.md#derivative-support) for the rationale.
+See [Long-Range Methods → Derivative Support](long_range.md#derivative-support) for details.
 
 **Notes:**
 
@@ -563,9 +585,9 @@ H = torch.autograd.functional.hessian(energy_fn, coords)  # shape (N, 3, N, 3)
 
     When computing higher-order derivatives from outside the calculator, pass `forces=False`. Requesting `forces=True` triggers an internal backward pass that frees intermediate activations, preventing a second differentiation through the graph.
 
-!!! note "Long-range backend limitations"
+!!! note "Long-range backends and external differentiation"
 
-    External higher-order differentiation depends on the selected long-range backend. The calculator's explicit Hessian path includes the real-atom periodic Coulomb block where the backend provides it; external `torch.autograd.functional.hessian` remains subject to each backend's graph support.
+    Every long-range backend keeps its energy in the autograd graph for higher-order differentiation: DSF routes through its differentiable torch path, and Ewald/PME (nvalchemi-toolkit-ops >= 0.4.1) are energy-graph-only, so external `torch.autograd.functional.hessian` captures the complete relaxed-charge Coulomb Hessian.
 
 When `coord` does **not** have `requires_grad=True` (the default), inputs are detached as before — optimization loops that call the calculator repeatedly incur no graph accumulation overhead.
 
@@ -736,8 +758,8 @@ LRCoulomb(
     key_in="charges",
     key_out="energy",
     method="simple",  # Default, changeable via set_lrcoulomb_method()
-    rc=metadata.get("coulomb_sr_rc", 4.6),
-    envelope=metadata.get("coulomb_sr_envelope", "exp"),
+    rc=4.6 if metadata.get("coulomb_sr_rc") is None else metadata["coulomb_sr_rc"],
+    envelope="exp" if metadata.get("coulomb_sr_envelope") is None else metadata["coulomb_sr_envelope"],
     subtract_sr=not sr_embedded,  # Based on coulomb_mode
 )
 ```
@@ -762,7 +784,7 @@ External LR modules are attached based on model metadata unless overridden by co
 - If `needs_coulomb=True`, an external `LRCoulomb` is created. If `coulomb_mode="sr_embedded"`, the model already subtracts SR Coulomb internally and the external module adds full Coulomb on top.
 - If `needs_dispersion=True` and `d3_params` are present, an external `DFTD3` is created. If `d3_params` are missing, initialization raises `ValueError`.
 
-Explicit `needs_coulomb` / `needs_dispersion` flags override metadata.
+Explicit `needs_coulomb` / `needs_dispersion` flags override metadata after structural validation. An explicit `False` disables the corresponding external module; effective runtime validation still rejects incompatible enabled components.
 
 ### Cutoff Handling for LR Modules
 
@@ -804,6 +826,8 @@ The envelope function (`"exp"` or `"cosine"`) determines how the SR interaction 
 
 Legacy JIT models (`.jpt`) have different behavior:
 
+Their synthesized runtime metadata remains format version 1 and records `has_embedded_lr=True`, `coulomb_mode="full_embedded"`, and no external long-range modules by default. This preserves legacy LR neighbor handling while preventing an additional external Coulomb module from being attached.
+
 | Feature | Legacy | New Format |
 | --- | --- | --- |
 | Coulomb | Embedded in model | External module |
@@ -817,7 +841,16 @@ Legacy JIT models (`.jpt`) have different behavior:
 
 ### Common Errors
 
-Invalid model type: `TypeError`. Missing required input key: `KeyError`. Unsupported Hessian representation: `ValueError` or `NotImplementedError`. Partial or mixed PBC: `ValueError` (PR 03 scope). Invalid Coulomb method: `ValueError`. Missing D3 parameters: `ValueError`.
+| Condition                                   | Error                 |
+| ------------------------------------------- | --------------------- |
+| Invalid model type                          | `TypeError`           |
+| Missing required input key                  | `KeyError`            |
+| Hessian with multiple molecules             | `NotImplementedError` |
+| PME with nvalchemi-toolkit-ops < 0.4.1      | `RuntimeError`        |
+| PBC with multiple molecules                 | `NotImplementedError` |
+| Invalid Coulomb method                      | `ValueError`          |
+| `needs_dispersion=True` without `d3_params` | `ValueError`          |
+| Partial or mixed PBC in mode 2              | `ValueError`          |
 
 ### Warnings
 

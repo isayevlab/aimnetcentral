@@ -10,7 +10,9 @@ The core calculator for running AIMNet2 inference. It handles model loading, dev
 
 - **Format Support**: Loads both legacy `.jpt` models and new `.pt` format.
 - **Long-Range Interactions**: Automatically attaches `LRCoulomb` and `DFTD3` modules based on model metadata.
-- **Overrides**: You can force specific long-range behavior using `needs_coulomb` and `needs_dispersion` arguments.
+- **Overrides**: `needs_coulomb` and `needs_dispersion` resolve effective
+  long-range behavior after artifact validation. Explicit `False` values can
+  disable external components for structurally valid custom artifacts.
 - **Batching**: Automatically batches large molecules/systems based on `nb_threshold`.
 
 ::: aimnet.calculators.AIMNet2Calculator
@@ -109,6 +111,24 @@ print(results[0]["potential_energy"], results[0]["forces"])
 
 Utilities for loading pre-trained models. Models are automatically downloaded from the remote repository to the local model cache (`AIMNET_CACHE_DIR` when set, otherwise `~/.cache/aimnet/`) upon first use.
 
+Every registry download and cache hit is verified against its SHA-256 digest.
+A corrupt cache hit triggers one verified atomic replacement attempt; persistent
+acquisition failures propagate after the final path is revalidated. See
+[Model cache recovery](../cli.md#model-cache-recovery).
+
+Official wheels and source distributions currently bundle no model artifacts;
+registry models are downloaded on demand.
+
+Bare registry names and aliases take precedence over same-named implicit local
+files or directories, preventing a local shadow from bypassing verification.
+Use an explicit path such as `./aimnet2` or an absolute path when a local
+artifact is intended.
+
+Only direct local v2 artifacts and complete Hugging Face repositories accept
+custom import settings. See
+[Model YAML import policy](../model_format.md#model-yaml-import-policy) for
+supported paths, modes, and security boundaries.
+
 ### CLI Command
 
 You can clear the local model cache using the CLI:
@@ -118,6 +138,15 @@ aimnet clear_model_cache
 ```
 
 ::: aimnet.calculators.model_registry
+    options:
+      show_root_heading: true
+      show_source: true
+
+## Vibrational analysis
+
+Harmonic frequency analysis of the dense Hessian returned by `AIMNet2Calculator.eval(data, hessian=True)`: mass-weighting, projection of rigid translations and rotations (five for a linear molecule, six otherwise), and conversion to wavenumbers with imaginary modes reported as negative values. Requires only numpy; ASE is not needed.
+
+::: aimnet.calculators.vibrations
     options:
       show_root_heading: true
       show_source: true
