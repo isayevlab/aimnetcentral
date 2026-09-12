@@ -965,10 +965,11 @@ class AIMNet2Calculator:
             )
 
         if hessian:
-            # Reject invalid mode-2 input before the split re-indexes it.
-            nbops.validate_mode2_input(self.to_input_tensors(data))
             subsystems = self._split_hessian_batch(data)
             if subsystems is not None:
+                # Reject invalid mode-2 input before any re-indexed subsystem
+                # runs; a single structure is validated by prepare_input below.
+                nbops.validate_mode2_input(self.to_input_tensors(data))
                 stack = torch.as_tensor(data["coord"]).ndim == 3
                 return self._eval_hessian_batched(
                     subsystems, forces=forces, stress=stress, validate_species=validate_species, stack=stack
@@ -1102,8 +1103,10 @@ class AIMNet2Calculator:
         caller_had_mol_idx = raw_data.get("mol_idx") is not None
         caller_had_nbmat = raw_data.get("nbmat") is not None
         data = self.to_input_tensors(data)
-        # Single validation chokepoint; the model's prepare_input honors the mark.
+        # Single validation chokepoint on the freshly converted dict; the mark
+        # tells the model's prepare_input not to repeat it.
         nbops.validate_mode2_input(data)
+        nbops.mark_mode2_validated(data)
         data = self.mol_flatten(data, hessian=hessian)
         if data.get("cell") is not None and self._coulomb_method == "simple":
             warnings.warn(
@@ -1343,6 +1346,9 @@ class AIMNet2Calculator:
         mode2 = primary_nbmat is not None and torch.as_tensor(primary_nbmat).ndim == 3
         for b in range(B):
             sub: dict[str, Any] = {}
+            # Suffixes that alias one caller object keep aliasing in the
+            # subsystem, so its validation and mask preparation dedup as well.
+            sliced: list[tuple[Any, Tensor]] = []
             for k, v in data.items():
                 if v is None:
                     continue
@@ -1357,17 +1363,23 @@ class AIMNet2Calculator:
                 elif k == "pbc":
                     t = torch.as_tensor(v)
                     sub[k] = t[b : b + 1] if mode2 and t.ndim == 2 else (t[b] if t.ndim == 2 else t)
-                elif k.startswith("nbmat"):
-                    t = torch.as_tensor(v)[b : b + 1]
-                    if t.ndim == 3:
-                        sentinel = B * t.shape[1]
-                        singleton_sentinel = t.shape[1]
-                        usable = t != sentinel
-                        t = torch.where(usable, t - b * t.shape[1], torch.full_like(t, singleton_sentinel))
-                    sub[k] = t
-                elif k.startswith("shifts"):
+                elif k.startswith(("nbmat", "shifts")):
+                    memo = next((value for previous, value in sliced if v is previous), None)
+                    if memo is not None:
+                        sub[k] = memo
+                        continue
                     t = torch.as_tensor(v)
-                    sub[k] = t[b : b + 1] if t.ndim >= 3 else t
+                    if k.startswith("nbmat"):
+                        t = t[b : b + 1]
+                        if t.ndim == 3:
+                            sentinel = B * t.shape[1]
+                            singleton_sentinel = t.shape[1]
+                            usable = t != sentinel
+                            t = torch.where(usable, t - b * t.shape[1], torch.full_like(t, singleton_sentinel))
+                    elif t.ndim >= 3:
+                        t = t[b : b + 1]
+                    sliced.append((v, t))
+                    sub[k] = t
                 elif k == "mol_idx":
                     continue
                 else:
@@ -1870,7 +1882,8 @@ class AIMNet2Calculator:
         Parameters
         ----------
         data : dict
-            Single-structure input (same keys as ``eval``). 3D batched or
+            Single-structure input (same keys as ``eval``); a singleton mode-2
+            batch (``B == 1``) counts as one structure. Batched (``B > 1``) or
             multi-molecule ``mol_idx`` inputs are not supported.
         vectors : Tensor
             Direction(s), shape ``(N, 3)`` or ``(K, N, 3)`` over the real atoms.

@@ -1112,7 +1112,7 @@ class TestBatchCorrectness:
         """Automatic small-molecule batching remains independent of sparse mode 2."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
 
-        # Use same-size molecules for mode 2 (requires padding otherwise)
+        # Two same-size molecules keep the automatic batching path simple.
         mol1 = self._make_water(offset=0.0)
         mol2 = self._make_water(offset=15.0)
 
@@ -2754,3 +2754,26 @@ def test_global_mode2_calculator_validates_aliased_periodic_suffixes_once(monkey
     monkeypatch.setattr(nbops, "validate_mode2_nbmat_raw", spy)
     calc(data)
     assert sorted(calls) == ["", "_coulomb"]
+
+
+@pytest.mark.parametrize(("batch", "expected_calls"), [(1, 1), (2, 3)])
+def test_global_mode2_calculator_hessian_validation_count(monkeypatch, batch, expected_calls):
+    """A singleton Hessian request validates once; a batch validates once
+    before the split and each re-indexed subsystem once more, with aliased
+    suffixes still deduplicated inside the subsystems."""
+    from aimnet import nbops
+
+    calc = _new_mode2_calculator()
+    calc.external_dftd3 = None
+    data = _global_mode2_calculator_input(batch=batch)
+    data["nbmat_lr"] = data["nbmat"]
+    calls: list[str] = []
+    original = nbops.validate_mode2_nbmat_raw
+
+    def spy(payload, *, suffix):
+        calls.append(suffix)
+        return original(payload, suffix=suffix)
+
+    monkeypatch.setattr(nbops, "validate_mode2_nbmat_raw", spy)
+    calc(data, hessian=True)
+    assert calls == [""] * expected_calls

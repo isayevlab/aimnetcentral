@@ -1006,10 +1006,24 @@ def test_global_mode2_rejects_nonfinite_coordinates_cpu():
         nbops.validate_mode2_input(data)
 
 
-def test_global_mode2_validate_input_accepts_valid_batch_and_marks_it():
+def test_global_mode2_validate_input_accepts_valid_batch_without_marking():
     data = _global_mode2_data(torch.device("cpu"), suffixes=("_lr", "_coulomb"))
     nbops.validate_mode2_input(data)
-    assert nbops.is_mode2_validated(data)
+    assert not nbops.consume_mode2_validated(data)
+
+
+def test_global_mode2_validation_mark_is_consumed_once():
+    data = _global_mode2_data(torch.device("cpu"))
+    nbops.mark_mode2_validated(data)
+    assert nbops.consume_mode2_validated(data)
+    assert nbops.consume_mode2_validated(data) is False
+    assert "_mode2_validated" not in data
+
+
+def test_global_mode2_mark_ignores_flat_input():
+    data = {"nbmat": torch.zeros((4, 3), dtype=torch.int64)}
+    nbops.mark_mode2_validated(data)
+    assert "_mode2_validated" not in data
 
 
 def test_global_mode2_validate_input_dedups_aliased_suffixes(monkeypatch):
@@ -1033,17 +1047,21 @@ def test_global_mode2_validation_traces_without_graph_breaks_cpu():
     """Validation must not fall back to ``Tensor.item()`` under torch.compile:
     the CPU eager path raises ``ValueError`` from ``.item()``, the compiled
     path queues ``torch._assert_async`` and raises ``RuntimeError``."""
-    import os
-
-    if os.environ.get("TORCHDYNAMO_DISABLE", "").strip() not in ("", "0"):
+    if torch._dynamo.config.disable:
         pytest.skip("torch.compile is disabled in this environment")
     torch._dynamo.reset()
 
     def prepare(data):
-        nbops.validate_mode2_input(data)
+        # The model's entry sequence: consume the calculator's mark or validate.
+        if not nbops.consume_mode2_validated(data):
+            nbops.validate_mode2_input(data)
         return nbops.calc_masks(nbops.set_nb_mode(data))["mask_ij"]
 
     explanation = torch._dynamo.explain(prepare)(_global_mode2_data(torch.device("cpu")))
+    assert explanation.graph_break_count == 0, explanation.break_reasons
+    marked = _global_mode2_data(torch.device("cpu"))
+    nbops.mark_mode2_validated(marked)
+    explanation = torch._dynamo.explain(prepare)(marked)
     assert explanation.graph_break_count == 0, explanation.break_reasons
 
     # aot_eager keeps the trace honest without inductor's C++ compile step.

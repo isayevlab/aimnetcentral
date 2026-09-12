@@ -786,3 +786,24 @@ def test_global_mode2_full_model_cpu_batch_vs_individual():
             }
             individual.append(model(single)["energy"])
     torch.testing.assert_close(batched, torch.cat(individual), atol=1e-6, rtol=1e-5)
+
+
+def test_global_mode2_model_revalidates_a_reused_dict():
+    """A standalone model validates every call: the dict it returns carries no
+    mark, so corrupting a neighbor matrix in place is caught on the next call."""
+    from aimnet.models.base import AIMNet2Base
+
+    data = {
+        "coord": torch.zeros((2, 4, 3), dtype=torch.float32),
+        "numbers": torch.tensor([[6, 1, 1, 0], [8, 1, 1, 0]]),
+        "charge": torch.zeros(2),
+        "nbmat": torch.tensor([
+            [[1, 2, 8], [0, 2, 8], [0, 1, 8], [8, 8, 8]],
+            [[5, 6, 8], [4, 6, 8], [4, 5, 8], [8, 8, 8]],
+        ]),
+    }
+    out = AIMNet2Base().prepare_input(data)
+    assert "_mode2_validated" not in out
+    out["nbmat"][0, 0, 0] = 4  # system 0 pointing into system 1
+    with pytest.raises(ValueError, match="batch interval"):
+        AIMNet2Base().prepare_input(out)

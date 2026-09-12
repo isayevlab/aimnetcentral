@@ -291,8 +291,10 @@ class AIMNet2Base(nn.Module):
 
     def prepare_input(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         """Common operations for input preparation."""
-        # No-op when the calculator already validated (and marked) this batch.
-        nbops.validate_mode2_input(data)
+        # The calculator marks the batch it validated; the mark is consumed here
+        # so a dict fed back to a standalone model is validated again.
+        if not nbops.consume_mode2_validated(data):
+            nbops.validate_mode2_input(data)
         data = self._prepare_dtype(data)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)

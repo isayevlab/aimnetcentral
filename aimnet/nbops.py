@@ -207,28 +207,46 @@ def validate_mode2_nbmat_raw(data: dict[str, Tensor], *, suffix: str) -> None:
 _MODE2_VALIDATED_KEY = "_mode2_validated"
 
 
-def is_mode2_validated(data: dict[str, Tensor]) -> bool:
-    """Whether :func:`validate_mode2_input` has already accepted ``data``."""
-    return data.get(_MODE2_VALIDATED_KEY) is not None
+def mark_mode2_validated(data: dict[str, Tensor]) -> None:
+    """Record on a freshly converted mode-2 batch that it has been validated.
+
+    Only the calculator calls this, on the dict it built itself in
+    ``to_input_tensors``; the model's ``prepare_input`` consumes the mark once
+    and validates when it is absent.  The mark is a private key that
+    ``to_input_tensors`` never forwards, so a caller's dict is never marked
+    and a recursive evaluation re-validates its own, re-indexed input.
+    """
+    nbmat = data.get("nbmat")
+    if isinstance(nbmat, Tensor) and nbmat.ndim == 3:
+        # A CPU scalar, like ``_nb_mode``: the value is never read on device,
+        # so no fill kernel is launched per evaluation.
+        data[_MODE2_VALIDATED_KEY] = torch.ones((), dtype=torch.bool)
+
+
+def consume_mode2_validated(data: dict[str, Tensor]) -> bool:
+    """Remove the validation mark and report whether it was present.
+
+    The mark is consumed, not read, so it never survives into a model output:
+    a dict that is fed back to a standalone model is validated again.
+    """
+    return data.pop(_MODE2_VALIDATED_KEY, None) is not None
 
 
 def validate_mode2_input(data: dict[str, Tensor]) -> None:
-    """Validate a batch once before any neighbor tensor is narrowed or consumed.
+    """Validate a batch before any neighbor tensor is narrowed or consumed.
 
     Every entry path (the calculator, a standalone model, the calculator's
-    Hessian split probe) calls this single chokepoint.  For flat inputs it
-    only checks that suffixed neighbor matrices match the primary layout.
-    For a 3D ``nbmat`` it normalizes the periodic geometry in place, requires
-    finite coordinates, validates every distinct neighbor matrix (suffixes
-    that alias the same tensor object, with aliased or absent shifts, are
-    validated once), and marks ``data`` so a downstream ``prepare_input``
-    does not repeat the work.  The mark is a private key that
-    ``AIMNet2Calculator.to_input_tensors`` does not forward, so a recursive
-    evaluation re-validates its own, re-indexed input.
+    Hessian split) calls this single chokepoint.  For flat inputs it only
+    checks that suffixed neighbor matrices match the primary layout.  For a
+    3D ``nbmat`` it normalizes the periodic geometry in place (a shared cell
+    or ``pbc`` is broadcast to every system), requires finite coordinates,
+    and validates every distinct neighbor matrix: suffixes that alias the
+    same tensor object, with aliased or absent shifts, are validated once.
+    It never marks ``data``; see :func:`mark_mode2_validated`.
     """
     nbmat = data.get("nbmat")
     validate_neighbor_suffix_layout(data)
-    if not (isinstance(nbmat, Tensor) and nbmat.ndim == 3) or is_mode2_validated(data):
+    if not (isinstance(nbmat, Tensor) and nbmat.ndim == 3):
         return
     normalize_mode2_periodic_geometry(data, B=nbmat.shape[0])
     coord = data.get("coord")
@@ -249,7 +267,6 @@ def validate_mode2_input(data: dict[str, Tensor]) -> None:
         validate_mode2_nbmat_raw(data, suffix=suffix)
         if isinstance(current, Tensor):
             seen.append((current, shifts))
-    data[_MODE2_VALIDATED_KEY] = torch.ones((), dtype=torch.bool, device=nbmat.device)
 
 
 def _prepare_mode2_neighbor_tensors(data: dict[str, Tensor]) -> None:
