@@ -1,5 +1,7 @@
 """Tests for aimnet.nbops - neighbor operations module."""
 
+import os
+
 import pytest
 import torch
 
@@ -1043,12 +1045,22 @@ def test_global_mode2_validate_input_dedups_aliased_suffixes(monkeypatch):
     assert sorted(calls) == ["", "_dftd3"]
 
 
+def _dynamo_disabled() -> bool:
+    """True when ``torch.compile`` is a no-op in this environment.
+
+    torch reads ``TORCH_COMPILE_DISABLE`` into ``config.disable`` at import and
+    checks ``TORCHDYNAMO_DISABLE`` (the CI torch-matrix setting) at ``optimize()``
+    time, so both must be consulted; ``torch._dynamo.explain`` reports -1 graph
+    breaks when nothing was traced.
+    """
+    return bool(torch._dynamo.config.disable) or os.environ.get("TORCHDYNAMO_DISABLE", "") == "1"
+
+
+@pytest.mark.skipif(_dynamo_disabled(), reason="torch.compile is disabled in this environment")
 def test_global_mode2_validation_traces_without_graph_breaks_cpu():
     """Validation must not fall back to ``Tensor.item()`` under torch.compile:
     the CPU eager path raises ``ValueError`` from ``.item()``, the compiled
     path queues ``torch._assert_async`` and raises ``RuntimeError``."""
-    if torch._dynamo.config.disable:
-        pytest.skip("torch.compile is disabled in this environment")
     torch._dynamo.reset()
 
     def prepare(data):
