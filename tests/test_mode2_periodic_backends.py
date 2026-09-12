@@ -85,7 +85,7 @@ def test_global_mode2_cpu_periodic_observables(backend: str):
 @pytest.mark.parametrize("backend", ["dsf", "dftd3", "ewald", "pme"])
 def test_global_mode2_cpu_periodic_forces_and_stress(backend: str):
     data = _periodic_mode2_data(torch.device("cpu"))
-    if backend == "ewald":
+    if backend in ("ewald", "pme"):
         data = {
             **data,
             "coord": data["coord"].detach().requires_grad_(True),
@@ -123,9 +123,9 @@ def test_global_mode2_periodic_matches_single_system(backend: str):
             atol=2e-5,
             rtol=2e-4,
         )
-        if backend == "ewald":
-            batch_forces, batch_virial = _ewald_forces_and_virial(data)
-            single_forces, single_virial = _ewald_forces_and_virial(single_data)
+        if backend in ("ewald", "pme"):
+            batch_forces, batch_virial = _energy_graph_forces_and_virial(backend, data)
+            single_forces, single_virial = _energy_graph_forces_and_virial(backend, single_data)
             torch.testing.assert_close(
                 batch_forces[batch_index],
                 single_forces[0],
@@ -154,12 +154,14 @@ def test_global_mode2_periodic_matches_single_system(backend: str):
             )
 
 
-def _ewald_forces_and_virial(data: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
-    """Differentiate the Ewald energy for its autograd-only observables."""
+def _energy_graph_forces_and_virial(
+    backend: str, data: dict[str, torch.Tensor]
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Differentiate an energy-graph backend (Ewald/PME) for its autograd-only observables."""
     sample = {key: value.clone() for key, value in data.items()}
     sample["coord"] = sample["coord"].detach().requires_grad_(True)
     sample["cell"] = sample["cell"].detach().requires_grad_(True)
-    energy = _module("ewald")(sample)["e_h"].sum()
+    energy = _module(backend)(sample)["e_h"].sum()
     grad_coord, grad_cell = torch.autograd.grad(energy, (sample["coord"], sample["cell"]))
     return -grad_coord, grad_cell
 
