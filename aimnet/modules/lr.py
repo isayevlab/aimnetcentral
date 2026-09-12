@@ -13,6 +13,10 @@ from nvalchemiops.torch.interactions.electrostatics import (
     ewald_summation,
     particle_mesh_ewald,
 )
+from nvalchemiops.torch.interactions.electrostatics.parameters import (
+    estimate_ewald_parameters,
+    estimate_pme_parameters,
+)
 from nvalchemiops.torch.neighbors import neighbor_list
 from torch import Tensor, nn
 from torch.autograd import Function
@@ -112,6 +116,33 @@ def _flatten_backend_view(tensor: Tensor, name: str) -> Tensor:
     if flattened._base is None:
         raise ValueError(f"{name} must be view-flattenable across (B, N).")
     return flattened
+
+
+def _real_atom_periodic_parameters(
+    backend: str,
+    positions: Tensor,
+    cell: Tensor,
+    batch_idx: Tensor,
+    real_mask: Tensor,
+    accuracy: float,
+) -> dict[str, Any]:
+    """Estimate Ewald/PME parameters from the real atoms of each system.
+
+    nvalchemiops estimates the splitting parameter ``alpha`` (and the k-space
+    cutoff or PME mesh) from the per-system atom count of the ``batch_idx`` it
+    receives.  Mode 2 hands the kernel every padded row, so left to the
+    kernel the estimate would depend on the padding width and the energy of a
+    system would change with the size of the largest molecule in its batch.
+    Running the same estimator over the real atoms only reproduces what the
+    flat mode-1 call gets, so mode 1 and mode 2 agree to rounding.
+    """
+    with torch.no_grad():
+        batch_idx_real = batch_idx[real_mask]
+        if backend == "ewald":
+            params = estimate_ewald_parameters(positions.detach(), cell.detach(), batch_idx_real, accuracy)
+            return {"alpha": params.alpha, "k_cutoff": params.reciprocal_space_cutoff}
+        params = estimate_pme_parameters(positions.detach(), cell.detach(), batch_idx_real, accuracy)
+        return {"alpha": params.alpha, "mesh_dimensions": tuple(params.mesh_dimensions)}
 
 
 _PME_MIN_NVALCHEMIOPS = (0, 4, 1)
@@ -539,17 +570,26 @@ class LRCoulomb(nn.Module):
         if cell is None:
             raise ValueError("nvalchemi Coulomb requires periodic cell data")
 
+        if backend not in ("ewald", "pme"):
+            raise ValueError(f"backend must be 'ewald' or 'pme', got {backend!r}")
+        backend_kwargs: dict[str, Any] = {}
         mode2 = nbops.get_nb_mode(data) == 2
         if mode2:
             mode2_inputs = _mode2_backend_inputs(data, suffix)
             coord_real = mode2_inputs.coord
-            charges_real = data[self.key_in].to(coord.dtype).flatten(0, 1).masked_fill(data["mask_i"].flatten(), 0.0)
+            real_mask = ~data["mask_i"].flatten()
+            charges_real = data[self.key_in].to(coord.dtype).flatten(0, 1).masked_fill(~real_mask, 0.0)
             mol_idx_real = mode2_inputs.batch_idx
             nbmat_real = mode2_inputs.neighbor_matrix
             shifts_real = mode2_inputs.shifts.to(torch.int32) if mode2_inputs.shifts is not None else None
             cell = mode2_inputs.cell.to(coord.dtype) if mode2_inputs.cell is not None else None
             N = mode2_inputs.fill_value
             num_systems = mode2_inputs.num_systems
+            # The dummy rows stay in the kernel call (zero charge, sentinel-only
+            # neighbors) but must not enter the parameter estimate.
+            backend_kwargs = _real_atom_periodic_parameters(
+                backend, coord_real, cell, mol_idx_real, real_mask, float(self.ewald_accuracy)
+            )
         else:
             charges = data[self.key_in]
             mol_idx = data["mol_idx"]
@@ -574,8 +614,6 @@ class LRCoulomb(nn.Module):
             shifts_real = shifts[:-1].to(torch.int32)
             num_systems = int(mol_idx_real.max().item()) + 1
 
-        if backend not in ("ewald", "pme"):
-            raise ValueError(f"backend must be 'ewald' or 'pme', got {backend!r}")
         fn = particle_mesh_ewald if backend == "pme" else ewald_summation
         energies_per_atom = fn(
             positions=coord_real,
@@ -586,6 +624,7 @@ class LRCoulomb(nn.Module):
             neighbor_matrix_shifts=shifts_real,
             mask_value=N,
             accuracy=float(self.ewald_accuracy),
+            **backend_kwargs,
         )
         ke = constants.Hartree * constants.Bohr
         energies_per_system = torch.zeros(num_systems, dtype=torch.float64, device=coord.device)

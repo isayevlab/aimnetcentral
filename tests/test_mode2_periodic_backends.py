@@ -154,9 +154,7 @@ def test_global_mode2_periodic_matches_single_system(backend: str):
             )
 
 
-def _energy_graph_forces_and_virial(
-    backend: str, data: dict[str, torch.Tensor]
-) -> tuple[torch.Tensor, torch.Tensor]:
+def _energy_graph_forces_and_virial(backend: str, data: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
     """Differentiate an energy-graph backend (Ewald/PME) for its autograd-only observables."""
     sample = {key: value.clone() for key, value in data.items()}
     sample["coord"] = sample["coord"].detach().requires_grad_(True)
@@ -258,3 +256,195 @@ def test_global_mode2_gpu_periodic_observables(backend: str):
     result = _module(backend).cuda()(data)
     key = "energy" if backend == "dftd3" else "e_h"
     assert torch.isfinite(result[key]).all()
+
+
+# ---------------------------------------------------------------------------
+# Mode 1 (flat) vs mode 2 (padded) parity for the energy-graph backends.
+#
+# nvalchemiops estimates the Ewald splitting parameter (and the k-space cutoff
+# or PME mesh) from the per-system atom count of the ``batch_idx`` it receives.
+# Mode 2 hands the kernel every padded row, so unless the parameters are
+# estimated from the real atoms the energy of a system depends on how much
+# padding its batch carries.  These tests pin the mode-2 result to the flat
+# mode-1 result and to itself across padding widths.
+# ---------------------------------------------------------------------------
+
+
+def _cation_in_box(device: torch.device):
+    coord = torch.tensor(
+        [[0.0, 0.0, 0.0], [1.0, 0.1, 0.0], [-0.3, 0.9, 0.2], [0.2, -0.4, 1.0]],
+        dtype=torch.float64,
+        device=device,
+    )
+    numbers = torch.tensor([7, 1, 1, 1], device=device)
+    charges = torch.tensor([0.4, 0.2, 0.2, 0.2], dtype=torch.float64, device=device)
+    cell = torch.eye(3, dtype=torch.float64, device=device) * 12.0
+    return coord, numbers, charges, cell
+
+
+def _periodic_neighbors(coord: torch.Tensor, cell: torch.Tensor, cutoff: float = 15.0):
+    from aimnet.calculators.neighbors import AdaptiveNeighborList
+
+    pbc = torch.ones((1, 3), dtype=torch.bool, device=coord.device)
+    nbmat, _num, shifts = AdaptiveNeighborList(cutoff=cutoff)(coord, cell.unsqueeze(0), pbc)
+    return nbmat.to(torch.int64), shifts.to(torch.float64)
+
+
+def _flat_periodic_inputs(coord, numbers, charges, cell, nbmat, shifts) -> dict[str, torch.Tensor]:
+    """Mode 1: one trailing padding row, single molecule."""
+    N, M = nbmat.shape
+    data = {
+        "coord": torch.cat([coord, coord.new_zeros(1, 3)]),
+        "numbers": torch.cat([numbers, numbers.new_zeros(1)]),
+        "charges": torch.cat([charges, charges.new_zeros(1)]),
+        "mol_idx": torch.zeros(N + 1, dtype=torch.long, device=coord.device),
+        "cell": cell,
+        "pbc": torch.ones(3, dtype=torch.bool, device=coord.device),
+        "nbmat": torch.cat([nbmat, torch.full((1, M), N, dtype=nbmat.dtype, device=coord.device)]),
+        "shifts": torch.cat([shifts, shifts.new_zeros(1, M, 3)]),
+    }
+    data["nbmat_coulomb"] = data["nbmat"]
+    data["shifts_coulomb"] = data["shifts"]
+    return nbops.calc_masks(nbops.set_nb_mode(data))
+
+
+def _padded_mode2_inputs(coord, numbers, charges, cell, nbmat, shifts, pads: int) -> dict[str, torch.Tensor]:
+    """Mode 2, B=1, with ``pads`` dummy rows appended to the real atoms."""
+    N, M = nbmat.shape
+    sentinel = N + pads
+    real = nbmat < N
+    nb = torch.full((1, sentinel, M), sentinel, dtype=torch.int32, device=coord.device)
+    nb[0, :N] = torch.where(real, nbmat, torch.full_like(nbmat, sentinel)).to(torch.int32)
+    sh = torch.zeros((1, sentinel, M, 3), dtype=torch.float64, device=coord.device)
+    sh[0, :N] = torch.where(real.unsqueeze(-1), shifts, torch.zeros_like(shifts))
+    data = {
+        "coord": torch.cat([coord, coord.new_zeros(pads, 3)]).unsqueeze(0),
+        "numbers": torch.cat([numbers, numbers.new_zeros(pads)]).unsqueeze(0),
+        "charges": torch.cat([charges, charges.new_zeros(pads)]).unsqueeze(0),
+        "cell": cell.unsqueeze(0),
+        "pbc": torch.ones((1, 3), dtype=torch.bool, device=coord.device),
+        "nbmat": nb,
+        "shifts": sh,
+    }
+    data["nbmat_coulomb"] = nb
+    data["shifts_coulomb"] = sh
+    return nbops.calc_masks(nbops.set_nb_mode(data))
+
+
+def _energy_and_real_forces(module, data: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
+    sample = dict(data)
+    sample["coord"] = sample["coord"].detach().clone().requires_grad_(True)
+    energy = module(sample)["e_h"].sum()
+    (grad,) = torch.autograd.grad(energy, sample["coord"])
+    n_real = int((sample["numbers"] != 0).sum())
+    return energy.detach(), -grad.reshape(-1, 3)[:n_real]
+
+
+@pytest.mark.parametrize("backend", ["ewald", "pme"])
+def test_global_mode2_matches_flat_mode1(backend: str):
+    """A padded mode-2 system reproduces the flat mode-1 energy and forces."""
+    device = torch.device("cpu")
+    coord, numbers, charges, cell = _cation_in_box(device)
+    nbmat, shifts = _periodic_neighbors(coord, cell)
+    module = LRCoulomb(method=backend, subtract_sr=False, ewald_accuracy=1e-6)
+    e_flat, f_flat = _energy_and_real_forces(
+        module, _flat_periodic_inputs(coord, numbers, charges, cell, nbmat, shifts)
+    )
+    e_mode2, f_mode2 = _energy_and_real_forces(
+        module, _padded_mode2_inputs(coord, numbers, charges, cell, nbmat, shifts, pads=1)
+    )
+    torch.testing.assert_close(e_mode2, e_flat, atol=1e-9, rtol=0.0)
+    torch.testing.assert_close(f_mode2, f_flat, atol=1e-9, rtol=0.0)
+
+
+@pytest.mark.parametrize("backend", ["ewald", "pme"])
+def test_global_mode2_energy_independent_of_padding_width(backend: str):
+    """Adding dummy rows to a system must not change its energy or forces."""
+    device = torch.device("cpu")
+    coord, numbers, charges, cell = _cation_in_box(device)
+    nbmat, shifts = _periodic_neighbors(coord, cell)
+    module = LRCoulomb(method=backend, subtract_sr=False, ewald_accuracy=1e-6)
+    e_1, f_1 = _energy_and_real_forces(module, _padded_mode2_inputs(coord, numbers, charges, cell, nbmat, shifts, 1))
+    e_8, f_8 = _energy_and_real_forces(module, _padded_mode2_inputs(coord, numbers, charges, cell, nbmat, shifts, 8))
+    torch.testing.assert_close(e_8, e_1, atol=1e-9, rtol=0.0)
+    torch.testing.assert_close(f_8, f_1, atol=1e-9, rtol=0.0)
+
+
+@pytest.mark.parametrize("backend", ["ewald", "pme"])
+def test_global_mode2_mixed_size_batch_matches_flat_batch(backend: str):
+    """Two systems of different size in one mode-2 batch match the flat mode-1 batch.
+
+    The reference is the flat two-molecule batch (``mol_idx`` 0/1 plus one
+    padding row), i.e. what the calculator's flat path hands the kernel, so
+    the batch-shared PME parameters are the same on both sides.
+    """
+    device = torch.device("cpu")
+    coord_a, numbers_a, charges_a, cell = _cation_in_box(device)
+    coord_b, numbers_b, charges_b = coord_a[:3] + 0.3, numbers_a[:3], charges_a[:3] + 0.1
+    nb_a, sh_a = _periodic_neighbors(coord_a, cell)
+    nb_b, sh_b = _periodic_neighbors(coord_b, cell)
+    module = LRCoulomb(method=backend, subtract_sr=False, ewald_accuracy=1e-6)
+    M = max(nb_a.shape[1], nb_b.shape[1])
+    cells = cell.unsqueeze(0).expand(2, -1, -1).contiguous()
+
+    # Flat mode 1: rows [a0..a3, b0..b2, pad], fill value 7, mol_idx 0/1.
+    n_flat = 7
+    flat_nbmat = torch.full((n_flat + 1, M), n_flat, dtype=torch.int64, device=device)
+    flat_shifts = torch.zeros((n_flat + 1, M, 3), dtype=torch.float64, device=device)
+    for offset, (nb, sh, n_real) in ((0, (nb_a, sh_a, 4)), (4, (nb_b, sh_b, 3))):
+        real = nb < n_real
+        flat_nbmat[offset : offset + n_real, : nb.shape[1]] = torch.where(
+            real, nb + offset, torch.full_like(nb, n_flat)
+        )
+        flat_shifts[offset : offset + n_real, : nb.shape[1]] = torch.where(real.unsqueeze(-1), sh, torch.zeros_like(sh))
+    flat = {
+        "coord": torch.cat([coord_a, coord_b, coord_a.new_zeros(1, 3)]),
+        "numbers": torch.cat([numbers_a, numbers_b, numbers_a.new_zeros(1)]),
+        "charges": torch.cat([charges_a, charges_b, charges_a.new_zeros(1)]),
+        "mol_idx": torch.tensor([0, 0, 0, 0, 1, 1, 1, 1], device=device),
+        "cell": cells,
+        "pbc": torch.ones((2, 3), dtype=torch.bool, device=device),
+        "nbmat": flat_nbmat,
+        "shifts": flat_shifts,
+        "nbmat_coulomb": flat_nbmat,
+        "shifts_coulomb": flat_shifts,
+    }
+    flat_sample = nbops.calc_masks(nbops.set_nb_mode(flat))
+    flat_sample["coord"] = flat_sample["coord"].detach().clone().requires_grad_(True)
+    e_flat = module(flat_sample)["e_h"]
+    (g_flat,) = torch.autograd.grad(e_flat.sum(), flat_sample["coord"])
+    e_flat, f_flat = e_flat.detach(), -g_flat[:n_flat]
+
+    # Mode 2: one (2, 6, M) batch, system a gets 2 dummies and b gets 3.
+    Np = 6
+    sentinel = 2 * Np
+    nbmat = torch.full((2, Np, M), sentinel, dtype=torch.int32, device=device)
+    shifts = torch.zeros((2, Np, M, 3), dtype=torch.float64, device=device)
+    for b, (nb, sh, n_real) in enumerate(((nb_a, sh_a, 4), (nb_b, sh_b, 3))):
+        real = nb < n_real
+        nbmat[b, :n_real, : nb.shape[1]] = torch.where(real, nb + b * Np, torch.full_like(nb, sentinel)).to(torch.int32)
+        shifts[b, :n_real, : nb.shape[1]] = torch.where(real.unsqueeze(-1), sh, torch.zeros_like(sh))
+    coord = torch.zeros((2, Np, 3), dtype=torch.float64, device=device)
+    coord[0, :4], coord[1, :3] = coord_a, coord_b
+    numbers = torch.zeros((2, Np), dtype=torch.long, device=device)
+    numbers[0, :4], numbers[1, :3] = numbers_a, numbers_b
+    charges = torch.zeros((2, Np), dtype=torch.float64, device=device)
+    charges[0, :4], charges[1, :3] = charges_a, charges_b
+    data = {
+        "coord": coord,
+        "numbers": numbers,
+        "charges": charges,
+        "cell": cells,
+        "pbc": torch.ones((2, 3), dtype=torch.bool, device=device),
+        "nbmat": nbmat,
+        "shifts": shifts,
+        "nbmat_coulomb": nbmat,
+        "shifts_coulomb": shifts,
+    }
+    sample = nbops.calc_masks(nbops.set_nb_mode(data))
+    sample["coord"] = sample["coord"].detach().clone().requires_grad_(True)
+    energies = module(sample)["e_h"]
+    (grad,) = torch.autograd.grad(energies.sum(), sample["coord"])
+    torch.testing.assert_close(energies, e_flat, atol=1e-9, rtol=0.0)
+    torch.testing.assert_close(-grad[0, :4], f_flat[:4], atol=1e-9, rtol=0.0)
+    torch.testing.assert_close(-grad[1, :3], f_flat[4:7], atol=1e-9, rtol=0.0)
