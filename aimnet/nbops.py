@@ -6,8 +6,15 @@ _SIGNED_INTEGER_DTYPES = {torch.int8, torch.int16, torch.int32, torch.int64}
 
 
 def _mode2_check(condition: Tensor, message: str) -> None:
-    """Raise on CPU or queue a device-side assertion on CUDA."""
-    if condition.device.type == "cuda":
+    """Assert a data-dependent mode-2 invariant.
+
+    Eager CPU raises ``ValueError`` from a host-side read.  CUDA and any
+    ``torch.compile`` trace queue ``torch._assert_async`` instead, which never
+    synchronizes, traces without a graph break, and raises ``RuntimeError``
+    when it fires (on CUDA as a device-side assertion that poisons the
+    context, so restart the process after a validation failure there).
+    """
+    if condition.device.type == "cuda" or torch.compiler.is_compiling():
         torch._assert_async(condition, message)
     elif not condition.item():
         raise ValueError(message)
@@ -195,6 +202,54 @@ def validate_mode2_nbmat_raw(data: dict[str, Tensor], *, suffix: str) -> None:
             (shifts.eq(0) | ~center_slots).all(),
             f"{shifts_key} must be zero for padded center rows.",
         )
+
+
+_MODE2_VALIDATED_KEY = "_mode2_validated"
+
+
+def is_mode2_validated(data: dict[str, Tensor]) -> bool:
+    """Whether :func:`validate_mode2_input` has already accepted ``data``."""
+    return data.get(_MODE2_VALIDATED_KEY) is not None
+
+
+def validate_mode2_input(data: dict[str, Tensor]) -> None:
+    """Validate a batch once before any neighbor tensor is narrowed or consumed.
+
+    Every entry path (the calculator, a standalone model, the calculator's
+    Hessian split probe) calls this single chokepoint.  For flat inputs it
+    only checks that suffixed neighbor matrices match the primary layout.
+    For a 3D ``nbmat`` it normalizes the periodic geometry in place, requires
+    finite coordinates, validates every distinct neighbor matrix (suffixes
+    that alias the same tensor object, with aliased or absent shifts, are
+    validated once), and marks ``data`` so a downstream ``prepare_input``
+    does not repeat the work.  The mark is a private key that
+    ``AIMNet2Calculator.to_input_tensors`` does not forward, so a recursive
+    evaluation re-validates its own, re-indexed input.
+    """
+    nbmat = data.get("nbmat")
+    validate_neighbor_suffix_layout(data)
+    if not (isinstance(nbmat, Tensor) and nbmat.ndim == 3) or is_mode2_validated(data):
+        return
+    normalize_mode2_periodic_geometry(data, B=nbmat.shape[0])
+    coord = data.get("coord")
+    if isinstance(coord, Tensor) and coord.is_floating_point():
+        # Dummy rows reach the periodic kernels with zero charge; a non-finite
+        # coordinate there still poisons the Ewald structure factor.
+        _mode2_check(torch.isfinite(coord).all(), "coord must be finite for mode-2 input.")
+    seen: list[tuple[Tensor, Tensor | None]] = []
+    for suffix in NBMAT_SUFFIXES:
+        if f"nbmat{suffix}" not in data and f"shifts{suffix}" not in data:
+            continue
+        current = data.get(f"nbmat{suffix}")
+        shifts = data.get(f"shifts{suffix}")
+        if isinstance(current, Tensor) and any(
+            current is previous and shifts is previous_shifts for previous, previous_shifts in seen
+        ):
+            continue
+        validate_mode2_nbmat_raw(data, suffix=suffix)
+        if isinstance(current, Tensor):
+            seen.append((current, shifts))
+    data[_MODE2_VALIDATED_KEY] = torch.ones((), dtype=torch.bool, device=nbmat.device)
 
 
 def _prepare_mode2_neighbor_tensors(data: dict[str, Tensor]) -> None:
