@@ -61,7 +61,7 @@ nbmat[b, i, k] == b * N + j       # valid neighbor
 nbmat[b, i, k] == B * N           # excluded slot
 ```
 
-Periodic mode 2 uses full three-dimensional cells with shape `(B, 3, 3)` for batches, or `(1, 3, 3)` for one system. `pbc` is optional when a cell is supplied; if present, all three components must be true. Each periodic neighbor matrix must have aligned integral lattice coefficients in `shifts.shape == (B, N, M, 3)`. Energy, forces, stress, and Hessian requests preserve the 3D execution path; Hessians select only real atoms and return `(R, 3, R, 3)` per system, where `R` excludes the padded tail. Batched Hessians stack when all systems have the same `R`, otherwise they return a list. Slab, mixed-periodicity, and partial-PBC inputs are not supported yet and are rejected with `ValueError`.
+Periodic mode 2 uses full three-dimensional cells. A `(B, 3, 3)` tensor gives each system its own cell; a single `(3, 3)` or `(1, 3, 3)` cell is broadcast to every system of the batch, the same way a `(3,)` `pbc` is. `pbc` is optional when a cell is supplied; if present, all three components must be true (partial or mixed periodicity is a content error, see the error semantics below). Each periodic neighbor matrix must have aligned integral lattice coefficients in `shifts.shape == (B, N, M, 3)`. Coordinates must be finite in every row, dummy rows included: they reach the periodic kernels with zero charge, and a non-finite dummy coordinate would still poison the Ewald structure factor. A system may consist of dummy rows only (a batch padded to a static size, for example); it contributes zero energy and does not influence the parameters estimated for the other systems. Ewald estimates its splitting parameter and k-space cutoff per system and PME one shared parameter set per batch, both from the real atoms only, so a system's energy does not depend on how much padding its batch carries and matches the flat evaluation to rounding (for PME the flat reference is the same batch of systems, because its parameters are shared across a batch in both layouts). Energy, forces, stress, and Hessian requests preserve the 3D execution path; Hessians select only real atoms and return `(R, 3, R, 3)` per system, where `R` excludes the padded tail. Batched Hessians stack when all systems have the same `R`, otherwise they return a list. Slab and mixed-periodicity inputs are not supported yet.
 
 All four periodic long-range producers—DSF, DFT-D3, Ewald, and PME—use the same global indices and aligned shifts. Their periodic neighbor lists must represent each physical interaction symmetrically: if an edge uses shift `s`, the reverse edge must use the opposite shift `-s`. A directed or half neighbor list is not a valid input for these long-range observables. A full-observable request can be made directly:
 
@@ -72,14 +72,15 @@ result = calc(
         "numbers": numbers_batch,  # (B, N)
         "charge": charges,
         "cell": cells,             # (B, 3, 3)
-        "nbmat": nbmat_global,     # (B, N, M), global indices
-        "shifts": shifts,          # (B, N, M, 3)
-        "nbmat_lr": nbmat_global,
-        "shifts_lr": shifts,
-        "nbmat_coulomb": nbmat_global,
-        "shifts_coulomb": shifts,
-        "nbmat_dftd3": nbmat_global,
-        "shifts_dftd3": shifts,
+        "nbmat": nbmat_sr,             # (B, N, M_sr), global indices, model cutoff
+        "shifts": shifts_sr,           # (B, N, M_sr, 3)
+        "nbmat_lr": nbmat_lr,          # (B, N, M_lr), built at calc.cutoff_lr
+        "shifts_lr": shifts_lr,
+        "nbmat_coulomb": nbmat_coulomb,  # (B, N, M_c), built at the Ewald/PME real-space cutoff
+        "shifts_coulomb": shifts_coulomb,
+        "cutoff_coulomb": r_c,         # lets the calculator check that cutoff
+        "nbmat_dftd3": nbmat_lr,       # may alias another list built at a sufficient cutoff
+        "shifts_dftd3": shifts_lr,
     },
     forces=True,
     stress=True,
@@ -88,6 +89,8 @@ result = calc(
 ```
 
 Calculator results from an explicit mode-2 Hessian split retain the singleton system axis for each recursive subsystem (for example, energy `(B, 1)` and forces `(B, 1, N, 3)`). This preserves the existing mode-2 collection behavior; the Hessian itself contains only real atoms.
+
+**Coulomb neighbor-list cutoff.** In mode 2 the calculator builds no neighbor lists, so the caller also owns the real-space cutoff of the Ewald/PME sum. The kernels evaluate the damped real-space term over exactly the pairs in `nbmat_coulomb`, while the splitting parameter is estimated for a real-space cutoff of `r_c = sqrt(-2 ln ε) · (V² / N_real)^(1/6) / sqrt(2π)` per system (`ε` is `ewald_accuracy`, `V` the cell volume, `N_real` the number of real atoms). A `nbmat_coulomb` built with a shorter cutoff truncates the real-space sum silently: reusing the model's short-range list for it costs on the order of meV per system at `ewald_accuracy=1e-6`. Build `nbmat_coulomb`/`shifts_coulomb` with a cutoff of at least the largest `r_c` in the batch (`nvalchemiops.torch.interactions.electrostatics.estimate_ewald_parameters` and `estimate_pme_parameters` return it as `real_space_cutoff`), and pass that cutoff as `cutoff_coulomb`: the calculator then warns when it is shorter than the estimate. The short-range list, `nbmat_lr`, and `nbmat_dftd3` keep their own cutoffs (the model cutoff, `cutoff_lr`, and the DFT-D3 cutoff).
 
 Legacy local matrices can be converted when their exclusions are already tail-packed:
 
@@ -100,7 +103,9 @@ nbmat_global = nbops.convert_mode2_local_to_global(
 )
 ```
 
-The helper does not reorder slots. If exclusions are interleaved, the producer must repack both the neighbor matrix and its aligned shifts together; moving indices alone would assign the wrong periodic image. This is an intentional API break for callers that previously supplied local 3D mode-2 indices. Invalid CUDA content queues a device-side assertion, so restart the CUDA process after a validation failure.
+The helper does not reorder slots. If exclusions are interleaved, the producer must repack both the neighbor matrix and its aligned shifts together; moving indices alone would assign the wrong periodic image. This is an intentional API break for callers that previously supplied local 3D mode-2 indices.
+
+Mode-2 input is validated before any neighbor tensor is narrowed or handed to a kernel: index bounds, per-system ownership, packed sentinel tails, shift alignment, finite coordinates, and the dummy-row layout. A plain evaluation validates once: the calculator validates its converted batch and marks it so the model's `prepare_input` does not repeat the work (the mark never reaches the caller's dict). A standalone model validates on every call. A Hessian request on a batch validates the batch once before splitting it and each subsystem once more in its own evaluation. Layout errors that need no tensor read (a wrong rank, dtype, or shape) raise `ValueError` in eager code; inside a `fullgraph=True` trace they surface as the compiler's error instead. Content errors depend on where they are detected: eager CPU raises `ValueError`; CUDA and any `torch.compile` trace queue a device-side assertion that raises `RuntimeError` without a host synchronization, and on CUDA the assertion poisons the context, so restart the CUDA process after a validation failure there. Partial or mixed periodicity is a content error and follows the same rule.
 
 ### Changing Coulomb Methods
 
@@ -542,12 +547,19 @@ calc.set_dftd3_cutoff(cutoff=20.0, smoothing_fraction=0.25)  # smoothing from 15
 | `mult` | `float32` | `(B,)` | Multiplicity |
 | `mol_idx` | `int64` | `(N,)` | Molecule index per atom |
 | `cell` | `float32` | `(3, 3)` or `(B, 3, 3)` | Unit cell vectors |
-| `nbmat` | `int64` | `(N, max_nb)` | Pre-computed neighbor matrix |
-| `nbmat_lr` | `int64` | `(N, max_nb)` | Long-range neighbor matrix |
+| `pbc` | `bool` | `(3,)` or `(B, 3)` | Periodic directions (mode 2 requires all three) |
+| `nbmat` | signed int | `(N, max_nb)` or `(B, N, M)` | Pre-computed neighbor matrix; 3D means global mode 2 |
+| `nbmat_lr` | signed int | `(N, max_nb)` or `(B, N, M)` | Long-range neighbor matrix |
+| `nbmat_coulomb` | signed int | `(N, max_nb)` or `(B, N, M)` | Coulomb neighbor matrix (Ewald/PME real-space cutoff) |
+| `nbmat_dftd3` | signed int | `(N, max_nb)` or `(B, N, M)` | DFT-D3 neighbor matrix |
 | `nb_pad_mask` | `bool` | `(N, max_nb)` | Optional padding mask for `nbmat` |
 | `nb_pad_mask_lr` | `bool` | `(N, max_nb)` | Optional padding mask for `nbmat_lr` |
-| `shifts` | `float32` | `(N, max_nb, 3)` | PBC shifts for neighbors |
-| `shifts_lr` | `float32` | `(N, max_nb, 3)` | PBC shifts for LR neighbors |
+| `shifts` | `float32` | `(N, max_nb, 3)` or `(B, N, M, 3)` | PBC shifts for neighbors |
+| `shifts_lr` | `float32` | `(N, max_nb, 3)` or `(B, N, M, 3)` | PBC shifts for LR neighbors |
+| `shifts_coulomb` | `float32` | `(N, max_nb, 3)` or `(B, N, M, 3)` | PBC shifts for `nbmat_coulomb` |
+| `shifts_dftd3` | `float32` | `(N, max_nb, 3)` or `(B, N, M, 3)` | PBC shifts for `nbmat_dftd3` |
+| `cutoff_coulomb` | `float32` | `(1,)` | Cutoff `nbmat_coulomb` was built with; the calculator warns when it is below the Ewald/PME estimate |
+| `cutoff_dftd3` | `float32` | `(1,)` | Cutoff `nbmat_dftd3` was built with (informational) |
 
 ### Input Conversion
 
@@ -841,16 +853,16 @@ Their synthesized runtime metadata remains format version 1 and records `has_emb
 
 ### Common Errors
 
-| Condition                                   | Error                 |
-| ------------------------------------------- | --------------------- |
-| Invalid model type                          | `TypeError`           |
-| Missing required input key                  | `KeyError`            |
-| Hessian with multiple molecules             | `NotImplementedError` |
-| PME with nvalchemi-toolkit-ops < 0.4.1      | `RuntimeError`        |
-| PBC with multiple molecules                 | `NotImplementedError` |
-| Invalid Coulomb method                      | `ValueError`          |
-| `needs_dispersion=True` without `d3_params` | `ValueError`          |
-| Partial or mixed PBC in mode 2              | `ValueError`          |
+| Condition | Error |
+| --- | --- |
+| Invalid model type | `TypeError` |
+| Missing required input key | `KeyError` |
+| Hessian with multiple molecules | `NotImplementedError` |
+| PME with nvalchemi-toolkit-ops < 0.4.1 | `RuntimeError` |
+| PBC with multiple molecules | `NotImplementedError` |
+| Invalid Coulomb method | `ValueError` |
+| `needs_dispersion=True` without `d3_params` | `ValueError` |
+| Partial or mixed PBC in mode 2 | `ValueError` on eager CPU; `RuntimeError` on CUDA or under `torch.compile` |
 
 ### Warnings
 
