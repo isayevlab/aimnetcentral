@@ -549,10 +549,17 @@ def test_global_mode2_shared_cell_broadcasts_to_every_system(backend: str, cell_
     """
     data = _periodic_mode2_data(torch.device("cpu"))
     key = "energy" if backend == "dftd3" else "e_h"
-    reference = _module(backend)(dict(data))[key].detach()
+    explicit = backend in ("dsf", "dftd3")
+    kwargs = {"compute_forces": True, "compute_virial": True} if explicit else {}
+    reference = _module(backend)(dict(data), **kwargs)
     shared = dict(data)
     shared["cell"] = data["cell"][0].reshape(cell_shape).clone()
-    result = _module(backend)(shared)[key].detach()
+    result = _module(backend)(shared, **kwargs)
+    if explicit:
+        (reference, reference_terms), (result, result_terms) = reference, result
+        torch.testing.assert_close(result_terms.forces, reference_terms.forces)
+        torch.testing.assert_close(result_terms.virial, reference_terms.virial)
+    reference, result = reference[key].detach(), result[key].detach()
     torch.testing.assert_close(result, reference)
     torch.testing.assert_close(result[0], result[1], atol=1e-5, rtol=1e-5)
 

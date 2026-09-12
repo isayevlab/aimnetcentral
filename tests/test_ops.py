@@ -628,10 +628,13 @@ class TestBatchedCells:
         assert d_ij[1, 0, 0].item() == pytest.approx(2.0, abs=1e-5)
 
     def test_calc_distances_single_cell_nb_mode2(self, device):
-        """Reject a shared cell for a multi-system mode-2 batch."""
+        """A shared cell is broadcast to every system of a multi-system mode-2 batch."""
         cell = torch.eye(3, device=device) * 10.0
-        with pytest.raises(ValueError, match="B, 3, 3"):
-            nbops.normalize_mode2_periodic_geometry({"cell": cell}, B=2)
+        data = nbops.normalize_mode2_periodic_geometry({"cell": cell}, B=2)
+        assert data["cell"].shape == (2, 3, 3)
+        assert torch.equal(data["cell"][1], cell)
+        with pytest.raises(ValueError, match="cell must have shape"):
+            nbops.normalize_mode2_periodic_geometry({"cell": cell.expand(3, -1, -1)}, B=2)
 
 
 def test_move_coord_to_cell_respects_partial_pbc(device):

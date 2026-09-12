@@ -1073,3 +1073,20 @@ def test_global_mode2_validation_traces_without_graph_breaks_cpu():
     bad["nbmat"][0, 3, 0] = 1  # padded center row must contain only the sentinel
     with pytest.raises(RuntimeError):
         torch.compile(prepare, fullgraph=True, backend="aot_eager")(bad)
+
+
+@pytest.mark.parametrize("cell_shape", [(3, 3), (1, 3, 3)])
+def test_global_mode2_normalizes_shared_cell_for_batch(cell_shape):
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    data["cell"] = (torch.eye(3) * 10.0).reshape(cell_shape)
+    nbops.validate_mode2_input(data)
+    assert data["cell"].shape == (2, 3, 3)
+    assert data["pbc"].shape == (2, 3)
+    torch.testing.assert_close(data["cell"][1], torch.eye(3) * 10.0)
+
+
+def test_global_mode2_rejects_cell_batch_mismatch():
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    data["cell"] = (torch.eye(3) * 10.0).expand(3, -1, -1)
+    with pytest.raises(ValueError, match="cell must have shape"):
+        nbops.validate_mode2_input(data)

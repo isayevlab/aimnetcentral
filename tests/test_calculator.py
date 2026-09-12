@@ -2404,11 +2404,30 @@ def test_global_mode2_calculator_canonicalizes_single_cell():
     assert prepared["pbc"].shape == (1, 3)
 
 
-def test_global_mode2_calculator_rejects_shared_cell_for_batch():
+@pytest.mark.parametrize("cell_shape", [(3, 3), (1, 3, 3)])
+def test_global_mode2_calculator_broadcasts_shared_cell_for_batch(cell_shape):
+    """One cell shared by the batch is broadcast to every system, like a (3,) pbc."""
+    calc = _new_mode2_calculator()
+
+    def periodic_input() -> dict[str, torch.Tensor]:
+        data = _global_mode2_calculator_input(periodic=True)
+        data["nbmat_lr"] = data["nbmat"]
+        data["shifts_lr"] = data["shifts"]
+        return data
+
+    reference = calc(periodic_input())["energy"]
+    data = periodic_input()
+    data["cell"] = (torch.eye(3) * 10).reshape(cell_shape)
+    prepared = calc.prepare_input(dict(data))
+    assert prepared["cell"].shape == (2, 3, 3)
+    torch.testing.assert_close(calc(data)["energy"], reference)
+
+
+def test_global_mode2_calculator_rejects_cell_batch_mismatch():
     calc = _new_mode2_calculator()
     data = _global_mode2_calculator_input(periodic=True)
-    data["cell"] = torch.eye(3) * 10
-    with pytest.raises(ValueError, match="B, 3, 3"):
+    data["cell"] = (torch.eye(3) * 10).expand(3, -1, -1)
+    with pytest.raises(ValueError, match="cell must have shape"):
         calc.prepare_input(data)
 
 
