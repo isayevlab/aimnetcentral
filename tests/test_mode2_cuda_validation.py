@@ -102,3 +102,19 @@ def test_global_mode2_valid_cuda_path_has_no_host_sync():
         AIMNet2Base().prepare_input(data)
     finally:
         torch.cuda.set_sync_debug_mode(previous_mode)
+
+
+def test_global_mode2_valid_periodic_cuda_path_has_no_host_sync():
+    """Cell/pbc normalization and the finiteness check must not synchronize either."""
+    data = _cuda_mode2_data()
+    device = data["coord"].device
+    data["cell"] = torch.eye(3, device=device) * 10.0
+    data["pbc"] = torch.ones(3, dtype=torch.bool, device=device)
+    data["shifts"] = torch.zeros((*data["nbmat"].shape, 3), device=device)
+    previous_mode = torch.cuda.get_sync_debug_mode()
+    torch.cuda.set_sync_debug_mode("error")
+    try:
+        prepared = AIMNet2Base().prepare_input(data)
+    finally:
+        torch.cuda.set_sync_debug_mode(previous_mode)
+    assert prepared["cell"].shape == (2, 3, 3)
