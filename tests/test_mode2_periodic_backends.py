@@ -1,5 +1,7 @@
 """CPU and GPU coverage for full-3D periodic global mode 2."""
 
+import warnings
+
 import pytest
 import torch
 
@@ -271,6 +273,12 @@ def test_global_mode2_gpu_periodic_observables(backend: str):
 
 
 def _cation_in_box(device: torch.device):
+    """A +1 cation in a 12 A cubic cell.
+
+    The 15 A neighbor list used with it is shorter than the Kolafa-Perram
+    real-space cutoff (~20 A at accuracy 1e-6): fine for parity between
+    layouts that share the list, not a converged absolute reference.
+    """
     coord = torch.tensor(
         [[0.0, 0.0, 0.0], [1.0, 0.1, 0.0], [-0.3, 0.9, 0.2], [0.2, -0.4, 1.0]],
         dtype=torch.float64,
@@ -331,43 +339,122 @@ def _padded_mode2_inputs(coord, numbers, charges, cell, nbmat, shifts, pads: int
     return nbops.calc_masks(nbops.set_nb_mode(data))
 
 
-def _energy_and_real_forces(module, data: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
+def _energy_forces_cell_grad(module, data: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Energy, real-atom forces, and the cell gradient (the strain/stress input)."""
     sample = dict(data)
     sample["coord"] = sample["coord"].detach().clone().requires_grad_(True)
+    sample["cell"] = sample["cell"].detach().clone().requires_grad_(True)
     energy = module(sample)["e_h"].sum()
-    (grad,) = torch.autograd.grad(energy, sample["coord"])
+    grad_coord, grad_cell = torch.autograd.grad(energy, (sample["coord"], sample["cell"]))
     n_real = int((sample["numbers"] != 0).sum())
-    return energy.detach(), -grad.reshape(-1, 3)[:n_real]
+    return energy.detach(), -grad_coord.reshape(-1, 3)[:n_real], grad_cell.reshape(-1, 3, 3)
 
 
 @pytest.mark.parametrize("backend", ["ewald", "pme"])
 def test_global_mode2_matches_flat_mode1(backend: str):
-    """A padded mode-2 system reproduces the flat mode-1 energy and forces."""
+    """A padded mode-2 system reproduces the flat mode-1 energy, forces, and cell gradient."""
     device = torch.device("cpu")
     coord, numbers, charges, cell = _cation_in_box(device)
     nbmat, shifts = _periodic_neighbors(coord, cell)
     module = LRCoulomb(method=backend, subtract_sr=False, ewald_accuracy=1e-6)
-    e_flat, f_flat = _energy_and_real_forces(
-        module, _flat_periodic_inputs(coord, numbers, charges, cell, nbmat, shifts)
-    )
-    e_mode2, f_mode2 = _energy_and_real_forces(
-        module, _padded_mode2_inputs(coord, numbers, charges, cell, nbmat, shifts, pads=1)
-    )
-    torch.testing.assert_close(e_mode2, e_flat, atol=1e-9, rtol=0.0)
-    torch.testing.assert_close(f_mode2, f_flat, atol=1e-9, rtol=0.0)
+    flat = _energy_forces_cell_grad(module, _flat_periodic_inputs(coord, numbers, charges, cell, nbmat, shifts))
+    mode2 = _energy_forces_cell_grad(module, _padded_mode2_inputs(coord, numbers, charges, cell, nbmat, shifts, pads=1))
+    for got, expected in zip(mode2, flat, strict=True):
+        torch.testing.assert_close(got, expected, atol=1e-9, rtol=0.0)
 
 
 @pytest.mark.parametrize("backend", ["ewald", "pme"])
 def test_global_mode2_energy_independent_of_padding_width(backend: str):
-    """Adding dummy rows to a system must not change its energy or forces."""
+    """Adding dummy rows to a system must not change its energy, forces, or cell gradient."""
     device = torch.device("cpu")
     coord, numbers, charges, cell = _cation_in_box(device)
     nbmat, shifts = _periodic_neighbors(coord, cell)
     module = LRCoulomb(method=backend, subtract_sr=False, ewald_accuracy=1e-6)
-    e_1, f_1 = _energy_and_real_forces(module, _padded_mode2_inputs(coord, numbers, charges, cell, nbmat, shifts, 1))
-    e_8, f_8 = _energy_and_real_forces(module, _padded_mode2_inputs(coord, numbers, charges, cell, nbmat, shifts, 8))
-    torch.testing.assert_close(e_8, e_1, atol=1e-9, rtol=0.0)
-    torch.testing.assert_close(f_8, f_1, atol=1e-9, rtol=0.0)
+    pads_1 = _energy_forces_cell_grad(module, _padded_mode2_inputs(coord, numbers, charges, cell, nbmat, shifts, 1))
+    pads_8 = _energy_forces_cell_grad(module, _padded_mode2_inputs(coord, numbers, charges, cell, nbmat, shifts, 8))
+    for got, expected in zip(pads_8, pads_1, strict=True):
+        torch.testing.assert_close(got, expected, atol=1e-9, rtol=0.0)
+
+
+@pytest.mark.parametrize("backend", ["dsf", "dftd3"])
+def test_global_mode2_explicit_terms_independent_of_padding_width(backend: str):
+    """DSF and DFT-D3 energies, explicit forces, and virials ignore the padding width."""
+    device = torch.device("cpu")
+    coord, numbers, charges, cell = _cation_in_box(device)
+    nbmat, shifts = _periodic_neighbors(coord, cell)
+    module = _module(backend).double()
+    key = "energy" if backend == "dftd3" else "e_h"
+    results = []
+    for pads in (1, 8):
+        data = _padded_mode2_inputs(coord, numbers, charges, cell, nbmat, shifts, pads)
+        for suffix in ("_lr", "_dftd3"):
+            data[f"nbmat{suffix}"] = data["nbmat"]
+            data[f"shifts{suffix}"] = data["shifts"]
+        data = nbops.calc_masks(nbops.set_nb_mode(data))
+        result, terms = module(data, compute_forces=True, compute_virial=True)
+        results.append((result[key].detach(), terms.forces.reshape(-1, 3)[:4], terms.virial.reshape(-1, 3, 3)))
+    for got, expected in zip(results[1], results[0], strict=True):
+        torch.testing.assert_close(got, expected, atol=1e-9, rtol=0.0)
+
+
+@pytest.mark.parametrize("backend", ["ewald", "pme"])
+def test_global_mode2_empty_system_contributes_zero(backend: str):
+    """A system of dummy rows only has zero energy and does not change the others.
+
+    With a zero real-atom count the kernel's own estimate degenerates
+    (Ewald: alpha = 0, PME: a zero in the batch median), so the parameters
+    are estimated over the non-empty systems only.
+    """
+    device = torch.device("cpu")
+    coord, numbers, charges, cell = _cation_in_box(device)
+    nbmat, shifts = _periodic_neighbors(coord, cell)
+    module = LRCoulomb(method=backend, subtract_sr=False, ewald_accuracy=1e-6)
+    alone = _energy_forces_cell_grad(module, _padded_mode2_inputs(coord, numbers, charges, cell, nbmat, shifts, 1))
+
+    single = _padded_mode2_inputs(coord, numbers, charges, cell, nbmat, shifts, 1)
+    Np, M = single["nbmat"].shape[1:]
+    sentinel = 2 * Np
+    nb = torch.full((2, Np, M), sentinel, dtype=torch.int32, device=device)
+    nb[0] = torch.where(single["nbmat"][0] == Np, torch.full_like(single["nbmat"][0], sentinel), single["nbmat"][0])
+    sh = torch.zeros((2, Np, M, 3), dtype=torch.float64, device=device)
+    sh[0] = single["shifts"][0]
+    data = {
+        "coord": torch.cat([single["coord"], torch.zeros_like(single["coord"])]),
+        "numbers": torch.cat([single["numbers"], torch.zeros_like(single["numbers"])]),
+        "charges": torch.cat([single["charges"], torch.zeros_like(single["charges"])]),
+        "cell": cell.unsqueeze(0).expand(2, -1, -1).contiguous(),
+        "pbc": torch.ones((2, 3), dtype=torch.bool, device=device),
+        "nbmat": nb,
+        "shifts": sh,
+        "nbmat_coulomb": nb,
+        "shifts_coulomb": sh,
+    }
+    sample = nbops.calc_masks(nbops.set_nb_mode(data))
+    sample["coord"] = sample["coord"].detach().clone().requires_grad_(True)
+    energies = module(sample)["e_h"]
+    (grad,) = torch.autograd.grad(energies.sum(), sample["coord"])
+    assert torch.isfinite(energies).all()
+    assert energies[1].item() == 0.0
+    torch.testing.assert_close(energies[0], alone[0], atol=1e-9, rtol=0.0)
+    torch.testing.assert_close(-grad[0, :4], alone[1], atol=1e-9, rtol=0.0)
+    assert torch.equal(grad[1], torch.zeros_like(grad[1]))
+
+
+@pytest.mark.parametrize("backend", ["ewald", "pme"])
+def test_global_mode2_warns_when_cutoff_coulomb_is_short(backend: str):
+    """A supplied ``cutoff_coulomb`` below the estimated real-space cutoff warns."""
+    device = torch.device("cpu")
+    coord, numbers, charges, cell = _cation_in_box(device)
+    nbmat, shifts = _periodic_neighbors(coord, cell)
+    module = LRCoulomb(method=backend, subtract_sr=False, ewald_accuracy=1e-6)
+    data = _padded_mode2_inputs(coord, numbers, charges, cell, nbmat, shifts, 1)
+    data["cutoff_coulomb"] = torch.tensor([4.6], dtype=torch.float64)
+    with pytest.warns(RuntimeWarning, match="real-space"):
+        module(dict(data))
+    data["cutoff_coulomb"] = torch.tensor([100.0], dtype=torch.float64)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        module(dict(data))
 
 
 @pytest.mark.parametrize("backend", ["ewald", "pme"])
