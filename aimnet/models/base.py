@@ -291,13 +291,8 @@ class AIMNet2Base(nn.Module):
 
     def prepare_input(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         """Common operations for input preparation."""
-        nbmat = data.get("nbmat")
-        nbops.validate_neighbor_suffix_layout(data)
-        if isinstance(nbmat, Tensor) and nbmat.ndim == 3:
-            nbops.normalize_mode2_periodic_geometry(data, B=nbmat.shape[0])
-            for suffix in nbops.NBMAT_SUFFIXES:
-                if f"nbmat{suffix}" in data or f"shifts{suffix}" in data:
-                    nbops.validate_mode2_nbmat_raw(data, suffix=suffix)
+        # No-op when the calculator already validated (and marked) this batch.
+        nbops.validate_mode2_input(data)
         data = self._prepare_dtype(data)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)

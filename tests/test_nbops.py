@@ -994,3 +994,64 @@ def test_global_mode2_rejects_suffix_only_3d_matrix():
     suffix_only = {"coord": data["coord"], "numbers": data["numbers"], "nbmat_lr": data["nbmat"]}
     with pytest.raises(ValueError, match="primary nbmat"):
         nbops.validate_neighbor_suffix_layout(suffix_only)
+
+
+def test_global_mode2_rejects_nonfinite_coordinates_cpu():
+    """Dummy rows enter the Ewald structure factor with zero charge; a NaN
+    coordinate there still poisons the reciprocal-space sum, so it is rejected
+    up front."""
+    data = _global_mode2_data(torch.device("cpu"))
+    data["coord"][0, 3, 0] = float("nan")
+    with pytest.raises(ValueError, match="finite"):
+        nbops.validate_mode2_input(data)
+
+
+def test_global_mode2_validate_input_accepts_valid_batch_and_marks_it():
+    data = _global_mode2_data(torch.device("cpu"), suffixes=("_lr", "_coulomb"))
+    nbops.validate_mode2_input(data)
+    assert nbops.is_mode2_validated(data)
+
+
+def test_global_mode2_validate_input_dedups_aliased_suffixes(monkeypatch):
+    data = _global_mode2_data(torch.device("cpu"))
+    data["nbmat_lr"] = data["nbmat"]
+    data["nbmat_coulomb"] = data["nbmat"]
+    data["nbmat_dftd3"] = data["nbmat"].clone()
+    calls: list[str] = []
+    original = nbops.validate_mode2_nbmat_raw
+
+    def spy(data, *, suffix):
+        calls.append(suffix)
+        return original(data, suffix=suffix)
+
+    monkeypatch.setattr(nbops, "validate_mode2_nbmat_raw", spy)
+    nbops.validate_mode2_input(data)
+    assert sorted(calls) == ["", "_dftd3"]
+
+
+def test_global_mode2_validation_traces_without_graph_breaks_cpu():
+    """Validation must not fall back to ``Tensor.item()`` under torch.compile:
+    the CPU eager path raises ``ValueError`` from ``.item()``, the compiled
+    path queues ``torch._assert_async`` and raises ``RuntimeError``."""
+    import os
+
+    if os.environ.get("TORCHDYNAMO_DISABLE", "").strip() not in ("", "0"):
+        pytest.skip("torch.compile is disabled in this environment")
+    torch._dynamo.reset()
+
+    def prepare(data):
+        nbops.validate_mode2_input(data)
+        return nbops.calc_masks(nbops.set_nb_mode(data))["mask_ij"]
+
+    explanation = torch._dynamo.explain(prepare)(_global_mode2_data(torch.device("cpu")))
+    assert explanation.graph_break_count == 0, explanation.break_reasons
+
+    # aot_eager keeps the trace honest without inductor's C++ compile step.
+    compiled = torch.compile(prepare, fullgraph=True, backend="aot_eager")
+    eager = prepare(_global_mode2_data(torch.device("cpu")))
+    torch.testing.assert_close(compiled(_global_mode2_data(torch.device("cpu"))), eager)
+
+    bad = _global_mode2_data(torch.device("cpu"))
+    bad["nbmat"][0, 3, 0] = 1  # padded center row must contain only the sentinel
+    with pytest.raises(RuntimeError):
+        torch.compile(prepare, fullgraph=True, backend="aot_eager")(bad)

@@ -965,14 +965,8 @@ class AIMNet2Calculator:
             )
 
         if hessian:
-            probe = self.to_input_tensors(data)
-            primary_nbmat = probe.get("nbmat")
-            nbops.validate_neighbor_suffix_layout(probe)
-            if primary_nbmat is not None and primary_nbmat.ndim == 3:
-                nbops.normalize_mode2_periodic_geometry(probe, B=primary_nbmat.shape[0])
-                for suffix in nbops.NBMAT_SUFFIXES:
-                    if f"nbmat{suffix}" in probe or f"shifts{suffix}" in probe:
-                        nbops.validate_mode2_nbmat_raw(probe, suffix=suffix)
+            # Reject invalid mode-2 input before the split re-indexes it.
+            nbops.validate_mode2_input(self.to_input_tensors(data))
             subsystems = self._split_hessian_batch(data)
             if subsystems is not None:
                 stack = torch.as_tensor(data["coord"]).ndim == 3
@@ -1108,13 +1102,8 @@ class AIMNet2Calculator:
         caller_had_mol_idx = raw_data.get("mol_idx") is not None
         caller_had_nbmat = raw_data.get("nbmat") is not None
         data = self.to_input_tensors(data)
-        primary_nbmat = data.get("nbmat")
-        nbops.validate_neighbor_suffix_layout(data)
-        if primary_nbmat is not None and primary_nbmat.ndim == 3:
-            nbops.normalize_mode2_periodic_geometry(data, B=primary_nbmat.shape[0])
-            for suffix in nbops.NBMAT_SUFFIXES:
-                if f"nbmat{suffix}" in data or f"shifts{suffix}" in data:
-                    nbops.validate_mode2_nbmat_raw(data, suffix=suffix)
+        # Single validation chokepoint; the model's prepare_input honors the mark.
+        nbops.validate_mode2_input(data)
         data = self.mol_flatten(data, hessian=hessian)
         if data.get("cell") is not None and self._coulomb_method == "simple":
             warnings.warn(
@@ -1548,15 +1537,22 @@ class AIMNet2Calculator:
             if not (isinstance(data[k], Tensor) and data[k].requires_grad):
                 t = t.detach()
             ret[k] = t
+        # Neighbor matrices and shifts that alias one caller object stay one
+        # tensor after conversion, so mode-2 validation and mask preparation
+        # can recognize the alias and run once per distinct pair.
         neighbor_memo: list[tuple[Any, Tensor]] = []
         neighbor_keys = {f"nbmat{suffix}" for suffix in nbops.NBMAT_SUFFIXES}
+        shift_keys = {f"shifts{suffix}" for suffix in nbops.NBMAT_SUFFIXES}
         for k in self.keys_in_optional:
             if k in data and data[k] is not None:
-                if k in neighbor_keys:
+                if k in neighbor_keys or k in shift_keys:
                     source = data[k]
                     t = next((value for previous, value in neighbor_memo if source is previous), None)
                     if t is None:
-                        t = torch.as_tensor(source, device=self.device)
+                        if k in shift_keys:
+                            t = torch.as_tensor(source, device=self.device, dtype=self.keys_in_optional[k])
+                        else:
+                            t = torch.as_tensor(source, device=self.device)
                         if not (isinstance(source, Tensor) and source.requires_grad):
                             t = t.detach()
                         neighbor_memo.append((source, t))

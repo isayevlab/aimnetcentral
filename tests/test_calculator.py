@@ -2711,3 +2711,46 @@ def test_metadata_flag_contradicting_module_tree_still_gets_lr_nblist():
         delattr(model, "d3ts")
         if hasattr(model, "_metadata"):
             del model._metadata
+
+
+def test_global_mode2_calculator_validates_once_per_eval(monkeypatch):
+    """The calculator validates a mode-2 batch once; the model trusts the mark."""
+    from aimnet import nbops
+
+    calc = _new_mode2_calculator()
+    data = _global_mode2_calculator_input()
+    data["nbmat_lr"] = data["nbmat"]
+    calls: list[str] = []
+    original = nbops.validate_mode2_nbmat_raw
+
+    def spy(payload, *, suffix):
+        calls.append(suffix)
+        return original(payload, suffix=suffix)
+
+    monkeypatch.setattr(nbops, "validate_mode2_nbmat_raw", spy)
+    calc(data)
+    assert calls == [""]
+
+
+def test_global_mode2_calculator_validates_aliased_periodic_suffixes_once(monkeypatch):
+    """Aliased neighbor matrices *and* shifts keep their identity through
+    ``to_input_tensors``, so one periodic batch is validated once per distinct
+    (nbmat, shifts) pair rather than once per suffix."""
+    from aimnet import nbops
+
+    calc = _new_mode2_calculator()
+    data = _global_mode2_calculator_input(periodic=True)
+    data["nbmat_lr"] = data["nbmat"]
+    data["shifts_lr"] = data["shifts"]
+    data["nbmat_coulomb"] = data["nbmat"].clone()
+    data["shifts_coulomb"] = data["shifts"].clone()
+    calls: list[str] = []
+    original = nbops.validate_mode2_nbmat_raw
+
+    def spy(payload, *, suffix):
+        calls.append(suffix)
+        return original(payload, suffix=suffix)
+
+    monkeypatch.setattr(nbops, "validate_mode2_nbmat_raw", spy)
+    calc(data)
+    assert sorted(calls) == ["", "_coulomb"]
