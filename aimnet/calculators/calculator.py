@@ -145,6 +145,7 @@ class AIMNet2Calculator:
         "shifts_dftd3": torch.float,
         "cell": torch.float,
         "pbc": torch.bool,
+        "cutoff_lr": torch.float,
         "cutoff_coulomb": torch.float,
         "cutoff_dftd3": torch.float,
     }
@@ -969,6 +970,8 @@ class AIMNet2Calculator:
             if subsystems is not None:
                 # Reject invalid mode-2 input before any re-indexed subsystem
                 # runs; a single structure is validated by prepare_input below.
+                # The converted dict is built only to validate and is discarded:
+                # each subsystem is converted again on its own recursive call.
                 nbops.validate_mode2_input(self.to_input_tensors(data))
                 stack = torch.as_tensor(data["coord"]).ndim == 3
                 return self._eval_hessian_batched(
@@ -1564,6 +1567,9 @@ class AIMNet2Calculator:
                         if k in shift_keys:
                             t = torch.as_tensor(source, device=self.device, dtype=self.keys_in_optional[k])
                         else:
+                            # Neighbor matrices keep the caller's integer dtype:
+                            # validation has to see it to reject a sentinel B*N
+                            # that would overflow the int32 the kernels take.
                             t = torch.as_tensor(source, device=self.device)
                         if not (isinstance(source, Tensor) and source.requires_grad):
                             t = t.detach()

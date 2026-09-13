@@ -167,10 +167,12 @@ def _real_atom_periodic_parameters(
         positions_real = positions.detach().index_select(0, real_idx)
         cell_nonempty = cell.detach()[nonempty]
         if cell_nonempty.shape[0] == 0:
-            alpha = positions.new_ones(B)
-            if backend == "ewald":
-                return {"alpha": alpha, "k_cutoff": torch.ones_like(alpha)}, positions.new_zeros(0)
-            return {"alpha": alpha, "mesh_dimensions": (8, 8, 8)}, positions.new_zeros(0)
+            # Mode 1 refuses the equivalent input ("at least one real atom");
+            # arbitrary placeholder parameters here would only hide the mistake.
+            raise ValueError(
+                "mode-2 periodic Coulomb needs at least one real atom in the batch, "
+                "but every system consists of dummy rows only."
+            )
         if backend == "ewald":
             params = estimate_ewald_parameters(positions_real, cell_nonempty, batch_compact, accuracy)
             alpha_real = params.alpha.reshape(-1).to(positions.dtype)
@@ -185,8 +187,45 @@ def _real_atom_periodic_parameters(
             return {"alpha": alpha, "k_cutoff": k_cutoff}, params.real_space_cutoff.reshape(-1)
         params = estimate_pme_parameters(positions_real, cell_nonempty, batch_compact, accuracy)
         # PME shares one alpha across the batch; extend it to the empty systems.
-        alpha = params.alpha.reshape(-1)[:1].expand(B).to(positions.dtype)
+        # expand() leaves a stride-0 view; materialize it so a kernel that takes
+        # the pointer raw cannot read one element on behalf of the whole batch.
+        alpha = params.alpha.reshape(-1)[:1].expand(B).to(positions.dtype).contiguous()
         return {"alpha": alpha, "mesh_dimensions": tuple(params.mesh_dimensions)}, params.real_space_cutoff.reshape(-1)
+
+
+def _warn_short_coulomb_list(
+    backend: str, data: dict[str, Tensor], suffix: str, rc_needed: Tensor, accuracy: float
+) -> None:
+    """Check the caller-built Coulomb neighbor list against the cutoff the estimate assumes.
+
+    In mode 2 the caller owns ``nbmat{suffix}``, so nothing downstream can tell
+    whether the real-space sum reaches the cutoff the splitting parameter was
+    tuned for. Truncating it is silent, and in a condensed-phase cell it is
+    large: reusing the model's short-range list costs of order 1 eV and
+    0.1 A^-1 eV in forces for a 64-molecule water box at ``ewald_accuracy=1e-6``.
+    """
+    if not rc_needed.numel():
+        return
+    supplied_cutoff = data.get(f"cutoff{suffix}")
+    if supplied_cutoff is None:
+        warnings.warn(
+            f"mode-2 {backend} received no cutoff{suffix}, so the real-space cutoff of the supplied "
+            f"nbmat{suffix} cannot be checked against the estimate; a list shorter than the estimate "
+            f"silently truncates the real-space sum. Pass cutoff{suffix} to enable the check.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+        return
+    supplied = float(torch.as_tensor(supplied_cutoff).min())
+    needed = float(rc_needed.max())
+    if supplied < needed * (1.0 - 1e-6):
+        warnings.warn(
+            f"nbmat{suffix} was built with cutoff {supplied:.2f} A, but the {backend} real-space "
+            f"sum at ewald_accuracy={accuracy:g} assumes {needed:.2f} A; the truncated real-space "
+            "term is missing from the energy. Rebuild the Coulomb neighbor list at the estimated cutoff.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
 
 
 _PME_MIN_NVALCHEMIOPS = (0, 4, 1)
@@ -621,8 +660,9 @@ class LRCoulomb(nn.Module):
         if mode2:
             mode2_inputs = _mode2_backend_inputs(data, suffix)
             coord_real = mode2_inputs.coord
-            real_mask = ~data["mask_i"].flatten()
-            charges_real = data[self.key_in].to(coord.dtype).flatten(0, 1).masked_fill(~real_mask, 0.0)
+            padding_mask = data["mask_i"].flatten()
+            real_mask = ~padding_mask
+            charges_real = data[self.key_in].to(coord.dtype).flatten(0, 1).masked_fill(padding_mask, 0.0)
             mol_idx_real = mode2_inputs.batch_idx
             nbmat_real = mode2_inputs.neighbor_matrix
             shifts_real = mode2_inputs.shifts.to(torch.int32) if mode2_inputs.shifts is not None else None
@@ -634,21 +674,9 @@ class LRCoulomb(nn.Module):
             backend_kwargs, rc_needed = _real_atom_periodic_parameters(
                 backend, coord_real, cell, mol_idx_real, real_mask, float(self.ewald_accuracy)
             )
-            # Mode-2 callers build nbmat_coulomb themselves; the estimate above
-            # assumes a real-space cutoff the supplied list may not reach.
-            supplied_cutoff = data.get("cutoff_coulomb")
-            if supplied_cutoff is not None and rc_needed.numel():
-                supplied = float(torch.as_tensor(supplied_cutoff).min())
-                needed = float(rc_needed.max())
-                if supplied < needed * (1.0 - 1e-6):
-                    warnings.warn(
-                        f"nbmat_coulomb was built with cutoff {supplied:.2f} A, but the {backend} real-space "
-                        f"sum at ewald_accuracy={float(self.ewald_accuracy):g} assumes {needed:.2f} A; the "
-                        "truncated real-space term is missing from the energy. Rebuild the Coulomb neighbor "
-                        "list at the estimated cutoff.",
-                        RuntimeWarning,
-                        stacklevel=2,
-                    )
+            # Mode-2 callers build the Coulomb list themselves; the estimate
+            # above assumes a real-space cutoff that list may not reach.
+            _warn_short_coulomb_list(backend, data, suffix, rc_needed, float(self.ewald_accuracy))
         else:
             charges = data[self.key_in]
             mol_idx = data["mol_idx"]
