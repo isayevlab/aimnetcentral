@@ -10,6 +10,7 @@ import torch
 from conftest import CAFFEINE_FILE, load_mol
 
 from aimnet.calculators import AIMNet2Calculator
+from aimnet.modules import D3TS, DFTD3
 
 
 class TinyLegacyModel(torch.nn.Module):
@@ -2796,3 +2797,53 @@ def test_global_mode2_calculator_hessian_validation_count(monkeypatch, batch, ex
     monkeypatch.setattr(nbops, "validate_mode2_nbmat_raw", spy)
     calc(data, hessian=True)
     assert calls == [""] * expected_calls
+
+
+def _embedded_dftd3_calculator(dispersion):
+    """A calculator over a model that carries ``dispersion`` in its own module tree."""
+    from torch import nn
+
+    from aimnet.calculators import AIMNet2Calculator
+
+    class EmbeddedDispersionModel(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.outputs = nn.ModuleDict({"d3bj": dispersion})
+            self._metadata = {
+                "cutoff": 5.0,
+                "needs_coulomb": False,
+                "needs_dispersion": False,
+                "coulomb_mode": "none",
+                "d3_params": None,
+                "implemented_species": [1, 6, 7, 8],
+            }
+
+    AIMNet2Calculator._constructed_families.clear()
+    return AIMNet2Calculator(EmbeddedDispersionModel(), device="cpu")
+
+
+def test_embedded_tabulated_dftd3_refuses_second_derivatives_and_stress():
+    """An embedded tabulated DFT-D3 contributes no curvature and no cell gradient.
+
+    Its energy reaches autograd through a first-order-only ``autograd.Function``,
+    so a Hessian silently loses the dispersion block entirely and a periodic
+    stress loses most of the dispersion virial. Refuse rather than return a
+    number that is wrong with nothing raised.
+    """
+    calc = _embedded_dftd3_calculator(DFTD3(s8=0.3908, a1=0.5660, a2=3.1280))
+    assert calc._embedded_tabulated_dftd3 is True
+    data = {"coord": torch.zeros(1, 3, 3), "numbers": torch.tensor([[8, 1, 1]]), "charge": torch.zeros(1)}
+    for kwargs in ({"hessian": True}, {"stress": True}):
+        with pytest.raises(NotImplementedError, match="tabulated DFT-D3"):
+            calc.eval(dict(data), validate_species=False, **kwargs)
+    with pytest.raises(NotImplementedError, match="tabulated DFT-D3"):
+        calc.hessian_vector_product(dict(data), torch.ones(1, 3, 3), validate_species=False)
+
+
+def test_embedded_d3ts_does_not_trip_the_dftd3_guard():
+    """D3TS is plain torch and differentiates correctly, including under the d3bj key.
+
+    The old key-based predicate called this a defect; the class-based one does not.
+    """
+    calc = _embedded_dftd3_calculator(D3TS(a1=0.5660, a2=3.1280, s8=0.3908))
+    assert calc._embedded_tabulated_dftd3 is False

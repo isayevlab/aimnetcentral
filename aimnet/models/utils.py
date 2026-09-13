@@ -132,6 +132,25 @@ def has_externalizable_dftd3(model: nn.Module) -> bool:
     return any(name in ("dftd3", "d3bj") for name, _ in named_children_rec(model))
 
 
+def has_embedded_tabulated_dftd3(model: nn.Module) -> bool:
+    """Check whether the model tree itself carries a tabulated DFT-D3 module.
+
+    Tests the class, not the key a module happens to sit under. That is the
+    opposite choice from :func:`has_externalizable_dftd3`, which asks "is there
+    something at the dftd3/d3bj key" -- the right question for sizing a
+    neighbor list, and the wrong one here: ``D3TS`` is commonly registered
+    under ``d3bj`` and differentiates correctly, while a ``DFTD3`` under any
+    other key is affected and invisible to a key test.
+
+    A TorchScript model reports scripted submodules rather than ``DFTD3``
+    instances, so this returns False for a legacy ``.jpt``. Such a model froze
+    the pure-torch implementation, which has no first-order-only backward.
+    """
+    from aimnet.modules.lr import DFTD3
+
+    return any(isinstance(module, DFTD3) for module in model.modules())
+
+
 def has_d3ts(model: nn.Module) -> bool:
     """Check if model has D3TS module (learned dispersion parameters).
 
