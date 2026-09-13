@@ -70,6 +70,40 @@ def _packed_data(n_mol, n_atom_per_mol, device, nfeat=2):
     return nbops.calc_masks(nbops.set_nb_mode(data))
 
 
+def _mode2_data(device):
+    B, N, M = 2, 4, 3
+    sentinel = B * N
+    nbmat = torch.full((B, N, M), sentinel, dtype=torch.int32, device=device)
+    for batch in range(B):
+        offset = batch * N
+        nbmat[batch, 0, :2] = torch.tensor([offset + 1, offset + 2], device=device)
+        nbmat[batch, 1, :2] = torch.tensor([offset, offset + 2], device=device)
+        nbmat[batch, 2, :2] = torch.tensor([offset, offset + 1], device=device)
+    return {
+        "numbers": torch.tensor([[6, 1, 1, 0], [8, 1, 1, 0]], device=device),
+        "nbmat": nbmat,
+        "nbmat_lr": nbmat,
+    }
+
+
+def test_mode2_calc_masks_compiled_matches_eager(device):
+    """Compiled mode 2 avoids alias-identity dedup without changing masks."""
+    if device.type != "cuda":
+        pytest.skip("compiled parity is only meaningful on the GPU backend")
+
+    def derive(data):
+        prepared = nbops.calc_masks(nbops.set_nb_mode(data))
+        return prepared["mask_ij"], prepared["_nbmat_gather"], prepared["_nbmat_kernel"]
+
+    eager = derive(_mode2_data(device))
+    torch._dynamo.reset()
+    compiled = torch.compile(derive, fullgraph=True)
+    actual = compiled(_mode2_data(device))
+
+    for got, expected in zip(actual, eager, strict=True):
+        torch.testing.assert_close(got, expected)
+
+
 @pytest.mark.parametrize("n_mol", [1, 2, 5])
 def test_mol_sum_compiled_matches_eager(device, n_mol):
     """The compiled branch reads the count from `charge`; the eager one from

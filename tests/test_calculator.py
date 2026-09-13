@@ -1108,11 +1108,11 @@ class TestBatchCorrectness:
         np.testing.assert_allclose(res_batch["energy"][0].item(), e1, atol=1e-5)
         np.testing.assert_allclose(res_batch["energy"][1].item(), e2, atol=1e-5)
 
-    def test_batch_vs_individual_mode2(self):
-        """nb_mode=2: Batched sparse neighbor matrix format."""
+    def test_batch_vs_individual_mode1_small_molecules(self):
+        """Automatic small-molecule batching remains independent of sparse mode 2."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
 
-        # Use same-size molecules for mode 2 (requires padding otherwise)
+        # Two same-size molecules keep the automatic batching path simple.
         mol1 = self._make_water(offset=0.0)
         mol2 = self._make_water(offset=15.0)
 
@@ -2293,6 +2293,235 @@ class TestDeterministicMode:
             calc({**water_molecule, "cell": cell}, forces=True)
 
 
+def _global_mode2_calculator_input(*, batch: int = 2, periodic: bool = False) -> dict[str, torch.Tensor]:
+    n_atoms = 4
+    sentinel = batch * n_atoms
+    coord = torch.arange(batch * n_atoms * 3, dtype=torch.float32).reshape(batch, n_atoms, 3)
+    numbers = torch.tensor([[6, 1, 1, 0], [8, 1, 0, 0]], dtype=torch.int64)[:batch]
+    nbmat = torch.full((batch, n_atoms, 3), sentinel, dtype=torch.int64)
+    for b in range(batch):
+        base = b * n_atoms
+        nbmat[b, 0, :2] = torch.tensor([base + 1, base + 2])
+        nbmat[b, 1, :2] = torch.tensor([base, base + 2])
+        if numbers[b, 2] != 0:
+            nbmat[b, 2, :2] = torch.tensor([base, base + 1])
+    data: dict[str, torch.Tensor] = {
+        "coord": coord,
+        "numbers": numbers,
+        "charge": torch.zeros(batch),
+        "nbmat": nbmat,
+    }
+    if periodic:
+        data["cell"] = torch.eye(3).repeat(batch, 1, 1) * 10
+        data["pbc"] = torch.ones((batch, 3), dtype=torch.bool)
+        data["shifts"] = torch.zeros((*nbmat.shape, 3))
+    return data
+
+
+def _new_mode2_calculator() -> AIMNet2Calculator:
+    return AIMNet2Calculator("aimnet2", nb_threshold=0, device="cpu")
+
+
+def test_global_mode2_calculator_preserves_cpu():
+    calc = _new_mode2_calculator()
+    prepared = calc.prepare_input(_global_mode2_calculator_input())
+    assert prepared["coord"].ndim == 3
+    assert prepared["numbers"].ndim == 2
+    assert prepared["nbmat"].ndim == 3
+
+
+def test_global_mode2_calculator_cpu_batch_vs_individual():
+    calc = _new_mode2_calculator()
+    source = _global_mode2_calculator_input()
+    for suffix in ("_lr", "_coulomb", "_dftd3"):
+        source[f"nbmat{suffix}"] = source["nbmat"]
+    batched = calc(source, forces=True)
+
+    energies = []
+    forces = []
+    B, N = source["coord"].shape[:2]
+    for b in range(B):
+        single_nbmat = torch.where(
+            source["nbmat"][b : b + 1] == B * N,
+            torch.tensor(N),
+            source["nbmat"][b : b + 1] - b * N,
+        )
+        single = {
+            "coord": source["coord"][b : b + 1],
+            "numbers": source["numbers"][b : b + 1],
+            "charge": torch.zeros(1),
+            "nbmat": single_nbmat,
+        }
+        for suffix in ("_lr", "_coulomb", "_dftd3"):
+            single[f"nbmat{suffix}"] = single_nbmat
+        result = calc(single, forces=True)
+        energies.append(result["energy"])
+        forces.append(result["forces"])
+    torch.testing.assert_close(batched["energy"], torch.cat(energies), atol=1e-5, rtol=1e-5)
+    torch.testing.assert_close(batched["forces"], torch.cat(forces), atol=1e-5, rtol=1e-4)
+
+
+def test_global_mode2_calculator_rejects_source_dtype():
+    calc = _new_mode2_calculator()
+    data = _global_mode2_calculator_input()
+    data["nbmat"] = data["nbmat"].float()
+    with pytest.raises(ValueError, match="integer"):
+        calc.prepare_input(data)
+
+
+def test_global_mode2_calculator_preserves_alias_int32():
+    calc = _new_mode2_calculator()
+    data = _global_mode2_calculator_input()
+    data["nbmat"] = data["nbmat"].to(torch.int32)
+    data["nbmat_lr"] = data["nbmat"]
+    prepared = calc.to_input_tensors(data)
+    assert prepared["nbmat"] is prepared["nbmat_lr"]
+
+
+def test_global_mode2_calculator_preserves_alias_int64():
+    calc = _new_mode2_calculator()
+    data = _global_mode2_calculator_input()
+    data["nbmat_lr"] = data["nbmat"]
+    prepared = calc.to_input_tensors(data)
+    assert prepared["nbmat"] is prepared["nbmat_lr"]
+
+
+def test_global_mode2_calculator_preserves_full3d_pbc():
+    calc = _new_mode2_calculator()
+    prepared = calc.prepare_input(_global_mode2_calculator_input(periodic=True))
+    assert prepared["coord"].shape == (2, 4, 3)
+    assert prepared["cell"].shape == (2, 3, 3)
+    assert prepared["pbc"].shape == (2, 3)
+
+
+def test_global_mode2_calculator_canonicalizes_single_cell():
+    calc = _new_mode2_calculator()
+    data = _global_mode2_calculator_input(batch=1, periodic=True)
+    data["cell"] = torch.eye(3) * 10
+    data["pbc"] = torch.ones(3, dtype=torch.bool)
+    prepared = calc.prepare_input(data)
+    assert prepared["cell"].shape == (1, 3, 3)
+    assert prepared["pbc"].shape == (1, 3)
+
+
+@pytest.mark.parametrize("cell_shape", [(3, 3), (1, 3, 3)])
+def test_global_mode2_calculator_broadcasts_shared_cell_for_batch(cell_shape):
+    """One cell shared by the batch is broadcast to every system, like a (3,) pbc."""
+    calc = _new_mode2_calculator()
+
+    def periodic_input() -> dict[str, torch.Tensor]:
+        data = _global_mode2_calculator_input(periodic=True)
+        data["nbmat_lr"] = data["nbmat"]
+        data["shifts_lr"] = data["shifts"]
+        return data
+
+    reference = calc(periodic_input())["energy"]
+    data = periodic_input()
+    data["cell"] = (torch.eye(3) * 10).reshape(cell_shape)
+    prepared = calc.prepare_input(dict(data))
+    assert prepared["cell"].shape == (2, 3, 3)
+    torch.testing.assert_close(calc(data)["energy"], reference)
+
+
+def test_global_mode2_calculator_rejects_cell_batch_mismatch():
+    calc = _new_mode2_calculator()
+    data = _global_mode2_calculator_input(periodic=True)
+    data["cell"] = (torch.eye(3) * 10).expand(3, -1, -1)
+    with pytest.raises(ValueError, match="cell must have shape"):
+        calc.prepare_input(data)
+
+
+def test_global_mode2_calculator_rejects_pbc_without_cell():
+    calc = _new_mode2_calculator()
+    data = _global_mode2_calculator_input()
+    data["pbc"] = torch.ones((2, 3), dtype=torch.bool)
+    with pytest.raises(ValueError, match="cell"):
+        calc.prepare_input(data)
+
+
+def test_global_mode2_calculator_rejects_partial_pbc():
+    calc = _new_mode2_calculator()
+    data = _global_mode2_calculator_input(periodic=True)
+    data["pbc"][0, 1] = False
+    with pytest.raises(ValueError, match="full-3D"):
+        calc.prepare_input(data)
+
+
+def test_global_mode2_calculator_stress_keeps_3d():
+    calc = _new_mode2_calculator()
+    prepared = calc.prepare_input(_global_mode2_calculator_input(periodic=True))
+    strained = calc.set_grad_tensors(prepared, stress=True)
+    assert strained["coord"].ndim == 3
+    assert strained["cell"].shape == (2, 3, 3)
+
+
+def test_global_mode2_calculator_hessian_splits_singleton_mode2():
+    calc = _new_mode2_calculator()
+    subsystems = calc._split_hessian_batch(_global_mode2_calculator_input())
+    assert subsystems is not None
+    assert all(sub["nbmat"].shape == (1, 4, 3) for sub in subsystems)
+    assert subsystems[1]["nbmat"][0, 0, 0] == 1
+
+
+def test_global_mode2_calculator_hessian_removes_all_padding():
+    from aimnet.calculators.derivatives import calculate_hessian
+
+    coord = torch.zeros((4, 3), requires_grad=True)
+    energy = (coord[:2] ** 2).sum()
+    forces = -torch.autograd.grad(energy, coord, create_graph=True)[0][:2]
+    hessian = calculate_hessian(forces, coord, real_atom_mask=torch.tensor([True, True, False, False]))
+    assert hessian.shape == (2, 3, 2, 3)
+
+
+def test_global_mode2_calculator_hessian_preserves_singleton_batch_graph():
+    from aimnet.calculators.derivatives import calculate_hessian
+
+    coord = torch.zeros((1, 3, 3), requires_grad=True)
+    energy = (coord[:, :2] ** 2).sum()
+    forces = -torch.autograd.grad(energy, coord, create_graph=True)[0]
+    hessian = calculate_hessian(
+        forces,
+        coord,
+        real_atom_mask=torch.tensor([[True, True, False]]),
+    )
+    assert hessian.shape == (2, 3, 2, 3)
+    torch.testing.assert_close(hessian.reshape(6, 6), 2 * torch.eye(6))
+
+
+def test_global_mode2_calculator_hessian_returns_ragged_list():
+    calc = _new_mode2_calculator()
+    calc.eval = lambda *args, **kwargs: {"hessian": torch.zeros((1, 3, 1, 3))}  # type: ignore[method-assign]
+    result = calc._eval_hessian_batched([{}, {}], forces=False, stress=False, validate_species=False, stack=False)
+    assert isinstance(result["hessian"], list)
+
+
+def test_global_mode2_calculator_stress_and_hessian():
+    calc = _new_mode2_calculator()
+    prepared = calc.prepare_input(_global_mode2_calculator_input(batch=1, periodic=True))
+    strained = calc.set_grad_tensors(prepared, stress=True, hessian=True)
+    assert strained["coord"].ndim == 3
+    assert calc._saved_for_grad["coord"].ndim == 3
+
+
+def test_global_mode2_calculator_rejects_cross_batch_before_hessian_split():
+    calc = _new_mode2_calculator()
+    data = _global_mode2_calculator_input()
+    data["nbmat"][0, 0, 0] = 4
+    calc._eval_hessian_batched = lambda *args, **kwargs: (_ for _ in ()).throw(  # type: ignore[method-assign]
+        AssertionError("hessian split reached before validation")
+    )
+    with pytest.raises(ValueError, match="batch interval"):
+        calc.eval(data, hessian=True, validate_species=False)
+
+
+def test_global_mode2_calculator_slices_batched_pbc():
+    calc = _new_mode2_calculator()
+    data = _global_mode2_calculator_input(periodic=True)
+    subsystems = calc._split_batch_dim(data, 2)
+    assert subsystems[0]["pbc"].shape == (1, 3)
+    assert subsystems[1]["pbc"].shape == (1, 3)
+
+
 def test_legacy_jpt_metadata_drives_calculator_lr_behavior(tmp_path, monkeypatch):
     """Legacy metadata keeps embedded LR behavior through case-insensitive routing."""
     from aimnet.models import base
@@ -2501,3 +2730,69 @@ def test_metadata_flag_contradicting_module_tree_still_gets_lr_nblist():
         delattr(model, "d3ts")
         if hasattr(model, "_metadata"):
             del model._metadata
+
+
+def test_global_mode2_calculator_validates_once_per_eval(monkeypatch):
+    """The calculator validates a mode-2 batch once; the model trusts the mark."""
+    from aimnet import nbops
+
+    calc = _new_mode2_calculator()
+    data = _global_mode2_calculator_input()
+    data["nbmat_lr"] = data["nbmat"]
+    calls: list[str] = []
+    original = nbops.validate_mode2_nbmat_raw
+
+    def spy(payload, *, suffix):
+        calls.append(suffix)
+        return original(payload, suffix=suffix)
+
+    monkeypatch.setattr(nbops, "validate_mode2_nbmat_raw", spy)
+    calc(data)
+    assert calls == [""]
+
+
+def test_global_mode2_calculator_validates_aliased_periodic_suffixes_once(monkeypatch):
+    """Aliased neighbor matrices *and* shifts keep their identity through
+    ``to_input_tensors``, so one periodic batch is validated once per distinct
+    (nbmat, shifts) pair rather than once per suffix."""
+    from aimnet import nbops
+
+    calc = _new_mode2_calculator()
+    data = _global_mode2_calculator_input(periodic=True)
+    data["nbmat_lr"] = data["nbmat"]
+    data["shifts_lr"] = data["shifts"]
+    data["nbmat_coulomb"] = data["nbmat"].clone()
+    data["shifts_coulomb"] = data["shifts"].clone()
+    calls: list[str] = []
+    original = nbops.validate_mode2_nbmat_raw
+
+    def spy(payload, *, suffix):
+        calls.append(suffix)
+        return original(payload, suffix=suffix)
+
+    monkeypatch.setattr(nbops, "validate_mode2_nbmat_raw", spy)
+    calc(data)
+    assert sorted(calls) == ["", "_coulomb"]
+
+
+@pytest.mark.parametrize(("batch", "expected_calls"), [(1, 1), (2, 3)])
+def test_global_mode2_calculator_hessian_validation_count(monkeypatch, batch, expected_calls):
+    """A singleton Hessian request validates once; a batch validates once
+    before the split and each re-indexed subsystem once more, with aliased
+    suffixes still deduplicated inside the subsystems."""
+    from aimnet import nbops
+
+    calc = _new_mode2_calculator()
+    calc.external_dftd3 = None
+    data = _global_mode2_calculator_input(batch=batch)
+    data["nbmat_lr"] = data["nbmat"]
+    calls: list[str] = []
+    original = nbops.validate_mode2_nbmat_raw
+
+    def spy(payload, *, suffix):
+        calls.append(suffix)
+        return original(payload, suffix=suffix)
+
+    monkeypatch.setattr(nbops, "validate_mode2_nbmat_raw", spy)
+    calc(data, hessian=True)
+    assert calls == [""] * expected_calls

@@ -1,5 +1,7 @@
 """Tests for aimnet.nbops - neighbor operations module."""
 
+import os
+
 import pytest
 import torch
 
@@ -111,18 +113,12 @@ class TestCalcMasks:
         """Test mask calculation for mode 2 (batched with 3D nbmat)."""
         B, N = 2, 4
         coord = torch.rand((B, N, 3), device=device)
-        numbers = torch.tensor(
-            [
-                [6, 1, 1, 0],  # molecule with padding
-                [6, 1, 0, 0],  # molecule with 2 padding atoms
-            ],
-            device=device,
-        )
+        numbers = torch.tensor([[6, 1, 1, 0], [6, 1, 0, 0]], device=device)
         # 3D nbmat: (B, N, max_neighbors)
         nbmat = torch.tensor(
             [
-                [[1, 2, 3], [0, 2, 3], [0, 1, 3], [3, 3, 3]],  # batch 0
-                [[1, 2, 3], [0, 2, 3], [2, 2, 2], [3, 3, 3]],  # batch 1
+                [[1, 2, 8], [0, 2, 8], [0, 1, 8], [8, 8, 8]],
+                [[5, 6, 8], [4, 6, 8], [8, 8, 8], [8, 8, 8]],
             ],
             device=device,
         )
@@ -141,38 +137,38 @@ class TestCalcMasks:
         assert data["mol_sizes"][0].item() == 3
         assert data["mol_sizes"][1].item() == 2
 
-        # local padded neighbor indices are masked per batch
+        # global sentinel and padding-target indices are masked per batch
         assert data["mask_ij"][0, 0, 2].item() is True
         assert data["mask_ij"][1, 0, 1].item() is True
         # padded center rows are fully masked
         assert data["mask_ij"][1, 2].all()
 
     def test_calc_masks_mode_2_masks_local_and_global_padding(self, device):
-        numbers = torch.tensor([[6, 0, 1], [6, 1, 0]], device=device)
-        nbmat_local = torch.tensor(
+        numbers = torch.tensor([[6, 1, 1, 0], [6, 1, 0, 0]], device=device)
+        nbmat_primary = torch.tensor(
             [
-                [[1, 2], [0, 2], [0, 1]],
-                [[1, 2], [0, 2], [0, 1]],
+                [[1, 3, 8], [0, 3, 8], [0, 1, 8], [8, 8, 8]],
+                [[5, 6, 8], [4, 6, 8], [8, 8, 8], [8, 8, 8]],
             ],
             device=device,
         )
-        nbmat_global = torch.tensor(
+        nbmat_lr = torch.tensor(
             [
-                [[1, 2], [0, 2], [0, 1]],
-                [[4, 5], [3, 5], [3, 4]],
+                [[1, 2, 8], [0, 2, 8], [0, 1, 8], [8, 8, 8]],
+                [[5, 7, 8], [4, 7, 8], [8, 8, 8], [8, 8, 8]],
             ],
             device=device,
         )
 
-        data = {"numbers": numbers, "nbmat": nbmat_local, "nbmat_lr": nbmat_global}
+        data = {"numbers": numbers, "nbmat": nbmat_primary, "nbmat_lr": nbmat_lr}
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
 
-        assert data["mask_ij"][0, 0, 0].item() is True  # local pad atom 1 in batch 0
-        assert data["mask_ij"][1, 0, 1].item() is True  # local pad atom 2 in batch 1
-        assert data["mask_ij_lr"][0, 0, 0].item() is True  # global pad atom 1
-        assert data["mask_ij_lr"][1, 0, 1].item() is True  # global pad atom 5
-        assert data["mask_ij"][0, 1].all()
+        assert data["mask_ij"][0, 0, 1].item() is True
+        assert data["mask_ij"][1, 0, 1].item() is True
+        assert data["mask_ij_lr"][0, 0, 2].item() is True
+        assert data["mask_ij_lr"][1, 0, 1].item() is True
+        assert data["mask_ij"][0, 3].all()
         assert data["mask_ij_lr"][1, 2].all()
 
 
@@ -332,13 +328,13 @@ class TestGetIj:
     def test_get_ij_mode_2(self, device):
         """Test pairwise extraction for mode 2."""
         B, N = 2, 3
-        numbers = torch.tensor([[6, 1, 1], [6, 1, 0]], device=device)
+        numbers = torch.tensor([[6, 1, 0], [6, 1, 0]], device=device)
         nbmat = torch.tensor(
-            [[[1, 2], [0, 2], [0, 1]], [[1, 2], [0, 2], [0, 1]]],  # (B, N, max_nb)
+            [[[1, 2], [0, 2], [6, 6]], [[4, 5], [3, 5], [6, 6]]],
             device=device,
         )
 
-        data = {"numbers": numbers, "nbmat": nbmat, "_nb_mode": torch.tensor(2)}
+        data = nbops.calc_masks({"numbers": numbers, "nbmat": nbmat, "_nb_mode": torch.tensor(2)})
 
         x = torch.tensor([[[1.0], [2.0], [3.0]], [[4.0], [5.0], [6.0]]], device=device)
         x_i, x_j = nbops.get_ij(x, data)
@@ -391,13 +387,13 @@ class TestGetI:
     def test_get_i_mode_2(self, device):
         """Test get_i for mode 2 matches get_ij x_i component."""
         B, N = 2, 3
-        numbers = torch.tensor([[6, 1, 1], [6, 1, 0]], device=device)
+        numbers = torch.tensor([[6, 1, 0], [6, 1, 0]], device=device)
         nbmat = torch.tensor(
-            [[[1, 2], [0, 2], [0, 1]], [[1, 2], [0, 2], [0, 1]]],  # (B, N, max_nb)
+            [[[1, 2], [0, 2], [6, 6]], [[4, 5], [3, 5], [6, 6]]],
             device=device,
         )
 
-        data = {"numbers": numbers, "nbmat": nbmat, "_nb_mode": torch.tensor(2)}
+        data = nbops.calc_masks({"numbers": numbers, "nbmat": nbmat, "_nb_mode": torch.tensor(2)})
 
         x = torch.tensor([[[1.0], [2.0], [3.0]], [[4.0], [5.0], [6.0]]], device=device)
         x_i_only = nbops.get_i(x, data)
@@ -564,7 +560,7 @@ class TestGradientFlow:
 
         # Gradient should be 1 for all inputs
         assert x.grad is not None
-        assert (x.grad == 1.0).all()
+        torch.testing.assert_close(x.grad, torch.ones_like(x))
 
     def test_mask_ij_gradient(self, device):
         """Test that gradients flow through mask_ij_ (not inplace)."""
@@ -596,3 +592,536 @@ class TestGradientFlow:
         loss.backward()
 
         assert x.grad is not None
+
+
+def _global_mode2_data(
+    device: torch.device,
+    *,
+    pad_neighbor: bool = False,
+    suffixes: tuple[str, ...] = (),
+    include_shifts: bool = False,
+) -> dict[str, torch.Tensor]:
+    """Build a small global-index mode-2 case with one trailing dummy per system."""
+    B, N, M = 2, 4, 3
+    sentinel = B * N
+    coord = torch.arange(B * N * 3, device=device, dtype=torch.float32).reshape(B, N, 3)
+    numbers = torch.tensor([[6, 1, 1, 0], [8, 1, 1, 0]], device=device)
+    nbmat = torch.full((B, N, M), sentinel, device=device, dtype=torch.int64)
+    for b in range(B):
+        base = b * N
+        nbmat[b, 0, :2] = torch.tensor([base + 1, base + 2], device=device)
+        nbmat[b, 1, :2] = torch.tensor([base, base + 2], device=device)
+        nbmat[b, 2, :2] = torch.tensor([base, base + 1], device=device)
+    if pad_neighbor:
+        nbmat[0, 0, 1] = N - 1
+    data: dict[str, torch.Tensor] = {"coord": coord, "numbers": numbers, "nbmat": nbmat}
+    if include_shifts:
+        shifts = torch.zeros((*nbmat.shape, 3), device=device, dtype=torch.float32)
+        data["shifts"] = shifts
+    for suffix in suffixes:
+        data[f"nbmat{suffix}"] = nbmat.clone()
+        if include_shifts:
+            data[f"shifts{suffix}"] = shifts.clone()
+    return data
+
+
+def test_global_mode2_gathers_distinct_batch_values(device):
+    data = nbops.calc_masks(nbops.set_nb_mode(_global_mode2_data(device)))
+    values = torch.tensor([[[10.0], [11.0], [12.0], [0.0]], [[20.0], [21.0], [22.0], [0.0]]], device=device)
+    _x_i, x_j = nbops.get_ij(values, data)
+    assert x_j[0, 0, 0, 0] == 11.0
+    assert x_j[1, 0, 0, 0] == 21.0
+
+
+def test_global_mode2_excludes_sentinel(device):
+    data = nbops.calc_masks(nbops.set_nb_mode(_global_mode2_data(device)))
+    values = torch.arange(8, device=device, dtype=torch.float32).reshape(2, 4, 1)
+    _x_i, x_j = nbops.get_ij(values, data)
+    assert x_j[0, 0, 2, 0] == 0.0
+    assert x_j[1, 0, 2, 0] == 0.0
+
+
+def test_global_mode2_masks_padded_neighbor(device):
+    data = nbops.calc_masks(nbops.set_nb_mode(_global_mode2_data(device, pad_neighbor=True)))
+    assert data["mask_ij"][0, 0, 1]
+    assert data["_nbmat_gather"][0, 0, 1] == 0
+
+
+def test_global_mode2_kernel_indices_exclude_padded_neighbor(device):
+    data = nbops.calc_masks(nbops.set_nb_mode(_global_mode2_data(device, pad_neighbor=True)))
+    assert data["_nbmat_kernel"][0, 0, 1] == data["nbmat"].shape[0] * data["nbmat"].shape[1]
+
+
+def test_global_mode2_masks_padded_center(device):
+    data = nbops.calc_masks(nbops.set_nb_mode(_global_mode2_data(device)))
+    assert data["mask_ij"][0, -1].all()
+    assert data["_nbmat_gather"][0, -1].eq(0).all()
+
+
+def test_global_mode2_rejects_non_sentinel_padded_center_cpu():
+    data = _global_mode2_data(torch.device("cpu"))
+    data["nbmat"][0, -1, 0] = 0
+    with pytest.raises(ValueError, match="padded center"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_local_batch1_index_cpu():
+    data = _global_mode2_data(torch.device("cpu"))
+    data["nbmat"][1, 0, 0] = 0
+    with pytest.raises(ValueError, match="batch interval"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_interleaved_sentinel_cpu():
+    data = _global_mode2_data(torch.device("cpu"))
+    data["nbmat"][0, 0] = torch.tensor([1, 8, 2])
+    with pytest.raises(ValueError, match=r"packed.*tail"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_interleaved_padded_neighbor_cpu():
+    data = _global_mode2_data(torch.device("cpu"), pad_neighbor=True)
+    data["nbmat"][0, 0, 2] = 2
+    with pytest.raises(ValueError, match=r"packed.*tail"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_builds_independent_suffix_tensors(device):
+    data = nbops.calc_masks(nbops.set_nb_mode(_global_mode2_data(device, suffixes=("_lr",))))
+    assert data["mask_ij"] is not data["mask_ij_lr"]
+    assert data["_nbmat_gather"] is not data["_nbmat_gather_lr"]
+
+
+def test_global_mode2_reuses_exact_alias_int32(device):
+    data = _global_mode2_data(device, suffixes=("_lr",))
+    data["nbmat"] = data["nbmat"].to(torch.int32)
+    data["nbmat_lr"] = data["nbmat"]
+    data = nbops.calc_masks(nbops.set_nb_mode(data))
+    assert data["_nbmat_gather"] is data["_nbmat_gather_lr"]
+
+
+def test_global_mode2_reuses_exact_alias_int64(device):
+    data = _global_mode2_data(device, suffixes=("_lr",))
+    data["nbmat_lr"] = data["nbmat"]
+    data = nbops.calc_masks(nbops.set_nb_mode(data))
+    data["mask_i"] = data["numbers"] == 0
+    nbops._prepare_mode2_neighbor_tensors(data)
+    assert data["nbmat"] is data["nbmat_lr"]
+
+
+def test_global_mode2_compile_alias_reuse_int32(device):
+    data = _global_mode2_data(device, suffixes=("_lr",))
+    data["nbmat"] = data["nbmat"].to(torch.int32)
+    data["nbmat_lr"] = data["nbmat"]
+    data = nbops.set_nb_mode(data)
+    data["mask_i"] = data["numbers"] == 0
+    nbops._prepare_mode2_neighbor_tensors(data)
+    assert data["_nbmat_gather"] is data["_nbmat_gather_lr"]
+
+
+def test_global_mode2_compile_alias_reuse_int64(device):
+    data = _global_mode2_data(device, suffixes=("_lr",))
+    data["nbmat_lr"] = data["nbmat"]
+    data = nbops.set_nb_mode(data)
+    data["mask_i"] = data["numbers"] == 0
+    nbops._prepare_mode2_neighbor_tensors(data)
+    assert data["_nbmat_kernel"] is data["_nbmat_kernel_lr"]
+
+
+def test_global_mode2_rejects_bool_neighbors():
+    data = _global_mode2_data(torch.device("cpu"))
+    data["nbmat"] = data["nbmat"].to(torch.bool)
+    with pytest.raises(ValueError, match="integer dtype"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_unsigned_neighbors():
+    data = _global_mode2_data(torch.device("cpu"))
+    data["nbmat"] = data["nbmat"].to(torch.uint8)
+    with pytest.raises(ValueError, match="signed"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_float_neighbors():
+    data = _global_mode2_data(torch.device("cpu"))
+    data["nbmat"] = data["nbmat"].to(torch.float32)
+    with pytest.raises(ValueError, match="integer dtype"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_complex_neighbors():
+    data = _global_mode2_data(torch.device("cpu"))
+    data["nbmat"] = data["nbmat"].to(torch.complex64)
+    with pytest.raises(ValueError, match="integer dtype"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_int32_capacity_overflow():
+    n = torch.iinfo(torch.int32).max + 1
+    data = {
+        "coord": torch.empty((1, n, 3), device="meta"),
+        "numbers": torch.empty((1, n), dtype=torch.int64, device="meta"),
+        "nbmat": torch.empty((1, n, 1), dtype=torch.int64, device="meta"),
+    }
+    with pytest.raises(ValueError, match="int32"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_mismatched_shift_shape():
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    data["shifts"] = torch.zeros(2, 4, 2, 3)
+    with pytest.raises(ValueError, match="shifts"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_orphan_shift():
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    del data["nbmat"]
+    with pytest.raises(ValueError, match="matching"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_missing_final_dummy():
+    data = _global_mode2_data(torch.device("cpu"))
+    data["numbers"][:, -1] = 6
+    with pytest.raises(ValueError, match="final dummy"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_noncontiguous_atom_padding():
+    data = _global_mode2_data(torch.device("cpu"))
+    data["numbers"][0, 1] = 0
+    with pytest.raises(ValueError, match="contiguous"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_noncontiguous_coord():
+    data = _global_mode2_data(torch.device("cpu"))
+    data["coord"] = torch.zeros((4, 2, 3)).transpose(0, 1)
+    with pytest.raises(ValueError, match="flatten"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_noncontiguous_numbers():
+    data = _global_mode2_data(torch.device("cpu"))
+    data["numbers"] = torch.tensor([[6, 8], [1, 1], [1, 1], [0, 0]]).transpose(0, 1)
+    with pytest.raises(ValueError, match="flatten"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_noncontiguous_nbmat():
+    data = _global_mode2_data(torch.device("cpu"))
+    data["nbmat"] = torch.zeros((4, 2, 3), dtype=torch.int64).transpose(0, 1)
+    with pytest.raises(ValueError, match="flatten"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_noncontiguous_shifts():
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    data["cell"] = torch.eye(3).repeat(2, 1, 1)
+    data["pbc"] = torch.ones((2, 3), dtype=torch.bool)
+    data["shifts"] = torch.zeros((4, 2, 3, 3)).transpose(0, 1)
+    with pytest.raises(ValueError, match="flatten"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_normalizes_single_periodic_geometry():
+    data = {"cell": torch.eye(3), "pbc": torch.ones(3, dtype=torch.bool)}
+    nbops.normalize_mode2_periodic_geometry(data, B=1)
+    assert data["cell"].shape == (1, 3, 3)
+    assert data["pbc"].shape == (1, 3)
+
+
+def test_global_mode2_preserves_batched_periodic_geometry():
+    data = _global_mode2_data(torch.device("cpu"))
+    cell = torch.stack([torch.eye(3), torch.eye(3) * 2])
+    pbc = torch.ones((2, 3), dtype=torch.bool)
+    data["cell"] = cell
+    data["pbc"] = pbc
+    nbops.normalize_mode2_periodic_geometry(data, B=2)
+    assert data["cell"] is cell
+    assert data["pbc"] is pbc
+
+
+def test_global_mode2_rejects_pbc_without_cell():
+    data = _global_mode2_data(torch.device("cpu"))
+    data["pbc"] = torch.ones(3, dtype=torch.bool)
+    with pytest.raises(ValueError, match="cell"):
+        nbops.normalize_mode2_periodic_geometry(data, B=2)
+
+
+def test_global_mode2_rejects_shifts_without_cell():
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    with pytest.raises(ValueError, match="cell"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_partial_pbc():
+    data = _global_mode2_data(torch.device("cpu"))
+    data["cell"] = torch.eye(3).repeat(2, 1, 1)
+    data["pbc"] = torch.tensor([True, False, True])
+    with pytest.raises(ValueError, match="full-3D"):
+        nbops.normalize_mode2_periodic_geometry(data, B=2)
+
+
+def test_global_mode2_rejects_missing_periodic_shifts():
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    data["cell"] = torch.eye(3).repeat(2, 1, 1)
+    data["pbc"] = torch.ones((2, 3), dtype=torch.bool)
+    del data["shifts"]
+    with pytest.raises(ValueError, match="shifts"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_fractional_periodic_shifts():
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    data["cell"] = torch.eye(3).repeat(2, 1, 1)
+    data["pbc"] = torch.ones((2, 3), dtype=torch.bool)
+    data["shifts"][0, 0, 0, 0] = 0.5
+    with pytest.raises(ValueError, match="integral"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_shift_int32_overflow():
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    data["cell"] = torch.eye(3).repeat(2, 1, 1)
+    data["pbc"] = torch.ones((2, 3), dtype=torch.bool)
+    data["shifts"][0, 0, 0, 0] = float(torch.iinfo(torch.int32).max) + 1
+    with pytest.raises(ValueError, match="int32"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_nonzero_sentinel_shift():
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    data["cell"] = torch.eye(3).repeat(2, 1, 1)
+    data["pbc"] = torch.ones((2, 3), dtype=torch.bool)
+    data["shifts"][0, 0, 2, 0] = 1
+    with pytest.raises(ValueError, match="sentinel"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_nonzero_padded_neighbor_shift():
+    data = _global_mode2_data(torch.device("cpu"), pad_neighbor=True, include_shifts=True)
+    data["cell"] = torch.eye(3).repeat(2, 1, 1)
+    data["pbc"] = torch.ones((2, 3), dtype=torch.bool)
+    data["shifts"][0, 0, 1, 0] = 1
+    with pytest.raises(ValueError, match="padded-neighbor"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_rejects_nonzero_padded_center_shift():
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    data["cell"] = torch.eye(3).repeat(2, 1, 1)
+    data["pbc"] = torch.ones((2, 3), dtype=torch.bool)
+    data["shifts"][0, -1, 0, 0] = 1
+    with pytest.raises(ValueError, match="padded center"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="")
+
+
+def test_global_mode2_preserves_mode0_and_mode1(device):
+    mode0 = nbops.set_nb_mode({"numbers": torch.ones((1, 2), device=device)})
+    mode1 = nbops.set_nb_mode({"numbers": torch.ones(3, device=device), "nbmat": torch.zeros((3, 1), device=device)})
+    assert nbops.get_nb_mode(mode0) == 0
+    assert nbops.get_nb_mode(mode1) == 1
+
+
+def test_global_mode2_convert_local_success_is_immutable():
+    local = torch.tensor([[[1, 2, 0], [0, 2, 0], [0, 0, 0], [0, 0, 0]]] * 2, dtype=torch.int64)
+    padding = torch.tensor([[[False, False, True], [False, False, True], [True, True, True], [True, True, True]]] * 2)
+    local_before = local.clone()
+    padding_before = padding.clone()
+    global_nbmat = nbops.convert_mode2_local_to_global(local, padding_mask=padding)
+    assert torch.equal(global_nbmat[0, 0], torch.tensor([1, 2, 8]))
+    assert torch.equal(global_nbmat[1, 0], torch.tensor([5, 6, 8]))
+    assert torch.equal(local, local_before)
+    assert torch.equal(padding, padding_before)
+
+
+def test_global_mode2_convert_local_rejects_non_tail_mask():
+    local = torch.zeros((1, 2, 3), dtype=torch.int64)
+    padding = torch.tensor([[[False, True, False], [False, False, True]]])
+    with pytest.raises(ValueError, match="tail"):
+        nbops.convert_mode2_local_to_global(local, padding_mask=padding)
+
+
+def test_global_mode2_convert_local_rejects_out_of_range():
+    local = torch.tensor([[[1, 2, 4], [0, 0, 0]]], dtype=torch.int64)
+    padding = torch.tensor([[[False, False, False], [True, True, True]]])
+    with pytest.raises(ValueError, match="range"):
+        nbops.convert_mode2_local_to_global(local, padding_mask=padding)
+
+
+def test_global_mode2_convert_local_requires_final_dummy_center():
+    local = torch.zeros((1, 3, 1), dtype=torch.int32)
+    padding = torch.zeros((1, 3, 1), dtype=torch.bool)
+    with pytest.raises(ValueError, match="final dummy"):
+        nbops.convert_mode2_local_to_global(local, padding_mask=padding)
+
+
+def test_global_mode2_convert_local_upcasts_before_global_arithmetic():
+    local = torch.zeros((2, 20_000, 1), dtype=torch.int16)
+    padding = torch.ones_like(local, dtype=torch.bool)
+    padding[:, :-1] = False
+    local[:, :-1] = 0
+    result = nbops.convert_mode2_local_to_global(local, padding_mask=padding)
+    assert result.dtype == torch.int32
+    assert result[1, 0, 0] == 20_000
+
+
+def test_global_mode2_private_preparation_matches_calc_masks(device):
+    expected = nbops.calc_masks(nbops.set_nb_mode(_global_mode2_data(device)))
+    actual = nbops.set_nb_mode(_global_mode2_data(device))
+    actual["mask_i"] = actual["numbers"] == 0
+    nbops._prepare_mode2_neighbor_tensors(actual)
+    for key in ("mask_ij", "_nbmat_gather", "_nbmat_kernel"):
+        assert torch.equal(actual[key], expected[key])
+
+
+def test_global_mode2_rejects_suffix_device_mismatch():
+    data = _global_mode2_data(torch.device("cpu"), suffixes=("_lr",))
+    data["nbmat_lr"] = data["nbmat_lr"].to("meta")
+    with pytest.raises(ValueError, match="same device"):
+        nbops.validate_mode2_nbmat_raw(data, suffix="_lr")
+
+
+def test_global_mode2_rejects_mixed_primary_and_suffix_rank():
+    data = _global_mode2_data(torch.device("cpu"), suffixes=("_lr",))
+    data["nbmat"] = data["nbmat"][0]
+    with pytest.raises(ValueError, match="rank"):
+        nbops.validate_neighbor_suffix_layout(data)
+
+
+def test_global_mode2_rejects_suffix_only_3d_matrix():
+    data = _global_mode2_data(torch.device("cpu"))
+    suffix_only = {"coord": data["coord"], "numbers": data["numbers"], "nbmat_lr": data["nbmat"]}
+    with pytest.raises(ValueError, match="primary nbmat"):
+        nbops.validate_neighbor_suffix_layout(suffix_only)
+
+
+def test_global_mode2_rejects_nonfinite_coordinates_cpu():
+    """Dummy rows enter the Ewald structure factor with zero charge; a NaN
+    coordinate there still poisons the reciprocal-space sum, so it is rejected
+    up front."""
+    data = _global_mode2_data(torch.device("cpu"))
+    data["coord"][0, 3, 0] = float("nan")
+    with pytest.raises(ValueError, match="finite"):
+        nbops.validate_mode2_input(data)
+
+
+def test_global_mode2_validate_input_accepts_valid_batch_without_marking():
+    data = _global_mode2_data(torch.device("cpu"), suffixes=("_lr", "_coulomb"))
+    nbops.validate_mode2_input(data)
+    assert not nbops.consume_mode2_validated(data)
+
+
+def test_global_mode2_validation_mark_is_consumed_once():
+    data = _global_mode2_data(torch.device("cpu"))
+    nbops.mark_mode2_validated(data)
+    assert nbops.consume_mode2_validated(data)
+    assert nbops.consume_mode2_validated(data) is False
+    assert "_mode2_validated" not in data
+
+
+def test_global_mode2_mark_ignores_flat_input():
+    data = {"nbmat": torch.zeros((4, 3), dtype=torch.int64)}
+    nbops.mark_mode2_validated(data)
+    assert "_mode2_validated" not in data
+
+
+def test_global_mode2_validate_input_dedups_aliased_suffixes(monkeypatch):
+    data = _global_mode2_data(torch.device("cpu"))
+    data["nbmat_lr"] = data["nbmat"]
+    data["nbmat_coulomb"] = data["nbmat"]
+    data["nbmat_dftd3"] = data["nbmat"].clone()
+    calls: list[str] = []
+    original = nbops.validate_mode2_nbmat_raw
+
+    def spy(data, *, suffix):
+        calls.append(suffix)
+        return original(data, suffix=suffix)
+
+    monkeypatch.setattr(nbops, "validate_mode2_nbmat_raw", spy)
+    nbops.validate_mode2_input(data)
+    assert sorted(calls) == ["", "_dftd3"]
+
+
+def _dynamo_disabled() -> bool:
+    """True when ``torch.compile`` is a no-op in this environment.
+
+    torch reads ``TORCH_COMPILE_DISABLE`` into ``config.disable`` at import and
+    checks ``TORCHDYNAMO_DISABLE`` (the CI torch-matrix setting) at ``optimize()``
+    time, so both must be consulted; ``torch._dynamo.explain`` reports -1 graph
+    breaks when nothing was traced.
+    """
+    return bool(torch._dynamo.config.disable) or os.environ.get("TORCHDYNAMO_DISABLE", "") == "1"
+
+
+@pytest.mark.skipif(_dynamo_disabled(), reason="torch.compile is disabled in this environment")
+def test_global_mode2_validation_traces_without_graph_breaks_cpu():
+    """Validation must not fall back to ``Tensor.item()`` under torch.compile:
+    the CPU eager path raises ``ValueError`` from ``.item()``, the compiled
+    path queues ``torch._assert_async`` and raises ``RuntimeError``."""
+    torch._dynamo.reset()
+
+    def prepare(data):
+        # The model's entry sequence: consume the calculator's mark or validate.
+        if not nbops.consume_mode2_validated(data):
+            nbops.validate_mode2_input(data)
+        return nbops.calc_masks(nbops.set_nb_mode(data))["mask_ij"]
+
+    explanation = torch._dynamo.explain(prepare)(_global_mode2_data(torch.device("cpu")))
+    assert explanation.graph_break_count == 0, explanation.break_reasons
+    marked = _global_mode2_data(torch.device("cpu"))
+    nbops.mark_mode2_validated(marked)
+    explanation = torch._dynamo.explain(prepare)(marked)
+    assert explanation.graph_break_count == 0, explanation.break_reasons
+
+    # aot_eager keeps the trace honest without inductor's C++ compile step.
+    compiled = torch.compile(prepare, fullgraph=True, backend="aot_eager")
+    eager = prepare(_global_mode2_data(torch.device("cpu")))
+    torch.testing.assert_close(compiled(_global_mode2_data(torch.device("cpu"))), eager)
+
+    bad = _global_mode2_data(torch.device("cpu"))
+    bad["nbmat"][0, 3, 0] = 1  # padded center row must contain only the sentinel
+    with pytest.raises(RuntimeError):
+        torch.compile(prepare, fullgraph=True, backend="aot_eager")(bad)
+
+
+@pytest.mark.parametrize("cell_shape", [(3, 3), (1, 3, 3)])
+def test_global_mode2_normalizes_shared_cell_for_batch(cell_shape):
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    data["cell"] = (torch.eye(3) * 10.0).reshape(cell_shape)
+    nbops.validate_mode2_input(data)
+    assert data["cell"].shape == (2, 3, 3)
+    assert data["pbc"].shape == (2, 3)
+    torch.testing.assert_close(data["cell"][1], torch.eye(3) * 10.0)
+
+
+def test_global_mode2_rejects_cell_batch_mismatch():
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    data["cell"] = (torch.eye(3) * 10.0).expand(3, -1, -1)
+    with pytest.raises(ValueError, match="cell must have shape"):
+        nbops.validate_mode2_input(data)
+
+
+@pytest.mark.parametrize("shifts_dtype", [torch.int8, torch.int16, torch.int32, torch.int64, torch.float32])
+def test_global_mode2_accepts_every_supported_shifts_dtype(shifts_dtype):
+    """Integer shifts are advertised as valid input, so every width must pass.
+
+    The int32 range check used to compare against ``2**31``, which wraps in any
+    dtype narrower than int64 and made the comparison false for every element.
+    """
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    data["cell"] = torch.eye(3) * 10.0
+    data["shifts"] = data["shifts"].to(shifts_dtype)
+    nbops.validate_mode2_input(data)
+
+
+def test_global_mode2_rejects_singular_cell():
+    """A zero cell has no reciprocal lattice; catch it instead of returning nan."""
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    cell = (torch.eye(3) * 10.0).unsqueeze(0).repeat(2, 1, 1)
+    cell[1] = 0.0
+    data["cell"] = cell
+    with pytest.raises(ValueError, match="non-singular"):
+        nbops.validate_mode2_input(data)

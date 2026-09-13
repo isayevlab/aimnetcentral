@@ -2,6 +2,8 @@
 
 This page documents the long-range (LR) modules implemented in `aimnet/modules/lr.py`. All modules operate on the shared data dictionary and add their contributions to `data[key_out]` (usually `energy`).
 
+For the complete batched sparse neighbor contract, including global indices, required dummy atoms, periodic cells, aligned shifts, and migration guidance, see [Batched sparse neighbor matrices (mode 2)](calculator.md#batched-sparse-neighbor-matrices-mode-2). DSF, DFT-D3, Ewald, and PME accept this representation without stripping per-system dummy rows or remapping valid indices.
+
 ## Choosing a Coulomb Method
 
 Select the appropriate method based on your system and accuracy requirements.
@@ -105,7 +107,7 @@ calc.set_lrcoulomb_method("ewald")
 calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-7)
 ```
 
-The Ewald and PME backends ignore the public `cutoff` argument; the calculator estimates a per-system real-space cutoff (and `alpha`/k-space cutoff or PME mesh) from `ewald_accuracy` and the cell geometry on every call.
+The Ewald and PME backends ignore the public `cutoff` argument; the calculator estimates a per-system real-space cutoff (and `alpha`/k-space cutoff or PME mesh) from `ewald_accuracy` and the cell geometry on every call. For mode-2 input (caller-supplied neighbor matrices) the caller must build `nbmat_coulomb` at that cutoff; see the calculator docs, "Batched sparse neighbor matrices (mode 2)".
 
 **Accuracy Parameter:**
 
@@ -124,7 +126,7 @@ where \(\varepsilon\) is the accuracy parameter, \(V\) is the cell volume, and \
 - Splits Coulomb into real-space + reciprocal-space + self-energy + background terms
 - Configurable accuracy target (default `1e-6`)
 - Splitting parameter and cutoffs estimated per call from `ewald_accuracy`
-- Per-call dense neighbor list sized to the real-space cutoff
+- Per-call dense neighbor list sized to the real-space cutoff (flat input; mode-2 callers supply that list themselves)
 - Most accurate method for periodic systems
 
 ### PME (Particle Mesh Ewald)
@@ -150,7 +152,7 @@ calc.set_lrcoulomb_method("pme")
 calc.set_lrcoulomb_method("pme", ewald_accuracy=1e-7)
 ```
 
-PME shares the `ewald_accuracy` knob with Ewald (default `1e-6`). The real-space cutoff, splitting parameter, and B-spline mesh dimensions are all estimated from this accuracy and the cell geometry; the mesh is not configured manually.
+PME shares the `ewald_accuracy` knob with Ewald (default `1e-6`). The real-space cutoff, splitting parameter, and B-spline mesh dimensions are all estimated from this accuracy and the cell geometry; the mesh is not configured manually. In a batch, PME shares one splitting parameter and mesh across the systems (estimated from the median system), while Ewald estimates them per system.
 
 **Characteristics:**
 
@@ -172,6 +174,7 @@ All nvalchemiops-backed external methods support inference forces/stress, force/
 - **DSF**: plain inference combines PyTorch autograd for the NN and the charge chain with explicit fixed-charge DSF forces/virial. Force/stress training and Hessian requests route through the closed-form differentiable torch path, which is relaxed-charge (includes the `d²E/(dq·dr)` charge-response coupling).
 - **Ewald / PME**: a single energy-only nvalchemiops call (>= 0.4.1) leaves positions, charges, and cell in the autograd graph; inference forces/stress, training losses, dense Hessians, and Hessian-vector products all come from the calculator's total-energy autograd and are relaxed-charge, the same contract as the DSF torch path (Ewald and PME are directly comparable with each other; DSF's shifted-force truncation still differs from the full lattice sum near the cutoff). Selecting PME on nvalchemiops 0.4.0 raises `RuntimeError`: its charge-gradient backward silently corrupts train-mode forces inside the full calculator graph (fixed upstream in 0.4.1).
 - **DFT-D3**: inference forces and stress come from detached nvalchemiops force/virial terms. Hessian requests use the pure-torch differentiable DFT-D3 path.
+- **Global mode 2**: all four producers accept batched `(B, N, M)` global-index neighbor matrices with aligned lattice shifts; derivative support matches the flat path above, and Hessians select real atoms. Ewald estimates its parameters per system and PME per batch, in both cases from the real atoms only, so a system's energy does not depend on the padding width of its batch and matches the flat evaluation (the same batch of systems, for PME) to rounding. See the calculator docs for the input contract and the Coulomb neighbor-list cutoff requirement.
 
 ## Method Comparison
 
@@ -239,7 +242,7 @@ If `subtract_sr=True`, the SR term is subtracted.
 
 3. **Ewald**
 
-Uses `nvalchemiops.torch.interactions.electrostatics.ewald_summation`. The calculator estimates the splitting parameter, real-space cutoff, and reciprocal-space cutoff per call from `ewald_accuracy` (default `1e-6`) and the cell, then builds a per-call dense neighbor list (`nbmat_coulomb`/`shifts_coulomb`, also aliased as `nbmat_lr`/`shifts_lr`).
+Uses `nvalchemiops.torch.interactions.electrostatics.ewald_summation`. The calculator estimates the splitting parameter, real-space cutoff, and reciprocal-space cutoff per call from `ewald_accuracy` (default `1e-6`) and the cell, then builds a per-call dense neighbor list (`nbmat_coulomb`/`shifts_coulomb`, also aliased as `nbmat_lr`/`shifts_lr`). For mode-2 input the list is caller-supplied and must be built at that real-space cutoff; the calculator warns when a supplied `cutoff_coulomb` is shorter than the estimate.
 
 The custom AIMNet wrapper exposes nvalchemiops forces, charge gradients, and virial through PyTorch autograd without requiring second derivatives of the underlying Warp kernels.
 

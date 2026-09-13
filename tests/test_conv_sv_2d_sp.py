@@ -284,7 +284,7 @@ class TestConvSV2dSP:
         assert hasattr(torch.ops.aimnet, "conv_sv_2d_sp_fwd"), "conv_sv_2d_sp_fwd op not registered"
 
         # Test using ops directly
-        output1 = torch.ops.aimnet.conv_sv_2d_sp_fwd(a.detach(), idx, g.detach())
+        output1 = torch.ops.aimnet.conv_sv_2d_sp_fwd(a.detach(), idx, g.detach(), a.shape[0] - 1, a.shape[0] - 1)
         output2 = reference_conv_sv_2d_sp_einsum(a.detach(), idx, g.detach())
 
         assert torch.allclose(output1, output2, atol=1e-5, rtol=1e-4), (
@@ -340,7 +340,7 @@ class TestConvSV2dSP:
         g_in = g.detach()
 
         def call_kernel(g2a, g2g):
-            return torch.ops.aimnet.conv_sv_2d_sp_bwd_bwd(grad_output, g2a, g2g, a_in, idx, g_in)
+            return torch.ops.aimnet.conv_sv_2d_sp_bwd_bwd(grad_output, g2a, g2g, a_in, idx, g_in, B - 1, B - 1)
 
         batched = torch.vmap(
             call_kernel,
@@ -377,7 +377,7 @@ class TestConvSV2dSP:
         g_in = g.detach()
 
         def call_kernel(go):
-            return torch.ops.aimnet.conv_sv_2d_sp_bwd(go, a_in, idx, g_in)
+            return torch.ops.aimnet.conv_sv_2d_sp_bwd(go, a_in, idx, g_in, B - 1, B - 1)
 
         batched = torch.vmap(call_kernel, in_dims=(0,))(grad_output)
 
@@ -470,3 +470,125 @@ class TestConvSVDispatch:
         assert torch.allclose(out_cuda.cpu(), out_cpu, atol=1e-10, rtol=1e-10), (
             f"CUDA float64 einsum fallback parity failed. Max diff: {torch.max(torch.abs(out_cuda.cpu() - out_cpu))}"
         )
+
+
+def _generalized_conv_data():
+    device = "cuda"
+    B, A, G, M = 4, 3, 2, 5
+    a = torch.randn(B, A, G, device=device, dtype=torch.float32, requires_grad=True)
+    idx = torch.tensor([[1, 2, 4, 4, 4], [0, 2, 3, 4, 4], [0, 1, 3, 4, 4], [0, 1, 2, 4, 4]], device=device)
+    g = torch.randn(B, M, G, 4, device=device, dtype=torch.float32, requires_grad=True)
+    g = g * (idx < B).unsqueeze(-1).unsqueeze(-1)
+    return a, idx, g, B, B
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_global_mode2_forward_accuracy():
+    from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp
+
+    a, idx, g, padding_value, num_centers = _generalized_conv_data()
+    actual = conv_sv_2d_sp(a, idx, g, padding_value, num_centers)
+    selected = a.index_select(0, idx.clamp_max(a.shape[0] - 1).flatten()).view(idx.shape[0], idx.shape[1], *a.shape[1:])
+    expected = torch.einsum("bmag,bmgd->bagd", selected, g)
+    assert torch.allclose(actual, expected, atol=1e-5, rtol=1e-4)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_global_mode2_distinct_atom_and_center_capacities():
+    from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp
+
+    a = torch.randn(6, 2, 2, device="cuda")
+    idx = torch.tensor([[1, 2, 5], [0, 2, 5], [0, 1, 5], [0, 1, 2]], device="cuda", dtype=torch.int32)
+    g = torch.randn(4, 3, 2, 4, device="cuda")
+    out = conv_sv_2d_sp(a, idx, g, padding_value=6, num_centers=4)
+    assert out.shape == (4, 2, 2, 4)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_global_mode2_backward_accuracy():
+    from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp
+
+    a, idx, g, padding_value, num_centers = _generalized_conv_data()
+    out = conv_sv_2d_sp(a, idx, g, padding_value, num_centers)
+    cotangent = torch.randn_like(out)
+    grad_a, grad_g = torch.autograd.grad(out, (a, g), cotangent, create_graph=True)
+
+    a_ref = a.detach().requires_grad_(True)
+    g_ref = g.detach().requires_grad_(True)
+    selected = a_ref.index_select(0, idx.clamp_max(a_ref.shape[0] - 1).flatten()).view(
+        idx.shape[0], idx.shape[1], *a_ref.shape[1:]
+    )
+    valid = (idx < padding_value).unsqueeze(-1).unsqueeze(-1)
+    reference = torch.einsum("cmag,cmgd->cagd", selected, g_ref * valid)
+    ref_a, ref_g = torch.autograd.grad(reference, (a_ref, g_ref), cotangent)
+    torch.testing.assert_close(grad_a, ref_a, atol=1e-5, rtol=1e-4)
+    torch.testing.assert_close(grad_g, ref_g, atol=1e-5, rtol=1e-4)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_global_mode2_double_backward_accuracy():
+    from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp
+
+    a, idx, g, padding_value, num_centers = _generalized_conv_data()
+    out = conv_sv_2d_sp(a, idx, g, padding_value, num_centers)
+    grad_a = torch.autograd.grad(out.sum(), a, create_graph=True)[0]
+    second = torch.autograd.grad(grad_a.sum(), g)[0]
+
+    a_ref = a.detach().requires_grad_(True)
+    g_ref = g.detach().requires_grad_(True)
+    selected = a_ref.index_select(0, idx.clamp_max(a_ref.shape[0] - 1).flatten()).view(
+        idx.shape[0], idx.shape[1], *a_ref.shape[1:]
+    )
+    valid = (idx < padding_value).unsqueeze(-1).unsqueeze(-1)
+    reference = torch.einsum("cmag,cmgd->cagd", selected, g_ref * valid)
+    ref_grad_a = torch.autograd.grad(reference.sum(), a_ref, create_graph=True)[0]
+    ref_second = torch.autograd.grad(ref_grad_a.sum(), g_ref)[0]
+    torch.testing.assert_close(second, ref_second, atol=1e-5, rtol=1e-4)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_global_mode2_mode1_explicit_compatibility():
+    from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp
+
+    a, idx, g, padding_value, num_centers = _generalized_conv_data()
+    assert torch.equal(conv_sv_2d_sp(a, idx, g), conv_sv_2d_sp(a, idx, g, padding_value - 1, num_centers - 1))
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_global_mode2_backward_vmap_scalars():
+    from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp
+
+    a, idx, g, padding_value, num_centers = _generalized_conv_data()
+    output = conv_sv_2d_sp(a, idx, g, padding_value, num_centers)
+    cotangents = torch.randn((2, *output.shape), device="cuda")
+    values = torch.vmap(lambda cotangent: torch.autograd.grad(output, a, cotangent, retain_graph=True)[0])(cotangents)
+    assert values.shape == cotangents.shape[:-1]
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_global_mode2_double_backward_vmap_scalars():
+    from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp
+
+    a, idx, g, padding_value, num_centers = _generalized_conv_data()
+    output = conv_sv_2d_sp(a, idx, g, padding_value, num_centers)
+    values = torch.func.vmap(lambda cotangent: cotangent.sum())(output)
+    assert values.shape == (output.shape[0],)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_global_mode2_vmap_rejects_unsupported_dims():
+    from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp
+
+    a, idx, g, padding_value, num_centers = _generalized_conv_data()
+    with pytest.raises((RuntimeError, ValueError)):
+        torch.func.vmap(lambda value: conv_sv_2d_sp(value, idx, g, padding_value, num_centers))(a.unsqueeze(0))
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_global_mode2_empty_and_all_sentinel_rows():
+    from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp
+
+    a, _idx, g, padding_value, num_centers = _generalized_conv_data()
+    idx = torch.full((a.shape[0], g.shape[1]), padding_value, device="cuda", dtype=torch.int64)
+    actual = conv_sv_2d_sp(a, idx, g, padding_value, num_centers)
+    assert torch.equal(actual, torch.zeros_like(actual))

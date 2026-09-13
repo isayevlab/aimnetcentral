@@ -1,6 +1,7 @@
 import math
 import os
 import re
+import warnings
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
@@ -10,6 +11,8 @@ from nvalchemiops.neighbors import NeighborOverflowError
 from nvalchemiops.torch.interactions.dispersion import dftd3
 from nvalchemiops.torch.interactions.electrostatics import (
     dsf_coulomb,
+    estimate_ewald_parameters,
+    estimate_pme_parameters,
     ewald_summation,
     particle_mesh_ewald,
 )
@@ -70,6 +73,159 @@ class ExternalDerivativeTerms:
 
     forces: Tensor | None = None
     virial: Tensor | None = None
+
+
+class _Mode2BackendInputs(NamedTuple):
+    coord: Tensor
+    neighbor_matrix: Tensor
+    shifts: Tensor | None
+    batch_idx: Tensor
+    fill_value: int
+    num_systems: int
+    cell: Tensor | None
+
+
+def _mode2_backend_inputs(data: dict[str, Tensor], suffix: str) -> _Mode2BackendInputs:
+    """Return the prepared global mode-2 tensors in backend layout."""
+    coord = data["coord"]
+    B, N = coord.shape[:2]
+    neighbor_matrix_source = data.get(f"_nbmat_kernel{suffix}", data[f"nbmat{suffix}"])
+    coord_flat = _flatten_backend_view(coord, "mode-2 coordinates")
+    neighbor_matrix_source = neighbor_matrix_source.to(torch.int32)
+    neighbor_matrix = _flatten_backend_view(neighbor_matrix_source, f"mode-2 nbmat{suffix}")
+    shifts_source = data.get(f"shifts{suffix}")
+    shifts = _flatten_backend_view(shifts_source, f"mode-2 shifts{suffix}") if shifts_source is not None else None
+    cell = data.get("cell")
+    if cell is not None:
+        # The batched kernels index ``cell[system]`` unchecked, so a shared
+        # cell must be broadcast to every system rather than left at (1, 3, 3).
+        if cell.ndim == 2:
+            cell = cell.unsqueeze(0)
+        if cell.ndim != 3 or cell.shape[-2:] != (3, 3):
+            raise ValueError("mode-2 cell must have shape (3, 3), (1, 3, 3), or (B, 3, 3).")
+        if cell.shape[0] == 1 and B > 1:
+            cell = cell.expand(B, -1, -1)
+        elif cell.shape[0] != B:
+            raise ValueError(f"mode-2 cell has {cell.shape[0]} systems but the batch has {B}.")
+    batch_idx = torch.arange(B, device=coord.device, dtype=torch.int32).repeat_interleave(N)
+    return _Mode2BackendInputs(
+        coord=coord_flat,
+        neighbor_matrix=neighbor_matrix,
+        shifts=shifts,
+        batch_idx=batch_idx,
+        fill_value=B * N,
+        num_systems=B,
+        cell=cell,
+    )
+
+
+def _flatten_backend_view(tensor: Tensor, name: str) -> Tensor:
+    flattened = tensor.flatten(0, 1)
+    if flattened._base is None:
+        raise ValueError(f"{name} must be view-flattenable across (B, N).")
+    return flattened
+
+
+def _real_atom_periodic_parameters(
+    backend: str,
+    positions: Tensor,
+    cell: Tensor,
+    batch_idx: Tensor,
+    real_mask: Tensor,
+    accuracy: float,
+) -> tuple[dict[str, Any], Tensor]:
+    """Estimate Ewald/PME parameters from the real atoms of the non-empty systems.
+
+    nvalchemiops estimates the splitting parameter ``alpha`` (and the k-space
+    cutoff or PME mesh) from the per-system atom count of the ``batch_idx`` it
+    receives.  Mode 2 hands the kernel every padded row, so left to the
+    kernel the estimate would depend on the padding width and the energy of a
+    system would change with the size of the largest molecule in its batch.
+    Running the same estimator over the real atoms only reproduces what the
+    flat mode-1 call gets, so mode 1 and mode 2 agree to rounding.
+
+    A system made of dummy rows only is left out of the estimate: with a zero
+    atom count the Ewald estimate degenerates to ``alpha = 0`` (a ``nan``
+    background term) and PME's batch median can hit a zero division.  Such a
+    system has no charge, so any finite parameters give it exactly zero
+    energy; it receives a placeholder ``alpha`` and does not shift the
+    parameters of the others.
+
+    Returns the keyword arguments for the kernel call and the per-system
+    real-space cutoff the estimate assumes (one entry per non-empty system).
+    """
+    with torch.no_grad():
+        B = cell.shape[0]
+        real_idx = real_mask.nonzero(as_tuple=False).flatten()
+        batch_real = batch_idx.index_select(0, real_idx)
+        counts = torch.zeros(B, dtype=torch.long, device=cell.device)
+        counts.scatter_add_(0, batch_real.to(torch.long), torch.ones_like(batch_real, dtype=torch.long))
+        nonempty = counts > 0
+        # Compact system indices over the non-empty systems.
+        compact = torch.cumsum(nonempty.to(torch.int32), 0) - 1
+        batch_compact = compact.index_select(0, batch_real.to(torch.long)).to(torch.int32)
+        positions_real = positions.detach().index_select(0, real_idx)
+        cell_nonempty = cell.detach()[nonempty]
+        if cell_nonempty.shape[0] == 0:
+            # Mode 1 refuses the equivalent input ("at least one real atom");
+            # arbitrary placeholder parameters here would only hide the mistake.
+            raise ValueError(
+                "mode-2 periodic Coulomb needs at least one real atom in the batch, "
+                "but every system consists of dummy rows only."
+            )
+        if backend == "ewald":
+            params = estimate_ewald_parameters(positions_real, cell_nonempty, batch_compact, accuracy)
+            alpha_real = params.alpha.reshape(-1).to(positions.dtype)
+            k_cutoff_real = params.reciprocal_space_cutoff.reshape(-1).to(positions.dtype)
+            # Placeholders for empty systems: the kernel sizes the shared
+            # k-vector set from the batch maximum, so use the batch minimum
+            # rather than a constant that could exceed every real cutoff.
+            alpha = alpha_real.min().expand(B).clone()
+            k_cutoff = k_cutoff_real.min().expand(B).clone()
+            alpha[nonempty] = alpha_real
+            k_cutoff[nonempty] = k_cutoff_real
+            return {"alpha": alpha, "k_cutoff": k_cutoff}, params.real_space_cutoff.reshape(-1)
+        params = estimate_pme_parameters(positions_real, cell_nonempty, batch_compact, accuracy)
+        # PME shares one alpha across the batch; extend it to the empty systems.
+        # expand() leaves a stride-0 view; materialize it so a kernel that takes
+        # the pointer raw cannot read one element on behalf of the whole batch.
+        alpha = params.alpha.reshape(-1)[:1].expand(B).to(positions.dtype).contiguous()
+        return {"alpha": alpha, "mesh_dimensions": tuple(params.mesh_dimensions)}, params.real_space_cutoff.reshape(-1)
+
+
+def _warn_short_coulomb_list(
+    backend: str, data: dict[str, Tensor], suffix: str, rc_needed: Tensor, accuracy: float
+) -> None:
+    """Check the caller-built Coulomb neighbor list against the cutoff the estimate assumes.
+
+    In mode 2 the caller owns ``nbmat{suffix}``, so nothing downstream can tell
+    whether the real-space sum reaches the cutoff the splitting parameter was
+    tuned for. Truncating it is silent, and in a condensed-phase cell it is
+    large: reusing the model's short-range list costs of order 1 eV and
+    0.1 A^-1 eV in forces for a 64-molecule water box at ``ewald_accuracy=1e-6``.
+    """
+    if not rc_needed.numel():
+        return
+    supplied_cutoff = data.get(f"cutoff{suffix}")
+    if supplied_cutoff is None:
+        warnings.warn(
+            f"mode-2 {backend} received no cutoff{suffix}, so the real-space cutoff of the supplied "
+            f"nbmat{suffix} cannot be checked against the estimate; a list shorter than the estimate "
+            f"silently truncates the real-space sum. Pass cutoff{suffix} to enable the check.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+        return
+    supplied = float(torch.as_tensor(supplied_cutoff).min())
+    needed = float(rc_needed.max())
+    if supplied < needed * (1.0 - 1e-6):
+        warnings.warn(
+            f"nbmat{suffix} was built with cutoff {supplied:.2f} A, but the {backend} real-space "
+            f"sum at ewald_accuracy={accuracy:g} assumes {needed:.2f} A; the truncated real-space "
+            "term is missing from the energy. Rebuild the Coulomb neighbor list at the estimated cutoff.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
 
 
 _PME_MIN_NVALCHEMIOPS = (0, 4, 1)
@@ -324,47 +480,21 @@ class LRCoulomb(nn.Module):
         data: dict[str, Tensor],
         suffix: str,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor | None, Tensor | None, int, int]:
-        """Flatten batched neighbor-matrix inputs for nvalchemiops DSF."""
-        coord = data["coord"]
-        charges = data[self.key_in].to(coord.dtype).masked_fill(data["mask_i"], 0.0)
-        B, N = coord.shape[:2]
-        fill_value = B * N
-
-        positions = torch.cat([coord.reshape(B * N, 3), coord.new_zeros(1, 3)], dim=0)
-        charges_flat = torch.cat([charges.reshape(B * N), charges.new_zeros(1)], dim=0)
-        batch_idx = torch.cat(
-            [
-                torch.repeat_interleave(torch.arange(B, device=coord.device, dtype=torch.int32), N),
-                torch.zeros(1, device=coord.device, dtype=torch.int32),
-            ],
-            dim=0,
+        mode2 = _mode2_backend_inputs(data, suffix)
+        charges = data[self.key_in].to(data["coord"].dtype)
+        charges_flat = charges.flatten(0, 1).masked_fill(data["mask_i"].flatten(), 0.0)
+        shifts = mode2.shifts.to(torch.int32) if mode2.shifts is not None else None
+        cell = mode2.cell.to(data["coord"].dtype) if mode2.cell is not None else None
+        return (
+            mode2.coord,
+            charges_flat,
+            mode2.batch_idx,
+            mode2.neighbor_matrix,
+            cell,
+            shifts,
+            mode2.fill_value,
+            mode2.num_systems,
         )
-
-        # nbmat values are atom indices LOCAL to each batch; the flattened
-        # `positions` tensor uses GLOBAL indices (b * N + i), so each batch's
-        # neighbor entries must be offset by b * N. Without this, valid
-        # neighbors in batch b > 0 silently point into batch 0 and DSF energy
-        # is wrong. Mirrors the offset that DFTD3 mode-2 already applies.
-        nbmat_local = data[f"nbmat{suffix}"].to(torch.int32)
-        offsets = (torch.arange(B, device=coord.device, dtype=torch.int32) * N).view(B, 1, 1)
-        nbmat = (nbmat_local + offsets).flatten(0, 1)
-        mask_ij = data[f"mask_ij{suffix}"].flatten(0, 1)
-        nbmat = torch.where(mask_ij, torch.full_like(nbmat, fill_value), nbmat)
-        nbmat = torch.cat(
-            [nbmat, torch.full((1, nbmat.shape[1]), fill_value, dtype=torch.int32, device=coord.device)],
-            dim=0,
-        )
-
-        cell = data.get("cell")
-        shifts = None
-        if cell is not None:
-            cell = cell.to(coord.dtype)
-            if cell.ndim == 2:
-                cell = cell.unsqueeze(0).expand(B, -1, -1)
-            shifts = data[f"shifts{suffix}"].flatten(0, 1).to(torch.int32)
-            shifts = torch.cat([shifts, torch.zeros((1, shifts.shape[1], 3), dtype=torch.int32, device=coord.device)])
-
-        return positions, charges_flat, batch_idx, nbmat, cell, shifts, fill_value, B
 
     def _dsf_inputs(
         self,
@@ -386,8 +516,10 @@ class LRCoulomb(nn.Module):
         nb_mode = nbops.get_nb_mode(data)
         if nb_mode == 1:
             return forces
-        if nb_mode in (0, 2):
+        if nb_mode == 0:
             return forces[:-1].reshape_as(data["coord"])
+        if nb_mode == 2:
+            return forces.reshape_as(data["coord"])
         raise ValueError(f"Invalid neighbor mode: {nb_mode}")
 
     def _coul_dsf_nvalchemi(
@@ -510,8 +642,9 @@ class LRCoulomb(nn.Module):
 
         Requires ``cell`` in ``data`` and a PBC neighbor list under
         ``nbmat_coulomb``/``shifts_coulomb`` (preferred) or the shared
-        ``nbmat_lr``/``shifts_lr``. Drops the trailing padding row before
-        invoking the backend.
+        ``nbmat_lr``/``shifts_lr``. Mode 2 keeps every batch-major dummy row
+        through zero-copy flattened backend views; flat mode 1 drops the
+        trailing padding row before invoking the backend.
         """
         suffix = nbops.resolve_suffix(data, ["_coulomb", "_lr"])
 
@@ -520,29 +653,54 @@ class LRCoulomb(nn.Module):
         if cell is None:
             raise ValueError("nvalchemi Coulomb requires periodic cell data")
 
-        charges = data[self.key_in]
-        mol_idx = data["mol_idx"]
-        nbmat = data[f"nbmat{suffix}"]
-        shifts = data[f"shifts{suffix}"]
-        if coord.ndim != 2 or charges.ndim != 1 or mol_idx.ndim != 1 or nbmat.ndim != 2:
-            raise ValueError("nvalchemi Coulomb expects flat padded PBC inputs")
-        if not (coord.shape[0] == charges.shape[0] == mol_idx.shape[0] == nbmat.shape[0]):
-            raise ValueError("nvalchemi Coulomb flat inputs must include matching coord/charge/mol_idx/nbmat rows")
-        if coord.shape[0] < 2:
-            raise ValueError("nvalchemi Coulomb flat inputs must include at least one real atom and one padding row")
-
-        # Drop the trailing padding atom (flat mode includes one at index N).
-        N_padded = coord.shape[0]
-        N = N_padded - 1
-        coord_real = coord[:-1]
-        charges_real = charges[:-1]
-        mol_idx_real = mol_idx[:-1].to(torch.int32)
-        nbmat_real = nbmat[:-1].to(torch.int32)
-        shifts_real = shifts[:-1].to(torch.int32)
-
         if backend not in ("ewald", "pme"):
             raise ValueError(f"backend must be 'ewald' or 'pme', got {backend!r}")
-        num_systems = int(mol_idx_real.max().item()) + 1
+        backend_kwargs: dict[str, Any] = {}
+        mode2 = nbops.get_nb_mode(data) == 2
+        if mode2:
+            mode2_inputs = _mode2_backend_inputs(data, suffix)
+            coord_real = mode2_inputs.coord
+            padding_mask = data["mask_i"].flatten()
+            real_mask = ~padding_mask
+            charges_real = data[self.key_in].to(coord.dtype).flatten(0, 1).masked_fill(padding_mask, 0.0)
+            mol_idx_real = mode2_inputs.batch_idx
+            nbmat_real = mode2_inputs.neighbor_matrix
+            shifts_real = mode2_inputs.shifts.to(torch.int32) if mode2_inputs.shifts is not None else None
+            cell = mode2_inputs.cell.to(coord.dtype) if mode2_inputs.cell is not None else None
+            N = mode2_inputs.fill_value
+            num_systems = mode2_inputs.num_systems
+            # The dummy rows stay in the kernel call (zero charge, sentinel-only
+            # neighbors) but must not enter the parameter estimate.
+            backend_kwargs, rc_needed = _real_atom_periodic_parameters(
+                backend, coord_real, cell, mol_idx_real, real_mask, float(self.ewald_accuracy)
+            )
+            # Mode-2 callers build the Coulomb list themselves; the estimate
+            # above assumes a real-space cutoff that list may not reach.
+            _warn_short_coulomb_list(backend, data, suffix, rc_needed, float(self.ewald_accuracy))
+        else:
+            charges = data[self.key_in]
+            mol_idx = data["mol_idx"]
+            nbmat = data[f"nbmat{suffix}"]
+            shifts = data[f"shifts{suffix}"]
+            if coord.ndim != 2 or charges.ndim != 1 or mol_idx.ndim != 1 or nbmat.ndim != 2:
+                raise ValueError("nvalchemi Coulomb expects flat padded PBC inputs")
+            if not (coord.shape[0] == charges.shape[0] == mol_idx.shape[0] == nbmat.shape[0]):
+                raise ValueError("nvalchemi Coulomb flat inputs must include matching coord/charge/mol_idx/nbmat rows")
+            if coord.shape[0] < 2:
+                raise ValueError(
+                    "nvalchemi Coulomb flat inputs must include at least one real atom and one padding row"
+                )
+
+            # Flat mode reserves one final padding atom for the backend fill value.
+            N_padded = coord.shape[0]
+            N = N_padded - 1
+            coord_real = coord[:-1]
+            charges_real = charges[:-1]
+            mol_idx_real = mol_idx[:-1].to(torch.int32)
+            nbmat_real = nbmat[:-1].to(torch.int32)
+            shifts_real = shifts[:-1].to(torch.int32)
+            num_systems = int(mol_idx_real.max().item()) + 1
+
         fn = particle_mesh_ewald if backend == "pme" else ewald_summation
         energies_per_atom = fn(
             positions=coord_real,
@@ -553,6 +711,7 @@ class LRCoulomb(nn.Module):
             neighbor_matrix_shifts=shifts_real,
             mask_value=N,
             accuracy=float(self.ewald_accuracy),
+            **backend_kwargs,
         )
         ke = constants.Hartree * constants.Bohr
         energies_per_system = torch.zeros(num_systems, dtype=torch.float64, device=coord.device)
@@ -1165,24 +1324,15 @@ class DFTD3(nn.Module):
 
         elif nb_mode == 2:
             suffix = nbops.resolve_suffix(data, ["_dftd3", "_lr"])
-            B, N = coord.shape[:2]
-            coord_flat = coord.flatten(0, 1)
-            numbers_flat = numbers.flatten()
-            batch_idx = torch.arange(B, device=coord.device, dtype=torch.int32).repeat_interleave(N)
-            num_systems = B
-
-            nbmat = data[f"nbmat{suffix}"]
-            offsets = torch.arange(B, device=coord.device).unsqueeze(1) * N
-            neighbor_matrix = (nbmat + offsets.unsqueeze(-1)).flatten(0, 1).to(torch.int32)
-            mask_ij = data.get(f"mask_ij{suffix}")
-            if mask_ij is not None:
-                fill_matrix = torch.full_like(neighbor_matrix, B * N)
-                neighbor_matrix = torch.where(mask_ij.flatten(0, 1), fill_matrix, neighbor_matrix)
-
-            shifts = data.get(f"shifts{suffix}")
-            neighbor_matrix_shifts = shifts.flatten(0, 1).to(torch.int32) if shifts is not None else None
-            fill_value = B * N
-            cell_for_kernel = cell
+            mode2 = _mode2_backend_inputs(data, suffix)
+            coord_flat = mode2.coord
+            numbers_flat = numbers.flatten(0, 1)
+            batch_idx = mode2.batch_idx
+            num_systems = mode2.num_systems
+            neighbor_matrix = mode2.neighbor_matrix
+            neighbor_matrix_shifts = mode2.shifts.to(torch.int32) if mode2.shifts is not None else None
+            fill_value = mode2.fill_value
+            cell_for_kernel = mode2.cell
 
         else:
             raise ValueError(f"Unsupported neighbor mode: {nb_mode}")
