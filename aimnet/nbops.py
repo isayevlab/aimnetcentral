@@ -43,6 +43,14 @@ def normalize_mode2_periodic_geometry(data: dict[str, Tensor], *, B: int) -> dic
         raise ValueError(f"cell must have shape (3, 3), (1, 3, 3), or (B, 3, 3) with B={B}.")
     if cell.shape[0] == 1 and B > 1:
         cell = cell.expand(B, -1, -1)
+    # A singular cell has no reciprocal lattice: the Ewald structure factor
+    # returns nan and the per-system stress divides by det(cell). Filling a
+    # padded-out slot with zeros is the common way to hit this, so reject it
+    # here rather than let it surface as nan in one row of the output.
+    _mode2_check(
+        (torch.linalg.det(cell).abs() > 0).all(),
+        "cell must be non-singular for every mode-2 system; copy a real cell into padded slots.",
+    )
     data["cell"] = cell
 
     if pbc is None:
@@ -160,10 +168,15 @@ def validate_mode2_nbmat_raw(data: dict[str, Tensor], *, suffix: str) -> None:
         if shifts.dtype.is_floating_point:
             _mode2_check(torch.isfinite(shifts).all(), f"{shifts_key} must be finite.")
             _mode2_check((shifts == shifts.round()).all(), f"{shifts_key} must be integral-valued.")
-        _mode2_check(
-            ((shifts >= -(2**31)) & (shifts < 2**31)).all(),
-            f"{shifts_key} values must fit in int32.",
-        )
+        # int8/int16/int32 values fit in int32 by construction, and the range
+        # check is not merely redundant for them: 2**31 overflows those dtypes,
+        # so torch wraps the Python scalar to -2**31 and `shifts < 2**31` is
+        # False for every element, rejecting valid input.
+        if shifts.dtype is torch.int64 or shifts.dtype.is_floating_point:
+            _mode2_check(
+                ((shifts >= -(2**31)) & (shifts < 2**31)).all(),
+                f"{shifts_key} values must fit in int32.",
+            )
 
     sentinel = total_atoms
     is_sentinel = nbmat == sentinel
@@ -275,6 +288,9 @@ def _prepare_mode2_neighbor_tensors(data: dict[str, Tensor]) -> None:
     nbmat = data["nbmat"]
     B, N, _M = nbmat.shape
     sentinel = B * N
+    # Identity dedup is eager-only for the same reason as in `calc_masks`
+    # below: a Python-level identity test would bake a wrong guard into a
+    # traced graph.
     dedup = not torch.compiler.is_compiling()
     previous: list[tuple[Tensor, Tensor, Tensor, Tensor]] = []
     mask_i = data["mask_i"]
@@ -286,12 +302,7 @@ def _prepare_mode2_neighbor_tensors(data: dict[str, Tensor]) -> None:
         reused = False
         if dedup:
             for source, mask_ij, gather, kernel in previous:
-                if (
-                    current is source
-                    and current.shape == source.shape
-                    and current.stride() == source.stride()
-                    and current.storage_offset() == source.storage_offset()
-                ):
+                if current is source:
                     data[f"mask_ij{suffix}"] = mask_ij
                     data[f"_nbmat_gather{suffix}"] = gather
                     data[f"_nbmat_kernel{suffix}"] = kernel
