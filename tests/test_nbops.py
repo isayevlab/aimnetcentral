@@ -1102,3 +1102,26 @@ def test_global_mode2_rejects_cell_batch_mismatch():
     data["cell"] = (torch.eye(3) * 10.0).expand(3, -1, -1)
     with pytest.raises(ValueError, match="cell must have shape"):
         nbops.validate_mode2_input(data)
+
+
+@pytest.mark.parametrize("shifts_dtype", [torch.int8, torch.int16, torch.int32, torch.int64, torch.float32])
+def test_global_mode2_accepts_every_supported_shifts_dtype(shifts_dtype):
+    """Integer shifts are advertised as valid input, so every width must pass.
+
+    The int32 range check used to compare against ``2**31``, which wraps in any
+    dtype narrower than int64 and made the comparison false for every element.
+    """
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    data["cell"] = torch.eye(3) * 10.0
+    data["shifts"] = data["shifts"].to(shifts_dtype)
+    nbops.validate_mode2_input(data)
+
+
+def test_global_mode2_rejects_singular_cell():
+    """A zero cell has no reciprocal lattice; catch it instead of returning nan."""
+    data = _global_mode2_data(torch.device("cpu"), include_shifts=True)
+    cell = (torch.eye(3) * 10.0).unsqueeze(0).repeat(2, 1, 1)
+    cell[1] = 0.0
+    data["cell"] = cell
+    with pytest.raises(ValueError, match="non-singular"):
+        nbops.validate_mode2_input(data)

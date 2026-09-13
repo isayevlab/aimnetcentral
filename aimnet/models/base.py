@@ -274,6 +274,9 @@ class AIMNet2Base(nn.Module):
             assert k in data, f"Key {k} is required"
             data[k] = data[k].to(d)
         neighbor_keys = {f"nbmat{suffix}" for suffix in nbops.NBMAT_SUFFIXES}
+        # Aliased neighbor matrices must stay one object through the int32 cast.
+        # Breaking this silently stops the identity dedup in validate_mode2_input
+        # and _prepare_mode2_neighbor_tensors, which then do the work per suffix.
         converted_neighbors: list[tuple[Tensor, Tensor]] = []
         for key in neighbor_keys:
             if key not in data:
