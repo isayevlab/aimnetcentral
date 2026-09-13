@@ -578,3 +578,93 @@ def test_global_mode2_rejects_cell_batch_mismatch(backend: str):
     data["cell"] = data["cell"][0].expand(3, -1, -1).clone()
     with pytest.raises(ValueError, match="cell"):
         _module(backend)(data)
+
+
+def _mode2_batch(systems, cell: torch.Tensor, padded_width: int) -> dict[str, torch.Tensor]:
+    """Pack ``(coord, numbers, charges, nbmat, shifts, n_real)`` systems into one batch.
+
+    A system with ``n_real == 0`` contributes only dummy rows.
+    """
+    B = len(systems)
+    device = cell.device
+    M = max(nbmat.shape[1] for *_, nbmat, _, _ in systems)
+    sentinel = B * padded_width
+    nbmat_b = torch.full((B, padded_width, M), sentinel, dtype=torch.int32, device=device)
+    shifts_b = torch.zeros((B, padded_width, M, 3), dtype=torch.float64, device=device)
+    coord_b = torch.zeros((B, padded_width, 3), dtype=torch.float64, device=device)
+    numbers_b = torch.zeros((B, padded_width), dtype=torch.long, device=device)
+    charges_b = torch.zeros((B, padded_width), dtype=torch.float64, device=device)
+    for b, (coord, numbers, charges, nbmat, shifts, n_real) in enumerate(systems):
+        if n_real == 0:
+            continue
+        coord_b[b, :n_real] = coord[:n_real]
+        numbers_b[b, :n_real] = numbers[:n_real]
+        charges_b[b, :n_real] = charges[:n_real]
+        real = nbmat < n_real
+        nbmat_b[b, :n_real, : nbmat.shape[1]] = torch.where(
+            real, nbmat + b * padded_width, torch.full_like(nbmat, sentinel)
+        ).to(torch.int32)
+        shifts_b[b, :n_real, : nbmat.shape[1]] = torch.where(real.unsqueeze(-1), shifts, torch.zeros_like(shifts))
+    data = {
+        "coord": coord_b,
+        "numbers": numbers_b,
+        "charges": charges_b,
+        "cell": cell.unsqueeze(0).expand(B, -1, -1).contiguous(),
+        "pbc": torch.ones((B, 3), dtype=torch.bool, device=device),
+        "nbmat": nbmat_b,
+        "shifts": shifts_b,
+        "nbmat_coulomb": nbmat_b,
+        "shifts_coulomb": shifts_b,
+    }
+    return nbops.calc_masks(nbops.set_nb_mode(data))
+
+
+def _two_sizes(device: torch.device):
+    coord_a, numbers_a, charges_a, cell = _cation_in_box(device)
+    coord_b, numbers_b, charges_b = coord_a[:3] + 0.3, numbers_a[:3], charges_a[:3] + 0.1
+    nbmat_a, shifts_a = _periodic_neighbors(coord_a, cell)
+    nbmat_b, shifts_b = _periodic_neighbors(coord_b, cell)
+    a = (coord_a, numbers_a, charges_a, nbmat_a, shifts_a, 4)
+    b = (coord_b, numbers_b, charges_b, nbmat_b, shifts_b, 3)
+    return a, b, cell
+
+
+def test_global_mode2_ewald_energy_does_not_depend_on_batch_companions():
+    """Ewald parameters are per-system, so a system's energy ignores its neighbors in the batch.
+
+    This is the reproducibility property the real-atom estimate exists for:
+    before it, every system took its parameters from the padded width, so
+    swapping a companion for one of a different size moved this energy.
+    """
+    a, b, cell = _two_sizes(torch.device("cpu"))
+    module = LRCoulomb(method="ewald", subtract_sr=False, ewald_accuracy=1e-6)
+    with_same = module(_mode2_batch([a, a], cell, 6))["e_h"][0]
+    with_other = module(_mode2_batch([a, b], cell, 6))["e_h"][0]
+    torch.testing.assert_close(with_same, with_other, atol=0.0, rtol=0.0)
+
+
+@pytest.mark.parametrize("backend", ["ewald", "pme"])
+def test_global_mode2_all_dummy_batch_is_rejected(backend: str):
+    """A batch with no real atom anywhere is refused, as the flat path refuses it."""
+    a, _b, cell = _two_sizes(torch.device("cpu"))
+    empty = (*a[:5], 0)
+    module = LRCoulomb(method=backend, subtract_sr=False, ewald_accuracy=1e-6)
+    with pytest.raises(ValueError, match="at least one real atom"):
+        module(_mode2_batch([empty, empty], cell, 6))
+
+
+@pytest.mark.parametrize("backend", ["ewald", "pme"])
+def test_global_mode2_warns_when_the_coulomb_cutoff_is_not_declared(backend: str):
+    """Without a declared cutoff the real-space sum cannot be checked, so say so.
+
+    The silent case is the default one: a caller who never read the cutoff
+    guidance also never sets ``cutoff_coulomb``.
+    """
+    device = torch.device("cpu")
+    coord, numbers, charges, cell = _cation_in_box(device)
+    nbmat, shifts = _periodic_neighbors(coord, cell)
+    module = LRCoulomb(method=backend, subtract_sr=False, ewald_accuracy=1e-6)
+    data = _padded_mode2_inputs(coord, numbers, charges, cell, nbmat, shifts, 1)
+    assert "cutoff_coulomb" not in data
+    with pytest.warns(RuntimeWarning, match="received no cutoff_coulomb"):
+        module(dict(data))
