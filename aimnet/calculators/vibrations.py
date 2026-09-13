@@ -19,7 +19,6 @@ the module works with or without the ``ase`` extra; ASE users can pass
 """
 
 import math
-import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -27,7 +26,6 @@ import numpy as np
 import torch
 
 from aimnet.constants import get_masses
-from aimnet.models.utils import has_externalizable_dftd3
 
 if TYPE_CHECKING:
     from .calculator import AIMNet2Calculator
@@ -272,19 +270,6 @@ def vibrational_analysis(
         # A flat multi-molecule input makes the calculator return one Hessian per
         # molecule; mirror its split check here instead of failing after the work.
         raise ValueError("vibrational_analysis handles one structure at a time; split the input by mol_idx")
-    model = getattr(calc, "model", None)
-    if model is not None and has_externalizable_dftd3(model):
-        # Only the tabulated DFT-D3/D3BJ module is affected: its energy enters
-        # autograd through a first-order-only Function, so the calculator's
-        # Hessian currently omits its curvature and low-frequency modes of
-        # dispersion-bound systems come out too soft. D3TS is plain torch and
-        # differentiates correctly; registry models externalize dispersion and
-        # are unaffected.
-        warnings.warn(
-            "This model embeds a tabulated DFT-D3 (D3BJ) module whose curvature the calculator's "
-            "Hessian currently omits; low-frequency modes of dispersion-bound systems will be off.",
-            stacklevel=2,
-        )
     numbers = torch.as_tensor(data["numbers"]).detach().cpu().numpy().reshape(-1)
     hessian = calc.eval(data, hessian=True)["hessian"]
     return analyze_hessian(

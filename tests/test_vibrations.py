@@ -375,7 +375,7 @@ def test_vibrational_analysis_matches_ase_on_a_real_model(model_calculator):
     np.testing.assert_allclose(vib.frequencies_cm1, np.sort(ase_freqs.real)[-3:], atol=1.0)
 
 
-# --- Input validation, batch guards, and the embedded-dispersion warning -----
+# --- Input validation and batch guards ---------------------------------------
 
 
 def test_masses_amu_rejects_padding_negative_and_out_of_range_numbers():
@@ -444,20 +444,3 @@ def test_vibrational_analysis_rejects_batches_up_front():
         vibrational_analysis(_FakeCalculator(), flat)
     # A leading batch dimension of one is a single structure.
     assert vibrational_analysis(_FakeCalculator(), _water_data(WATER[None])).n_tr_removed == 6
-
-
-def test_vibrational_analysis_warns_only_for_embedded_tabulated_dftd3():
-    import warnings
-
-    from torch import nn
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        vibrational_analysis(_FakeCalculator(), _water_data(WATER))  # no model attribute: silent
-        d3ts_model = nn.Module()
-        d3ts_model.add_module("d3ts", nn.Identity())
-        vibrational_analysis(_FakeCalculator(d3ts_model), _water_data(WATER))  # D3TS differentiates correctly
-    dftd3_model = nn.Module()
-    dftd3_model.add_module("dftd3", nn.Identity())
-    with pytest.warns(UserWarning, match="tabulated DFT-D3"):
-        vibrational_analysis(_FakeCalculator(dftd3_model), _water_data(WATER))
