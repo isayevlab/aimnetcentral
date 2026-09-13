@@ -156,7 +156,42 @@ class ConvSV(nn.Module):
     def forward(self, data: dict[str, Tensor], a: Tensor) -> Tensor:
         g_sv = data["g_sv"]
         mode = nbops.get_nb_mode(data)
-        if self.d2features:
+        if mode == 2:
+            a_flat = _flatten_mode2(a, "atomic features")
+            g_flat = _flatten_mode2(g_sv, "ConvSV geometry")
+            gather_flat = _flatten_mode2(data["_nbmat_gather"], "ConvSV gather indices")
+            kernel_flat = _flatten_mode2(data["_nbmat_kernel"], "ConvSV kernel indices")
+            b, n = a.shape[:2]
+            use_warp = (
+                self.d2features
+                and a.device.type == "cuda"
+                and a.dtype == torch.float32
+                and g_sv.dtype == torch.float32
+                and WARP_CUDA_AVAILABLE
+            )
+            if use_warp:
+                avf_sv = conv_sv_2d_sp(
+                    a_flat,
+                    kernel_flat,
+                    g_flat,
+                    padding_value=b * n,
+                    num_centers=b * n,
+                ).unflatten(0, (b, n))
+            else:
+                if self.d2features and a.device.type == "cuda" and a.dtype == torch.float32 and not WARP_CUDA_AVAILABLE:
+                    _warn_warp_cuda_unavailable()
+                # Masked slots gather index 0 (system 0's first real atom), so
+                # the gathered features are zeroed explicitly instead of relying
+                # on ``g_sv`` having been masked by its producer.
+                mask_ij = data["mask_ij"]
+                a_j = a_flat.index_select(0, gather_flat.flatten()).unflatten(0, mask_ij.shape)
+                # In place: a_j is a fresh index_select output, so no autograd hazard.
+                a_j.masked_fill_(mask_ij.reshape(*mask_ij.shape, *([1] * (a_j.ndim - 3))), 0.0)
+                if self.d2features:
+                    avf_sv = torch.einsum("...mag,...mgd->...agd", a_j, g_sv)
+                else:
+                    avf_sv = torch.einsum("...ma,...mgd->...agd", a_j, g_sv)
+        elif self.d2features:
             # The Warp kernel is float32-only and needs a CUDA-capable warp-lang
             # build (a CUDA pytorch + CPU warp-lang env is solver-reachable on
             # conda-forge); anything else falls through to the pure-torch einsum.
@@ -164,13 +199,7 @@ class ConvSV(nn.Module):
                 if WARP_CUDA_AVAILABLE:
                     avf_sv = conv_sv_2d_sp(a, data["nbmat"], g_sv)
                 else:
-                    warnings.warn(
-                        "warp-lang has no CUDA support in this environment; "
-                        "using the slower pure-torch AEV path on CUDA tensors. "
-                        "Install a CUDA build of warp-lang (conda-forge: warp-lang=*=cuda*).",
-                        RuntimeWarning,
-                        stacklevel=2,
-                    )
+                    _warn_warp_cuda_unavailable()
                     a_j = a.index_select(0, data["nbmat"].flatten()).unflatten(0, data["nbmat"].shape)
                     avf_sv = torch.einsum("...mag,...mgd->...agd", a_j, g_sv)
             elif mode > 0:
@@ -186,7 +215,28 @@ class ConvSV(nn.Module):
                 avf_sv = torch.einsum("...ma,...mgd->...agd", a.unsqueeze(1), g_sv)
         avf_s, avf_v = avf_sv.split([1, 3], dim=-1)
         avf_v = torch.einsum("agh,...agd->...ahd", self.agh, avf_v).pow(2).sum(-1)
-        return torch.cat([avf_s.squeeze(-1).flatten(-2, -1), avf_v.flatten(-2, -1)], dim=-1)
+        out = torch.cat([avf_s.squeeze(-1).flatten(-2, -1), avf_v.flatten(-2, -1)], dim=-1)
+        if mode == 1:
+            return out
+        return nbops.mask_i_(out, data, mask_value=0.0, inplace=False)
+
+
+def _warn_warp_cuda_unavailable() -> None:
+    warnings.warn(
+        "warp-lang has no CUDA support in this environment; "
+        "using the slower pure-torch AEV path on CUDA tensors. "
+        "Install a CUDA build of warp-lang (conda-forge: warp-lang=*=cuda*).",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+
+
+def _flatten_mode2(tensor: Tensor, name: str) -> Tensor:
+    """Flatten system and atom dimensions without allocating."""
+    flattened = tensor.flatten(0, 1)
+    if flattened._base is None:
+        raise ValueError(f"mode-2 {name} must be view-flattenable")
+    return flattened
 
 
 def _init_ahg(b: int, m: int, n: int):

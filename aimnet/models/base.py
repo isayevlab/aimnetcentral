@@ -273,13 +273,31 @@ class AIMNet2Base(nn.Module):
         for k, d in zip(self._required_keys, self._required_keys_dtype, strict=False):
             assert k in data, f"Key {k} is required"
             data[k] = data[k].to(d)
+        neighbor_keys = {f"nbmat{suffix}" for suffix in nbops.NBMAT_SUFFIXES}
+        # Aliased neighbor matrices must stay one object through the int32 cast.
+        # Breaking this silently stops the identity dedup in validate_mode2_input
+        # and _prepare_mode2_neighbor_tensors, which then do the work per suffix.
+        converted_neighbors: list[tuple[Tensor, Tensor]] = []
+        for key in neighbor_keys:
+            if key not in data:
+                continue
+            source = data[key]
+            converted = next((value for previous, value in converted_neighbors if source is previous), None)
+            if converted is None:
+                converted = source if source.dtype == torch.int32 else source.to(torch.int32)
+                converted_neighbors.append((source, converted))
+            data[key] = converted
         for k, d in zip(self._optional_keys, self._optional_keys_dtype, strict=False):
-            if k in data:
+            if k in data and k not in neighbor_keys:
                 data[k] = data[k].to(d)
         return data
 
     def prepare_input(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         """Common operations for input preparation."""
+        # The calculator marks the batch it validated; the mark is consumed here
+        # so a dict fed back to a standalone model is validated again.
+        if not nbops.consume_mode2_validated(data):
+            nbops.validate_mode2_input(data)
         data = self._prepare_dtype(data)
         data = nbops.set_nb_mode(data)
         data = nbops.calc_masks(data)
