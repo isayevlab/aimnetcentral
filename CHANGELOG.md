@@ -59,6 +59,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Removed
 
+- Removed the Codecov integration: the seven coverage upload steps, `codecov.yaml`, the `validate-codecov-config` workflow, and the README badge. No upload ever succeeded. Codecov reports the repository as never activated, with zero commits recorded, and every run logged `Token required - not valid tokenless upload` while the action's default `fail_ci_if_error: false` kept the job green. Coverage status checks were already disabled, so nothing gated on it and the badge advertised "unknown". Test jobs still measure coverage; nothing consumes the report.
 - Removed unused `DataGroup.to_dict`, `DataGroup.merge`, `DataGroup.rename_key`, `SizeGroupedDataset.merge`, and `SizeGroupedDataset.rename_datakey` (no callers in-repo or in downstream projects).
 - Removed unused `aimnet.train.utils.make_seed` and `aimnet.ops.lazy_calc_dij_lr`.
 - Removed unused `LRCoulomb.coul_ewald` and `LRCoulomb.coul_pme` convenience wrappers; use `LRCoulomb.forward` with `method="ewald"`/`"pme"`.
