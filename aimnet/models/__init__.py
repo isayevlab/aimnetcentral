@@ -11,6 +11,7 @@ from .utils import (  # noqa: F401
     has_d3ts,
     has_d3ts_in_config,
     has_dispersion,
+    has_embedded_tabulated_dftd3,
     has_externalizable_dftd3,
     has_lrcoulomb,
     iter_lrcoulomb_mods,

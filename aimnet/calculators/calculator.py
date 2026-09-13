@@ -12,7 +12,12 @@ from torch import Tensor, nn
 from aimnet import nbops
 from aimnet.models.artifact_validation import uses_default_model_import_settings, validate_runtime_model_metadata
 from aimnet.models.base import load_legacy_jit
-from aimnet.models.utils import has_d3ts, has_externalizable_dftd3, has_lrcoulomb
+from aimnet.models.utils import (
+    has_d3ts,
+    has_embedded_tabulated_dftd3,
+    has_externalizable_dftd3,
+    has_lrcoulomb,
+)
 from aimnet.modules import DFTD3, LRCoulomb
 from aimnet.modules.lr import ExternalDerivativeTerms, _require_pme_capable_nvalchemiops
 
@@ -254,6 +259,11 @@ class AIMNet2Calculator:
                 s6=d3_params.get("s6", 1.0),
             )
             self.external_dftd3 = self.external_dftd3.to(self.device)
+
+        # A tabulated DFT-D3 left inside the model tree reaches autograd through a
+        # first-order-only Function, so second derivatives and cell gradients are
+        # silently wrong. Detect it once; the affected requests are refused below.
+        self._embedded_tabulated_dftd3 = has_embedded_tabulated_dftd3(self.model)
 
         # Determine if model has long-range modules (embedded or external).
         #
@@ -940,6 +950,27 @@ class AIMNet2Calculator:
             version,
         )
 
+    def _reject_embedded_tabulated_dftd3(self, quantity: str) -> None:
+        """Refuse a derivative an embedded tabulated DFT-D3 module cannot contribute to.
+
+        Its energy reaches autograd through a first-order-only ``autograd.Function``:
+        the backward multiplies a saved, graph-free force tensor, so the second
+        derivative is structurally zero, and it returns no gradient for ``cell``,
+        so the periodic image term never contributes. Measured on a test crystal,
+        that costs the whole dispersion curvature and about 95% of the dispersion
+        virial, with nothing raised. Energy and forces are correct, so only the
+        affected quantities are refused.
+        """
+        if not self._embedded_tabulated_dftd3:
+            return
+        raise NotImplementedError(
+            f"{quantity} is not available for a model carrying a tabulated DFT-D3 module inside its own "
+            "module tree: that module contributes no second derivative and no cell gradient, so the result "
+            "would silently omit dispersion. Load the model so the calculator owns dispersion externally "
+            "(needs_dispersion=True), or use D3TS, which differentiates correctly. Energy and forces are "
+            "unaffected."
+        )
+
     def eval(
         self, data: dict[str, Any], forces=False, stress=False, hessian=False, *, validate_species: bool = True
     ) -> dict[str, Any]:
@@ -964,6 +995,11 @@ class AIMNet2Calculator:
                 "(Dynamo + double-backward through GELU hangs). Reconstruct calculator "
                 "with compile_model=False."
             )
+
+        if hessian:
+            self._reject_embedded_tabulated_dftd3("A Hessian")
+        if stress:
+            self._reject_embedded_tabulated_dftd3("A stress")
 
         if hessian:
             subsystems = self._split_hessian_batch(data)
@@ -1960,6 +1996,7 @@ class AIMNet2Calculator:
             self._validate_species_and_charge(data)
         # Warn once if the caller requests an open-shell `mult` this model ignores.
         self._maybe_warn_mult_ignored(data)
+        self._reject_embedded_tabulated_dftd3("A Hessian-vector product")
         coord_in = torch.as_tensor(data["coord"])
         if coord_in.ndim == 3 and coord_in.shape[0] > 1:
             raise NotImplementedError("hessian_vector_product supports a single structure only (got 3D batch).")
