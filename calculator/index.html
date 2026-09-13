@@ -1540,6 +1540,23 @@
   
 </li>
         
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#batched-sparse-neighbor-matrices-mode-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Batched sparse neighbor matrices (mode 2)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Batched sparse neighbor matrices (mode 2)">
+      <ul class="md-nav__list">
+        
           <li class="md-nav__item">
   <a href="#changing-coulomb-methods" class="md-nav__link">
     <span class="md-ellipsis">
@@ -2942,6 +2959,23 @@
   
 </li>
         
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#batched-sparse-neighbor-matrices-mode-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Batched sparse neighbor matrices (mode 2)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Batched sparse neighbor matrices (mode 2)">
+      <ul class="md-nav__list">
+        
           <li class="md-nav__item">
   <a href="#changing-coulomb-methods" class="md-nav__link">
     <span class="md-ellipsis">
@@ -3941,6 +3975,48 @@
     <span class="s2">&quot;cell&quot;</span><span class="p">:</span> <span class="n">cell</span><span class="p">,</span>  <span class="c1"># (3, 3)</span>
 <span class="p">},</span> <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">stress</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
+<h2 id="batched-sparse-neighbor-matrices-mode-2">Batched sparse neighbor matrices (mode 2)<a class="headerlink" href="#batched-sparse-neighbor-matrices-mode-2" title="Permanent link">&para;</a></h2>
+<p>Mode 2 represents several padded systems in one tensor. Coordinates, atomic numbers, and features have shape <code>(B, N, ...)</code>, where <code>B</code> is the number of systems and <code>N</code> is the padded atom capacity. Each system reserves its final atom slot as a dummy (<code>numbers[:, -1] == 0</code>); any additional zero-number atoms form a contiguous tail.</p>
+<p>Neighbor indices are global: atom <code>j</code> in system <code>b</code> is <code>b*N + j</code>. The sentinel is <code>B*N</code>, and valid neighbors must precede the sentinel tail in every center row. A neighbor that targets a padded atom is also excluded and belongs to that tail. The primary and long-range matrices use the same representation:</p>
+<div class="highlight"><pre><span></span><code><span class="n">nbmat</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">M</span><span class="p">)</span>
+<span class="n">nbmat</span><span class="p">[</span><span class="n">b</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">k</span><span class="p">]</span> <span class="o">==</span> <span class="n">b</span> <span class="o">*</span> <span class="n">N</span> <span class="o">+</span> <span class="n">j</span>       <span class="c1"># valid neighbor</span>
+<span class="n">nbmat</span><span class="p">[</span><span class="n">b</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">k</span><span class="p">]</span> <span class="o">==</span> <span class="n">B</span> <span class="o">*</span> <span class="n">N</span>           <span class="c1"># excluded slot</span>
+</code></pre></div>
+<p>Periodic mode 2 uses full three-dimensional cells. A <code>(B, 3, 3)</code> tensor gives each system its own cell; a single <code>(3, 3)</code> or <code>(1, 3, 3)</code> cell is broadcast to every system of the batch, the same way a <code>(3,)</code> <code>pbc</code> is. <code>pbc</code> is optional when a cell is supplied; if present, all three components must be true (partial or mixed periodicity is a content error, see the error semantics below). Each periodic neighbor matrix must have aligned integral lattice coefficients in <code>shifts.shape == (B, N, M, 3)</code>. Coordinates must be finite in every row, dummy rows included: they reach the periodic kernels with zero charge, and a non-finite dummy coordinate would still poison the Ewald structure factor. A system may consist of dummy rows only (a batch padded to a static size, for example); it contributes zero energy and does not influence the parameters estimated for the other systems. It must still carry a non-singular cell, so copy a real system's cell into the placeholder slot: a zero cell has no reciprocal lattice and would poison that system's energy and stress with <code>nan</code>, and it is rejected. Prefer a real cell over an artificially large one, since the batch shares one k-vector set sized from the largest cell. Ewald estimates its splitting parameter and k-space cutoff per system and PME one shared parameter set per batch, both from the real atoms only, so a system's energy does not depend on how much padding its batch carries and matches the flat evaluation to rounding (for PME the flat reference is the same batch of systems, because its parameters are shared across a batch in both layouts). Energy, forces, stress, and Hessian requests preserve the 3D execution path; Hessians select only real atoms and return <code>(R, 3, R, 3)</code> per system, where <code>R</code> excludes the padded tail. Batched Hessians stack when all systems have the same <code>R</code>, otherwise they return a list. Slab and mixed-periodicity inputs are not supported yet.</p>
+<p>All four periodic long-range producers—DSF, DFT-D3, Ewald, and PME—use the same global indices and aligned shifts. Their periodic neighbor lists must represent each physical interaction symmetrically: if an edge uses shift <code>s</code>, the reverse edge must use the opposite shift <code>-s</code>. A directed or half neighbor list is not a valid input for these long-range observables. A full-observable request can be made directly:</p>
+<div class="highlight"><pre><span></span><code><span class="n">result</span> <span class="o">=</span> <span class="n">calc</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">coord_batch</span><span class="p">,</span>      <span class="c1"># (B, N, 3), final atom padded</span>
+        <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="n">numbers_batch</span><span class="p">,</span>  <span class="c1"># (B, N)</span>
+        <span class="s2">&quot;charge&quot;</span><span class="p">:</span> <span class="n">charges</span><span class="p">,</span>
+        <span class="s2">&quot;cell&quot;</span><span class="p">:</span> <span class="n">cells</span><span class="p">,</span>             <span class="c1"># (B, 3, 3)</span>
+        <span class="s2">&quot;nbmat&quot;</span><span class="p">:</span> <span class="n">nbmat_sr</span><span class="p">,</span>             <span class="c1"># (B, N, M_sr), global indices, model cutoff</span>
+        <span class="s2">&quot;shifts&quot;</span><span class="p">:</span> <span class="n">shifts_sr</span><span class="p">,</span>           <span class="c1"># (B, N, M_sr, 3)</span>
+        <span class="s2">&quot;nbmat_lr&quot;</span><span class="p">:</span> <span class="n">nbmat_lr</span><span class="p">,</span>          <span class="c1"># (B, N, M_lr), built at calc.cutoff_lr</span>
+        <span class="s2">&quot;shifts_lr&quot;</span><span class="p">:</span> <span class="n">shifts_lr</span><span class="p">,</span>
+        <span class="s2">&quot;nbmat_coulomb&quot;</span><span class="p">:</span> <span class="n">nbmat_coulomb</span><span class="p">,</span>  <span class="c1"># (B, N, M_c), built at the Ewald/PME real-space cutoff</span>
+        <span class="s2">&quot;shifts_coulomb&quot;</span><span class="p">:</span> <span class="n">shifts_coulomb</span><span class="p">,</span>
+        <span class="s2">&quot;cutoff_coulomb&quot;</span><span class="p">:</span> <span class="n">r_c</span><span class="p">,</span>         <span class="c1"># lets the calculator check that cutoff</span>
+        <span class="s2">&quot;nbmat_dftd3&quot;</span><span class="p">:</span> <span class="n">nbmat_lr</span><span class="p">,</span>       <span class="c1"># may alias another list built at a sufficient cutoff</span>
+        <span class="s2">&quot;shifts_dftd3&quot;</span><span class="p">:</span> <span class="n">shifts_lr</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">stress</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">hessian</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Calculator results from an explicit mode-2 Hessian split retain the singleton system axis for each recursive subsystem (for example, energy <code>(B, 1)</code> and forces <code>(B, 1, N, 3)</code>). This preserves the existing mode-2 collection behavior; the Hessian itself contains only real atoms.</p>
+<p><strong>Coulomb neighbor-list cutoff.</strong> In mode 2 the calculator builds no neighbor lists, so the caller also owns the real-space cutoff of the Ewald/PME sum. The kernels evaluate the damped real-space term over exactly the pairs in <code>nbmat_coulomb</code>, while the splitting parameter is estimated for a real-space cutoff of <code>r_c = sqrt(-2 ln ε) · (V² / N_real)^(1/6) / sqrt(2π)</code> per system (<code>ε</code> is <code>ewald_accuracy</code>, <code>V</code> the cell volume, <code>N_real</code> the number of real atoms). A <code>nbmat_coulomb</code> built with a shorter cutoff truncates the real-space sum silently, and the cost rises steeply with density. Aliasing the model's short-range list into it leaves an isolated small molecule within a few meV, but at <code>ewald_accuracy=1e-6</code> it costs of order 1 eV in energy and 0.1 eV/A in forces for a 64-molecule water box, which is far above any geometry-optimization or dynamics tolerance. Because <code>r_c</code> grows as <code>(V² / N_real)^(1/6)</code>, a dilute system needs a long list: a 4-atom ion in a 12 A cell asks for about 20 A, wider than the cell itself, so the list must carry several periodic images of the same pair. A minimum-image neighbor builder cannot satisfy that; <code>AdaptiveNeighborList</code> and ASE can. Build <code>nbmat_coulomb</code>/<code>shifts_coulomb</code> with a cutoff of at least the largest <code>r_c</code> in the batch (<code>nvalchemiops.torch.interactions.electrostatics.estimate_ewald_parameters</code> and <code>estimate_pme_parameters</code> return it as <code>real_space_cutoff</code>), and pass that cutoff as <code>cutoff_coulomb</code>: the calculator then warns when it is shorter than the estimate. The check follows whichever list the Coulomb sum resolved to, so a caller who supplies only <code>nbmat_lr</code> declares <code>cutoff_lr</code> instead. Leaving the cutoff undeclared also warns, because an unchecked list is the case this trap actually reaches. The short-range list, <code>nbmat_lr</code>, and <code>nbmat_dftd3</code> keep their own cutoffs (the model cutoff, <code>cutoff_lr</code>, and the DFT-D3 cutoff).</p>
+<p>Legacy local matrices can be converted when their exclusions are already tail-packed:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">aimnet</span><span class="w"> </span><span class="kn">import</span> <span class="n">nbops</span>
+
+<span class="n">nbmat_global</span> <span class="o">=</span> <span class="n">nbops</span><span class="o">.</span><span class="n">convert_mode2_local_to_global</span><span class="p">(</span>
+    <span class="n">nbmat_local</span><span class="p">,</span>
+    <span class="n">padding_mask</span><span class="o">=</span><span class="n">padding_mask</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>The helper does not reorder slots. If exclusions are interleaved, the producer must repack both the neighbor matrix and its aligned shifts together; moving indices alone would assign the wrong periodic image. This is an intentional API break for callers that previously supplied local 3D mode-2 indices.</p>
+<p>Mode-2 input is validated before any neighbor tensor is narrowed or handed to a kernel: index bounds, per-system ownership, packed sentinel tails, shift alignment, finite coordinates, and the dummy-row layout. A plain evaluation validates once: the calculator validates its converted batch and marks it so the model's <code>prepare_input</code> does not repeat the work (the mark never reaches the caller's dict). A standalone model validates on every call. A Hessian request on a batch validates the batch once before splitting it and each subsystem once more in its own evaluation. Layout errors that need no tensor read (a wrong rank, dtype, or shape) raise <code>ValueError</code> in eager code; inside a <code>fullgraph=True</code> trace they surface as the compiler's error instead. Content errors depend on where they are detected: eager CPU raises <code>ValueError</code>; CUDA and any <code>torch.compile</code> trace queue a device-side assertion that raises <code>RuntimeError</code> without a host synchronization, and on CUDA the assertion poisons the context, so restart the CUDA process after a validation failure there. Partial or mixed periodicity is a content error and follows the same rule.</p>
 <h3 id="changing-coulomb-methods">Changing Coulomb Methods<a class="headerlink" href="#changing-coulomb-methods" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="n">calc</span><span class="o">.</span><span class="n">set_lrcoulomb_method</span><span class="p">(</span><span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">dsf_alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
 
@@ -4428,7 +4504,7 @@
 <p><strong>Ewald / PME Accuracy:</strong></p>
 <p>For both Ewald and PME, <code>ewald_accuracy</code> (default <code>1e-6</code>, matching the nvalchemiops default) controls the splitting parameter, real-space cutoff, and reciprocal-space resolution. The calculator estimates these per call from the cell geometry; smaller values give tighter convergence at higher cost.</p>
 <p><strong>Derivative Support:</strong></p>
-<p>All external Coulomb methods support inference forces/stress, force/stress losses in <code>train=True</code>, and Hessian/HVP requests. DSF routes training and Hessians through its differentiable closed-form torch path; <code>ewald</code> and <code>pme</code> keep their nvalchemiops energy in the autograd graph (nvalchemi-toolkit-ops &gt;= 0.4.1; selecting <code>pme</code> on 0.4.0 raises <code>RuntimeError</code>), so all derivatives come from the calculator's total-energy autograd and are relaxed-charge.</p>
+<p>All external Coulomb methods support inference forces/stress, force/stress losses in <code>train=True</code>, and Hessian/HVP requests. DSF routes training and Hessians through its differentiable closed-form torch path; <code>ewald</code> and <code>pme</code> keep their nvalchemiops energy in the autograd graph (nvalchemi-toolkit-ops &gt;= 0.4.1; selecting <code>pme</code> on 0.4.0 raises <code>RuntimeError</code>), so all derivatives come from the calculator's total-energy autograd and are relaxed-charge. Global mode-2 batches (see <a href="#batched-sparse-neighbor-matrices-mode-2">Batched sparse neighbor matrices (mode 2)</a>) support the same observables on the 3D execution path; their Hessians select real atoms.</p>
 <p>See <a href="../long_range/#derivative-support">Long-Range Methods → Derivative Support</a> for details.</p>
 <p><strong>Notes:</strong></p>
 <ul>
@@ -4552,16 +4628,34 @@
 <td>Unit cell vectors</td>
 </tr>
 <tr>
+<td><code>pbc</code></td>
+<td><code>bool</code></td>
+<td><code>(3,)</code> or <code>(B, 3)</code></td>
+<td>Periodic directions (mode 2 requires all three)</td>
+</tr>
+<tr>
 <td><code>nbmat</code></td>
-<td><code>int64</code></td>
-<td><code>(N, max_nb)</code></td>
-<td>Pre-computed neighbor matrix</td>
+<td>signed int</td>
+<td><code>(N, max_nb)</code> or <code>(B, N, M)</code></td>
+<td>Pre-computed neighbor matrix; 3D means global mode 2</td>
 </tr>
 <tr>
 <td><code>nbmat_lr</code></td>
-<td><code>int64</code></td>
-<td><code>(N, max_nb)</code></td>
+<td>signed int</td>
+<td><code>(N, max_nb)</code> or <code>(B, N, M)</code></td>
 <td>Long-range neighbor matrix</td>
+</tr>
+<tr>
+<td><code>nbmat_coulomb</code></td>
+<td>signed int</td>
+<td><code>(N, max_nb)</code> or <code>(B, N, M)</code></td>
+<td>Coulomb neighbor matrix (Ewald/PME real-space cutoff)</td>
+</tr>
+<tr>
+<td><code>nbmat_dftd3</code></td>
+<td>signed int</td>
+<td><code>(N, max_nb)</code> or <code>(B, N, M)</code></td>
+<td>DFT-D3 neighbor matrix</td>
 </tr>
 <tr>
 <td><code>nb_pad_mask</code></td>
@@ -4578,14 +4672,44 @@
 <tr>
 <td><code>shifts</code></td>
 <td><code>float32</code></td>
-<td><code>(N, max_nb, 3)</code></td>
-<td>PBC shifts for neighbors</td>
+<td><code>(N, max_nb, 3)</code> or <code>(B, N, M, 3)</code></td>
+<td>Integral lattice coefficients for <code>nbmat</code>, contracted with <code>cell</code>; not Cartesian displacements</td>
 </tr>
 <tr>
 <td><code>shifts_lr</code></td>
 <td><code>float32</code></td>
-<td><code>(N, max_nb, 3)</code></td>
-<td>PBC shifts for LR neighbors</td>
+<td><code>(N, max_nb, 3)</code> or <code>(B, N, M, 3)</code></td>
+<td>Integral lattice coefficients for <code>nbmat_lr</code></td>
+</tr>
+<tr>
+<td><code>shifts_coulomb</code></td>
+<td><code>float32</code></td>
+<td><code>(N, max_nb, 3)</code> or <code>(B, N, M, 3)</code></td>
+<td>Integral lattice coefficients for <code>nbmat_coulomb</code></td>
+</tr>
+<tr>
+<td><code>shifts_dftd3</code></td>
+<td><code>float32</code></td>
+<td><code>(N, max_nb, 3)</code> or <code>(B, N, M, 3)</code></td>
+<td>Integral lattice coefficients for <code>nbmat_dftd3</code></td>
+</tr>
+<tr>
+<td><code>cutoff_lr</code></td>
+<td><code>float32</code></td>
+<td><code>(1,)</code></td>
+<td>Cutoff in A that <code>nbmat_lr</code> was built with; checked when the Coulomb sum falls back to the <code>_lr</code> list</td>
+</tr>
+<tr>
+<td><code>cutoff_coulomb</code></td>
+<td><code>float32</code></td>
+<td><code>(1,)</code></td>
+<td>Cutoff in A that <code>nbmat_coulomb</code> was built with; the calculator warns when it is below the Ewald/PME estimate</td>
+</tr>
+<tr>
+<td><code>cutoff_dftd3</code></td>
+<td><code>float32</code></td>
+<td><code>(1,)</code></td>
+<td>Cutoff in A that <code>nbmat_dftd3</code> was built with (informational; no consumer reads it yet)</td>
 </tr>
 </tbody>
 </table>
@@ -4625,47 +4749,16 @@
 </div>
 <p>When <code>coord</code> does <strong>not</strong> have <code>requires_grad=True</code> (the default), inputs are detached as before — optimization loops that call the calculator repeatedly incur no graph accumulation overhead.</p>
 <h2 id="output-format">Output Format<a class="headerlink" href="#output-format" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Key</th>
-<th>Shape</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>energy</code></td>
-<td><code>(1,)</code> or <code>(B,)</code></td>
-<td>Total energy per molecule</td>
-</tr>
-<tr>
-<td><code>charges</code></td>
-<td><code>(N,)</code> or <code>(B, N)</code></td>
-<td>Atomic partial charges</td>
-</tr>
-<tr>
-<td><code>forces</code></td>
-<td><code>(N, 3)</code> or <code>(B, N, 3)</code></td>
-<td>Atomic forces (if requested)</td>
-</tr>
-<tr>
-<td><code>stress</code></td>
-<td><code>(3, 3)</code> or <code>(B, 3, 3)</code></td>
-<td>Stress tensor (if requested)</td>
-</tr>
-<tr>
-<td><code>hessian</code></td>
-<td><code>(N, 3, N, 3)</code></td>
-<td>Hessian matrix (if requested)</td>
-</tr>
-</tbody>
-</table>
+<p><code>energy</code>: <code>(1,)</code> or <code>(B,)</code>, total energy per molecule.</p>
+<p><code>charges</code>: <code>(N,)</code> or <code>(B, N)</code>, atomic partial charges.</p>
+<p><code>forces</code>: <code>(N, 3)</code> or <code>(B, N, 3)</code>, when requested.</p>
+<p><code>stress</code>: <code>(3, 3)</code> or <code>(B, 3, 3)</code>, when requested.</p>
+<p><code>hessian</code>: <code>(N, 3, N, 3)</code> or batched mode-2 equivalents, over real atoms.</p>
 <p><strong>Notes:</strong></p>
 <ul>
 <li><code>forces</code> requires <code>forces=True</code> in <code>eval()</code></li>
 <li><code>stress</code> requires <code>stress=True</code> and <code>cell</code> in input</li>
-<li><code>hessian</code> requires <code>hessian=True</code>, only for single molecules</li>
+<li><code>hessian</code> requires <code>hessian=True</code>; explicit batched mode 2 supports stacked or ragged per-system results</li>
 </ul>
 <h2 id="batching-and-neighbor-modes">Batching and Neighbor Modes<a class="headerlink" href="#batching-and-neighbor-modes" title="Permanent link">&para;</a></h2>
 <p>The calculator chooses between dense and sparse execution based on system size and device. The goal is to keep small GPU workloads fast while keeping large or CPU workloads linear in memory.</p>
@@ -4736,7 +4829,7 @@
 <li>Coordinates wrapped into unit cell via <code>move_coord_to_cell()</code></li>
 <li>Neighbor lists include periodic image shifts</li>
 <li>Coulomb method auto-switches to <code>"dsf"</code> if <code>"simple"</code> (with warning). For legacy JIT models the embedded Coulomb method cannot be changed at runtime; the warning indicates that only the calculator’s external setting was updated.</li>
-<li>Multiple molecules with PBC: raises <code>NotImplementedError</code></li>
+<li>Multiple molecules with PBC: raises <code>NotImplementedError</code> for a dense 3D batch; a global mode-2 batch is supported (see <a href="#batched-sparse-neighbor-matrices-mode-2">Batched sparse neighbor matrices</a>)</li>
 </ol>
 <h3 id="coulomb-method-for-pbc">Coulomb Method for PBC<a class="headerlink" href="#coulomb-method-for-pbc" title="Permanent link">&para;</a></h3>
 <table>
@@ -4974,16 +5067,16 @@
 <td><code>KeyError</code></td>
 </tr>
 <tr>
-<td>Hessian with multiple molecules</td>
-<td><code>NotImplementedError</code></td>
+<td>Hessian with hand-flattened multi-molecule input, or a dense 3D batch with <code>B &gt; 1</code></td>
+<td><code>NotImplementedError</code> (a global mode-2 batch splits per system instead)</td>
 </tr>
 <tr>
 <td>PME with nvalchemi-toolkit-ops &lt; 0.4.1</td>
 <td><code>RuntimeError</code></td>
 </tr>
 <tr>
-<td>PBC with multiple molecules</td>
-<td><code>NotImplementedError</code></td>
+<td>PBC with multiple molecules in a dense 3D batch</td>
+<td><code>NotImplementedError</code> (supported in global mode 2)</td>
 </tr>
 <tr>
 <td>Invalid Coulomb method</td>
@@ -4992,6 +5085,10 @@
 <tr>
 <td><code>needs_dispersion=True</code> without <code>d3_params</code></td>
 <td><code>ValueError</code></td>
+</tr>
+<tr>
+<td>Partial or mixed PBC in mode 2</td>
+<td><code>ValueError</code> on eager CPU; <code>RuntimeError</code> on CUDA or under <code>torch.compile</code></td>
 </tr>
 </tbody>
 </table>
