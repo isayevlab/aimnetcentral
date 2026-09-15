@@ -113,6 +113,8 @@ trainer:
     # function that define trainig and validation loops
     trainer: aimnet.train.utils.default_trainer
     evaluator: aimnet.train.utils.default_evaluator
+    # opt-in compiled model/derivative forward on one CUDA GPU
+    compile: false
     # total number of epochs to train
     epochs: 100
 

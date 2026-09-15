@@ -601,19 +601,29 @@ class TestHessian:
         # Sanity: doublet Hessian should be symmetric to fp32 noise.
         assert np.max(np.abs(H - H.T)) / np.max(np.abs(H)) < 1e-3
 
-    def test_hessian_compile_model_raises(self):
-        """compile_model=True must reject the Hessian path with RuntimeError."""
+    def test_hessian_compile_model_matches_eager(self):
+        """Compiled inference and eager calculators must share the Hessian result."""
         pytest.importorskip("ase", reason="ASE not installed")
         from ase import Atoms
 
         from aimnet.calculators import AIMNet2ASE, AIMNet2Calculator
 
-        base = AIMNet2Calculator("aimnet2", compile_model=True)
-        atoms = Atoms("OH2", positions=[[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]])
-        atoms.calc = AIMNet2ASE(base)
+        positions = [[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]]
+        eager_atoms = Atoms("OH2", positions=positions)
+        compiled_atoms = eager_atoms.copy()
+        eager_atoms.calc = AIMNet2ASE(AIMNet2Calculator("aimnet2", device="cpu"))
+        compiled_atoms.calc = AIMNet2ASE(
+            AIMNet2Calculator("aimnet2", device="cpu", compile_model=True)
+        )
 
-        with pytest.raises(RuntimeError, match="compile_model"):
-            atoms.calc.get_hessian(atoms)
+        eager_hessian = eager_atoms.calc.get_hessian(eager_atoms)
+        compiled_hessian = compiled_atoms.calc.get_hessian(compiled_atoms)
+
+        assert eager_hessian.shape == (9, 9)
+        assert compiled_hessian.shape == (9, 9)
+        assert np.isfinite(eager_hessian).all()
+        assert np.isfinite(compiled_hessian).all()
+        np.testing.assert_allclose(compiled_hessian, eager_hessian, rtol=1e-4, atol=3e-5)
 
     def test_hessian_cpu_device(self):
         """CPU device must produce a correct-shape Hessian for small molecules.

@@ -106,8 +106,14 @@ def run(local_rank, world_size, model_cfg, train_cfg, load, save):
     if not isinstance(train_cfg, omegaconf.DictConfig):
         raise TypeError("Train configuration must be a dictionary.")
 
+    compile_training = bool(train_cfg.trainer.get("compile", False))
+    if compile_training and world_size > 1:
+        raise RuntimeError("trainer.compile=True is not supported with DDP (world_size must be 1).")
+    if compile_training and not torch.cuda.is_available():
+        raise RuntimeError("trainer.compile=True requires a CUDA GPU.")
+
     # build model
-    _force_training = "forces" in train_cfg.data.y
+    _force_training = "forces" in train_cfg.data.y or (compile_training and "stress" in train_cfg.data.y)
     model = utils.build_model(model_cfg, forces=_force_training)
     if world_size > 1:
         from ignite import distributed as idist

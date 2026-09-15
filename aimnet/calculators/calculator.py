@@ -2,7 +2,7 @@ import copy
 import math
 import warnings
 import weakref
-from collections.abc import Collection, Mapping
+from collections.abc import Callable, Collection, Mapping
 from types import MappingProxyType
 from typing import Any, ClassVar, Literal, Self, cast
 
@@ -66,7 +66,9 @@ class AIMNet2Calculator:
         Device to run the model on ("cuda", "cpu", or specific like "cuda:0").
         If None (default), auto-detects CUDA availability.
     compile_model : bool
-        Whether to compile the model with torch.compile(). Default is False.
+        Compile the model forward with ``torch.compile``. CUDA defaults to
+        ``fullgraph=True``; CPU uses ``compile_kwargs`` unchanged. Default is
+        False.
     compile_kwargs : dict | None
         Additional keyword arguments to pass to torch.compile(). Default is None.
     cache_static : bool
@@ -200,12 +202,21 @@ class AIMNet2Calculator:
             model_import_mode=model_import_mode,
         )
 
-        # Compile model if requested
-        self._was_compiled = bool(compile_model)
+        # Keep the original module as the sole owner of parameters and state.
+        # The compiled callable references that same module; replacing
+        # ``self.model`` makes checkpoints and higher derivatives operate on a
+        # Dynamo wrapper instead of the AIMNet2 instance.
+        self._compiled_forward: Callable[[dict[str, Tensor]], dict[str, Tensor]] | None = None
         if compile_model:
-            kwargs = compile_kwargs or {}
-            self.model = cast(nn.Module, torch.compile(self.model, **kwargs))
-
+            if torch.device(self.device).type == "cuda":
+                kwargs = {"fullgraph": True}
+                kwargs.update(compile_kwargs or {})
+            else:
+                kwargs = compile_kwargs or {}
+            self._compiled_forward = cast(
+                Callable[[dict[str, Tensor]], dict[str, Tensor]],
+                torch.compile(self.model, **kwargs),
+            )
         # Resolve final flags (explicit overrides metadata)
         final_needs_coulomb = (
             needs_coulomb
@@ -987,15 +998,6 @@ class AIMNet2Calculator:
             self._validate_species_and_charge(data)
         # Warn once if the caller requests an open-shell `mult` this model ignores.
         self._maybe_warn_mult_ignored(data)
-        # Hessian + torch.compile is known to hang on the double-backward
-        # path through GELU activations. Fail fast instead.
-        if hessian and getattr(self, "_was_compiled", False):
-            raise RuntimeError(
-                "Hessian computation is incompatible with compile_model=True "
-                "(Dynamo + double-backward through GELU hangs). Reconstruct calculator "
-                "with compile_model=False."
-            )
-
         if hessian:
             self._reject_embedded_tabulated_dftd3("A Hessian")
         if stress:
@@ -1013,7 +1015,6 @@ class AIMNet2Calculator:
                 return self._eval_hessian_batched(
                     subsystems, forces=forces, stress=stress, validate_species=validate_species, stack=stack
                 )
-
         # The simple->dsf PBC auto-switch in prepare_input is scoped to this
         # evaluation: any pending restore is consumed in the finally block, so
         # an exception mid-eval cannot leave the calculator on the switched method.
@@ -1030,6 +1031,8 @@ class AIMNet2Calculator:
             if isinstance(self.model, torch.jit.ScriptModule):
                 with torch.jit.optimized_execution(False):  # type: ignore
                     data = self.model(data)
+            elif self._compiled_forward is not None and not hessian:
+                data = self._compiled_forward(data)
             else:
                 data = self.model(data)
             # Run external modules if present
@@ -1946,10 +1949,10 @@ class AIMNet2Calculator:
         Notes
         -----
         The product is an exact reverse-mode autograd computation for every
-        backend: the NN, short-range, ``simple``/``dsf`` Coulomb, DFTD3, and
-        periodic ``ewald``/``pme`` energies are all in the autograd graph, so
-        the vjp captures the full curvature, including the relaxed-charge
-        response ``d^2E/(dq.dr)``. This mirrors the dense
+        backend, including external Coulomb and DFTD3 terms. It uses the
+        original eager model, including when ``compile_model=True``, because
+        higher derivatives require an autograd graph rather than the compiled
+        inference forward. It mirrors the dense
         :meth:`calculate_hessian` assembly, so ``hessian_vector_product(v)``
         equals ``H.reshape(3N, 3N) @ v`` to the backend's tolerance. The
         default return is detached; set ``create_graph=True`` when the HVP
@@ -1983,11 +1986,6 @@ class AIMNet2Calculator:
                 "migration (all backends are exact reverse-mode autograd) and will be removed.",
                 DeprecationWarning,
                 stacklevel=2,
-            )
-        if getattr(self, "_was_compiled", False):
-            raise RuntimeError(
-                "hessian_vector_product is incompatible with compile_model=True "
-                "(Dynamo + double-backward through GELU hangs). Reconstruct with compile_model=False."
             )
         # Same species/charge validation contract as `eval` (opt-out via
         # validate_species=False); otherwise unsupported elements / charged

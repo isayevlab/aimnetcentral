@@ -10,7 +10,11 @@ from ignite.engine import Engine, Events
 from ignite.handlers import ModelCheckpoint, ProgressBar, TerminateOnNan, global_step_from_engine
 from omegaconf import OmegaConf
 from torch import Tensor, nn
+from torch._decomp import core_aten_decompositions
+from torch.func import functional_call
+from torch.fx.experimental.proxy_tensor import make_fx
 
+from aimnet import nbops
 from aimnet.config import build_module, get_init_module, get_module, load_yaml
 from aimnet.data import SizeGroupedDataset
 from aimnet.modules import Forces
@@ -216,19 +220,152 @@ def prepare_batch(batch: dict[str, Tensor], device="cuda", non_blocking=True) ->
     return batch
 
 
+class _SymbolicTrainingForward:
+    """Compile one fixed training layout from the first batch.
+
+    The loader must keep input keys, tensor ranks and dtypes, and neighbor mode
+    unchanged for that trainer.
+    """
+
+    def __init__(self, model: nn.Module, example: dict[str, Tensor], target_keys: tuple[str, ...]):
+        self.module = model.module if isinstance(model, Forces) else model
+        self.input_keys = tuple(example)
+        self.state_names = tuple(name for name, _ in (*self.module.named_parameters(), *self.module.named_buffers()))
+        self.force_key = model.key_out if isinstance(model, Forces) else None
+        self.coord_key = model.x if isinstance(model, Forces) else "coord"
+        self.energy_key = model.y if isinstance(model, Forces) else "energy"
+        self.need_stress = "stress" in target_keys
+        if self.need_stress and "cell" not in example:
+            raise ValueError("Compiled training stress targets require a cell input.")
+        if self.force_key is not None and self.coord_key not in example:
+            raise ValueError(f"Compiled training force targets require {self.coord_key!r} input.")
+
+        output_keys = tuple(dict.fromkeys((*target_keys, "_natom", "_input_padded")))
+
+        def derivative_forward(*tensors: Tensor) -> tuple[Tensor, ...]:
+            input_tensors = tensors[: len(self.input_keys)]
+            state_tensors = tensors[len(self.input_keys) :]
+            data = dict(zip(self.input_keys, input_tensors, strict=True))
+            coord = data[self.coord_key]
+            need_derivatives = self.force_key is not None or self.need_stress
+            if need_derivatives:
+                coord = coord.detach().requires_grad_(True)
+                data[self.coord_key] = coord
+            strain = None
+            if self.need_stress:
+                n_systems = data["cell"].shape[0] if coord.ndim == 2 else coord.shape[0]
+                strain = (
+                    torch.eye(3, dtype=coord.dtype, device=coord.device)
+                    .unsqueeze(0)
+                    .repeat(n_systems, 1, 1)
+                    .requires_grad_(True)
+                )
+                if coord.ndim == 2:
+                    data[self.coord_key] = torch.einsum("ni,nij->nj", coord, strain[data["mol_idx"]])
+                else:
+                    data[self.coord_key] = torch.einsum("bni,bij->bnj", coord, strain)
+                data["cell"] = data["cell"] @ strain
+            state = dict(zip(self.state_names, state_tensors, strict=True))
+            data = functional_call(self.module, state, (data,))
+            if need_derivatives:
+                grad_inputs = [coord]
+                if strain is not None:
+                    grad_inputs.append(strain)
+                derivatives = torch.autograd.grad(
+                    data[self.energy_key].sum(), grad_inputs, create_graph=True, retain_graph=True
+                )
+                if self.force_key is not None:
+                    data[self.force_key] = -derivatives[0]
+                if strain is not None:
+                    volume = torch.linalg.det(data["cell"].detach()).abs().unsqueeze(-1).unsqueeze(-1)
+                    data["stress"] = derivatives[-1] / volume
+            return tuple(data[key] for key in output_keys)
+
+        example_args = (*tuple(example.values()), *self._live_state_tensors())
+        # ``make_fx`` is not reported as compiling by Torch 2.13. AIMNet2's
+        # local trace context selects its compile-safe tensor paths without
+        # changing Torch's process-global compiler state.
+        with nbops._symbolic_trace_context():
+            traced = make_fx(
+                derivative_forward,
+                tracing_mode="symbolic",
+                decomposition_table=core_aten_decompositions(),
+                _allow_non_fake_inputs=True,
+                _error_on_data_dependent_ops=True,
+            )(*example_args)
+        self.forward = torch.compile(traced, dynamic=True, fullgraph=False)
+        self.output_keys = output_keys
+
+    def _live_state_tensors(self) -> tuple[Tensor, ...]:
+        state = dict(self.module.named_parameters())
+        state.update(self.module.named_buffers())
+        return tuple(state[name] for name in self.state_names)
+
+    def __call__(self, x: dict[str, Tensor]) -> dict[str, Tensor]:
+        input_key_set = set(x)
+        expected_key_set = set(self.input_keys)
+        if input_key_set != expected_key_set:
+            missing = tuple(sorted(expected_key_set - input_key_set))
+            unexpected = tuple(sorted(input_key_set - expected_key_set))
+            raise ValueError(
+                "Compiled training input keys changed after the first batch; "
+                f"missing {missing}, unexpected {unexpected}."
+            )
+        values = self.forward(*(x[key] for key in self.input_keys), *self._live_state_tensors())
+        y_pred = dict(x)
+        y_pred.update(zip(self.output_keys, values, strict=True))
+        return y_pred
+
+
 def default_trainer(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     loss_fn: Callable | torch.nn.Module,
     device: str | torch.device | None = None,
     non_blocking: bool = True,
+    compile_training: bool = False,
 ) -> Engine:
+    model_device = next(model.parameters()).device
+    target_device = torch.device(device) if device is not None else model_device
+    if compile_training and (model_device.type != "cuda" or target_device.type != "cuda"):
+        raise RuntimeError("Compiled training requires the model and batches to use CUDA.")
+    if compile_training and isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        raise RuntimeError("Compiled training is not supported with DistributedDataParallel.")
+
+    # Keep the original module as the optimizer/checkpoint owner. The compiled
+    # callable covers the model and derivative computation, including its
+    # autograd backward. Loss evaluation, clipping, and the optimizer step stay
+    # eager; the trainer invokes loss.backward() to enter the compiled backward.
+    if compile_training:
+        # The first batch supplies the tensor schema for the symbolic
+        # derivative graph. Energy-only training can continue to use the
+        # ordinary module compile path.
+        forward = None if isinstance(model, Forces) else torch.compile(model, dynamic=True)
+    else:
+        forward = model
+    symbolic_forward: _SymbolicTrainingForward | None = None
+
+    def _check_compiled_batch(x: dict[str, Tensor]) -> None:
+        if "numbers" not in x:
+            raise ValueError("Compiled training requires a numbers input.")
+
     def _update(engine: Engine, batch: tuple[dict[str, Tensor], dict[str, Tensor]]) -> float:
+        nonlocal symbolic_forward
         model.train()
         optimizer.zero_grad()
-        x = prepare_batch(batch[0], device=device, non_blocking=non_blocking)  # type: ignore
-        y = prepare_batch(batch[1], device=device, non_blocking=non_blocking)  # type: ignore
-        y_pred = model(x)
+        x = prepare_batch(dict(batch[0]), device=device, non_blocking=non_blocking)  # type: ignore
+        y = prepare_batch(dict(batch[1]), device=device, non_blocking=non_blocking)  # type: ignore
+        if compile_training:
+            _check_compiled_batch(x)
+            if isinstance(model, Forces):
+                if symbolic_forward is None:
+                    symbolic_forward = _SymbolicTrainingForward(model, x, tuple(y))
+                y_pred = symbolic_forward(x)
+            else:
+                assert forward is not None
+                y_pred = forward(x)
+        else:
+            y_pred = forward(x)
         loss = loss_fn(y_pred, y)["loss"]
         loss.backward()
         torch.nn.utils.clip_grad_value_(model.parameters(), 0.4)
@@ -240,16 +377,44 @@ def default_trainer(
 
 
 def default_evaluator(
-    model: torch.nn.Module, device: str | torch.device | None = None, non_blocking: bool = True
+    model: torch.nn.Module,
+    device: str | torch.device | None = None,
+    non_blocking: bool = True,
+    stress: bool = False,
 ) -> Engine:
     def _inference(
         engine: Engine, batch: tuple[dict[str, Tensor], dict[str, Tensor]]
     ) -> tuple[dict[str, Tensor], dict[str, Tensor]]:
         model.eval()
-        x = prepare_batch(batch[0], device=device, non_blocking=non_blocking)  # type: ignore
+        x = prepare_batch(dict(batch[0]) if stress else batch[0], device=device, non_blocking=non_blocking)  # type: ignore
         y = prepare_batch(batch[1], device=device, non_blocking=non_blocking)  # type: ignore
-        with torch.no_grad():
-            y_pred = model(x)
+        if not stress:
+            with torch.no_grad():
+                y_pred = model(x)
+            return y_pred, y
+
+        if "cell" not in x:
+            raise ValueError("Compiled training stress targets require a cell input.")
+        module = model.module if isinstance(model, Forces) else model
+        coord = x["coord"].detach().requires_grad_(True)
+        n_systems = x["cell"].shape[0] if coord.ndim == 2 else coord.shape[0]
+        strain = (
+            torch.eye(3, dtype=coord.dtype, device=coord.device)
+            .unsqueeze(0)
+            .repeat(n_systems, 1, 1)
+            .requires_grad_(True)
+        )
+        if coord.ndim == 2:
+            x["coord"] = torch.einsum("ni,nij->nj", coord, strain[x["mol_idx"]])
+        else:
+            x["coord"] = torch.einsum("bni,bij->bnj", coord, strain)
+        x["cell"] = x["cell"] @ strain
+        y_pred = module(x)
+        derivatives = torch.autograd.grad(y_pred["energy"].sum(), (coord, strain))
+        if isinstance(model, Forces):
+            y_pred[model.key_out] = -derivatives[0]
+        volume = torch.linalg.det(x["cell"].detach()).abs().unsqueeze(-1).unsqueeze(-1)
+        y_pred["stress"] = derivatives[1] / volume
         return y_pred, y
 
     return Engine(_inference)
@@ -267,9 +432,16 @@ class TerminateOnLowLR:
 
 def build_engine(model, optimizer, scheduler, loss_fn, metrics, cfg, loader_val):
     device = next(model.parameters()).device
+    evaluator_name = cfg.trainer.evaluator
+    need_stress = bool(cfg.trainer.get("compile", False)) and "stress" in cfg.data.y
+    if need_stress and evaluator_name != "aimnet.train.utils.default_evaluator":
+        raise RuntimeError("trainer.compile=True with stress targets requires aimnet.train.utils.default_evaluator.")
 
     train_fn = get_module(cfg.trainer.trainer)
-    trainer = train_fn(model, optimizer, loss_fn, device=device, non_blocking=True)
+    train_kwargs = {"device": device, "non_blocking": True}
+    if bool(cfg.trainer.get("compile", False)):
+        train_kwargs["compile_training"] = True
+    trainer = train_fn(model, optimizer, loss_fn, **train_kwargs)
     # check for NaNs after each epoch
     trainer.add_event_handler(Events.EPOCH_COMPLETED, TerminateOnNan())
 
@@ -296,8 +468,11 @@ def build_engine(model, optimizer, scheduler, loss_fn, metrics, cfg, loader_val)
         pbar.attach(trainer, event_name=Events.ITERATION_COMPLETED(every=100))
 
     # attach validator
-    validate_fn = get_module(cfg.trainer.evaluator)
-    validator = validate_fn(model, device=device, non_blocking=True)
+    validate_fn = get_module(evaluator_name)
+    evaluator_kwargs = {"device": device, "non_blocking": True}
+    if need_stress:
+        evaluator_kwargs["stress"] = True
+    validator = validate_fn(model, **evaluator_kwargs)
     metrics.attach(validator, "multi")
     trainer.add_event_handler(Events.EPOCH_COMPLETED(every=1), validator.run, data=loader_val)
 

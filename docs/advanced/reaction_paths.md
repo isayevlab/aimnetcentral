@@ -49,7 +49,10 @@ base = AIMNet2Calculator("aimnet2-nse", compile_model=True)
 calc = AIMNet2Pysis(base, charge=-1, mult=1)
 ```
 
-Use `compile_model=True` for repeated force-only evaluations such as NEB image optimization. Leave compilation disabled for Hessian workflows because the calculator rejects `compile_model=True` together with `hessian=True`.
+Use `compile_model=True` for repeated force evaluations such as NEB image
+optimization. Hessian and HVP requests automatically use the original eager
+model, so compilation can remain enabled but does not accelerate those higher
+derivatives.
 
 ### The run_pysis() Entry Point
 
@@ -220,7 +223,7 @@ hessian_au = hessian_2d * EV_TO_HARTREE / (ANG_TO_BOHR ** 2)
 
 !!! warning "Hessian limitations"
 
-    The Hessian computation is supported for **single molecules only**. If `mol_idx` indicates multiple molecules, the calculator raises `NotImplementedError`. `compile_model=True` is also incompatible with Hessian requests. The Hessian output has shape `(N, 3, N, 3)` and should be flattened to `(3N, 3N)` for eigenvalue analysis.
+    The Hessian computation is supported for **single molecules only**. If `mol_idx` indicates multiple molecules, the calculator raises `NotImplementedError`. With `compile_model=True`, the Hessian uses the original eager model rather than the compiled inference forward. The Hessian output has shape `(N, 3, N, 3)` and should be flattened to `(3N, 3N)` for eigenvalue analysis.
 
 ### Vibrational Frequency Analysis
 
