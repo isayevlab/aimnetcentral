@@ -164,9 +164,10 @@ class AIMNet2ASE(Calculator):
         """Return Cartesian Hessian as a (3N, 3N) ndarray in eV/Å^2.
 
         Designed for use as ``Sella(atoms, hessian_function=atoms.calc.get_hessian)``.
-        Computed via double-backward through the AIMNet2 energy graph; cost scales
-        as O(3N) backward passes per call. Not supported when ``compile_model=True``
-        or for batched / multi-molecule input.
+        Computed via the original eager AIMNet2 module, including when the
+        calculator's inference forward is compiled. Cost scales as O(3N)
+        backward passes per call. Batched or multi-molecule input is not
+        supported.
 
         This method intentionally bypasses the standard ASE
         ``Calculator.calculate(properties=['hessian'])`` flow and ``self.results``

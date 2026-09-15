@@ -2,27 +2,27 @@
 # Validate the torch / warp-lang / nvalchemiops coupling on a CUDA box across
 # the supported PyTorch range. For each version: fresh venv -> resolver-coherent
 # install -> `pytest -m gpu` -> deterministic energy/force dump. A same-run
-# torch-2.9 baseline is then used to diff every other version.
+# torch-2.10 baseline is then used to diff every other version.
 #
 # Usage:
 #   bash scripts/gpu_validate.sh            # run the full matrix
 #   DRY_RUN=1 bash scripts/gpu_validate.sh  # print the per-version commands only
 #
 # Tunables (env vars):
-#   TORCH_VERSIONS  default "2.8 2.9 2.10 2.11 2.12 2.13 2.14"
+#   TORCH_VERSIONS  default "2.10 2.11 2.12 2.13 2.14"
 #   CUDA_INDEX      default "https://download.pytorch.org/whl/cu126"
 #   PYTHON          default "python3.12"
 #   RESULTS         default "./gpu-validation-results"
-#   BASELINE        default "2.9"
+#   BASELINE        default "2.10"
 #   ENERGY_ATOL     default "1e-5"   (Hartree)
 #   FORCE_ATOL      default "1e-4"   (Hartree/Angstrom)
 set -u
 
-TORCH_VERSIONS="${TORCH_VERSIONS:-2.8 2.9 2.10 2.11 2.12 2.13 2.14}"
+TORCH_VERSIONS="${TORCH_VERSIONS:-2.10 2.11 2.12 2.13 2.14}"
 CUDA_INDEX="${CUDA_INDEX:-https://download.pytorch.org/whl/cu126}"
 PYTHON="${PYTHON:-python3.12}"
 RESULTS="${RESULTS:-./gpu-validation-results}"
-BASELINE="${BASELINE:-2.9}"
+BASELINE="${BASELINE:-2.10}"
 ENERGY_ATOL="${ENERGY_ATOL:-1e-5}"
 FORCE_ATOL="${FORCE_ATOL:-1e-4}"
 DRY_RUN="${DRY_RUN:-0}"

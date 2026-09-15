@@ -172,6 +172,59 @@ def test_hvp_wrong_vector_shape_raises():
         calc.hessian_vector_product(data, torch.zeros(5, 3))  # wrong N
 
 
+@pytest.mark.gpu
+@pytest.mark.slow
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_compile_model_hvp_and_hessian_match_eager():
+    eager = AIMNet2Calculator(
+        "aimnet2", nb_threshold=1000, device="cuda", needs_coulomb=False, needs_dispersion=False
+    )
+    compiled = AIMNet2Calculator(
+        "aimnet2", nb_threshold=1000, device="cuda", compile_model=True, needs_coulomb=False, needs_dispersion=False
+    )
+    vector = torch.randn(3, 3, device="cuda")
+    mode2_data = {key: value.cuda() for key, value in _singleton_mode2_input().items()}
+
+    eager_hessian = eager(dict(mode2_data), hessian=True)["hessian"]
+    compiled_hvp = compiled.hessian_vector_product(dict(mode2_data), vector)
+    compiled_hessian = compiled(dict(mode2_data), hessian=True)["hessian"]
+
+    torch.testing.assert_close(
+        compiled_hvp,
+        (eager_hessian.reshape(9, 9) @ vector.reshape(-1)).reshape(3, 3),
+        rtol=1e-4,
+        atol=6e-5,
+    )
+    torch.testing.assert_close(compiled_hessian, eager_hessian, rtol=1e-4, atol=3e-5)
+
+
+@pytest.mark.gpu
+@pytest.mark.slow
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_compile_model_external_hvp_and_hessian_match_eager():
+    data = {
+        "coord": torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]], device="cuda"),
+        "numbers": torch.tensor([8, 1, 1], device="cuda"),
+        "charge": torch.tensor(0.0, device="cuda"),
+    }
+    eager = AIMNet2Calculator("aimnet2", nb_threshold=0, device="cuda")
+    compiled = AIMNet2Calculator("aimnet2", nb_threshold=0, device="cuda", compile_model=True)
+    assert eager.external_dftd3 is not None and compiled.external_dftd3 is not None
+    vector = torch.randn(3, 3, device="cuda")
+
+    eager_hessian = eager(dict(data), hessian=True)["hessian"]
+    compiled_hvp = compiled.hessian_vector_product(dict(data), vector)
+    compiled_hessian = compiled(dict(data), hessian=True)["hessian"]
+
+    torch.testing.assert_close(
+        compiled_hvp,
+        (eager_hessian.reshape(9, 9) @ vector.reshape(-1)).reshape(3, 3),
+        rtol=1e-4,
+        atol=6e-5,
+    )
+    torch.testing.assert_close(compiled_hessian, eager_hessian, rtol=1e-4, atol=3e-5)
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("method", ["simple", "ewald"])
 def test_hvp_matches_dense_with_dftd3(method):

@@ -70,8 +70,8 @@ jobs:
     #
     # torch.compile/inductor is DISABLED here (TORCHDYNAMO_DISABLE=1): reinstalling
     # torch alone leaves a mismatched triton, so the inductor path cannot be tested
-    # coherently via reinstall-on-top (it breaks with `triton_key` ImportError on
-    # torch 2.8). The compile path's cross-version validation belongs in a
+    # coherently via reinstall-on-top (it can break with a `triton_key` ImportError).
+    # The compile path's cross-version validation belongs in a
     # resolver-coherent env, not this eager API/numerics probe.
     tests-torch:
         runs-on: ubuntu-latest
@@ -80,8 +80,6 @@ jobs:
             matrix:
                 torch-version:
                     [
-                        "2.8.*",
-                        "2.9.*",
                         "2.10.*",
                         "2.11.*",
                         "2.12.*",
