@@ -24,7 +24,7 @@ AIMNet2 predicts energies, forces, atomic charges, stress tensors, and Hessians 
 
 ## Install
 
-AIMNet2 requires Python 3.11+ and PyTorch 2.8+.
+AIMNet2 requires Python 3.11+ and PyTorch 2.10+.
 
 ```bash
 # CPU or PyTorch-default install
@@ -179,7 +179,12 @@ Private repos can be loaded with `token=` or the `HF_TOKEN` environment variable
 | `stress`  | `(3, 3)`                | eV/Angstrom^3   |
 | `hessian` | `(N, 3, N, 3)`          | eV/Angstrom^2   |
 
-Hessians are single-molecule only and are incompatible with `compile_model=True`. Long-range backends differ in derivative support; see the [calculator](https://isayevlab.github.io/aimnetcentral/calculator/) and [long-range](https://isayevlab.github.io/aimnetcentral/long_range/) docs for the exact contracts.
+Hessians are single-molecule only. With `compile_model=True`, Hessian and HVP
+requests use the original eager model rather than the compiled inference
+forward. Long-range backends differ in derivative support; see the
+[calculator](https://isayevlab.github.io/aimnetcentral/calculator/) and
+[long-range](https://isayevlab.github.io/aimnetcentral/long_range/) docs for the
+exact contracts.
 
 ## Training and CLI
 
@@ -189,6 +194,15 @@ aimnet train --config my_config.yaml --model aimnet2.yaml
 ```
 
 The `aimnet` entry point is installed with the core package. Training, export, and self-atomic-energy commands require the `train` extra.
+
+To compile the AIMNet2 energy, force, and stress computation during training,
+set `trainer.compile: true`. Compiled training requires one CUDA process and
+does not support DDP. The first batch fixes the neighbor mode and the input
+keys, ranks, and dtypes; later batches may use different atom and neighbor
+counts. Loss evaluation, gradient clipping, and the optimizer step remain
+eager. The trainer invokes `loss.backward()` eagerly, while gradients through
+the compiled model and derivative computation use its compiled autograd
+backward and update the original model parameters.
 
 ## Development
 

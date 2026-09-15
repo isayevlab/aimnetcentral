@@ -1341,13 +1341,14 @@ class TestTorchCompile:
     @pytest.mark.skipif(not hasattr(torch, "compile"), reason="torch.compile requires PyTorch 2.0+")
     @pytest.mark.gpu
     def test_torch_compile_cuda(self):
-        """Test torch.compile on CUDA device."""
+        """The CUDA constructor compiles the forward without replacing the model."""
         if not torch.cuda.is_available():
             pytest.skip("CUDA not available")
 
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        compiled_model = torch.compile(calc.model)
-        calc.model = compiled_model
+        eager = AIMNet2Calculator("aimnet2", nb_threshold=0, device="cuda")
+        compiled = AIMNet2Calculator("aimnet2", nb_threshold=0, device="cuda", compile_model=True)
+        model = compiled.model
+        assert compiled._compiled_forward is not None
 
         data = {
             "coord": torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
@@ -1355,9 +1356,13 @@ class TestTorchCompile:
             "charge": torch.tensor([0.0]),
         }
 
-        res = calc(data)
-        assert res["energy"].device.type == "cuda"
-        assert torch.isfinite(res["energy"]).all()
+        eager_result = eager(dict(data))
+        compiled_result = compiled(dict(data))
+        assert compiled.model is model
+        assert compiled_result["energy"].device.type == "cuda"
+        assert torch.isfinite(compiled_result["energy"]).all()
+        torch.testing.assert_close(compiled_result["energy"], eager_result["energy"], rtol=1e-4, atol=2e-5)
+        torch.testing.assert_close(compiled_result["charges"], eager_result["charges"], rtol=1e-4, atol=2e-5)
 
     def test_device_parameter(self):
         """Test explicit device parameter."""
@@ -1377,7 +1382,9 @@ class TestTorchCompile:
     @pytest.mark.skipif(not hasattr(torch, "compile"), reason="torch.compile requires PyTorch 2.0+")
     def test_compile_model_parameter(self):
         """Test compile_model constructor parameter."""
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, compile_model=True)
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, device="cpu", compile_model=True)
+        model = calc.model
+        assert calc._compiled_forward is not None
 
         data = {
             "coord": torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
@@ -1386,6 +1393,7 @@ class TestTorchCompile:
         }
 
         res = calc(data)
+        assert calc.model is model
         assert "energy" in res
         assert torch.isfinite(res["energy"]).all()
 
@@ -1395,6 +1403,7 @@ class TestTorchCompile:
         calc = AIMNet2Calculator(
             "aimnet2",
             nb_threshold=0,
+            device="cpu",
             compile_model=True,
             compile_kwargs={"fullgraph": False},
         )
@@ -1645,13 +1654,6 @@ def test_calculator_metadata_property_returns_model_metadata():
         calc.metadata["family"] = "mutated"  # type: ignore[index]
 
 
-def test_calculator_was_compiled_flag_default_false():
-    from aimnet.calculators import AIMNet2Calculator
-
-    calc = AIMNet2Calculator("aimnet2", device="cpu")
-    assert calc._was_compiled is False
-
-
 def test_calculator_rejects_unsupported_species():
     """Calling the calculator with an unsupported atomic number must raise ValueError
     with chemistry context and pointers to alternative models."""
@@ -1816,26 +1818,6 @@ def test_species_validation_cached_for_repeated_numbers_tensor(monkeypatch):
     data["numbers"][0] = 92
     with pytest.raises(ValueError, match=r"implemented_species"):
         calc(data)
-
-
-def test_hessian_with_compile_raises():
-    """Calling with hessian=True on a calculator constructed with compile_model=True
-    must raise RuntimeError instead of hanging (Dynamo + double-backward on GELU)."""
-    import pytest
-    import torch
-
-    from aimnet.calculators import AIMNet2Calculator
-
-    calc = AIMNet2Calculator("aimnet2", device="cpu")
-    # Don't actually torch.compile (slow + may need GPU); just flip the flag.
-    calc._was_compiled = True
-
-    coords = torch.tensor([[0.0, 0.0, 0.0]])
-    numbers = torch.tensor([1])
-    data = {"coord": coords, "numbers": numbers, "charge": torch.tensor(0.0)}
-
-    with pytest.raises(RuntimeError, match=r"Hessian computation is incompatible with compile_model=True"):
-        calc(data, hessian=True)
 
 
 def test_set_lrcoulomb_method_does_not_warn_on_rxn_cutoff_change():
