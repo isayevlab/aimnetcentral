@@ -179,12 +179,7 @@ Private repos can be loaded with `token=` or the `HF_TOKEN` environment variable
 | `stress`  | `(3, 3)`                | eV/Angstrom^3   |
 | `hessian` | `(N, 3, N, 3)`          | eV/Angstrom^2   |
 
-Hessians are single-molecule only. With `compile_model=True`, Hessian and HVP
-requests use the original eager model rather than the compiled inference
-forward. Long-range backends differ in derivative support; see the
-[calculator](https://isayevlab.github.io/aimnetcentral/calculator/) and
-[long-range](https://isayevlab.github.io/aimnetcentral/long_range/) docs for the
-exact contracts.
+Hessians are single-molecule only. With `compile_model=True`, Hessian and HVP requests use the original eager model rather than the compiled inference forward. Long-range backends differ in derivative support; see the [calculator](https://isayevlab.github.io/aimnetcentral/calculator/) and [long-range](https://isayevlab.github.io/aimnetcentral/long_range/) docs for the exact contracts.
 
 ## Training and CLI
 
@@ -195,21 +190,9 @@ aimnet train --config my_config.yaml --model aimnet2.yaml
 
 The `aimnet` entry point is installed with the core package. Training, export, and self-atomic-energy commands require the `train` extra.
 
-To compile the AIMNet2 energy, force, and stress computation during training,
-set `trainer.compile: true`. Compiled training requires CUDA and supports DDP;
-each process or rank owns one compiled derivative graph. The first batch fixes
-the requested properties, neighbor mode, and ordered input keys, ranks, dtypes,
-and device type. Later batches may change their batch, atom, and neighbor
-dimensions. Forces are supported in modes 0, 1, and 2. Stress requires an
-explicit mode-1 or mode-2 neighbor matrix, a cell, and an aligned shift tensor
-for every neighbor matrix.
+To compile the AIMNet2 energy, force, and stress computation during training, set `trainer.compile: true`. Compiled training requires CUDA and supports DDP; each process or rank owns one compiled derivative graph. The first batch fixes the requested properties, neighbor mode, and ordered input keys, ranks, dtypes, and device type. Later batches may change their batch, atom, and neighbor dimensions. Forces are supported in modes 0, 1, and 2. Stress requires an explicit mode-1 or mode-2 neighbor matrix, a cell, and an aligned shift tensor for every neighbor matrix.
 
-The original AIMNet2 module remains the sole parameter and checkpoint owner.
-Loss evaluation, gradient clipping, and the optimizer step remain eager. The
-trainer invokes `loss.backward()` from eager Python, which enters the compiled
-AOTAutograd backward for the model and derivative graph. Hessian and HVP
-requests made through a calculator with compiled inference enabled continue to
-use the original eager model.
+The original AIMNet2 module remains the sole parameter and checkpoint owner. Loss evaluation, gradient clipping, and the optimizer step remain eager. The trainer invokes `loss.backward()` from eager Python, which enters the compiled AOTAutograd backward for the model and derivative graph. Hessian and HVP requests made through a calculator with compiled inference enabled continue to use the original eager model.
 
 ## Development
 

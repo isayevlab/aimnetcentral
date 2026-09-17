@@ -49,10 +49,7 @@ base = AIMNet2Calculator("aimnet2-nse", compile_model=True)
 calc = AIMNet2Pysis(base, charge=-1, mult=1)
 ```
 
-Use `compile_model=True` for repeated force evaluations such as NEB image
-optimization. Hessian and HVP requests automatically use the original eager
-model, so compilation can remain enabled but does not accelerate those higher
-derivatives.
+Use `compile_model=True` for repeated force evaluations such as NEB image optimization. Hessian and HVP requests automatically use the original eager model, so compilation can remain enabled but does not accelerate those higher derivatives.
 
 ### The run_pysis() Entry Point
 

@@ -1177,7 +1177,8 @@ def test_compiled_stress_training_default_validator_returns_stress(monkeypatch, 
             if cell.shape[0] == 1 and n_systems != 1:
                 cell = cell.expand(n_systems, -1, -1).contiguous()
             strain = (
-                torch.eye(3, dtype=coord.dtype, device=coord.device)
+                torch
+                .eye(3, dtype=coord.dtype, device=coord.device)
                 .unsqueeze(0)
                 .repeat(n_systems, 1, 1)
                 .requires_grad_(True)
