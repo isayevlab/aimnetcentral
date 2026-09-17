@@ -207,15 +207,17 @@ def validate_mode2_nbmat_raw(data: dict[str, Tensor], *, suffix: str) -> None:
 
     mask_i = numbers == 0
     _mode2_check(mask_i[..., -1].all(), "numbers must reserve the final atom as the final dummy.")
+    previous_mask_i = torch.cat((torch.zeros_like(mask_i[..., :1]), mask_i), dim=-1)[..., :-1]
     _mode2_check(
-        ~(mask_i[..., :-1] & ~mask_i[..., 1:]).any(),
+        ~(previous_mask_i & ~mask_i).any(),
         "numbers padding must be a contiguous tail.",
     )
     safe_idx = nbmat.clamp(0, sentinel - 1)
     padded_neighbor = numbers.flatten().index_select(0, safe_idx.flatten()).view_as(nbmat) == 0
     excluded = is_sentinel | padded_neighbor
+    previous_excluded = torch.cat((torch.zeros_like(excluded[..., :1]), excluded), dim=-1)[..., :-1]
     _mode2_check(
-        ~(excluded[..., :-1] & ~excluded[..., 1:]).any(),
+        ~(previous_excluded & ~excluded).any(),
         f"{nbmat_key} must have a packed sentinel/padded-neighbor tail.",
     )
     _mode2_check(
@@ -490,15 +492,17 @@ def calc_masks(data: dict[str, Tensor]) -> dict[str, Tensor]:
                     processed[ptr] = suffix
                 data[f"mask_ij{suffix}"] = data[nbmat_key] == data["numbers"].shape[0] - 1
         data["_input_padded"] = torch.tensor(True)
-        if _is_compiling() and "charge" in data:
+        if "charge" in data:
             # ``charge`` has one entry per molecule, so it supplies a fixed
             # output size for the compiled reduction.  The final flat atom is
             # padding and belongs to the final molecule.
             mol_sizes = torch.zeros(data["charge"].shape[0], device=data["mol_idx"].device, dtype=torch.long)
-            mol_sizes.scatter_add_(0, data["mol_idx"], torch.ones_like(data["mol_idx"]))
-            mol_sizes = mol_sizes - torch.arange(mol_sizes.shape[0], device=mol_sizes.device).eq(
-                mol_sizes.shape[0] - 1
-            ).to(mol_sizes.dtype)
+            real_idx = data["mol_idx"][:-1].to(torch.long)
+            mol_sizes.scatter_add_(
+                0,
+                real_idx,
+                torch.ones(real_idx.shape, device=real_idx.device, dtype=torch.long),
+            )
             data["mol_sizes"] = mol_sizes
         else:
             data["mol_sizes"] = torch.bincount(data["mol_idx"])
@@ -683,8 +687,8 @@ def mol_sum(x: Tensor, data: dict[str, Tensor]) -> Tensor:
             1,
             2,
         ), "Invalid tensor shape for mol_sum, ndim should be 1 or 2"
-        idx = data["mol_idx"]
-        if _is_compiling() and "charge" in data and x.device.type != "cpu":
+        idx = data["mol_idx"].to(torch.long)
+        if _is_compiling() and "charge" in data:
             # `charge` carries one entry per molecule and is a genuine model
             # input, so its length is static shape metadata: reading it costs
             # no device sync and no graph break.
@@ -693,17 +697,8 @@ def mol_sum(x: Tensor, data: dict[str, Tensor]) -> Tensor:
             # is the same number: this preparation metadata is not a reliable
             # allocation-size source under dynamic tracing.
             #
-            # CPU is excluded on purpose: it keeps the .item() graph break
-            # below. Through torch 2.10, inductor's CPU scheduler fuses the
-            # atomic_add scatters of the PBC distance backward with a
-            # dependent pointwise, and CppScheduling.try_loop_split then dies
-            # on the fused group with `AssertionError: expected_var_ranges ==
-            # extra_indexing_ranges` (a degenerate loop split). The fusion is
-            # outlawed upstream by pytorch/pytorch#172301, first released in
-            # torch 2.11. The break costs nothing on CPU -- .item() has no
-            # device sync there -- and restores the graph partitioning that
-            # avoids the fused group. Drop this exclusion when the supported
-            # torch floor reaches 2.11.
+            # This also keeps CPU fullgraph compilation free of the
+            # data-dependent scalar read in the eager branch below.
             out_size = data["charge"].shape[0]
         elif _is_compiling():
             # data dict assembled without `charge`: dynamo handles the .item()
@@ -720,25 +715,22 @@ def mol_sum(x: Tensor, data: dict[str, Tensor]) -> Tensor:
                 data["_num_mol"] = torch.tensor(int(idx[-1].item()) + 1)
             out_size = int(data["_num_mol"].item())
 
-        if _is_compiling() and out_size == 1:
-            # A single molecule makes the scatter degenerate into a plain sum
-            # over atoms. Spell it that way under torch.compile: inductor
-            # (2.9.1+cu128) miscompiles `scatter_add_` into a size-1 leading
-            # dim when the result is gathered from later in the same graph --
-            # it fuses the degenerate reduction into the consumer and returns
-            # garbage, silently, with no error. Verified standalone: the same
-            # pattern is correct for out_size >= 2.
-            # Compile-only so eager stays bit-for-bit unchanged; mol_idx is all
-            # zeros whenever out_size is 1, so the two agree exactly up to
-            # summation order.
-            res = x.sum(dim=0, keepdim=True)
+        if x.ndim == 1:
+            shape = (out_size,)
         else:
-            if x.ndim == 1:
-                res = torch.zeros(out_size, device=x.device, dtype=x.dtype)
-            else:
-                idx = idx.unsqueeze(-1).expand(-1, x.shape[1])
-                res = torch.zeros(out_size, x.shape[1], device=x.device, dtype=x.dtype)
-            res.scatter_add_(0, idx, x)
+            idx = idx.unsqueeze(-1).expand(-1, x.shape[1])
+            shape = (out_size, x.shape[1])
+        if _is_compiling():
+            # An unused row avoids a PyTorch 2.12 Inductor bug in a compiled
+            # size-one scatter reduction followed by a gather.  Slicing the
+            # row away preserves the public shape and one dynamic graph also
+            # handles larger batches.  Eager execution keeps the exact-sized
+            # allocation above.
+            shape = (shape[0] + 1, *shape[1:])
+        res = torch.zeros(shape, device=x.device, dtype=x.dtype)
+        res.scatter_add_(0, idx, x)
+        if _is_compiling():
+            res = res[:out_size]
     else:
         raise ValueError(f"Invalid neighbor mode: {nb_mode}")
     return res

@@ -1,3 +1,4 @@
+import inspect
 import logging
 import re
 from collections.abc import Callable
@@ -10,9 +11,6 @@ from ignite.engine import Engine, Events
 from ignite.handlers import ModelCheckpoint, ProgressBar, TerminateOnNan, global_step_from_engine
 from omegaconf import OmegaConf
 from torch import Tensor, nn
-from torch._decomp import core_aten_decompositions
-from torch.func import functional_call
-from torch.fx.experimental.proxy_tensor import make_fx
 
 from aimnet import nbops
 from aimnet.config import build_module, get_init_module, get_module, load_yaml
@@ -191,11 +189,9 @@ def set_trainable_parameters(model: nn.Module, force_train: list[str], force_no_
 
 
 def unwrap_module(net):
-    if isinstance(net, (Forces, torch.nn.parallel.DistributedDataParallel)):
-        net = net.module
-        return unwrap_module(net)
-    else:
-        return net
+    while isinstance(net, (Forces, _CompiledTrainingRunner, torch.nn.parallel.DistributedDataParallel)):
+        net = net.core if isinstance(net, _CompiledTrainingRunner) else net.module
+    return net
 
 
 def build_model(cfg, forces=False):
@@ -220,101 +216,343 @@ def prepare_batch(batch: dict[str, Tensor], device="cuda", non_blocking=True) ->
     return batch
 
 
-class _SymbolicTrainingForward:
-    """Compile one fixed training layout from the first batch.
+class _CompiledTrainingRunner(nn.Module):
+    """Run one fixed derivative contract against the original AIMNet2 module."""
 
-    The loader must keep input keys, tensor ranks and dtypes, and neighbor mode
-    unchanged for that trainer.
-    """
+    _DYNAMIC_INPUTS = frozenset({
+        "coord",
+        "numbers",
+        "charge",
+        "mult",
+        "mol_idx",
+        "cell",
+        "pbc",
+        "nbmat",
+        "nbmat_lr",
+        "nbmat_coulomb",
+        "nbmat_dftd3",
+        "shifts",
+        "shifts_lr",
+        "shifts_coulomb",
+        "shifts_dftd3",
+    })
 
-    def __init__(self, model: nn.Module, example: dict[str, Tensor], target_keys: tuple[str, ...]):
-        self.module = model.module if isinstance(model, Forces) else model
-        self.input_keys = tuple(example)
-        self.state_names = tuple(name for name, _ in (*self.module.named_parameters(), *self.module.named_buffers()))
-        self.force_key = model.key_out if isinstance(model, Forces) else None
-        self.coord_key = model.x if isinstance(model, Forces) else "coord"
-        self.energy_key = model.y if isinstance(model, Forces) else "energy"
-        self.need_stress = "stress" in target_keys
-        if self.need_stress and "cell" not in example:
-            raise ValueError("Compiled training stress targets require a cell input.")
-        if self.force_key is not None and self.coord_key not in example:
-            raise ValueError(f"Compiled training force targets require {self.coord_key!r} input.")
+    def __init__(self, core: nn.Module, target_keys: tuple[str, ...] = (), *, compile_training: bool = True):
+        super().__init__()
+        self.core = core
+        self.target_keys = target_keys
+        self.compile_training = compile_training
+        self._input_schema: tuple[tuple[str, int, torch.dtype, str, tuple[int, ...] | None], ...] | None = None
+        self._input_keys: tuple[str, ...] = ()
+        self._state_names: tuple[str, ...] = ()
+        self._output_keys: tuple[str, ...] = ()
+        self._neighbor_mode: int | None = None
+        self._compiled_forward: Callable[..., tuple[Tensor, ...]] | None = None
 
-        output_keys = tuple(dict.fromkeys((*target_keys, "_natom", "_input_padded")))
+    @property
+    def need_forces(self) -> bool:
+        return "forces" in self.target_keys
+
+    @property
+    def need_stress(self) -> bool:
+        return "stress" in self.target_keys
+
+    def set_target_keys(self, target_keys: tuple[str, ...]) -> None:
+        if self.target_keys and self.target_keys != target_keys:
+            raise ValueError("Training target properties changed after the derivative runner's first batch.")
+        self.target_keys = target_keys
+
+    def _validate_stress_input(self, data: dict[str, Tensor]) -> None:
+        if not self.need_stress:
+            return
+        mode = nbops.infer_nb_mode(data)
+        if mode == 0:
+            raise ValueError(
+                "Stress training requires explicit neighbor topology (mode 1 or 2); dense mode 0 is not supported."
+            )
+        if "cell" not in data:
+            raise ValueError("Stress training requires a cell input.")
+        for suffix in nbops.NBMAT_SUFFIXES:
+            neighbor_key, shifts_key = f"nbmat{suffix}", f"shifts{suffix}"
+            if neighbor_key in data and shifts_key not in data:
+                raise ValueError(f"Stress training requires a matching {shifts_key!r} tensor for {neighbor_key!r}.")
+            if neighbor_key in data and data[shifts_key].shape != (*data[neighbor_key].shape, 3):
+                raise ValueError(f"Stress training requires {shifts_key!r} to align with {neighbor_key!r}.")
+
+    @staticmethod
+    def _normalize_cell(cell: Tensor, n_systems: int) -> Tensor:
+        if cell.ndim == 2 and cell.shape == (3, 3):
+            cell = cell.unsqueeze(0)
+        if cell.ndim != 3 or cell.shape[-2:] != (3, 3) or cell.shape[0] not in (1, n_systems):
+            raise ValueError(f"cell must have shape (3, 3), (1, 3, 3), or (B, 3, 3) with B={n_systems}.")
+        return cell.expand(n_systems, -1, -1).contiguous() if cell.shape[0] == 1 and n_systems != 1 else cell
+
+    def validate_mode1_indices(self, data: dict[str, Tensor]) -> None:
+        if nbops.infer_nb_mode(data) != 1:
+            return
+        numbers, mol_idx, charge = data["numbers"], data["mol_idx"], data["charge"]
+        if numbers.ndim != 1 or mol_idx.ndim != 1 or numbers.shape != mol_idx.shape:
+            raise ValueError("Mode-1 training requires aligned one-dimensional numbers and mol_idx tensors.")
+        n_systems = charge.shape[0]
+        real = numbers != 0
+        if bool(((mol_idx[real] < 0) | (mol_idx[real] >= n_systems)).any()):
+            raise ValueError("Mode-1 training requires every real mol_idx entry to index a declared system.")
+
+    def _normalize_mode1_dummy(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+        if nbops.infer_nb_mode(data) != 1:
+            return data
+        numbers, mol_idx, charge = data["numbers"], data["mol_idx"], data["charge"]
+        n_systems = charge.shape[0]
+        real = numbers != 0
+        normalized = torch.where(real, mol_idx, torch.full_like(mol_idx, n_systems - 1)).to(torch.long)
+        return {**data, "mol_idx": normalized}
+
+    def _schema(self, data: dict[str, Tensor]) -> tuple[tuple[str, int, torch.dtype, str, tuple[int, ...] | None], ...]:
+        return tuple(
+            (
+                key,
+                value.ndim,
+                value.dtype,
+                value.device.type,
+                None if key in self._DYNAMIC_INPUTS else tuple(value.shape),
+            )
+            for key, value in data.items()
+        )
+
+    def _validate_input(self, data: dict[str, Tensor]) -> None:
+        schema = self._schema(data)
+        if self._input_schema is None:
+            if data["numbers"].device.type == "cpu":
+                self.validate_mode1_indices(data)
+            self._input_schema = schema
+            self._input_keys = tuple(data)
+            self._neighbor_mode = nbops.infer_nb_mode(data)
+            return
+        if tuple(key for key, *_ in schema) != self._input_keys:
+            expected, actual = set(self._input_keys), set(data)
+            if expected == actual:
+                raise ValueError("Compiled training input key order changed after the first batch.")
+            raise ValueError(
+                "Compiled training input keys changed after the first batch; "
+                f"missing {tuple(sorted(expected - actual))}, unexpected {tuple(sorted(actual - expected))}."
+            )
+        if self._neighbor_mode != nbops.infer_nb_mode(data):
+            raise ValueError("Compiled training neighbor mode changed after the first batch.")
+        for expected, actual in zip(self._input_schema, schema, strict=True):
+            key, rank, dtype, device_type, fixed_shape = expected
+            if actual[1:4] != (rank, dtype, device_type):
+                raise ValueError(f"Compiled training input schema changed for {key!r} (rank, dtype, or device type).")
+            if fixed_shape is not None and actual[4] != fixed_shape:
+                raise ValueError(f"Compiled training fixed-shape input changed for {key!r}.")
+
+    def _live_state_tensors(self) -> tuple[Tensor, ...]:
+        state = dict(self.core.named_parameters())
+        state.update(self.core.named_buffers())
+        return tuple(state[name] for name in self._state_names)
+
+    def _derivative_predictions(
+        self,
+        data: dict[str, Tensor],
+        apply_core: Callable[[dict[str, Tensor]], dict[str, Tensor]],
+        *,
+        create_graph: bool,
+    ) -> dict[str, Tensor]:
+        """Run the common energy/forces/stress derivative topology."""
+        data = self._normalize_mode1_dummy(data)
+        coord = data["coord"].detach().requires_grad_(True)
+        data["coord"] = coord
+        strain = None
+        if self.need_stress:
+            n_systems = data["charge"].shape[0]
+            cell = self._normalize_cell(data["cell"], n_systems)
+            strain = torch.eye(3, dtype=coord.dtype, device=coord.device).unsqueeze(0).repeat(n_systems, 1, 1)
+            strain.requires_grad_(True)
+            if coord.ndim == 2:
+                data["coord"] = torch.einsum("ni,nij->nj", coord, strain[data["mol_idx"]])
+            else:
+                data["coord"] = torch.einsum("bni,bij->bnj", coord, strain)
+            data["cell"] = cell @ strain
+        data = apply_core(data)
+        if self.need_forces or self.need_stress:
+            inputs = (coord,) if strain is None else (coord, strain)
+            derivatives = torch.autograd.grad(
+                data["energy"].sum(), inputs, create_graph=create_graph, retain_graph=create_graph
+            )
+            if self.need_forces:
+                data["forces"] = -derivatives[0]
+            if strain is not None:
+                volume = torch.linalg.det(data["cell"].detach()).abs().unsqueeze(-1).unsqueeze(-1)
+                data["stress"] = derivatives[-1] / volume
+        return data
+
+    def _capture(self, example: dict[str, Tensor]) -> None:
+        # Keep private Torch compiler imports local: their APIs change faster
+        # than AIMNet2's public training surface.
+        try:
+            from torch._dynamo.source import ConstantSource
+            from torch._functorch.aot_autograd import aot_module_simplified, make_boxed_compiler
+            from torch._inductor.compile_fx import compile_fx
+            from torch._subclasses.fake_tensor import FakeTensorMode
+            from torch.func import functional_call
+            from torch.fx.experimental.proxy_tensor import make_fx
+            from torch.fx.experimental.symbolic_shapes import DimDynamic, ShapeEnv
+        except (AttributeError, ImportError) as error:
+            raise RuntimeError(
+                "Compiled training requires PyTorch 2.10 or newer with its AOTAutograd and Inductor compiler APIs."
+            ) from error
+
+        self._state_names = tuple(name for name, _ in (*self.core.named_parameters(), *self.core.named_buffers()))
+        self._output_keys = tuple(dict.fromkeys((*self.target_keys, "_natom", "_input_padded", "numbers")))
 
         def derivative_forward(*tensors: Tensor) -> tuple[Tensor, ...]:
-            input_tensors = tensors[: len(self.input_keys)]
-            state_tensors = tensors[len(self.input_keys) :]
-            data = dict(zip(self.input_keys, input_tensors, strict=True))
-            coord = data[self.coord_key]
-            need_derivatives = self.force_key is not None or self.need_stress
-            if need_derivatives:
-                coord = coord.detach().requires_grad_(True)
-                data[self.coord_key] = coord
-            strain = None
-            if self.need_stress:
-                n_systems = data["cell"].shape[0] if coord.ndim == 2 else coord.shape[0]
-                strain = (
-                    torch.eye(3, dtype=coord.dtype, device=coord.device)
-                    .unsqueeze(0)
-                    .repeat(n_systems, 1, 1)
-                    .requires_grad_(True)
-                )
-                if coord.ndim == 2:
-                    data[self.coord_key] = torch.einsum("ni,nij->nj", coord, strain[data["mol_idx"]])
-                else:
-                    data[self.coord_key] = torch.einsum("bni,bij->bnj", coord, strain)
-                data["cell"] = data["cell"] @ strain
-            state = dict(zip(self.state_names, state_tensors, strict=True))
-            data = functional_call(self.module, state, (data,))
-            if need_derivatives:
-                grad_inputs = [coord]
-                if strain is not None:
-                    grad_inputs.append(strain)
-                derivatives = torch.autograd.grad(
-                    data[self.energy_key].sum(), grad_inputs, create_graph=True, retain_graph=True
-                )
-                if self.force_key is not None:
-                    data[self.force_key] = -derivatives[0]
-                if strain is not None:
-                    volume = torch.linalg.det(data["cell"].detach()).abs().unsqueeze(-1).unsqueeze(-1)
-                    data["stress"] = derivatives[-1] / volume
-            return tuple(data[key] for key in output_keys)
+            data = dict(zip(self._input_keys, tensors[: len(self._input_keys)], strict=True))
+            state = dict(zip(self._state_names, tensors[len(self._input_keys) :], strict=True))
+            data = self._derivative_predictions(
+                data,
+                lambda values: functional_call(self.core, state, (values,)),
+                create_graph=True,
+            )
+            return tuple(data[key] for key in self._output_keys)
 
-        example_args = (*tuple(example.values()), *self._live_state_tensors())
-        # ``make_fx`` is not reported as compiling by Torch 2.13. AIMNet2's
-        # local trace context selects its compile-safe tensor paths without
-        # changing Torch's process-global compiler state.
-        with nbops._symbolic_trace_context():
+        shape_env = ShapeEnv(duck_shape=False, specialize_zero_one=False)
+        fake_mode = FakeTensorMode(shape_env=shape_env, allow_non_fake_inputs=True)
+        mode = nbops.infer_nb_mode(example)
+        symbols: dict[str, torch.SymInt] = {}
+
+        def symbolic_size(label: str, hint: int) -> torch.SymInt:
+            if label not in symbols:
+                source = ConstantSource(f"aimnet2_{label}")
+                expression = shape_env.create_symbol(
+                    max(hint, 2),
+                    source,
+                    dynamic_dim=DimDynamic.DYNAMIC,
+                    do_not_specialize_zero_one=True,
+                )
+                symbols[label] = shape_env.create_symintnode(expression, hint=max(hint, 2), source=source)
+            return symbols[label]
+
+        def symbolic_shape(key: str, value: Tensor) -> tuple[int | torch.SymInt, ...] | None:
+            B = symbolic_size("B", example["charge"].shape[0])
+
+            def neighbor_width(prefix: str, axis: int) -> torch.SymInt:
+                suffix = key.removeprefix(prefix)
+                return symbolic_size(f"M{suffix}", value.shape[axis])
+
+            if mode == 0:
+                N = symbolic_size("N", example["numbers"].shape[1])
+                if key in {"coord", "numbers"}:
+                    return (B, N, *value.shape[2:])
+                if key in {"charge", "mult"}:
+                    return (B, *value.shape[1:])
+                if key == "cell" and value.ndim == 3:
+                    return (B, 3, 3)
+                if key == "pbc" and value.ndim == 2:
+                    return (B, 3)
+            elif mode == 1:
+                L = symbolic_size("L", example["numbers"].shape[0])
+                if key in {"coord", "numbers", "mol_idx"}:
+                    return (L, *value.shape[1:])
+                if key in {"charge", "mult"}:
+                    return (B, *value.shape[1:])
+                if key.startswith("nbmat") and value.ndim == 2:
+                    M = neighbor_width("nbmat", 1)
+                    return (L, M)
+                if key.startswith("shifts") and value.ndim == 3:
+                    M = neighbor_width("shifts", 1)
+                    return (L, M, 3)
+                if key == "cell" and value.ndim == 3:
+                    return (B, 3, 3)
+                if key == "pbc" and value.ndim == 2:
+                    return (B, 3)
+            else:
+                N = symbolic_size("N", example["numbers"].shape[1])
+                if key in {"coord", "numbers"}:
+                    return (B, N, *value.shape[2:])
+                if key in {"charge", "mult"}:
+                    return (B, *value.shape[1:])
+                if key.startswith("nbmat") and value.ndim == 3:
+                    M = neighbor_width("nbmat", 2)
+                    return (B, N, M)
+                if key.startswith("shifts") and value.ndim == 4:
+                    M = neighbor_width("shifts", 2)
+                    return (B, N, M, 3)
+                if key == "cell" and value.ndim == 3:
+                    return (B, 3, 3)
+                if key == "pbc" and value.ndim == 2:
+                    return (B, 3)
+            return None
+
+        def contiguous_strides(shape: tuple[int | torch.SymInt, ...]) -> tuple[int | torch.SymInt, ...]:
+            strides: list[int | torch.SymInt] = []
+            stride: int | torch.SymInt = 1
+            for size in reversed(shape):
+                strides.append(stride)
+                stride = stride * size
+            return tuple(reversed(strides))
+
+        with fake_mode, nbops._symbolic_trace_context():
+            fake_inputs = []
+            for key, value in example.items():
+                shape = symbolic_shape(key, value)
+                if shape is None:
+                    fake_inputs.append(fake_mode.from_tensor(value, static_shapes=True))
+                else:
+                    fake_inputs.append(
+                        torch.empty_strided(shape, contiguous_strides(shape), dtype=value.dtype, device=value.device)
+                    )
+            fake_state = tuple(fake_mode.from_tensor(value, static_shapes=True) for value in self._live_state_tensors())
+            fake_args = (*fake_inputs, *fake_state)
             traced = make_fx(
                 derivative_forward,
                 tracing_mode="symbolic",
-                decomposition_table=core_aten_decompositions(),
                 _allow_non_fake_inputs=True,
                 _error_on_data_dependent_ops=True,
-            )(*example_args)
-        self.forward = torch.compile(traced, dynamic=True, fullgraph=False)
-        self.output_keys = output_keys
+            )(*fake_args)
+        # Compile from the captured fake inputs so AOTAutograd preserves this
+        # ShapeEnv. Rebuilding fake inputs from the first real batch would
+        # specialize singleton dimensions and lose shared size relationships.
+        object.__setattr__(
+            self,
+            "_compiled_forward",
+            aot_module_simplified(
+                traced,
+                fake_args,
+                fw_compiler=make_boxed_compiler(compile_fx),
+                bw_compiler=make_boxed_compiler(compile_fx),
+            ),
+        )
 
-    def _live_state_tensors(self) -> tuple[Tensor, ...]:
-        state = dict(self.module.named_parameters())
-        state.update(self.module.named_buffers())
-        return tuple(state[name] for name in self.state_names)
+    def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+        self._validate_stress_input(data)
+        if self.need_stress:
+            data = {**data, "cell": self._normalize_cell(data["cell"], data["charge"].shape[0])}
+        self._validate_input(data)
+        if not self.compile_training:
+            with torch.enable_grad():
+                return self._derivative_predictions(data, self.core, create_graph=self.training)
+        if self._compiled_forward is None:
+            self._capture(data)
+        assert self._compiled_forward is not None
+        args = (*(data[key] for key in self._input_keys), *self._live_state_tensors())
+        values = self._compiled_forward(*args)
+        result = dict(data)
+        result.update(zip(self._output_keys, values, strict=True))
+        return result
 
-    def __call__(self, x: dict[str, Tensor]) -> dict[str, Tensor]:
-        input_key_set = set(x)
-        expected_key_set = set(self.input_keys)
-        if input_key_set != expected_key_set:
-            missing = tuple(sorted(expected_key_set - input_key_set))
-            unexpected = tuple(sorted(input_key_set - expected_key_set))
-            raise ValueError(
-                "Compiled training input keys changed after the first batch; "
-                f"missing {missing}, unexpected {unexpected}."
-            )
-        values = self.forward(*(x[key] for key in self.input_keys), *self._live_state_tensors())
-        y_pred = dict(x)
-        y_pred.update(zip(self.output_keys, values, strict=True))
-        return y_pred
+
+def build_compiled_training_runner(
+    model: nn.Module, target_keys: tuple[str, ...], *, compile_training: bool = True
+) -> _CompiledTrainingRunner:
+    return _CompiledTrainingRunner(unwrap_module(model), target_keys, compile_training=compile_training)
+
+
+def _eager_derivative_predictions(
+    model: nn.Module, data: dict[str, Tensor], target_keys: tuple[str, ...]
+) -> dict[str, Tensor]:
+    """Evaluate energy/derivative targets through the same stress topology."""
+    contract = _CompiledTrainingRunner(unwrap_module(model), target_keys)
+    contract._validate_stress_input(data)
+    return contract._derivative_predictions(data, unwrap_module(model), create_graph=False)
 
 
 def default_trainer(
@@ -329,45 +567,55 @@ def default_trainer(
     target_device = torch.device(device) if device is not None else model_device
     if compile_training and (model_device.type != "cuda" or target_device.type != "cuda"):
         raise RuntimeError("Compiled training requires the model and batches to use CUDA.")
-    if compile_training and isinstance(model, torch.nn.parallel.DistributedDataParallel):
-        raise RuntimeError("Compiled training is not supported with DistributedDataParallel.")
-
-    # Keep the original module as the optimizer/checkpoint owner. The compiled
-    # callable covers the model and derivative computation, including its
-    # autograd backward. Loss evaluation, clipping, and the optimizer step stay
-    # eager; the trainer invokes loss.backward() to enter the compiled backward.
-    if compile_training:
-        # The first batch supplies the tensor schema for the symbolic
-        # derivative graph. Energy-only training can continue to use the
-        # ordinary module compile path.
-        forward = None if isinstance(model, Forces) else torch.compile(model, dynamic=True)
-    else:
-        forward = model
-    symbolic_forward: _SymbolicTrainingForward | None = None
+    if compile_training and not isinstance(model, (torch.nn.parallel.DistributedDataParallel, _CompiledTrainingRunner)):
+        # Direct callers may still pass a regular core/Forces model. The CLI
+        # builds this runner earlier so DDP sees the runner itself.
+        model = build_compiled_training_runner(model, ())
+    if (
+        compile_training
+        and isinstance(model, torch.nn.parallel.DistributedDataParallel)
+        and not isinstance(model.module, _CompiledTrainingRunner)
+    ):
+        raise RuntimeError("Compiled DDP training requires a compiled training runner before DDP wrapping.")
+    forward = model
 
     def _check_compiled_batch(x: dict[str, Tensor]) -> None:
         if "numbers" not in x:
             raise ValueError("Compiled training requires a numbers input.")
 
+    def _any_rank_failed(flag: Tensor, message: str) -> None:
+        flag = flag.to(device=model_device, dtype=torch.int32)
+        if idist.get_world_size() > 1:
+            flag = idist.all_reduce(flag, op="MAX")
+        if bool(flag.item()):
+            raise RuntimeError(message)
+
     def _update(engine: Engine, batch: tuple[dict[str, Tensor], dict[str, Tensor]]) -> float:
-        nonlocal symbolic_forward
         model.train()
         optimizer.zero_grad()
-        x = prepare_batch(dict(batch[0]), device=device, non_blocking=non_blocking)  # type: ignore
+        source_x = dict(batch[0])
+        runner = model.module if isinstance(model, torch.nn.parallel.DistributedDataParallel) else model
+        if isinstance(runner, _CompiledTrainingRunner) and source_x["numbers"].device.type == "cpu":
+            runner.validate_mode1_indices(source_x)
+        x = prepare_batch(source_x, device=device, non_blocking=non_blocking)  # type: ignore
         y = prepare_batch(dict(batch[1]), device=device, non_blocking=non_blocking)  # type: ignore
         if compile_training:
             _check_compiled_batch(x)
-            if isinstance(model, Forces):
-                if symbolic_forward is None:
-                    symbolic_forward = _SymbolicTrainingForward(model, x, tuple(y))
-                y_pred = symbolic_forward(x)
-            else:
-                assert forward is not None
-                y_pred = forward(x)
-        else:
-            y_pred = forward(x)
+            assert isinstance(runner, _CompiledTrainingRunner)
+            runner.set_target_keys(tuple(y))
+        y_pred = forward(x)
         loss = loss_fn(y_pred, y)["loss"]
+        _any_rank_failed(~torch.isfinite(loss).all(), "Non-finite training loss; optimizer step skipped.")
         loss.backward()
+        gradient_checks = [
+            torch.isfinite(parameter.grad).all() for parameter in model.parameters() if parameter.grad is not None
+        ]
+        gradients_finite = (
+            torch.stack(gradient_checks).all()
+            if gradient_checks
+            else torch.ones((), device=model_device, dtype=torch.bool)
+        )
+        _any_rank_failed(~gradients_finite, "Non-finite training gradients; optimizer step skipped.")
         torch.nn.utils.clip_grad_value_(model.parameters(), 0.4)
         optimizer.step()
 
@@ -393,29 +641,19 @@ def default_evaluator(
                 y_pred = model(x)
             return y_pred, y
 
-        if "cell" not in x:
-            raise ValueError("Compiled training stress targets require a cell input.")
-        module = model.module if isinstance(model, Forces) else model
-        coord = x["coord"].detach().requires_grad_(True)
-        n_systems = x["cell"].shape[0] if coord.ndim == 2 else coord.shape[0]
-        strain = (
-            torch.eye(3, dtype=coord.dtype, device=coord.device)
-            .unsqueeze(0)
-            .repeat(n_systems, 1, 1)
-            .requires_grad_(True)
-        )
-        if coord.ndim == 2:
-            x["coord"] = torch.einsum("ni,nij->nj", coord, strain[x["mol_idx"]])
+        target_keys = tuple(dict.fromkeys((*y, "stress")))
+        if (
+            isinstance(model, torch.nn.parallel.DistributedDataParallel)
+            and isinstance(model.module, _CompiledTrainingRunner)
+        ) or isinstance(model, _CompiledTrainingRunner):
+            runner = model.module if isinstance(model, torch.nn.parallel.DistributedDataParallel) else model
+            if not runner.need_stress:
+                raise ValueError("Stress evaluation requires a derivative runner configured with stress.")
+            y_pred = model(x)
         else:
-            x["coord"] = torch.einsum("bni,bij->bnj", coord, strain)
-        x["cell"] = x["cell"] @ strain
-        y_pred = module(x)
-        derivatives = torch.autograd.grad(y_pred["energy"].sum(), (coord, strain))
-        if isinstance(model, Forces):
-            y_pred[model.key_out] = -derivatives[0]
-        volume = torch.linalg.det(x["cell"].detach()).abs().unsqueeze(-1).unsqueeze(-1)
-        y_pred["stress"] = derivatives[1] / volume
-        return y_pred, y
+            y_pred = _eager_derivative_predictions(model, x, target_keys)
+        # Validation does not retain the derivative graph.
+        return {key: value.detach() if isinstance(value, Tensor) else value for key, value in y_pred.items()}, y
 
     return Engine(_inference)
 
@@ -433,13 +671,11 @@ class TerminateOnLowLR:
 def build_engine(model, optimizer, scheduler, loss_fn, metrics, cfg, loader_val):
     device = next(model.parameters()).device
     evaluator_name = cfg.trainer.evaluator
-    need_stress = bool(cfg.trainer.get("compile", False)) and "stress" in cfg.data.y
-    if need_stress and evaluator_name != "aimnet.train.utils.default_evaluator":
-        raise RuntimeError("trainer.compile=True with stress targets requires aimnet.train.utils.default_evaluator.")
+    need_stress = "stress" in cfg.data.y
 
     train_fn = get_module(cfg.trainer.trainer)
     train_kwargs = {"device": device, "non_blocking": True}
-    if bool(cfg.trainer.get("compile", False)):
+    if bool(cfg.trainer.get("compile", False)) and train_fn is default_trainer:
         train_kwargs["compile_training"] = True
     trainer = train_fn(model, optimizer, loss_fn, **train_kwargs)
     # check for NaNs after each epoch
@@ -470,7 +706,13 @@ def build_engine(model, optimizer, scheduler, loss_fn, metrics, cfg, loader_val)
     # attach validator
     validate_fn = get_module(evaluator_name)
     evaluator_kwargs = {"device": device, "non_blocking": True}
-    if need_stress:
+    if need_stress and (
+        "stress" in inspect.signature(validate_fn).parameters
+        or any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in inspect.signature(validate_fn).parameters.values()
+        )
+    ):
         evaluator_kwargs["stress"] = True
     validator = validate_fn(model, **evaluator_kwargs)
     metrics.attach(validator, "multi")

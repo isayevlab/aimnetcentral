@@ -176,9 +176,7 @@ def test_hvp_wrong_vector_shape_raises():
 @pytest.mark.slow
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
 def test_compile_model_hvp_and_hessian_match_eager():
-    eager = AIMNet2Calculator(
-        "aimnet2", nb_threshold=1000, device="cuda", needs_coulomb=False, needs_dispersion=False
-    )
+    eager = AIMNet2Calculator("aimnet2", nb_threshold=1000, device="cuda", needs_coulomb=False, needs_dispersion=False)
     compiled = AIMNet2Calculator(
         "aimnet2", nb_threshold=1000, device="cuda", compile_model=True, needs_coulomb=False, needs_dispersion=False
     )

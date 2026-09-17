@@ -1340,6 +1340,7 @@ class TestTorchCompile:
 
     @pytest.mark.skipif(not hasattr(torch, "compile"), reason="torch.compile requires PyTorch 2.0+")
     @pytest.mark.gpu
+    @pytest.mark.slow
     def test_torch_compile_cuda(self):
         """The CUDA constructor compiles the forward without replacing the model."""
         if not torch.cuda.is_available():
@@ -1397,26 +1398,30 @@ class TestTorchCompile:
         assert "energy" in res
         assert torch.isfinite(res["energy"]).all()
 
-    @pytest.mark.skipif(not hasattr(torch, "compile"), reason="torch.compile requires PyTorch 2.0+")
-    def test_compile_kwargs_parameter(self):
-        """Test compile_kwargs constructor parameter."""
-        calc = AIMNet2Calculator(
-            "aimnet2",
-            nb_threshold=0,
-            device="cpu",
-            compile_model=True,
-            compile_kwargs={"fullgraph": False},
-        )
+    def test_compile_kwargs_rejects_non_fullgraph(self):
+        """Compiled inference has one mandatory full graph contract."""
+        with pytest.raises(
+            ValueError,
+            match=r"compile_kwargs\['fullgraph'\]=False is not supported; compiled inference requires a full graph\.",
+        ):
+            AIMNet2Calculator(
+                "aimnet2",
+                nb_threshold=0,
+                device="cpu",
+                compile_model=True,
+                compile_kwargs={"fullgraph": False},
+            )
 
-        data = {
-            "coord": torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
-            "numbers": torch.tensor([8, 1, 1]),
-            "charge": torch.tensor([0.0]),
-        }
+    def test_compile_legacy_torchscript_model_is_rejected(self, monkeypatch):
+        """Legacy .jpt modules cannot enter the eager-model compiler path."""
+        from aimnet.calculators import calculator as calculator_module
 
-        res = calc(data)
-        assert "energy" in res
-        assert torch.isfinite(res["energy"]).all()
+        legacy = torch.jit.script(TinyLegacyModel())
+        monkeypatch.setattr(calculator_module, "resolve_model", Mock(return_value=(legacy, None, 5.0)))
+        with pytest.raises(
+            ValueError, match=r"compile_model=True is not supported for legacy TorchScript \.jpt models\."
+        ):
+            AIMNet2Calculator("legacy.jpt", device="cpu", compile_model=True)
 
 
 # =============================================================================

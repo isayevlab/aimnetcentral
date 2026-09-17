@@ -57,38 +57,15 @@ def mse_loss_fn(y_pred: dict[str, Tensor], y_true: dict[str, Tensor], key_pred: 
 
 
 def peratom_loss_fn(y_pred: dict[str, Tensor], y_true: dict[str, Tensor], key_pred: str, key_true: str) -> Tensor:
-    """MSE loss function with per-atom normalization correction.
-    Suitable when some of the values are zero both in y_pred and y_true due to padding of inputs.
-    """
+    """MSE for per-atom targets, excluding rows whose atomic number is zero."""
     x = y_true[key_true]
     y = y_pred[key_pred]
 
     numbers = y_pred.get("numbers")
-    nbmat = y_pred.get("nbmat")
-    if (
-        isinstance(numbers, Tensor)
-        and numbers.ndim == 2
-        and isinstance(nbmat, Tensor)
-        and nbmat.ndim == 3
-        and x.ndim >= 2
-        and x.shape[:2] == numbers.shape
-    ):
-        real_atoms = numbers != 0
-        return torch.nn.functional.mse_loss(x[real_atoms], y[real_atoms])
-
-    mol_idx = y_pred.get("mol_idx")
-    if x.ndim in (1, 2) and isinstance(mol_idx, Tensor) and mol_idx.ndim == 1 and x.shape[0] == mol_idx.shape[0]:
-        return torch.nn.functional.mse_loss(x[:-1], y[:-1])
-
-    loss = torch.nn.functional.mse_loss(x, y)
-    if y_pred["_natom"].numel() > 1:
-        diff2 = (x - y).pow(2).view(x.shape[0], -1)
-        dim = diff2.shape[-1]
-        padded_loss = (diff2 * (y_pred["_natom"].unsqueeze(-1) / dim)).mean()
-        # Mode 0 now always reports one atom count per system. Preserve the
-        # former unpadded-batch result while avoiding a device scalar read.
-        loss = torch.where(y_pred["_input_padded"], padded_loss, loss)
-    return loss
+    if not isinstance(numbers, Tensor) or x.ndim < numbers.ndim or x.shape[: numbers.ndim] != numbers.shape:
+        raise ValueError("peratom_loss_fn requires atom-aligned numbers, prediction, and target tensors.")
+    real_atoms = numbers != 0
+    return torch.nn.functional.mse_loss(x[real_atoms], y[real_atoms])
 
 
 def energy_loss_fn(

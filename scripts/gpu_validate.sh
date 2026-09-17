@@ -58,7 +58,7 @@ for V in $TORCH_VERSIONS; do
     # the venv explicitly (the [ase] extra does not pull the dev group).
     install_cmd="uv venv --python $PYTHON $VENV && \
         VIRTUAL_ENV=$VENV uv pip install 'torch==$V.*' --index-url $CUDA_INDEX && \
-        VIRTUAL_ENV=$VENV uv pip install -e '$REPO[ase]' pytest"
+        VIRTUAL_ENV=$VENV uv pip install -e '$REPO[ase,train]' pytest"
     suite_cmd="'$VENV/bin/python' -m pytest '$REPO/tests' -m gpu"
     dump_cmd="'$VENV/bin/python' -m aimnet.validation.gpu_observables --out '$RESULTS/$V.json'"
 

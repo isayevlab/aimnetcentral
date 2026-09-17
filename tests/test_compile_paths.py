@@ -158,6 +158,17 @@ def test_mode1_calc_masks_compiled_matches_eager(device, n_mol):
     torch.testing.assert_close(actual, eager)
 
 
+def test_mode1_counts_exclude_an_int32_dummy_own_bucket(device):
+    data = {
+        "numbers": torch.tensor([6, 1, 8, 1, 0], device=device),
+        "mol_idx": torch.tensor([0, 0, 1, 1, 2], dtype=torch.int32, device=device),
+        "nbmat": torch.zeros(5, 1, dtype=torch.int32, device=device),
+        "charge": torch.zeros(2, device=device),
+    }
+    prepared = nbops.calc_masks(nbops.set_nb_mode(data))
+    torch.testing.assert_close(prepared["mol_sizes"], torch.tensor([2, 2], device=device))
+
+
 @pytest.mark.parametrize("mode", [1, 2])
 def test_packed_and_global_loss_metadata_uses_mol_sizes(device, mode):
     from aimnet.train.loss import energy_loss_fn
@@ -209,8 +220,7 @@ def test_mode2_calc_masks_compiled_matches_eager(device):
 @pytest.mark.parametrize("n_mol", [1, 2, 5])
 def test_mol_sum_compiled_matches_eager(device, n_mol):
     """The compiled branch reads the count from `charge`; the eager one from
-    the `_num_mol` cache. A single molecule additionally takes the sum path,
-    which keeps a degenerate size-1 scatter out of the graph entirely."""
+    the `_num_mol` cache, including the single-molecule scatter case."""
     if device.type != "cuda":
         pytest.skip("compiled parity is only meaningful on the GPU backend")
     data = _packed_data(n_mol, 4, device)

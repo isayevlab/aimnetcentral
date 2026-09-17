@@ -208,11 +208,14 @@ class AIMNet2Calculator:
         # Dynamo wrapper instead of the AIMNet2 instance.
         self._compiled_forward: Callable[[dict[str, Tensor]], dict[str, Tensor]] | None = None
         if compile_model:
-            if torch.device(self.device).type == "cuda":
-                kwargs = {"fullgraph": True}
-                kwargs.update(compile_kwargs or {})
-            else:
-                kwargs = compile_kwargs or {}
+            if isinstance(self.model, torch.jit.ScriptModule):
+                raise ValueError("compile_model=True is not supported for legacy TorchScript .jpt models.")
+            kwargs = {"fullgraph": True}
+            kwargs.update(compile_kwargs or {})
+            if kwargs.get("fullgraph") is False:
+                raise ValueError(
+                    "compile_kwargs['fullgraph']=False is not supported; compiled inference requires a full graph."
+                )
             self._compiled_forward = cast(
                 Callable[[dict[str, Tensor]], dict[str, Tensor]],
                 torch.compile(self.model, **kwargs),

@@ -601,6 +601,7 @@ class TestHessian:
         # Sanity: doublet Hessian should be symmetric to fp32 noise.
         assert np.max(np.abs(H - H.T)) / np.max(np.abs(H)) < 1e-3
 
+    @pytest.mark.slow
     def test_hessian_compile_model_matches_eager(self):
         """Compiled inference and eager calculators must share the Hessian result."""
         pytest.importorskip("ase", reason="ASE not installed")
@@ -612,9 +613,7 @@ class TestHessian:
         eager_atoms = Atoms("OH2", positions=positions)
         compiled_atoms = eager_atoms.copy()
         eager_atoms.calc = AIMNet2ASE(AIMNet2Calculator("aimnet2", device="cpu"))
-        compiled_atoms.calc = AIMNet2ASE(
-            AIMNet2Calculator("aimnet2", device="cpu", compile_model=True)
-        )
+        compiled_atoms.calc = AIMNet2ASE(AIMNet2Calculator("aimnet2", device="cpu", compile_model=True))
 
         eager_hessian = eager_atoms.calc.get_hessian(eager_atoms)
         compiled_hessian = compiled_atoms.calc.get_hessian(compiled_atoms)

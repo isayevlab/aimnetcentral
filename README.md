@@ -196,13 +196,20 @@ aimnet train --config my_config.yaml --model aimnet2.yaml
 The `aimnet` entry point is installed with the core package. Training, export, and self-atomic-energy commands require the `train` extra.
 
 To compile the AIMNet2 energy, force, and stress computation during training,
-set `trainer.compile: true`. Compiled training requires one CUDA process and
-does not support DDP. The first batch fixes the neighbor mode and the input
-keys, ranks, and dtypes; later batches may use different atom and neighbor
-counts. Loss evaluation, gradient clipping, and the optimizer step remain
-eager. The trainer invokes `loss.backward()` eagerly, while gradients through
-the compiled model and derivative computation use its compiled autograd
-backward and update the original model parameters.
+set `trainer.compile: true`. Compiled training requires CUDA and supports DDP;
+each process or rank owns one compiled derivative graph. The first batch fixes
+the requested properties, neighbor mode, and ordered input keys, ranks, dtypes,
+and device type. Later batches may change their batch, atom, and neighbor
+dimensions. Forces are supported in modes 0, 1, and 2. Stress requires an
+explicit mode-1 or mode-2 neighbor matrix, a cell, and an aligned shift tensor
+for every neighbor matrix.
+
+The original AIMNet2 module remains the sole parameter and checkpoint owner.
+Loss evaluation, gradient clipping, and the optimizer step remain eager. The
+trainer invokes `loss.backward()` from eager Python, which enters the compiled
+AOTAutograd backward for the model and derivative graph. Hessian and HVP
+requests made through a calculator with compiled inference enabled continue to
+use the original eager model.
 
 ## Development
 

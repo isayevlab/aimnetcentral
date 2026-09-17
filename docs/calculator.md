@@ -232,6 +232,11 @@ Whether to compile the model with `torch.compile()` for faster inference.
 | `True`            | Compile model with `torch.compile()` |
 
 Compilation adds overhead on first call but speeds up subsequent calls. Useful for MD trajectories, geometry optimizations, or repeated evaluations.
+Compilation always uses `fullgraph=True`; passing `fullgraph=False` in
+`compile_kwargs` is rejected. Legacy TorchScript `.jpt` models do not support
+this option. Hessian and Hessian-vector-product requests use the original eager
+model while ordinary compiled evaluations continue to share that model's
+parameters and state.
 
 #### `compile_kwargs`
 
