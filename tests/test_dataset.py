@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import pytest
 
 from aimnet.data import SizeGroupedDataset, SizeGroupedSampler
 
@@ -206,3 +207,121 @@ def test_save_h5_roundtrip(tmp_path):
     assert sorted(ds2.keys()) == sorted(ds.keys())
     assert len(ds2) == len(ds)
     assert sorted(ds2.datakeys()) == sorted(ds.datakeys())
+
+
+def test_datagroup_to_dict():
+    ds = dataset()
+    grp = next(iter(ds.values()))
+    d = grp.to_dict()
+    assert isinstance(d, dict)
+    assert sorted(d.keys()) == sorted(grp.keys())
+    assert d["numbers"] is grp["numbers"]
+
+
+def test_datagroup_rename_key():
+    ds = dataset()
+    grp = next(iter(ds.values()))
+    before = grp["energy"]
+    grp.rename_key("energy", "ref_energy")
+    assert "energy" not in grp
+    assert np.array_equal(grp["ref_energy"], before)
+
+
+def test_datagroup_merge_strict():
+    grp = next(iter(dataset().values()))
+    other = next(iter(dataset().values()))
+    n = len(grp)
+    grp.merge(other)
+    assert len(grp) == 2 * n
+
+
+def test_datagroup_merge_strict_rejects_mismatched_keys():
+    grp = next(iter(dataset().values()))
+    other = next(iter(dataset().values()))
+    other.pop("energy")
+    with pytest.raises(ValueError, match="Data keys do not match"):
+        grp.merge(other)
+
+
+def test_datagroup_merge_non_strict_keeps_shared_keys():
+    grp = next(iter(dataset().values()))
+    other = next(iter(dataset().values()))
+    other.pop("energy")
+    n = len(grp)
+    grp.merge(other, strict=False)
+    assert "energy" not in grp
+    assert "numbers" in grp
+    assert len(grp) == 2 * n
+
+
+def test_rename_datakey_across_all_groups():
+    ds = dataset()
+    ds.rename_datakey("energy", "ref_energy")
+    assert "ref_energy" in ds.datakeys()
+    assert "energy" not in ds.datakeys()
+    for g in ds.groups:
+        assert "ref_energy" in g
+
+
+def test_merge_concatenates_shared_size_groups():
+    ds = dataset()
+    other = dataset()
+    n, ngroups = len(ds), len(ds.groups)
+    ds.merge(other)
+    assert len(ds) == 2 * n
+    assert len(ds.groups) == ngroups
+    assert sorted(ds.datakeys()) == sorted(other.datakeys())
+
+
+def test_merge_adopts_size_groups_absent_from_self():
+    full = dataset()
+    dropped = sorted(full.keys())[0]
+    ds = SizeGroupedDataset({k: v for k, v in full.items() if k != dropped})
+    assert dropped not in ds
+    ds.merge(full)
+    assert dropped in ds
+    assert len(ds[dropped]) == len(full[dropped])
+
+
+def test_merge_strict_rejects_mismatched_datakeys():
+    ds = dataset()
+    other = dataset(keys=["energy", "forces"])
+    with pytest.raises(ValueError, match="Data keys do not match"):
+        ds.merge(other)
+
+
+def test_merge_non_strict_reduces_to_shared_datakeys():
+    ds = dataset()
+    other = dataset(keys=["energy", "forces"])
+    n = len(ds)
+    ds.merge(other, strict=False)
+    assert sorted(ds.datakeys()) == ["energy", "forces"]
+    assert len(ds) == 2 * n
+
+
+def test_merge_non_strict_also_reduces_the_argument():
+    """Documented side effect: `other` is reduced to the shared key set too."""
+    me = dataset(keys=["energy", "forces"])
+    other = dataset()
+    assert len(other.datakeys()) == 11
+    me.merge(other, strict=False)
+    assert sorted(other.datakeys()) == ["energy", "forces"]
+
+
+def test_merge_adopted_group_is_shared_by_reference():
+    """Documented side effect: an adopted group is not copied."""
+    full = dataset()
+    dropped = sorted(full.keys())[0]
+    ds = SizeGroupedDataset({k: v for k, v in full.items() if k != dropped})
+    ds.merge(full)
+    assert ds[dropped] is full[dropped]
+
+
+def test_datagroup_merge_ignores_keys_only_in_other():
+    grp = next(iter(dataset(keys=["energy", "forces"]).values()))
+    other = next(iter(dataset().values()))
+    n = len(grp)
+    grp.merge(other, strict=False)
+    assert sorted(grp.keys()) == ["energy", "forces"]
+    assert len(grp) == 2 * n
+    assert "coord" in other, "DataGroup.merge must not modify `other`"
