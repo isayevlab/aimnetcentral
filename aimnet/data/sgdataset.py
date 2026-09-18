@@ -82,6 +82,13 @@ class DataGroup:
     def __len__(self):
         return len(next(iter(self.values()))) if self._data else 0
 
+    def to_dict(self):
+        """Return the live `{key: array}` mapping backing this group.
+
+        This is the internal dict, not a copy: mutating it mutates the group.
+        """
+        return self._data
+
     def items(self):
         return self._data.items()
 
@@ -93,6 +100,10 @@ class DataGroup:
 
     def pop(self, key):
         return self._data.pop(key)
+
+    def rename_key(self, old, new):
+        """Rename data key `old` to `new` in place."""
+        self[new] = self.pop(old)
 
     def sample(self, idx, keys=None) -> "DataGroup":
         """Return a new `DataGroup` with the data indexed by `idx`."""
@@ -154,6 +165,27 @@ class DataGroup:
             keys = self.keys()
         for idx in idxs:
             yield {k: v[idx] for k, v in self.items() if k in keys}
+
+    def merge(self, other, strict=True):
+        """Concatenate `other` into this group along the sample axis.
+
+        With `strict=True` both groups must carry exactly the same data keys.
+        With `strict=False` the result keeps only the keys they share: keys
+        present here but missing from `other` are dropped. Keys present in
+        `other` but missing here are ignored in both modes -- this only ever
+        grows the sample axis, never the key set. `other` is not modified.
+        """
+        if strict:
+            if set(self.keys()) != set(other.keys()):
+                raise ValueError("Data keys do not match between the datasets.")
+            keys = self.keys()
+        else:
+            keys = set(self.keys()) & set(other.keys())
+        for k in list(self.keys()):
+            if k in keys:
+                self._data[k] = np.concatenate([self[k], other[k]], axis=0)
+            else:
+                self.pop(k)
 
     def apply_peratom_shift(self, sap_dict, key_in="energy", key_out="energy", numbers_key="numbers"):
         ntyp = max(sap_dict.keys()) + 1
@@ -258,9 +290,55 @@ class SizeGroupedDataset:
     def __contains__(self, value):
         return value in self.keys()
 
+    def rename_datakey(self, old, new):
+        """Rename data key `old` to `new` across every size group."""
+        for g in self.groups:
+            g.rename_key(old, new)
+
     def apply(self, fn):
         for grp in self.groups:
             fn(grp)
+
+    def merge(self, other, strict=True):
+        """Merge `other` into this dataset in place.
+
+        Size groups present in both are concatenated; groups only in `other`
+        are adopted as-is. With `strict=True` both datasets must carry exactly
+        the same data keys.
+
+        Two side effects to be aware of, both long-standing:
+
+        - With `strict=False`, `other` is also reduced in place to the shared
+          key set. Pass a copy if you still need it intact.
+        - An adopted group is taken by reference, not copied, so that group is
+          then shared between the two datasets.
+        """
+        if not isinstance(other, self.__class__):
+            other = self.__class__(other)
+        if strict:
+            if set(other.datakeys()) != set(self.datakeys()):
+                raise ValueError("Data keys do not match between the datasets.")
+        else:
+            keys = set(other.datakeys()) & set(self.datakeys())
+            for k in list(self.datakeys()):
+                if k not in keys:
+                    for g in self.groups:
+                        g.pop(k)
+            for k in list(other.datakeys()):
+                if k not in keys:
+                    for g in other.groups:
+                        g.pop(k)
+        # NB: iterate `other.keys()` explicitly. `SizeGroupedDataset` defines
+        # `__getitem__` but no `__iter__`, so a bare `for k in other` falls back
+        # to the legacy integer sequence protocol: it probes `other[0]`,
+        # `other[1]`, ... and stops only on `IndexError`. Keys here are group
+        # sizes, so the first size missing from a gap-free run starting at 0
+        # raises `KeyError` instead -- i.e. on every realistic dataset.
+        for k in list(other.keys()):
+            if k in self:
+                self[k].cat(other[k])  # type: ignore[attr-defined]
+            else:
+                self[k] = other[k]  # type: ignore[attr-defined]
 
     def random_split(self, *fractions, seed=None):
         splitted_groups = {}
