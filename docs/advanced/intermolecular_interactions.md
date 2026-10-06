@@ -18,6 +18,8 @@
 
 The `aimnet2-2025` model was specifically trained with improved sampling of intermolecular configurations, making it the best choice for non-covalent interaction studies. It shares the same element coverage as the standard models (H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I) but provides significantly better accuracy for hydrogen bonding, pi-stacking, and dispersion-dominated complexes.
 
+For the AIMNet2-2025 model and non-covalent interaction benchmarks, see [Critical benchmarking of machine-learned interatomic potentials for intermolecular and noncovalent interactions](https://doi.org/10.1088/2632-2153/aea39f) (2026).
+
 See the [Model Selection Guide](../models/guide.md) for choosing between models.
 
 ## Interaction Energy: The Supramolecular Approach

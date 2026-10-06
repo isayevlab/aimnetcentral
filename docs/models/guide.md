@@ -253,6 +253,8 @@ All model files are downloaded automatically the first time you call `AIMNet2Cal
 
 ## References
 
+- **AIMNet2-2025:** Nayal, K.; Cho, I.; Isayev, O. Critical benchmarking of machine-learned interatomic potentials for intermolecular and noncovalent interactions. _Machine Learning: Science and Technology_ **2026**. DOI: [10.1088/2632-2153/aea39f](https://doi.org/10.1088/2632-2153/aea39f)
+
 - **AIMNet2 (wB97M-D3, B97-3c):** Anstine, D.M., Zubatyuk, R., Isayev, O. _AIMNet2: A Neural Network Potential to Meet your Neutral, Charged, Organic, and Elemental-Organic Needs._ Chemical Science 2025, 16, 10228-10244. [DOI: 10.1039/D4SC08572H](https://doi.org/10.1039/D4SC08572H)
 
 - **AIMNet2-NSE (open-shell):** Kalita, B.; Zubatyuk, R.; Anstine, D. M.; Bergeler, M.; Settels, V.; Stork, C.; Spicher, S.; Isayev, O. AIMNet2-NSE: A Transferable Reactive Neural Network Potential for Open-Shell Chemistry. _Angew. Chem. Int. Ed._ **2026**. [DOI: 10.1002/anie.202516763](https://doi.org/10.1002/anie.202516763)

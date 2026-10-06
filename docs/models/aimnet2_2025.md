@@ -8,6 +8,8 @@
 
 AIMNet2-2025 is the **current-generation B97-3c model**, combining the cost-effective B97-3c reference level with improved training for non-covalent chemistry. It supersedes the original AIMNet2-B97-3c (`aimnet2-b973c`) and is recommended for all applications: high-throughput screening, conformer ranking, binding energy calculations, and any workflow where B97-3c-level accuracy is appropriate.
 
+The `aimnet2-2025` model is described in [Critical benchmarking of machine-learned interatomic potentials for intermolecular and noncovalent interactions](https://doi.org/10.1088/2632-2153/aea39f) (2026).
+
 **Supported elements:** H, B, C, N, O, F, Si, P, S, Cl, As, Se, Br, I (14 elements)
 
 **Registry alias:** `aimnet2-2025` (loads ensemble member `aimnet2-b973c-2025-d3_0`)
@@ -159,5 +161,7 @@ print(f"Binding energy: {statistics.mean(binding_energies)*23.0609:.2f} "
 ```
 
 ## References
+
+**AIMNet2-2025:** Nayal, K.; Cho, I.; Isayev, O. Critical benchmarking of machine-learned interatomic potentials for intermolecular and noncovalent interactions. _Machine Learning: Science and Technology_ **2026**. DOI: [10.1088/2632-2153/aea39f](https://doi.org/10.1088/2632-2153/aea39f)
 
 Anstine, D. M.; Zubatyuk, R.; Isayev, O. AIMNet2: A Neural Network Potential to Meet your Neutral, Charged, Organic, and Elemental-Organic Needs. _Chemical Science_ **2025**, _16_, 10228--10244. DOI: [10.1039/D4SC08572H](https://doi.org/10.1039/D4SC08572H)
