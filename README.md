@@ -219,6 +219,20 @@ If AIMNet2 is useful in your work, please cite the relevant model papers:
 }
 ```
 
+**AIMNet2-2025**
+
+If you use AIMNet2-2025 (`aimnet2-2025`), please also cite [the AIMNet2-2025 paper](https://doi.org/10.1088/2632-2153/aea39f):
+
+```bibtex
+@article{nayal2026critical,
+  title={Critical benchmarking of machine-learned interatomic potentials for intermolecular and noncovalent interactions},
+  author={Nayal, Kamal and Cho, IlKwon and Isayev, Olexandr},
+  journal={Machine Learning: Science and Technology},
+  year={2026},
+  doi={10.1088/2632-2153/aea39f}
+}
+```
+
 **AIMNet2-NSE:** Kalita, B.; Zubatyuk, R.; Anstine, D. M.; Bergeler, M.; Settels, V.; Stork, C.; Spicher, S.; Isayev, O. AIMNet2-NSE: A Transferable Reactive Neural Network Potential for Open-Shell Chemistry. _Angew. Chem. Int. Ed._ **2026**. DOI: [10.1002/anie.202516763](https://doi.org/10.1002/anie.202516763)
 
 **AIMNet2-Pd:** Anstine, D. M.; Zubatyuk, R.; Gallegos, L.; Paton, R.; Wiest, O.; Nebgen, B.; Jones, T.; Gomes, G.; Tretiak, S.; Isayev, O. Transferable Machine Learning Interatomic Potential for Pd-Catalyzed Cross-Coupling Reactions. _ChemRxiv_ **2025**. DOI: [10.26434/chemrxiv-2025-n36r6](https://doi.org/10.26434/chemrxiv-2025-n36r6)
