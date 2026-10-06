@@ -168,6 +168,20 @@ If you use AIMNet2, please cite:
 }
 ```
 
+**AIMNet2-2025**
+
+If you use AIMNet2-2025 (`aimnet2-2025`), please also cite [the AIMNet2-2025 paper](https://doi.org/10.1088/2632-2153/aea39f):
+
+```bibtex
+@article{nayal2026critical,
+  title={Critical benchmarking of machine-learned interatomic potentials for intermolecular and noncovalent interactions},
+  author={Nayal, Kamal and Cho, IlKwon and Isayev, Olexandr},
+  journal={Machine Learning: Science and Technology},
+  year={2026},
+  doi={10.1088/2632-2153/aea39f}
+}
+```
+
 ## License
 
 See [LICENSE](https://github.com/isayevlab/aimnetcentral/blob/main/LICENSE) for details.
