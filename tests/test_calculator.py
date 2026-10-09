@@ -2834,3 +2834,74 @@ def test_embedded_d3ts_does_not_trip_the_dftd3_guard():
     """
     calc = _embedded_dftd3_calculator(D3TS(a1=0.5660, a2=3.1280, s8=0.3908))
     assert calc._embedded_tabulated_dftd3 is False
+
+
+def _water_batch(n: int = 2):
+    coord = torch.tensor([[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]] * n)
+    numbers = torch.tensor([[8, 1, 1]] * n)
+    return coord, numbers
+
+
+def test_scalar_charge_batched_matches_per_system_charge_cpu():
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    coord, numbers = _water_batch()
+    shared = calc({"coord": coord, "numbers": numbers, "charge": 0.0}, forces=True)
+    explicit = calc({"coord": coord, "numbers": numbers, "charge": [0.0, 0.0]}, forces=True)
+    torch.testing.assert_close(shared["energy"], explicit["energy"])
+    torch.testing.assert_close(shared["forces"], explicit["forces"])
+
+
+def test_scalar_charge_flat_mol_idx_cpu():
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    coord, numbers = _water_batch()
+    flat = {"coord": coord.flatten(0, 1), "numbers": numbers.flatten(), "mol_idx": torch.tensor([0, 0, 0, 1, 1, 1])}
+    shared = calc({**flat, "charge": 0.0})
+    explicit = calc({**flat, "charge": [0.0, 0.0]})
+    torch.testing.assert_close(shared["energy"], explicit["energy"])
+
+
+def test_charge_length_mismatch_raises():
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    coord, numbers = _water_batch(3)
+    with pytest.raises(ValueError, match="'charge' has 2 entries for 3 systems"):
+        calc({"coord": coord, "numbers": numbers, "charge": [0.0, 0.0]})
+
+
+def test_broadcast_per_system_expands_charge_and_mult_and_keeps_grad():
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    charge = torch.zeros(1, requires_grad=True)
+    data = {"charge": charge, "mult": torch.ones(1)}
+    calc._broadcast_per_system(data, 3)
+    assert data["charge"].shape == (3,) and data["mult"].shape == (3,)
+    data["charge"].sum().backward()
+    torch.testing.assert_close(charge.grad, torch.tensor([3.0]))
+    same = {"charge": torch.zeros(3)}
+    calc._broadcast_per_system(same, 3)
+    assert same["charge"].shape == (3,)
+
+
+def test_mol_flatten_explicit_mode2_broadcasts_scalar_charge():
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    data = {
+        "coord": torch.zeros(2, 4, 3),
+        "numbers": torch.tensor([[6, 1, 1, 0], [8, 1, 1, 0]]),
+        "nbmat": torch.full((2, 4, 3), 8, dtype=torch.int32),
+        "charge": torch.zeros(1),
+        "mult": torch.ones(1),
+    }
+    out = calc.mol_flatten(data)
+    assert out["charge"].shape == (2,)
+    assert out["mult"].shape == (2,)
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize("compile_model", [False, pytest.param(True, marks=pytest.mark.slow)])
+def test_scalar_charge_batched_cuda_mode1(compile_model):
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, compile_model=compile_model)
+    coord, numbers = _water_batch()
+    shared = calc({"coord": coord, "numbers": numbers, "charge": 0.0}, forces=True)
+    explicit = calc({"coord": coord, "numbers": numbers, "charge": [0.0, 0.0]}, forces=True)
+    torch.testing.assert_close(shared["energy"], explicit["energy"], atol=1e-5, rtol=1e-5)
+    torch.testing.assert_close(shared["forces"], explicit["forces"], atol=1e-5, rtol=1e-5)
