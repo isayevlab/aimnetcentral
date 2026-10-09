@@ -552,22 +552,27 @@ def build_compiled_training_runner(
     return _CompiledTrainingRunner(unwrap_module(model), target_keys, compile_training=compile_training)
 
 
-def check_stress_loader(loader) -> None:
-    """Fail before training when the loader cannot feed stress targets.
+def attach_stress_batch_check(trainer: Engine) -> None:
+    """Fail at the first training batch when the loader cannot feed stress targets.
 
     Stress needs explicit mode-1 or mode-2 neighbor topology, a cell, and
     aligned shifts. The built-in SizeGroupedDataset yields dense mode-0
-    batches, so without this check the run fails only at its first step.
+    batches. The check reads the batch the trainer already fetched, so it
+    starts no extra loader iterator, and runs before the first step.
     """
-    x, _ = next(iter(loader))
-    try:
-        _CompiledTrainingRunner(nn.Identity(), ("stress",))._validate_stress_input(x)
-    except ValueError as error:
-        raise ValueError(
-            f"{error} The built-in SizeGroupedDataset loader produces dense mode-0 batches without "
-            "neighbor lists; stress training needs a custom dataset (data.datasets.train) that "
-            "supplies mode-1 or mode-2 nbmat, matching shifts, and cell. See docs/train.md."
-        ) from error
+
+    def _check(engine: Engine) -> None:
+        x, _ = engine.state.batch
+        try:
+            _CompiledTrainingRunner(nn.Identity(), ("stress",))._validate_stress_input(x)
+        except ValueError as error:
+            raise ValueError(
+                f"{error} The built-in SizeGroupedDataset loader produces dense mode-0 batches without "
+                "neighbor lists; stress training needs a custom dataset (data.datasets.train) that "
+                "supplies mode-1 or mode-2 nbmat, matching shifts, and cell. See docs/train.md."
+            ) from error
+
+    trainer.add_event_handler(Events.ITERATION_STARTED(once=1), _check)
 
 
 def _eager_derivative_predictions(

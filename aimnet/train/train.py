@@ -139,8 +139,6 @@ def run(local_rank, world_size, model_cfg, train_cfg, load, save):
 
     # data loaders
     train_loader, val_loader = utils.get_loaders(train_cfg.data)
-    if needs_stress_runner:
-        utils.check_stress_loader(train_loader)
 
     # optimizer, scheduler, etc
     model = utils.set_trainable_parameters(
@@ -159,6 +157,8 @@ def run(local_rank, world_size, model_cfg, train_cfg, load, save):
 
     # ignite engine
     trainer, validator = utils.build_engine(model, optimizer, scheduler, loss, metrics, train_cfg, val_loader)
+    if needs_stress_runner:
+        utils.attach_stress_batch_check(trainer)
 
     if local_rank == 0 and train_cfg.wandb is not None:
         utils.setup_wandb(train_cfg, model_cfg, model, trainer, validator, optimizer)
