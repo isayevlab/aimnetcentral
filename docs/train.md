@@ -166,3 +166,14 @@ Maintainers publishing a registry artifact must:
 Official AIMNet distributions do not bundle model artifacts. Registry models are downloaded on demand, and cached, bundled, or newly downloaded bytes must match the registry SHA-256 digest before a path is returned. A stale bundled artifact fails closed on a checksum mismatch; it is not replaced by a network download.
 
 Introducing bundled model artifacts later requires a separate design and release review plus explicit maintainer approval. The approved process must preserve immutable artifact filenames, bytes, and registry digests; require each bundled artifact to match its registry digest; keep checksum failures fail-closed; and add non-vacuous release checks for the actual wheel and source-distribution contents.
+
+## Stress training
+
+Add `stress` to `data.y` to train on periodic stress. Requirements:
+
+- **Labels:** full `(B, 3, 3)` tensors in eV/Å^3, ASE sign convention (σ = (1/V) ∂E/∂ε; negative under compression), e.g. `atoms.get_stress(voigt=False)`. Convert VASP output by flipping the sign and dividing kBar by 1602.1766.
+- **Inputs:** explicit neighbor topology in mode 1 (flat `nbmat` with a trailing dummy atom) or mode 2 (global `(B, N, M)` `nbmat`), a `cell`, and a `shifts` tensor aligned with every neighbor matrix. Dense mode-0 batches are rejected.
+- **Loader:** the built-in `SizeGroupedDataset` yields dense mode-0 batches, so supply a custom dataset class via `data.datasets.train`. `aimnet train` inspects the first training batch and stops with an explanation when these inputs are missing.
+- **Weighting:** stress MSE is typically around 1e-6 (eV/Å^3)^2, so the stress loss weight must be large (order 10^2–10^4) to contribute next to energy and forces.
+
+Stress is computed as the strain derivative of the energy divided by the cell volume, the same contract as the calculator's `stress=True`.

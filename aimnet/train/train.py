@@ -139,6 +139,8 @@ def run(local_rank, world_size, model_cfg, train_cfg, load, save):
 
     # data loaders
     train_loader, val_loader = utils.get_loaders(train_cfg.data)
+    if needs_stress_runner:
+        utils.check_stress_loader(train_loader)
 
     # optimizer, scheduler, etc
     model = utils.set_trainable_parameters(
