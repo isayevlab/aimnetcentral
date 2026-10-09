@@ -589,12 +589,17 @@ def default_trainer(
         if "numbers" not in x:
             raise ValueError("Compiled training requires a numbers input.")
 
-    def _any_rank_failed(flag: Tensor, message: str) -> None:
-        flag = flag.to(device=model_device, dtype=torch.int32)
+    def _step_is_finite(loss: Tensor) -> bool:
+        """One fused finite check over the loss and every gradient, agreed across ranks."""
+        grads = [parameter.grad for parameter in model.parameters() if parameter.grad is not None]
+        # The inf-norm (max |g|) cannot overflow for finite gradients and
+        # propagates NaN and inf, so one value per tensor decides finiteness.
+        norms = torch._foreach_norm(grads, float("inf")) if grads else []
+        values = torch.stack([loss.detach().reshape(()).float(), *(norm.float() for norm in norms)])
+        bad = (~torch.isfinite(values).all()).to(device=model_device, dtype=torch.int32)
         if idist.get_world_size() > 1:
-            flag = idist.all_reduce(flag, op="MAX")
-        if bool(flag.item()):
-            raise RuntimeError(message)
+            bad = idist.all_reduce(bad, op="MAX")
+        return not bool(bad.item())
 
     def _update(engine: Engine, batch: tuple[dict[str, Tensor], dict[str, Tensor]]) -> float:
         model.train()
@@ -611,23 +616,33 @@ def default_trainer(
             runner.set_target_keys(tuple(y))
         y_pred = forward(x)
         loss = loss_fn(y_pred, y)["loss"]
-        _any_rank_failed(~torch.isfinite(loss).all(), "Non-finite training loss; optimizer step skipped.")
+        # backward runs on every rank even for a bad loss: DDP's gradient
+        # all-reduce must stay in lockstep, and the check below then sees
+        # the same reduced gradients everywhere.
         loss.backward()
-        gradient_checks = [
-            torch.isfinite(parameter.grad).all() for parameter in model.parameters() if parameter.grad is not None
-        ]
-        gradients_finite = (
-            torch.stack(gradient_checks).all()
-            if gradient_checks
-            else torch.ones((), device=model_device, dtype=torch.bool)
-        )
-        _any_rank_failed(~gradients_finite, "Non-finite training gradients; optimizer step skipped.")
+        if not _step_is_finite(loss):
+            optimizer.zero_grad()
+            skipped = getattr(engine.state, "skipped_steps", 0) + 1
+            engine.state.skipped_steps = skipped
+            if skipped & (skipped - 1) == 0:  # log at 1, 2, 4, 8, ... skips
+                logging.warning(
+                    "Skipped training step %d with a non-finite loss or gradient (%d skipped so far).",
+                    engine.state.iteration,
+                    skipped,
+                )
+            return loss.item()
         torch.nn.utils.clip_grad_value_(model.parameters(), 0.4)
         optimizer.step()
 
         return loss.item()
 
-    return Engine(_update)
+    engine = Engine(_update)
+
+    @engine.on(Events.STARTED)
+    def _reset_skipped_steps(engine: Engine) -> None:
+        engine.state.skipped_steps = 0
+
+    return engine
 
 
 def default_evaluator(
