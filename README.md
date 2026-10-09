@@ -192,6 +192,8 @@ The `aimnet` entry point is installed with the core package. Training, export, a
 
 To compile the AIMNet2 energy, force, and stress computation during training, set `trainer.compile: true`. Compiled training requires CUDA and supports DDP; each process or rank owns one compiled derivative graph. The first batch fixes the requested properties, neighbor mode, and ordered input keys, ranks, dtypes, and device type. Later batches may change their batch, atom, and neighbor dimensions. Forces are supported in modes 0, 1, and 2. Stress requires an explicit mode-1 or mode-2 neighbor matrix, a cell, and an aligned shift tensor for every neighbor matrix.
 
+Stress labels must be full `(B, 3, 3)` tensors in eV/Å^3 with the ASE sign convention (σ = (1/V) ∂E/∂ε, negative under compression), as returned by `atoms.get_stress(voigt=False)`. VASP reports stress with the opposite sign in kBar (1 eV/Å^3 = 1602.1766 kBar). The built-in `SizeGroupedDataset` loader produces dense batches without neighbor lists, so stress training requires a custom dataset; `aimnet train` checks the first batch and stops with an explanation otherwise. See [Training](docs/train.md#stress-training).
+
 The original AIMNet2 module remains the sole parameter and checkpoint owner. Loss evaluation, gradient clipping, and the optimizer step remain eager. The trainer invokes `loss.backward()` from eager Python, which enters the compiled AOTAutograd backward for the model and derivative graph. Hessian and HVP requests made through a calculator with compiled inference enabled continue to use the original eager model.
 
 ## Development

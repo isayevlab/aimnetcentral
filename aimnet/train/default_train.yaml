@@ -82,6 +82,16 @@ loss:
                 kwargs:
                     key_true: charges
                     key_pred: charges
+            # Stress (add `stress` to data.y): full (B, 3, 3) labels in eV/A^3,
+            # ASE sign. Needs explicit mode-1/2 neighbor lists from a custom
+            # dataset; see docs/train.md. Stress MSE is typically ~1e-6, so it
+            # needs a large weight.
+            # stress:
+            #     fn: aimnet.train.loss.mse_loss_fn
+            #     weight: 100.0
+            #     kwargs:
+            #         key_true: stress
+            #         key_pred: stress
 
 optimizer:
     # lists of regular expressions for parameter names to enable or disable gradients
@@ -113,7 +123,7 @@ trainer:
     # function that define trainig and validation loops
     trainer: aimnet.train.utils.default_trainer
     evaluator: aimnet.train.utils.default_evaluator
-    # opt-in compiled model/derivative forward on one CUDA GPU
+    # opt-in compiled model/derivative forward on CUDA (single GPU or DDP)
     compile: false
     # total number of epochs to train
     epochs: 100

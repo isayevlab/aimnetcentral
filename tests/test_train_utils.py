@@ -1542,3 +1542,29 @@ def test_peratom_loss_has_no_host_sync_on_cuda():
     finally:
         torch.cuda.set_sync_debug_mode("default")
     torch.testing.assert_close(actual, expected)
+
+
+def test_check_stress_loader_rejects_dense_batches_with_guidance():
+    pytest.importorskip("ignite")
+    torch = pytest.importorskip("torch")
+    from aimnet.train.utils import check_stress_loader
+
+    dense = {
+        "coord": torch.randn(1, 2, 3),
+        "numbers": torch.tensor([[1, 1]]),
+        "charge": torch.zeros(1),
+        "cell": torch.eye(3),
+    }
+    with pytest.raises(ValueError, match="custom dataset"):
+        check_stress_loader([(dense, {"stress": torch.zeros(1, 3, 3)})])
+
+    packed = {
+        "coord": torch.randn(3, 3),
+        "numbers": torch.tensor([1, 1, 0]),
+        "charge": torch.zeros(1),
+        "mol_idx": torch.tensor([0, 0, 0]),
+        "nbmat": torch.zeros(3, 1, dtype=torch.int32),
+        "shifts": torch.zeros(3, 1, 3),
+        "cell": torch.eye(3),
+    }
+    check_stress_loader([(packed, {"stress": torch.zeros(1, 3, 3)})])
