@@ -1568,3 +1568,29 @@ def test_check_stress_loader_rejects_dense_batches_with_guidance():
         "cell": torch.eye(3),
     }
     check_stress_loader([(packed, {"stress": torch.zeros(1, 3, 3)})])
+
+
+def test_skipped_step_reports_nan_on_every_rank():
+    """A skipped step must look identical to TerminateOnNan on every DDP rank.
+
+    The skip decision is all-reduced, but a rank whose own loss was finite
+    used to return it, so only the ranks that saw the bad loss terminated
+    at the end of the epoch and the others hung on their next collective.
+    """
+    pytest.importorskip("ignite")
+    torch = pytest.importorskip("torch")
+    import math
+
+    class NaNGradient(torch.autograd.Function):
+        @staticmethod
+        def forward(ctx, value):
+            return value.clone()
+
+        @staticmethod
+        def backward(ctx, grad_output):
+            return torch.full_like(grad_output, float("nan"))
+
+    _, trainer = _scalar_trainer(lambda pred, _true: {"loss": NaNGradient.apply(pred["energy"]).sum()})
+    trainer.run([({"value": torch.ones(1)}, {})], max_epochs=1)
+    assert trainer.state.skipped_steps == 1
+    assert math.isnan(trainer.state.output)
