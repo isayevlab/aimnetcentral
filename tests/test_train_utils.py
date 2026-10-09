@@ -1545,10 +1545,37 @@ def test_peratom_loss_has_no_host_sync_on_cuda():
     torch.testing.assert_close(actual, expected)
 
 
-def test_check_stress_loader_rejects_dense_batches_with_guidance():
+def test_stress_batch_check_rejects_dense_batches_with_guidance():
     pytest.importorskip("ignite")
     torch = pytest.importorskip("torch")
-    from aimnet.train.utils import check_stress_loader
+    from ignite.engine import Engine
+
+    from aimnet.train.utils import attach_stress_batch_check
+
+    class CountingLoader:
+        """Counts iterator starts: a second one would spawn loader workers again."""
+
+        def __init__(self, batches):
+            self.batches = batches
+            self.iterations = 0
+
+        def __iter__(self):
+            self.iterations += 1
+            return iter(self.batches)
+
+        def __len__(self):
+            return len(self.batches)
+
+    def run(x):
+        steps = []
+        trainer = Engine(lambda engine, batch: steps.append(batch))
+        attach_stress_batch_check(trainer)
+        loader = CountingLoader([(x, {"stress": torch.zeros(1, 3, 3)})])
+        try:
+            trainer.run(loader, max_epochs=1)
+        finally:
+            assert loader.iterations == 1
+        return steps
 
     dense = {
         "coord": torch.randn(1, 2, 3),
@@ -1557,7 +1584,7 @@ def test_check_stress_loader_rejects_dense_batches_with_guidance():
         "cell": torch.eye(3),
     }
     with pytest.raises(ValueError, match="custom dataset"):
-        check_stress_loader([(dense, {"stress": torch.zeros(1, 3, 3)})])
+        run(dense)
 
     packed = {
         "coord": torch.randn(3, 3),
@@ -1568,7 +1595,7 @@ def test_check_stress_loader_rejects_dense_batches_with_guidance():
         "shifts": torch.zeros(3, 1, 3),
         "cell": torch.eye(3),
     }
-    check_stress_loader([(packed, {"stress": torch.zeros(1, 3, 3)})])
+    assert len(run(packed)) == 1
 
 
 def test_skipped_step_reports_nan_on_every_rank():
