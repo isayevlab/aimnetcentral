@@ -1,5 +1,6 @@
 import inspect
 import logging
+import math
 import re
 from collections.abc import Callable
 
@@ -791,6 +792,14 @@ def build_engine(model, optimizer, scheduler, loss_fn, metrics, cfg, loader_val)
     return trainer, validator
 
 
+def _wandb_train_output(loss: float, skipped_steps: int | None) -> dict[str, float]:
+    """Train metrics for wandb; a skipped step's NaN loss is left out of the loss curve."""
+    output: dict[str, float] = {"loss": loss} if math.isfinite(loss) else {}
+    if skipped_steps is not None:
+        output["skipped_steps"] = skipped_steps
+    return output
+
+
 def setup_wandb(cfg, model_cfg, model, trainer, validator, optimizer):
     import wandb
     from ignite.handlers import WandBLogger, global_step_from_engine
@@ -806,7 +815,7 @@ def setup_wandb(cfg, model_cfg, model, trainer, validator, optimizer):
     wandb_logger.attach_output_handler(
         trainer,
         event_name=Events.ITERATION_COMPLETED(every=200),
-        output_transform=lambda loss: {"loss": loss},
+        output_transform=lambda loss: _wandb_train_output(loss, getattr(trainer.state, "skipped_steps", None)),
         tag="train",
     )
     wandb_logger.attach_output_handler(
