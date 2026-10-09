@@ -641,7 +641,7 @@ def default_trainer(
         if not _step_is_finite(loss):
             optimizer.zero_grad()
             skipped = getattr(engine.state, "skipped_steps", 0) + 1
-            engine.state.skipped_steps = skipped
+            engine.state.skipped_steps = skipped  # type: ignore[attr-defined]
             if skipped & (skipped - 1) == 0:  # log at 1, 2, 4, 8, ... skips
                 logging.warning(
                     "Skipped training step %d with a non-finite loss or gradient (%d skipped so far).",
@@ -658,7 +658,7 @@ def default_trainer(
 
     @engine.on(Events.STARTED)
     def _reset_skipped_steps(engine: Engine) -> None:
-        engine.state.skipped_steps = 0
+        engine.state.skipped_steps = 0  # type: ignore[attr-defined]
 
     return engine
 
