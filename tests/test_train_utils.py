@@ -1594,3 +1594,16 @@ def test_skipped_step_reports_nan_on_every_rank():
     trainer.run([({"value": torch.ones(1)}, {})], max_epochs=1)
     assert trainer.state.skipped_steps == 1
     assert math.isnan(trainer.state.output)
+
+
+def test_peratom_loss_ignores_nonfinite_values_in_padded_slots():
+    torch = pytest.importorskip("torch")
+    from aimnet.train.loss import peratom_loss_fn
+
+    numbers = torch.tensor([[1, 6, 1, 0]])
+    pred = torch.zeros(1, 4, 3)
+    true = torch.ones(1, 4, 3)
+    pred[0, -1] = float("nan")
+    true[0, -1] = float("inf")
+    actual = peratom_loss_fn({"forces": pred, "numbers": numbers}, {"forces": true}, "forces", "forces")
+    torch.testing.assert_close(actual, torch.tensor(1.0))

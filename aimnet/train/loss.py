@@ -65,9 +65,12 @@ def peratom_loss_fn(y_pred: dict[str, Tensor], y_true: dict[str, Tensor], key_pr
     if not isinstance(numbers, Tensor) or x.ndim < numbers.ndim or x.shape[: numbers.ndim] != numbers.shape:
         raise ValueError("peratom_loss_fn requires atom-aligned numbers, prediction, and target tensors.")
     # Masked sum instead of boolean indexing: same value, no host sync.
-    mask = (numbers != 0).reshape(*numbers.shape, *([1] * (x.ndim - numbers.ndim))).to(x.dtype)
+    # torch.where (not a multiply) so a non-finite value in a padded slot
+    # cannot leak into the loss.
+    mask = (numbers != 0).reshape(*numbers.shape, *([1] * (x.ndim - numbers.ndim)))
     features = x[(0,) * numbers.ndim].numel()
-    return ((x - y).square() * mask).sum() / (mask.sum() * features)
+    squared = torch.where(mask, (x - y).square(), torch.zeros((), dtype=x.dtype, device=x.device))
+    return squared.sum() / (mask.sum() * features)
 
 
 def energy_loss_fn(
