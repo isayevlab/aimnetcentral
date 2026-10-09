@@ -563,7 +563,7 @@ def attach_stress_batch_check(trainer: Engine) -> None:
     """
 
     def _check(engine: Engine) -> None:
-        x, _ = engine.state.batch
+        x, _ = engine.state.batch  # type: ignore[misc]
         try:
             _CompiledTrainingRunner(nn.Identity(), ("stress",))._validate_stress_input(x)
         except ValueError as error:
