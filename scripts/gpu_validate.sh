@@ -79,6 +79,7 @@ for V in $TORCH_VERSIONS; do
         echo "  install FAILED for torch $V"
         _set_status "$V" install fail
         _set_status "$V" gpu_suite skipped
+        _set_status "$V" cpu_compile skipped
         continue
     fi
 

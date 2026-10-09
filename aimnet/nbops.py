@@ -502,8 +502,10 @@ def calc_masks(data: dict[str, Tensor]) -> dict[str, Tensor]:
             n_mol = data["charge"].shape[0]
         else:
             # Count molecules from mol_idx, ignoring the trailing dummy, so a
-            # scalar charge shared by several molecules keeps working. The
-            # host read costs the same sync bincount paid before.
+            # scalar charge shared by several molecules keeps working. This
+            # costs one host sync, no more than torch.bincount (which reads
+            # the max on the host to size its output). charge.shape[0] would
+            # avoid the sync but is wrong for a shared scalar charge.
             n_mol = int(real_idx.max().item()) + 1 if real_idx.numel() > 0 else 1
         # The dummy may carry its own bucket index (mol_idx[-1] == n_mol).
         # Fold it into the last molecule so eager and compiled reductions
