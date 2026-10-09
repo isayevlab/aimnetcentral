@@ -256,3 +256,56 @@ def test_nse_compiled_matches_eager(device, n_mol):
 
     torch.testing.assert_close(got, ref, rtol=1e-5, atol=1e-5)
     torch.testing.assert_close(got_g, ref_g, rtol=1e-5, atol=1e-5)
+
+
+def test_mode1_eager_counts_do_not_depend_on_charge_length(device):
+    """A shared scalar charge for several molecules must not shrink mol_sizes."""
+    data = {
+        "numbers": torch.tensor([6, 1, 8, 1, 0], device=device),
+        "mol_idx": torch.tensor([0, 0, 1, 1, 1], device=device),
+        "nbmat": torch.zeros(5, 1, dtype=torch.int32, device=device),
+        "charge": torch.zeros(1, device=device),
+    }
+    prepared = nbops.calc_masks(nbops.set_nb_mode(data))
+    torch.testing.assert_close(prepared["mol_sizes"], torch.tensor([2, 2], device=device))
+    assert int(prepared["_num_mol"]) == 2
+    summed = nbops.mol_sum(torch.ones(5, device=device), prepared)
+    # the dummy (index 4) belongs to molecule 1, so it lands in the second sum
+    torch.testing.assert_close(summed, torch.tensor([2.0, 3.0], device=device))
+
+
+def test_mode1_dummy_own_bucket_is_folded_without_mutating_caller(device):
+    mol_idx = torch.tensor([0, 0, 1, 1, 2], dtype=torch.int32, device=device)
+    data = {
+        "numbers": torch.tensor([6, 1, 8, 1, 0], device=device),
+        "mol_idx": mol_idx,
+        "nbmat": torch.zeros(5, 1, dtype=torch.int32, device=device),
+        "charge": torch.zeros(2, device=device),
+    }
+    prepared = nbops.calc_masks(nbops.set_nb_mode(dict(data)))
+    torch.testing.assert_close(mol_idx, torch.tensor([0, 0, 1, 1, 2], dtype=torch.int32, device=device))
+    assert prepared["mol_idx"].dtype == torch.int32
+    torch.testing.assert_close(prepared["mol_idx"], torch.tensor([0, 0, 1, 1, 1], dtype=torch.int32, device=device))
+    x = torch.tensor([1.0, 2.0, 3.0, 4.0, 0.0], device=device)
+    torch.testing.assert_close(nbops.mol_sum(x, prepared), torch.tensor([3.0, 7.0], device=device))
+
+
+def test_mode1_dummy_own_bucket_compiled_matches_eager(device):
+    if device.type != "cuda":
+        pytest.skip("compiled parity is only meaningful on the GPU backend")
+    data = {
+        "numbers": torch.tensor([6, 1, 8, 1, 0], device=device),
+        "mol_idx": torch.tensor([0, 0, 1, 1, 2], dtype=torch.int32, device=device),
+        "nbmat": torch.zeros(5, 1, dtype=torch.int32, device=device),
+        "charge": torch.zeros(2, device=device),
+    }
+    x = torch.tensor([1.0, 2.0, 3.0, 4.0, 0.0], device=device)
+
+    def reduce(values, x):
+        values = nbops.calc_masks(nbops.set_nb_mode(values))
+        return nbops.mol_sum(x, values), values["mol_sizes"]
+
+    eager = reduce(dict(data), x)
+    torch._dynamo.reset()
+    compiled = torch.compile(reduce, dynamic=True, fullgraph=True)(dict(data), x)
+    torch.testing.assert_close(compiled, eager)

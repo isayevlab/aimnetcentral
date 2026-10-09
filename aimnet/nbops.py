@@ -492,26 +492,30 @@ def calc_masks(data: dict[str, Tensor]) -> dict[str, Tensor]:
                     processed[ptr] = suffix
                 data[f"mask_ij{suffix}"] = data[nbmat_key] == data["numbers"].shape[0] - 1
         data["_input_padded"] = torch.tensor(True)
-        if "charge" in data:
-            # ``charge`` has one entry per molecule, so it supplies a fixed
-            # output size for the compiled reduction.  The final flat atom is
-            # padding and belongs to the final molecule.
-            mol_sizes = torch.zeros(data["charge"].shape[0], device=data["mol_idx"].device, dtype=torch.long)
-            real_idx = data["mol_idx"][:-1].to(torch.long)
-            mol_sizes.scatter_add_(
-                0,
-                real_idx,
-                torch.ones(real_idx.shape, device=real_idx.device, dtype=torch.long),
-            )
-            data["mol_sizes"] = mol_sizes
+        mol_idx = data["mol_idx"]
+        real_idx = mol_idx[:-1].to(torch.long)
+        if _is_compiling() and "charge" in data:
+            # ``charge`` has one entry per molecule, so its length is static
+            # shape metadata: no device sync and no unbacked symbol. The
+            # calculator broadcasts a shared scalar charge to this length
+            # before the compiled forward.
+            n_mol = data["charge"].shape[0]
         else:
-            data["mol_sizes"] = torch.bincount(data["mol_idx"])
-            # last atom is padding
-            data["mol_sizes"][-1] -= 1
+            # Count molecules from mol_idx, ignoring the trailing dummy, so a
+            # scalar charge shared by several molecules keeps working. The
+            # host read costs the same sync bincount paid before.
+            n_mol = int(real_idx.max().item()) + 1 if real_idx.numel() > 0 else 1
+        # The dummy may carry its own bucket index (mol_idx[-1] == n_mol).
+        # Fold it into the last molecule so eager and compiled reductions
+        # agree; build a new tensor so the caller's mol_idx is untouched.
+        data["mol_idx"] = torch.cat((mol_idx[:-1], mol_idx[-1:].clamp(max=n_mol - 1)))
+        mol_sizes = torch.zeros(n_mol, device=mol_idx.device, dtype=torch.long)
+        mol_sizes.scatter_add_(0, real_idx, torch.ones_like(real_idx))
+        data["mol_sizes"] = mol_sizes
         # Cache the molecule count as a CPU tensor for eager mol_sum. Compiled
         # mol_sum derives it from the charge input instead of this cache.
         if not _is_compiling():
-            data["_num_mol"] = torch.tensor(data["mol_sizes"].shape[0])
+            data["_num_mol"] = torch.tensor(n_mol)
         data["_natom"] = data["mol_sizes"]
     elif nb_mode == 2:
         data["mask_i"] = data["numbers"] == 0
