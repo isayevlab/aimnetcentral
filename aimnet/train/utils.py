@@ -533,8 +533,14 @@ class _CompiledTrainingRunner(nn.Module):
         if self._compiled_forward is None:
             self._capture(data)
         assert self._compiled_forward is not None
-        args = (*(data[key] for key in self._input_keys), *self._live_state_tensors())
-        values = self._compiled_forward(*args)
+        inputs = tuple(data[key].contiguous() for key in self._input_keys)
+        state = self._live_state_tensors()
+        if not torch.is_grad_enabled():
+            # Validation under no_grad: with no input requiring grad the
+            # compiled function records no backward, so no saved activations
+            # outlive the call.
+            state = tuple(tensor.detach() for tensor in state)
+        values = self._compiled_forward(*inputs, *state)
         result = dict(data)
         result.update(zip(self._output_keys, values, strict=True))
         return result

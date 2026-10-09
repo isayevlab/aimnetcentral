@@ -1467,3 +1467,68 @@ def test_peratom_loss_packed_variable_sizes_excludes_only_final_dummy():
     )
 
     torch.testing.assert_close(actual, torch.nn.functional.mse_loss(predicted[:-1], target[:-1]))
+
+
+def _two_atom_runner():
+    torch = pytest.importorskip("torch")
+    from torch import nn
+
+    from aimnet.train.utils import build_compiled_training_runner
+
+    class TwoAtomEnergy(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.scale = nn.Parameter(torch.tensor(0.75, device="cuda"))
+
+        def forward(self, data):
+            data["energy"] = self.scale * data["coord"].square().sum(dim=(-1, -2))
+            data["_natom"] = torch.ones((), dtype=torch.int64, device=data["coord"].device) * data["numbers"].shape[1]
+            data["_input_padded"] = torch.zeros((), dtype=torch.bool, device=data["coord"].device)
+            return data
+
+    return build_compiled_training_runner(TwoAtomEnergy(), ("energy", "forces"), compile_training=True).cuda()
+
+
+def _two_atom_batch(batch=2):
+    torch = pytest.importorskip("torch")
+    coord = torch.arange(batch * 6, dtype=torch.float32, device="cuda").view(batch, 2, 3) / 10
+    return {
+        "coord": coord,
+        "numbers": torch.ones((batch, 2), dtype=torch.long, device="cuda"),
+        "charge": torch.zeros(batch, device="cuda"),
+    }
+
+
+@pytest.mark.gpu
+@pytest.mark.slow
+def test_compiled_runner_keeps_no_graph_under_no_grad():
+    pytest.importorskip("ignite")
+    torch = pytest.importorskip("torch")
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA is required for compiled training")
+    runner = _two_atom_runner()
+    runner(_two_atom_batch())  # capture in grad mode, as training does
+    runner.eval()
+    with torch.no_grad():
+        prediction = runner(_two_atom_batch())
+    for key in ("energy", "forces"):
+        assert prediction[key].grad_fn is None
+        assert not prediction[key].requires_grad
+    expected = -2 * 0.75 * _two_atom_batch()["coord"]
+    torch.testing.assert_close(prediction["forces"], expected)
+
+
+@pytest.mark.gpu
+@pytest.mark.slow
+def test_compiled_runner_accepts_non_contiguous_coord():
+    pytest.importorskip("ignite")
+    torch = pytest.importorskip("torch")
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA is required for compiled training")
+    runner = _two_atom_runner()
+    runner(_two_atom_batch())
+    data = _two_atom_batch()
+    data["coord"] = data["coord"].transpose(0, 1).contiguous().transpose(0, 1)
+    assert not data["coord"].is_contiguous()
+    prediction = runner(data)
+    torch.testing.assert_close(prediction["forces"], -2 * 0.75 * data["coord"])
