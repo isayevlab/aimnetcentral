@@ -1,5 +1,6 @@
 import inspect
 import logging
+import math
 import re
 from collections.abc import Callable
 
@@ -552,22 +553,27 @@ def build_compiled_training_runner(
     return _CompiledTrainingRunner(unwrap_module(model), target_keys, compile_training=compile_training)
 
 
-def check_stress_loader(loader) -> None:
-    """Fail before training when the loader cannot feed stress targets.
+def attach_stress_batch_check(trainer: Engine) -> None:
+    """Fail at the first training batch when the loader cannot feed stress targets.
 
     Stress needs explicit mode-1 or mode-2 neighbor topology, a cell, and
     aligned shifts. The built-in SizeGroupedDataset yields dense mode-0
-    batches, so without this check the run fails only at its first step.
+    batches. The check reads the batch the trainer already fetched, so it
+    starts no extra loader iterator, and runs before the first step.
     """
-    x, _ = next(iter(loader))
-    try:
-        _CompiledTrainingRunner(nn.Identity(), ("stress",))._validate_stress_input(x)
-    except ValueError as error:
-        raise ValueError(
-            f"{error} The built-in SizeGroupedDataset loader produces dense mode-0 batches without "
-            "neighbor lists; stress training needs a custom dataset (data.datasets.train) that "
-            "supplies mode-1 or mode-2 nbmat, matching shifts, and cell. See docs/train.md."
-        ) from error
+
+    def _check(engine: Engine) -> None:
+        x, _ = engine.state.batch  # type: ignore[misc]
+        try:
+            _CompiledTrainingRunner(nn.Identity(), ("stress",))._validate_stress_input(x)
+        except ValueError as error:
+            raise ValueError(
+                f"{error} The built-in SizeGroupedDataset loader produces dense mode-0 batches without "
+                "neighbor lists; stress training needs a custom dataset (data.datasets.train) that "
+                "supplies mode-1 or mode-2 nbmat, matching shifts, and cell. See docs/train.md."
+            ) from error
+
+    trainer.add_event_handler(Events.ITERATION_STARTED(once=1), _check)
 
 
 def _eager_derivative_predictions(
@@ -786,6 +792,14 @@ def build_engine(model, optimizer, scheduler, loss_fn, metrics, cfg, loader_val)
     return trainer, validator
 
 
+def _wandb_train_output(loss: float, skipped_steps: int | None) -> dict[str, float]:
+    """Train metrics for wandb; a skipped step's NaN loss is left out of the loss curve."""
+    output: dict[str, float] = {"loss": loss} if math.isfinite(loss) else {}
+    if skipped_steps is not None:
+        output["skipped_steps"] = skipped_steps
+    return output
+
+
 def setup_wandb(cfg, model_cfg, model, trainer, validator, optimizer):
     import wandb
     from ignite.handlers import WandBLogger, global_step_from_engine
@@ -801,7 +815,7 @@ def setup_wandb(cfg, model_cfg, model, trainer, validator, optimizer):
     wandb_logger.attach_output_handler(
         trainer,
         event_name=Events.ITERATION_COMPLETED(every=200),
-        output_transform=lambda loss: {"loss": loss},
+        output_transform=lambda loss: _wandb_train_output(loss, getattr(trainer.state, "skipped_steps", None)),
         tag="train",
     )
     wandb_logger.attach_output_handler(

@@ -1633,8 +1633,10 @@ class AIMNet2Calculator:
         """Expand a shared scalar ``charge``/``mult`` to one entry per system.
 
         Compiled inference sizes per-molecule reductions from ``charge``'s
-        length, so every system needs its own entry. ``expand`` keeps any
-        caller autograd link on the shared value.
+        length, so every system needs its own entry. ``repeat`` keeps any
+        caller autograd link on the shared value and gives contiguous
+        storage: a stride-0 ``expand`` view would change the compiled input
+        metadata and cost one extra graph.
         """
         for key in ("charge", "mult"):
             value = data.get(key)
@@ -1645,7 +1647,7 @@ class AIMNet2Calculator:
                     f"'{key}' has {value.shape[0]} entries for {n_systems} systems; "
                     "pass one value per system or a single shared value."
                 )
-            data[key] = value.expand(n_systems)
+            data[key] = value.repeat(n_systems)
 
     def mol_flatten(self, data: dict[str, Tensor], *, hessian: bool = False) -> dict[str, Tensor]:
         """Flatten the input data for multiple molecules.
