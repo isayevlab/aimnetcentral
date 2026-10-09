@@ -33,7 +33,7 @@ dynamic = ["version"]
 
 # Minimal core dependencies for inference
 dependencies = [
-    "torch>=2.8",
+    "torch>=2.10",
     "numpy",
     "warp-lang>=1.13,<2",
     "nvalchemi-toolkit-ops>=0.4.1",

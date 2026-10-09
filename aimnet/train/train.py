@@ -106,13 +106,25 @@ def run(local_rank, world_size, model_cfg, train_cfg, load, save):
     if not isinstance(train_cfg, omegaconf.DictConfig):
         raise TypeError("Train configuration must be a dictionary.")
 
+    compile_training = bool(train_cfg.trainer.get("compile", False))
+    if compile_training and not torch.cuda.is_available():
+        raise RuntimeError("trainer.compile=True requires a CUDA GPU.")
+
     # build model
-    _force_training = "forces" in train_cfg.data.y
+    needs_stress_runner = "stress" in train_cfg.data.y
+    _force_training = "forces" in train_cfg.data.y and not (compile_training or needs_stress_runner)
     model = utils.build_model(model_cfg, forces=_force_training)
+    if compile_training or needs_stress_runner:
+        # DDP must own the runner, not the bare core: every training call then
+        # passes through the outer wrapper while the core remains its only child.
+        model = utils.build_compiled_training_runner(model, tuple(train_cfg.data.y), compile_training=compile_training)
     if world_size > 1:
         from ignite import distributed as idist
 
-        model = idist.auto_model(model)  # type: ignore[attr-defined]
+        model = idist.auto_model(
+            model,
+            find_unused_parameters=compile_training or needs_stress_runner,
+        )  # type: ignore[attr-defined]
     elif torch.cuda.is_available():
         model = model.cuda()  # type: ignore
 
@@ -127,6 +139,8 @@ def run(local_rank, world_size, model_cfg, train_cfg, load, save):
 
     # data loaders
     train_loader, val_loader = utils.get_loaders(train_cfg.data)
+    if needs_stress_runner:
+        utils.check_stress_loader(train_loader)
 
     # optimizer, scheduler, etc
     model = utils.set_trainable_parameters(

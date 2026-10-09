@@ -92,7 +92,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.32.3" },
     { name = "safetensors", marker = "extra == 'hf'", specifier = ">=0.4" },
     { name = "sella", marker = "extra == 'sella'", specifier = ">=2.4.0" },
-    { name = "torch", specifier = ">=2.8" },
+    { name = "torch", specifier = ">=2.10" },
     { name = "torch-sim-atomistic", marker = "python_full_version >= '3.12' and extra == 'torchsim'", specifier = ">=0.6.0,<0.7.0" },
     { name = "wandb", marker = "extra == 'train'", specifier = ">=0.18.5" },
     { name = "warp-lang", specifier = ">=1.13,<2" },

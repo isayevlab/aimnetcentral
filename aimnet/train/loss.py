@@ -57,19 +57,20 @@ def mse_loss_fn(y_pred: dict[str, Tensor], y_true: dict[str, Tensor], key_pred: 
 
 
 def peratom_loss_fn(y_pred: dict[str, Tensor], y_true: dict[str, Tensor], key_pred: str, key_true: str) -> Tensor:
-    """MSE loss function with per-atom normalization correction.
-    Suitable when some of the values are zero both in y_pred and y_true due to padding of inputs.
-    """
+    """MSE for per-atom targets, excluding rows whose atomic number is zero."""
     x = y_true[key_true]
     y = y_pred[key_pred]
 
-    if y_pred["_natom"].numel() == 1:
-        loss = torch.nn.functional.mse_loss(x, y)
-    else:
-        diff2 = (x - y).pow(2).view(x.shape[0], -1)
-        dim = diff2.shape[-1]
-        loss = (diff2 * (y_pred["_natom"].unsqueeze(-1) / dim)).mean()
-    return loss
+    numbers = y_pred.get("numbers")
+    if not isinstance(numbers, Tensor) or x.ndim < numbers.ndim or x.shape[: numbers.ndim] != numbers.shape:
+        raise ValueError("peratom_loss_fn requires atom-aligned numbers, prediction, and target tensors.")
+    # Masked sum instead of boolean indexing: same value, no host sync.
+    # torch.where (not a multiply) so a non-finite value in a padded slot
+    # cannot leak into the loss.
+    mask = (numbers != 0).reshape(*numbers.shape, *([1] * (x.ndim - numbers.ndim)))
+    features = x[(0,) * numbers.ndim].numel()
+    squared = torch.where(mask, (x - y).square(), torch.zeros((), dtype=x.dtype, device=x.device))
+    return squared.sum() / (mask.sum() * features)
 
 
 def energy_loss_fn(

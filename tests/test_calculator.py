@@ -1340,14 +1340,16 @@ class TestTorchCompile:
 
     @pytest.mark.skipif(not hasattr(torch, "compile"), reason="torch.compile requires PyTorch 2.0+")
     @pytest.mark.gpu
+    @pytest.mark.slow
     def test_torch_compile_cuda(self):
-        """Test torch.compile on CUDA device."""
+        """The CUDA constructor compiles the forward without replacing the model."""
         if not torch.cuda.is_available():
             pytest.skip("CUDA not available")
 
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
-        compiled_model = torch.compile(calc.model)
-        calc.model = compiled_model
+        eager = AIMNet2Calculator("aimnet2", nb_threshold=0, device="cuda")
+        compiled = AIMNet2Calculator("aimnet2", nb_threshold=0, device="cuda", compile_model=True)
+        model = compiled.model
+        assert compiled._compiled_forward is not None
 
         data = {
             "coord": torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
@@ -1355,9 +1357,13 @@ class TestTorchCompile:
             "charge": torch.tensor([0.0]),
         }
 
-        res = calc(data)
-        assert res["energy"].device.type == "cuda"
-        assert torch.isfinite(res["energy"]).all()
+        eager_result = eager(dict(data))
+        compiled_result = compiled(dict(data))
+        assert compiled.model is model
+        assert compiled_result["energy"].device.type == "cuda"
+        assert torch.isfinite(compiled_result["energy"]).all()
+        torch.testing.assert_close(compiled_result["energy"], eager_result["energy"], rtol=1e-4, atol=2e-5)
+        torch.testing.assert_close(compiled_result["charges"], eager_result["charges"], rtol=1e-4, atol=2e-5)
 
     def test_device_parameter(self):
         """Test explicit device parameter."""
@@ -1377,7 +1383,9 @@ class TestTorchCompile:
     @pytest.mark.skipif(not hasattr(torch, "compile"), reason="torch.compile requires PyTorch 2.0+")
     def test_compile_model_parameter(self):
         """Test compile_model constructor parameter."""
-        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, compile_model=True)
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0, device="cpu", compile_model=True)
+        model = calc.model
+        assert calc._compiled_forward is not None
 
         data = {
             "coord": torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
@@ -1386,28 +1394,34 @@ class TestTorchCompile:
         }
 
         res = calc(data)
+        assert calc.model is model
         assert "energy" in res
         assert torch.isfinite(res["energy"]).all()
 
-    @pytest.mark.skipif(not hasattr(torch, "compile"), reason="torch.compile requires PyTorch 2.0+")
-    def test_compile_kwargs_parameter(self):
-        """Test compile_kwargs constructor parameter."""
-        calc = AIMNet2Calculator(
-            "aimnet2",
-            nb_threshold=0,
-            compile_model=True,
-            compile_kwargs={"fullgraph": False},
-        )
+    def test_compile_kwargs_rejects_non_fullgraph(self):
+        """Compiled inference has one mandatory full graph contract."""
+        with pytest.raises(
+            ValueError,
+            match=r"compile_kwargs\['fullgraph'\]=False is not supported; compiled inference requires a full graph\.",
+        ):
+            AIMNet2Calculator(
+                "aimnet2",
+                nb_threshold=0,
+                device="cpu",
+                compile_model=True,
+                compile_kwargs={"fullgraph": False},
+            )
 
-        data = {
-            "coord": torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
-            "numbers": torch.tensor([8, 1, 1]),
-            "charge": torch.tensor([0.0]),
-        }
+    def test_compile_legacy_torchscript_model_is_rejected(self, monkeypatch):
+        """Legacy .jpt modules cannot enter the eager-model compiler path."""
+        from aimnet.calculators import calculator as calculator_module
 
-        res = calc(data)
-        assert "energy" in res
-        assert torch.isfinite(res["energy"]).all()
+        legacy = torch.jit.script(TinyLegacyModel())
+        monkeypatch.setattr(calculator_module, "resolve_model", Mock(return_value=(legacy, None, 5.0)))
+        with pytest.raises(
+            ValueError, match=r"compile_model=True is not supported for legacy TorchScript \.jpt models\."
+        ):
+            AIMNet2Calculator("legacy.jpt", device="cpu", compile_model=True)
 
 
 # =============================================================================
@@ -1645,13 +1659,6 @@ def test_calculator_metadata_property_returns_model_metadata():
         calc.metadata["family"] = "mutated"  # type: ignore[index]
 
 
-def test_calculator_was_compiled_flag_default_false():
-    from aimnet.calculators import AIMNet2Calculator
-
-    calc = AIMNet2Calculator("aimnet2", device="cpu")
-    assert calc._was_compiled is False
-
-
 def test_calculator_rejects_unsupported_species():
     """Calling the calculator with an unsupported atomic number must raise ValueError
     with chemistry context and pointers to alternative models."""
@@ -1816,26 +1823,6 @@ def test_species_validation_cached_for_repeated_numbers_tensor(monkeypatch):
     data["numbers"][0] = 92
     with pytest.raises(ValueError, match=r"implemented_species"):
         calc(data)
-
-
-def test_hessian_with_compile_raises():
-    """Calling with hessian=True on a calculator constructed with compile_model=True
-    must raise RuntimeError instead of hanging (Dynamo + double-backward on GELU)."""
-    import pytest
-    import torch
-
-    from aimnet.calculators import AIMNet2Calculator
-
-    calc = AIMNet2Calculator("aimnet2", device="cpu")
-    # Don't actually torch.compile (slow + may need GPU); just flip the flag.
-    calc._was_compiled = True
-
-    coords = torch.tensor([[0.0, 0.0, 0.0]])
-    numbers = torch.tensor([1])
-    data = {"coord": coords, "numbers": numbers, "charge": torch.tensor(0.0)}
-
-    with pytest.raises(RuntimeError, match=r"Hessian computation is incompatible with compile_model=True"):
-        calc(data, hessian=True)
 
 
 def test_set_lrcoulomb_method_does_not_warn_on_rxn_cutoff_change():
@@ -2847,3 +2834,74 @@ def test_embedded_d3ts_does_not_trip_the_dftd3_guard():
     """
     calc = _embedded_dftd3_calculator(D3TS(a1=0.5660, a2=3.1280, s8=0.3908))
     assert calc._embedded_tabulated_dftd3 is False
+
+
+def _water_batch(n: int = 2):
+    coord = torch.tensor([[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]] * n)
+    numbers = torch.tensor([[8, 1, 1]] * n)
+    return coord, numbers
+
+
+def test_scalar_charge_batched_matches_per_system_charge_cpu():
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    coord, numbers = _water_batch()
+    shared = calc({"coord": coord, "numbers": numbers, "charge": 0.0}, forces=True)
+    explicit = calc({"coord": coord, "numbers": numbers, "charge": [0.0, 0.0]}, forces=True)
+    torch.testing.assert_close(shared["energy"], explicit["energy"])
+    torch.testing.assert_close(shared["forces"], explicit["forces"])
+
+
+def test_scalar_charge_flat_mol_idx_cpu():
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    coord, numbers = _water_batch()
+    flat = {"coord": coord.flatten(0, 1), "numbers": numbers.flatten(), "mol_idx": torch.tensor([0, 0, 0, 1, 1, 1])}
+    shared = calc({**flat, "charge": 0.0})
+    explicit = calc({**flat, "charge": [0.0, 0.0]})
+    torch.testing.assert_close(shared["energy"], explicit["energy"])
+
+
+def test_charge_length_mismatch_raises():
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    coord, numbers = _water_batch(3)
+    with pytest.raises(ValueError, match="'charge' has 2 entries for 3 systems"):
+        calc({"coord": coord, "numbers": numbers, "charge": [0.0, 0.0]})
+
+
+def test_broadcast_per_system_expands_charge_and_mult_and_keeps_grad():
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    charge = torch.zeros(1, requires_grad=True)
+    data = {"charge": charge, "mult": torch.ones(1)}
+    calc._broadcast_per_system(data, 3)
+    assert data["charge"].shape == (3,) and data["mult"].shape == (3,)
+    data["charge"].sum().backward()
+    torch.testing.assert_close(charge.grad, torch.tensor([3.0]))
+    same = {"charge": torch.zeros(3)}
+    calc._broadcast_per_system(same, 3)
+    assert same["charge"].shape == (3,)
+
+
+def test_mol_flatten_explicit_mode2_broadcasts_scalar_charge():
+    calc = AIMNet2Calculator("aimnet2", device="cpu")
+    data = {
+        "coord": torch.zeros(2, 4, 3),
+        "numbers": torch.tensor([[6, 1, 1, 0], [8, 1, 1, 0]]),
+        "nbmat": torch.full((2, 4, 3), 8, dtype=torch.int32),
+        "charge": torch.zeros(1),
+        "mult": torch.ones(1),
+    }
+    out = calc.mol_flatten(data)
+    assert out["charge"].shape == (2,)
+    assert out["mult"].shape == (2,)
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize("compile_model", [False, pytest.param(True, marks=pytest.mark.slow)])
+def test_scalar_charge_batched_cuda_mode1(compile_model):
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, compile_model=compile_model)
+    coord, numbers = _water_batch()
+    shared = calc({"coord": coord, "numbers": numbers, "charge": 0.0}, forces=True)
+    explicit = calc({"coord": coord, "numbers": numbers, "charge": [0.0, 0.0]}, forces=True)
+    torch.testing.assert_close(shared["energy"], explicit["energy"], atol=1e-5, rtol=1e-5)
+    torch.testing.assert_close(shared["forces"], explicit["forces"], atol=1e-5, rtol=1e-5)

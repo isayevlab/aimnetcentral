@@ -2,7 +2,7 @@ import copy
 import math
 import warnings
 import weakref
-from collections.abc import Collection, Mapping
+from collections.abc import Callable, Collection, Mapping
 from types import MappingProxyType
 from typing import Any, ClassVar, Literal, Self, cast
 
@@ -66,7 +66,10 @@ class AIMNet2Calculator:
         Device to run the model on ("cuda", "cpu", or specific like "cuda:0").
         If None (default), auto-detects CUDA availability.
     compile_model : bool
-        Whether to compile the model with torch.compile(). Default is False.
+        Compile the model forward with ``torch.compile``. ``fullgraph=True``
+        is always requested (on CPU and CUDA); other ``compile_kwargs`` are
+        passed through, and ``fullgraph=False`` is rejected. Default is
+        False.
     compile_kwargs : dict | None
         Additional keyword arguments to pass to torch.compile(). Default is None.
     cache_static : bool
@@ -200,12 +203,24 @@ class AIMNet2Calculator:
             model_import_mode=model_import_mode,
         )
 
-        # Compile model if requested
-        self._was_compiled = bool(compile_model)
+        # Keep the original module as the sole owner of parameters and state.
+        # The compiled callable references that same module; replacing
+        # ``self.model`` makes checkpoints and higher derivatives operate on a
+        # Dynamo wrapper instead of the AIMNet2 instance.
+        self._compiled_forward: Callable[[dict[str, Tensor]], dict[str, Tensor]] | None = None
         if compile_model:
-            kwargs = compile_kwargs or {}
-            self.model = cast(nn.Module, torch.compile(self.model, **kwargs))
-
+            if isinstance(self.model, torch.jit.ScriptModule):
+                raise ValueError("compile_model=True is not supported for legacy TorchScript .jpt models.")
+            kwargs = {"fullgraph": True}
+            kwargs.update(compile_kwargs or {})
+            if kwargs.get("fullgraph") is False:
+                raise ValueError(
+                    "compile_kwargs['fullgraph']=False is not supported; compiled inference requires a full graph."
+                )
+            self._compiled_forward = cast(
+                Callable[[dict[str, Tensor]], dict[str, Tensor]],
+                torch.compile(self.model, **kwargs),
+            )
         # Resolve final flags (explicit overrides metadata)
         final_needs_coulomb = (
             needs_coulomb
@@ -987,15 +1002,6 @@ class AIMNet2Calculator:
             self._validate_species_and_charge(data)
         # Warn once if the caller requests an open-shell `mult` this model ignores.
         self._maybe_warn_mult_ignored(data)
-        # Hessian + torch.compile is known to hang on the double-backward
-        # path through GELU activations. Fail fast instead.
-        if hessian and getattr(self, "_was_compiled", False):
-            raise RuntimeError(
-                "Hessian computation is incompatible with compile_model=True "
-                "(Dynamo + double-backward through GELU hangs). Reconstruct calculator "
-                "with compile_model=False."
-            )
-
         if hessian:
             self._reject_embedded_tabulated_dftd3("A Hessian")
         if stress:
@@ -1013,7 +1019,6 @@ class AIMNet2Calculator:
                 return self._eval_hessian_batched(
                     subsystems, forces=forces, stress=stress, validate_species=validate_species, stack=stack
                 )
-
         # The simple->dsf PBC auto-switch in prepare_input is scoped to this
         # evaluation: any pending restore is consumed in the finally block, so
         # an exception mid-eval cannot leave the calculator on the switched method.
@@ -1030,6 +1035,8 @@ class AIMNet2Calculator:
             if isinstance(self.model, torch.jit.ScriptModule):
                 with torch.jit.optimized_execution(False):  # type: ignore
                     data = self.model(data)
+            elif self._compiled_forward is not None and not hessian:
+                data = self._compiled_forward(data)
             else:
                 data = self.model(data)
             # Run external modules if present
@@ -1621,6 +1628,25 @@ class AIMNet2Calculator:
                 ret[k] = v.unsqueeze(0)
         return ret
 
+    @staticmethod
+    def _broadcast_per_system(data: dict[str, Tensor], n_systems: int) -> None:
+        """Expand a shared scalar ``charge``/``mult`` to one entry per system.
+
+        Compiled inference sizes per-molecule reductions from ``charge``'s
+        length, so every system needs its own entry. ``expand`` keeps any
+        caller autograd link on the shared value.
+        """
+        for key in ("charge", "mult"):
+            value = data.get(key)
+            if value is None or value.shape[0] == n_systems:
+                continue
+            if value.shape[0] != 1:
+                raise ValueError(
+                    f"'{key}' has {value.shape[0]} entries for {n_systems} systems; "
+                    "pass one value per system or a single shared value."
+                )
+            data[key] = value.expand(n_systems)
+
     def mol_flatten(self, data: dict[str, Tensor], *, hessian: bool = False) -> dict[str, Tensor]:
         """Flatten the input data for multiple molecules.
         Will not flatten for batched input and molecule size below threshold.
@@ -1628,6 +1654,7 @@ class AIMNet2Calculator:
         ndim = data["coord"].ndim
         explicit_mode2 = data.get("nbmat") is not None and data["nbmat"].ndim == 3
         if explicit_mode2:
+            self._broadcast_per_system(data, data["coord"].shape[0])
             self._batch = None
             self._max_mol_size = data["coord"].shape[1]
             return data
@@ -1636,13 +1663,18 @@ class AIMNet2Calculator:
             if "mol_idx" not in data:
                 data["mol_idx"] = torch.zeros(data["coord"].shape[0], dtype=torch.long, device=self.device)
                 self._max_mol_size = data["coord"].shape[0]
+                n_systems = 1
             elif data["mol_idx"][-1] == 0:
                 self._max_mol_size = len(data["mol_idx"])
+                n_systems = 1
             else:
                 self._max_mol_size = data["mol_idx"].unique(return_counts=True)[1].max().item()
+                n_systems = int(data["mol_idx"].max().item()) + 1
+            self._broadcast_per_system(data, n_systems)
 
         elif ndim == 3:
             B, N = data["coord"].shape[:2]
+            self._broadcast_per_system(data, B)
             if hessian and B != 1:
                 raise NotImplementedError("Hessian calculation is not supported for batched inputs with B > 1")
             # Force flattening for PBC (cell present) to ensure make_nbmat computes proper neighbor lists with shifts
@@ -1946,10 +1978,10 @@ class AIMNet2Calculator:
         Notes
         -----
         The product is an exact reverse-mode autograd computation for every
-        backend: the NN, short-range, ``simple``/``dsf`` Coulomb, DFTD3, and
-        periodic ``ewald``/``pme`` energies are all in the autograd graph, so
-        the vjp captures the full curvature, including the relaxed-charge
-        response ``d^2E/(dq.dr)``. This mirrors the dense
+        backend, including external Coulomb and DFTD3 terms. It uses the
+        original eager model, including when ``compile_model=True``, because
+        higher derivatives require an autograd graph rather than the compiled
+        inference forward. It mirrors the dense
         :meth:`calculate_hessian` assembly, so ``hessian_vector_product(v)``
         equals ``H.reshape(3N, 3N) @ v`` to the backend's tolerance. The
         default return is detached; set ``create_graph=True`` when the HVP
@@ -1983,11 +2015,6 @@ class AIMNet2Calculator:
                 "migration (all backends are exact reverse-mode autograd) and will be removed.",
                 DeprecationWarning,
                 stacklevel=2,
-            )
-        if getattr(self, "_was_compiled", False):
-            raise RuntimeError(
-                "hessian_vector_product is incompatible with compile_model=True "
-                "(Dynamo + double-backward through GELU hangs). Reconstruct with compile_model=False."
             )
         # Same species/charge validation contract as `eval` (opt-out via
         # validate_species=False); otherwise unsupported elements / charged

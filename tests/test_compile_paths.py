@@ -54,6 +54,74 @@ class TestIsInputPadded:
         assert nbops.is_input_padded(data) is padded
 
 
+def test_symbolic_trace_context_is_scoped(device):
+    numbers = torch.tensor([[6, 1, 1]], device=device)
+    data = nbops.calc_masks(nbops.set_nb_mode({"numbers": numbers}))
+
+    assert nbops.is_input_padded(data) is False
+    with nbops._symbolic_trace_context():
+        assert nbops.get_nb_mode(data) == 0
+        assert nbops.is_input_padded(data) is True
+        traced = nbops.calc_masks(nbops.set_nb_mode({"numbers": numbers}))
+        assert traced["_natom"].shape == traced["mol_sizes"].shape == (1,)
+        torch.testing.assert_close(traced["_natom"], torch.tensor([3], device=device))
+    assert nbops.is_input_padded(data) is False
+
+
+@pytest.mark.parametrize("padded", [False, True])
+def test_mode0_metadata_shape_and_values(device, padded):
+    """Eager mode 0 preserves its scalar unpadded metadata contract."""
+    numbers = torch.tensor(
+        [[6, 1, 1, 8], [8, 1, 1, 1]] if not padded else [[6, 1, 1, 0], [8, 1, 0, 0]],
+        device=device,
+    )
+    data = nbops.calc_masks(nbops.set_nb_mode({"numbers": numbers}))
+
+    assert data["_input_padded"].shape == ()
+    assert data["_input_padded"].dtype == torch.bool
+    assert bool(data["_input_padded"].item()) is padded
+    if padded:
+        expected = torch.tensor([3, 2], device=device)
+        assert data["_natom"].shape == data["mol_sizes"].shape == (2,)
+    else:
+        expected = torch.tensor(4, device=device)
+        assert data["_natom"].shape == data["mol_sizes"].shape == ()
+    torch.testing.assert_close(data["_natom"], expected)
+    torch.testing.assert_close(data["mol_sizes"], expected)
+
+
+@pytest.mark.parametrize("padded", [False, True])
+def test_mode0_metadata_compiled_uses_per_system_counts(device, padded):
+    """The fullgraph preparation path keeps static per-system loss metadata."""
+    if device.type != "cuda":
+        pytest.skip("compiled parity is only meaningful on the GPU backend")
+    numbers = torch.tensor(
+        [[6, 1, 1, 8], [8, 1, 1, 1]] if not padded else [[6, 1, 1, 0], [8, 1, 0, 0]],
+        device=device,
+    )
+
+    def metadata(values):
+        data = nbops.calc_masks(nbops.set_nb_mode({"numbers": values}))
+        return data["_input_padded"], data["_natom"], data["mol_sizes"], data["mask_ij"]
+
+    eager = metadata(numbers)
+    torch._dynamo.reset()
+    compiled = torch.compile(metadata, dynamic=True, fullgraph=True)
+    actual = compiled(numbers)
+
+    expected_counts = torch.tensor([4, 4] if not padded else [3, 2], device=device)
+    expected_mask = (
+        torch.eye(numbers.shape[1], dtype=torch.bool, device=device).unsqueeze(0).expand(numbers.shape[0], -1, -1)
+    )
+    padding_mask = numbers.eq(0)
+    expected_mask = expected_mask | (padding_mask.unsqueeze(-2) | padding_mask.unsqueeze(-1))
+    assert bool(actual[0].item()) is bool(eager[0].item()) is padded
+    torch.testing.assert_close(actual[3], expected_mask)
+    assert actual[1].shape == actual[2].shape == (2,)
+    torch.testing.assert_close(actual[1], expected_counts)
+    torch.testing.assert_close(actual[2], expected_counts)
+
+
 def _packed_data(n_mol, n_atom_per_mol, device, nfeat=2):
     """Packed (mode 1) data dict with the usual trailing padding atom."""
     mol_idx = torch.arange(n_mol, device=device).repeat_interleave(n_atom_per_mol)
@@ -68,6 +136,51 @@ def _packed_data(n_mol, n_atom_per_mol, device, nfeat=2):
         "charge": torch.zeros(n_mol, device=device),
     }
     return nbops.calc_masks(nbops.set_nb_mode(data))
+
+
+@pytest.mark.parametrize("n_mol", [1, 3])
+def test_mode1_calc_masks_compiled_matches_eager(device, n_mol):
+    """Mode 1 metadata uses the charge length as its fixed output size."""
+    if device.type != "cuda":
+        pytest.skip("compiled parity is only meaningful on the GPU backend")
+    prepared = _packed_data(n_mol, 4, device)
+    data = {key: prepared[key] for key in ("numbers", "mol_idx", "nbmat", "charge")}
+
+    def metadata(values):
+        values = nbops.calc_masks(nbops.set_nb_mode(values))
+        return values["mol_sizes"]
+
+    eager = metadata(dict(data))
+    torch._dynamo.reset()
+    compiled = torch.compile(metadata, dynamic=True, fullgraph=True)
+    actual = compiled(dict(data))
+
+    torch.testing.assert_close(actual, eager)
+
+
+def test_mode1_counts_exclude_an_int32_dummy_own_bucket(device):
+    data = {
+        "numbers": torch.tensor([6, 1, 8, 1, 0], device=device),
+        "mol_idx": torch.tensor([0, 0, 1, 1, 2], dtype=torch.int32, device=device),
+        "nbmat": torch.zeros(5, 1, dtype=torch.int32, device=device),
+        "charge": torch.zeros(2, device=device),
+    }
+    prepared = nbops.calc_masks(nbops.set_nb_mode(data))
+    torch.testing.assert_close(prepared["mol_sizes"], torch.tensor([2, 2], device=device))
+
+
+@pytest.mark.parametrize("mode", [1, 2])
+def test_packed_and_global_loss_metadata_uses_mol_sizes(device, mode):
+    from aimnet.train.loss import energy_loss_fn
+
+    data = _packed_data(2, 3, device) if mode == 1 else nbops.calc_masks(nbops.set_nb_mode(_mode2_data(device)))
+    prediction = torch.tensor([1.0, 2.0], device=device)
+    target = torch.tensor([0.0, 0.0], device=device)
+    actual = energy_loss_fn({"energy": prediction, "_natom": data["_natom"]}, {"energy": target})
+    expected = ((prediction - target).square() / data["mol_sizes"].sqrt()).mean()
+
+    torch.testing.assert_close(data["_natom"], data["mol_sizes"])
+    torch.testing.assert_close(actual, expected)
 
 
 def _mode2_data(device):
@@ -107,8 +220,7 @@ def test_mode2_calc_masks_compiled_matches_eager(device):
 @pytest.mark.parametrize("n_mol", [1, 2, 5])
 def test_mol_sum_compiled_matches_eager(device, n_mol):
     """The compiled branch reads the count from `charge`; the eager one from
-    the `_num_mol` cache. A single molecule additionally takes the sum path,
-    which keeps a degenerate size-1 scatter out of the graph entirely."""
+    the `_num_mol` cache, including the single-molecule scatter case."""
     if device.type != "cuda":
         pytest.skip("compiled parity is only meaningful on the GPU backend")
     data = _packed_data(n_mol, 4, device)
@@ -144,3 +256,56 @@ def test_nse_compiled_matches_eager(device, n_mol):
 
     torch.testing.assert_close(got, ref, rtol=1e-5, atol=1e-5)
     torch.testing.assert_close(got_g, ref_g, rtol=1e-5, atol=1e-5)
+
+
+def test_mode1_eager_counts_do_not_depend_on_charge_length(device):
+    """A shared scalar charge for several molecules must not shrink mol_sizes."""
+    data = {
+        "numbers": torch.tensor([6, 1, 8, 1, 0], device=device),
+        "mol_idx": torch.tensor([0, 0, 1, 1, 1], device=device),
+        "nbmat": torch.zeros(5, 1, dtype=torch.int32, device=device),
+        "charge": torch.zeros(1, device=device),
+    }
+    prepared = nbops.calc_masks(nbops.set_nb_mode(data))
+    torch.testing.assert_close(prepared["mol_sizes"], torch.tensor([2, 2], device=device))
+    assert int(prepared["_num_mol"]) == 2
+    summed = nbops.mol_sum(torch.ones(5, device=device), prepared)
+    # the dummy (index 4) belongs to molecule 1, so it lands in the second sum
+    torch.testing.assert_close(summed, torch.tensor([2.0, 3.0], device=device))
+
+
+def test_mode1_dummy_own_bucket_is_folded_without_mutating_caller(device):
+    mol_idx = torch.tensor([0, 0, 1, 1, 2], dtype=torch.int32, device=device)
+    data = {
+        "numbers": torch.tensor([6, 1, 8, 1, 0], device=device),
+        "mol_idx": mol_idx,
+        "nbmat": torch.zeros(5, 1, dtype=torch.int32, device=device),
+        "charge": torch.zeros(2, device=device),
+    }
+    prepared = nbops.calc_masks(nbops.set_nb_mode(dict(data)))
+    torch.testing.assert_close(mol_idx, torch.tensor([0, 0, 1, 1, 2], dtype=torch.int32, device=device))
+    assert prepared["mol_idx"].dtype == torch.int32
+    torch.testing.assert_close(prepared["mol_idx"], torch.tensor([0, 0, 1, 1, 1], dtype=torch.int32, device=device))
+    x = torch.tensor([1.0, 2.0, 3.0, 4.0, 0.0], device=device)
+    torch.testing.assert_close(nbops.mol_sum(x, prepared), torch.tensor([3.0, 7.0], device=device))
+
+
+def test_mode1_dummy_own_bucket_compiled_matches_eager(device):
+    if device.type != "cuda":
+        pytest.skip("compiled parity is only meaningful on the GPU backend")
+    data = {
+        "numbers": torch.tensor([6, 1, 8, 1, 0], device=device),
+        "mol_idx": torch.tensor([0, 0, 1, 1, 2], dtype=torch.int32, device=device),
+        "nbmat": torch.zeros(5, 1, dtype=torch.int32, device=device),
+        "charge": torch.zeros(2, device=device),
+    }
+    x = torch.tensor([1.0, 2.0, 3.0, 4.0, 0.0], device=device)
+
+    def reduce(values, x):
+        values = nbops.calc_masks(nbops.set_nb_mode(values))
+        return nbops.mol_sum(x, values), values["mol_sizes"]
+
+    eager = reduce(dict(data), x)
+    torch._dynamo.reset()
+    compiled = torch.compile(reduce, dynamic=True, fullgraph=True)(dict(data), x)
+    torch.testing.assert_close(compiled, eager)

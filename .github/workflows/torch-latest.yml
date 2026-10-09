@@ -6,7 +6,7 @@ on:
     workflow_dispatch:
 
 jobs:
-    # Early-warning lane for the unbounded `torch>=2.8` pin: reinstalls the
+    # Early-warning lane for the unbounded `torch>=2.10` pin: reinstalls the
     # latest stable torch CPU wheel on top of the locked env (same
     # reinstall-on-top idiom as the tests-torch matrix in main.yml) and runs
     # the core test suite against it. Non-blocking — this is a scheduled
