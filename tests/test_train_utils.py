@@ -548,8 +548,7 @@ def test_stress_evaluator_requires_explicit_topology_and_matching_shifts():
         evaluator.run([(packed, {"stress": torch.zeros(1, 3, 3)})])
 
 
-def test_default_trainer_skips_step_for_nonfinite_loss():
-    pytest.importorskip("ignite")
+def _scalar_trainer(loss_fn):
     torch = pytest.importorskip("torch")
     from torch import nn
 
@@ -565,23 +564,32 @@ def test_default_trainer_skips_step_for_nonfinite_loss():
 
     model = Energy()
     optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
-    trainer = default_trainer(
-        model,
-        optimizer,
-        lambda pred, _true: {"loss": pred["energy"].sum() * torch.tensor(float("nan"))},
-        device="cpu",
-    )
-    with pytest.raises(RuntimeError, match="Non-finite training loss; optimizer step skipped"):
-        trainer.run([({"value": torch.ones(1)}, {})])
+    return model, default_trainer(model, optimizer, loss_fn, device="cpu")
+
+
+def test_default_trainer_skips_step_for_nonfinite_loss():
+    pytest.importorskip("ignite")
+    torch = pytest.importorskip("torch")
+
+    def loss_fn(pred, true):
+        loss = pred["energy"].sum()
+        return {"loss": loss * torch.tensor(float("nan")) if bool(true["bad"]) else loss}
+
+    model, trainer = _scalar_trainer(loss_fn)
+    # prepare_batch calls .to(device) on every value, so flags are tensors
+    bad = ({"value": torch.ones(1)}, {"bad": torch.tensor(True)})
+    good = ({"value": torch.ones(1)}, {"bad": torch.tensor(False)})
+    trainer.run([bad], max_epochs=1)
+    assert trainer.state.skipped_steps == 1
     torch.testing.assert_close(model.weight, torch.ones(()))
+    trainer.run([good], max_epochs=1)
+    # 1 - lr * clip(dL/dw = 1, 0.4): the good step runs normally after the skip
+    torch.testing.assert_close(model.weight.detach(), torch.tensor(0.6))
 
 
 def test_default_trainer_skips_step_for_nonfinite_gradients():
     pytest.importorskip("ignite")
     torch = pytest.importorskip("torch")
-    from torch import nn
-
-    from aimnet.train.utils import default_trainer
 
     class NaNGradient(torch.autograd.Function):
         @staticmethod
@@ -592,25 +600,11 @@ def test_default_trainer_skips_step_for_nonfinite_gradients():
         def backward(ctx, grad_output):
             return torch.full_like(grad_output, float("nan"))
 
-    class Energy(nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.weight = nn.Parameter(torch.ones(()))
-
-        def forward(self, data):
-            return {"energy": self.weight * data["value"]}
-
-    model = Energy()
-    optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
-    trainer = default_trainer(
-        model,
-        optimizer,
-        lambda pred, _true: {"loss": NaNGradient.apply(pred["energy"]).sum()},
-        device="cpu",
-    )
-    with pytest.raises(RuntimeError, match="Non-finite training gradients; optimizer step skipped"):
-        trainer.run([({"value": torch.ones(1)}, {})])
+    model, trainer = _scalar_trainer(lambda pred, _true: {"loss": NaNGradient.apply(pred["energy"]).sum()})
+    trainer.run([({"value": torch.ones(1)}, {}), ({"value": torch.ones(1)}, {})], max_epochs=1)
+    assert trainer.state.skipped_steps == 2
     torch.testing.assert_close(model.weight, torch.ones(()))
+    assert model.weight.grad is None or torch.equal(model.weight.grad, torch.zeros(()))
 
 
 def test_training_runner_rejects_input_key_and_order_changes():
@@ -799,17 +793,13 @@ def _nccl_compiled_train_utils_worker(rank, world_size, init_file, result_dir):
         trainer.run(batches, max_epochs=1)
         successful_state = {name: value.detach().cpu().clone() for name, value in runner.core.state_dict().items()}
 
-        def synchronized_failure(loss_fn, message):
+        def synchronized_skip(loss_fn):
             state_before = {name: value.detach().clone() for name, value in runner.core.state_dict().items()}
-            failed = False
-            try:
-                default_trainer(model, optimizer, loss_fn, device=device, compile_training=True).run(
-                    [batches[0]], max_epochs=1
-                )
-            except RuntimeError as error:
-                failed = message in str(error)
+            engine = default_trainer(model, optimizer, loss_fn, device=device, compile_training=True)
+            engine.run([batches[0]], max_epochs=1)
             state_after = runner.core.state_dict()
-            return failed and all(torch.equal(state_before[name], state_after[name]) for name in state_before)
+            unchanged = all(torch.equal(state_before[name], state_after[name]) for name in state_before)
+            return engine.state.skipped_steps == 1 and unchanged
 
         def nonfinite_loss(pred, true):
             loss = (pred["forces"] - true["forces"]).square().mean()
@@ -817,13 +807,13 @@ def _nccl_compiled_train_utils_worker(rank, world_size, init_file, result_dir):
                 loss = loss * torch.full((), float("nan"), device=loss.device)
             return {"loss": loss}
 
-        loss_failure_synchronized = synchronized_failure(nonfinite_loss, "Non-finite training loss")
+        loss_failure_synchronized = synchronized_skip(nonfinite_loss)
 
         def nonfinite_gradient(pred, true):
             loss = (pred["forces"] - true["forces"]).square().mean()
             return {"loss": RankGradient.apply(loss)}
 
-        gradient_failure_synchronized = synchronized_failure(nonfinite_gradient, "Non-finite training gradients")
+        gradient_failure_synchronized = synchronized_skip(nonfinite_gradient)
         dist.barrier()
         torch.save(
             {
@@ -841,7 +831,7 @@ def _nccl_compiled_train_utils_worker(rank, world_size, init_file, result_dir):
 
 @pytest.mark.gpu
 @pytest.mark.slow
-def test_compiled_nccl_ddp_handles_dynamic_rank_local_shapes_and_synchronized_failures(tmp_path):
+def test_compiled_nccl_ddp_handles_dynamic_rank_local_shapes_and_synchronized_skips(tmp_path):
     pytest.importorskip("ignite")
     torch = pytest.importorskip("torch")
     if not torch.distributed.is_nccl_available() or torch.cuda.device_count() < 2:
