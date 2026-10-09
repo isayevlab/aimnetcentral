@@ -648,7 +648,9 @@ def default_trainer(
                     engine.state.iteration,
                     skipped,
                 )
-            return loss.item()
+            # Every rank reports NaN for a skipped step, whatever its local
+            # loss, so an end-of-epoch TerminateOnNan stops all ranks together.
+            return float("nan")
         torch.nn.utils.clip_grad_value_(model.parameters(), 0.4)
         optimizer.step()
 
