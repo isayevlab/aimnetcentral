@@ -1635,3 +1635,13 @@ def test_peratom_loss_ignores_nonfinite_values_in_padded_slots():
     true[0, -1] = float("inf")
     actual = peratom_loss_fn({"forces": pred, "numbers": numbers}, {"forces": true}, "forces", "forces")
     torch.testing.assert_close(actual, torch.tensor(1.0))
+
+
+def test_wandb_train_output_drops_skipped_step_loss():
+    pytest.importorskip("ignite")
+    from aimnet.train.utils import _wandb_train_output
+
+    assert _wandb_train_output(0.25, None) == {"loss": 0.25}
+    assert _wandb_train_output(float("nan"), None) == {}
+    assert _wandb_train_output(float("inf"), 3) == {"skipped_steps": 3}
+    assert _wandb_train_output(0.25, 3) == {"loss": 0.25, "skipped_steps": 3}
