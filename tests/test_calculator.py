@@ -2882,9 +2882,8 @@ def test_broadcast_per_system_expands_charge_and_mult_and_keeps_grad():
 
 def test_broadcast_per_system_gives_contiguous_storage():
     """A stride-0 view would change compiled input metadata and cost a recompile."""
-    calc = AIMNet2Calculator("aimnet2", device="cpu")
     data = {"charge": torch.zeros(1), "mult": torch.ones(1)}
-    calc._broadcast_per_system(data, 3)
+    AIMNet2Calculator._broadcast_per_system(data, 3)
     for key in ("charge", "mult"):
         assert data[key].is_contiguous() and data[key].stride() == (1,)
 
