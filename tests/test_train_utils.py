@@ -1522,3 +1522,23 @@ def test_compiled_runner_accepts_non_contiguous_coord():
     assert not data["coord"].is_contiguous()
     prediction = runner(data)
     torch.testing.assert_close(prediction["forces"], -2 * 0.75 * data["coord"])
+
+
+@pytest.mark.gpu
+def test_peratom_loss_has_no_host_sync_on_cuda():
+    torch = pytest.importorskip("torch")
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    from aimnet.train.loss import peratom_loss_fn
+
+    numbers = torch.tensor([[1, 6, 1, 0], [1, 1, 6, 8]], device="cuda")
+    pred = torch.randn(2, 4, 3, device="cuda")
+    true = torch.randn(2, 4, 3, device="cuda")
+    expected = torch.nn.functional.mse_loss(pred[numbers != 0], true[numbers != 0])
+    torch.cuda.synchronize()
+    torch.cuda.set_sync_debug_mode("error")
+    try:
+        actual = peratom_loss_fn({"forces": pred, "numbers": numbers}, {"forces": true}, "forces", "forces")
+    finally:
+        torch.cuda.set_sync_debug_mode("default")
+    torch.testing.assert_close(actual, expected)
