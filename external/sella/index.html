@@ -2069,7 +2069,7 @@
 <h2 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Gas-phase only. The <code>internal=True</code> path assumes molecular topology; periodic TS searches are not supported by <code>AIMNet2ASE.get_hessian</code>.</li>
-<li><code>compile_model=True</code> is incompatible with the Hessian path — Dynamo + double-backward through GELU hangs (<code>AIMNet2Calculator</code> raises <code>RuntimeError</code> if you combine them).</li>
+<li><code>compile_model=True</code> does not compile the Hessian path. The Hessian callback uses the original eager model while repeated ordinary force evaluations can still use the compiled inference forward.</li>
 <li>Multi-molecule batching is not available for the Hessian; each <code>Sella</code> instance must hold one structure.</li>
 </ul>
 <h2 id="minima-with-sella">Minima with Sella<a class="headerlink" href="#minima-with-sella" title="Permanent link">&para;</a></h2>

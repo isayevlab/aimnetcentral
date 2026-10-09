@@ -1673,6 +1673,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#stress-training" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stress training
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2098,6 +2109,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#stress-training" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stress training
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2243,6 +2265,15 @@
 <h3 id="registry-distribution-and-bundling-policy">Registry Distribution and Bundling Policy<a class="headerlink" href="#registry-distribution-and-bundling-policy" title="Permanent link">&para;</a></h3>
 <p>Official AIMNet distributions do not bundle model artifacts. Registry models are downloaded on demand, and cached, bundled, or newly downloaded bytes must match the registry SHA-256 digest before a path is returned. A stale bundled artifact fails closed on a checksum mismatch; it is not replaced by a network download.</p>
 <p>Introducing bundled model artifacts later requires a separate design and release review plus explicit maintainer approval. The approved process must preserve immutable artifact filenames, bytes, and registry digests; require each bundled artifact to match its registry digest; keep checksum failures fail-closed; and add non-vacuous release checks for the actual wheel and source-distribution contents.</p>
+<h2 id="stress-training">Stress training<a class="headerlink" href="#stress-training" title="Permanent link">&para;</a></h2>
+<p>Add <code>stress</code> to <code>data.y</code> to train on periodic stress. Requirements:</p>
+<ul>
+<li><strong>Labels:</strong> full <code>(B, 3, 3)</code> tensors in eV/Å^3, ASE sign convention (σ = (1/V) ∂E/∂ε; negative under compression), e.g. <code>atoms.get_stress(voigt=False)</code>. Convert VASP output by flipping the sign and dividing kBar by 1602.1766.</li>
+<li><strong>Inputs:</strong> explicit neighbor topology in mode 1 (flat <code>nbmat</code> with a trailing dummy atom) or mode 2 (global <code>(B, N, M)</code> <code>nbmat</code>), a <code>cell</code>, and a <code>shifts</code> tensor aligned with every neighbor matrix. Dense mode-0 batches are rejected.</li>
+<li><strong>Loader:</strong> the built-in <code>SizeGroupedDataset</code> yields dense mode-0 batches, so supply a custom dataset class via <code>data.datasets.train</code>. <code>aimnet train</code> inspects the first training batch and stops with an explanation when these inputs are missing.</li>
+<li><strong>Weighting:</strong> stress MSE is typically around 1e-6 (eV/Å^3)^2, so the stress loss weight must be large (order 10^2–10^4) to contribute next to energy and forces.</li>
+</ul>
+<p>Stress is computed as the strain derivative of the energy divided by the cell volume, the same contract as the calculator's <code>stress=True</code>.</p>
 
 
 

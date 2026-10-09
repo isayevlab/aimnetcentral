@@ -4218,7 +4218,7 @@
 </tr>
 </tbody>
 </table>
-<p>Compilation adds overhead on first call but speeds up subsequent calls. Useful for MD trajectories, geometry optimizations, or repeated evaluations.</p>
+<p>Compilation adds overhead on first call but speeds up subsequent calls. Useful for MD trajectories, geometry optimizations, or repeated evaluations. Compilation always uses <code>fullgraph=True</code>; passing <code>fullgraph=False</code> in <code>compile_kwargs</code> is rejected. Legacy TorchScript <code>.jpt</code> models do not support this option. Hessian and Hessian-vector-product requests use the original eager model while ordinary compiled evaluations continue to share that model's parameters and state.</p>
 <h4 id="compile_kwargs"><code>compile_kwargs</code><a class="headerlink" href="#compile_kwargs" title="Permanent link">&para;</a></h4>
 <p>Additional keyword arguments to pass to <code>torch.compile()</code>. Default is <code>None</code>.</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Example: use reduce-overhead mode for lower latency</span>

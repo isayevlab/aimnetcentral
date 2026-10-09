@@ -2022,7 +2022,7 @@
 <p>Runtime corrections and safeguards fire regardless of <code>validate_species</code>:</p>
 <ul>
 <li><strong>Posthoc D3 dispersion</strong>: <code>AIMNet2Calculator</code> adds external DFT-D3(BJ) with the same wB97M-D3 parameters used by the default <code>aimnet2</code> model (<code>s6=1.0</code>, <code>s8=0.3908</code>, <code>a1=0.566</code>, <code>a2=3.128</code>). This also applies to older rxn artifacts that do not carry <code>needs_dispersion</code> / <code>d3_params</code> metadata.</li>
-<li><strong>Hessian + <code>torch.compile</code></strong>: setting both raises <code>RuntimeError</code> (Dynamo + double-backward through GELU is known to hang). Reconstruct with <code>compile_model=False</code> for TS / IRC / vibrational work.</li>
+<li><strong>Hessian + <code>torch.compile</code></strong>: Hessian and HVP requests use the original eager model rather than the compiled inference forward. <code>compile_model=True</code> can remain enabled, but it does not accelerate those higher derivatives.</li>
 </ul>
 <p>A separate one-time <code>UserWarning</code> fires if the same Python process constructs calculators from two different AIMNet2 families (rxn vs. wb97m-d3 etc.), because their absolute energy scales are not comparable.</p>
 <h2 id="dipole-origin-convention">Dipole origin convention<a class="headerlink" href="#dipole-origin-convention" title="Permanent link">&para;</a></h2>

@@ -3623,7 +3623,10 @@ device : str | None
     Device to run the model on ("cuda", "cpu", or specific like "cuda:0").
     If None (default), auto-detects CUDA availability.
 compile_model : bool
-    Whether to compile the model with torch.compile(). Default is False.
+    Compile the model forward with <code>torch.compile</code>. <code>fullgraph=True</code>
+    is always requested (on CPU and CUDA); other <code>compile_kwargs</code> are
+    passed through, and <code>fullgraph=False</code> is rejected. Default is
+    False.
 compile_kwargs : dict | None
     Additional keyword arguments to pass to torch.compile(). Default is None.
 cache_static : bool
@@ -3696,10 +3699,7 @@ external_dftd3 : DFTD3 | None
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">161</span>
-<span class="normal">162</span>
-<span class="normal">163</span>
-<span class="normal">164</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">164</span>
 <span class="normal">165</span>
 <span class="normal">166</span>
 <span class="normal">167</span>
@@ -3918,7 +3918,22 @@ external_dftd3 : DFTD3 | None
 <span class="normal">380</span>
 <span class="normal">381</span>
 <span class="normal">382</span>
-<span class="normal">383</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+<span class="normal">383</span>
+<span class="normal">384</span>
+<span class="normal">385</span>
+<span class="normal">386</span>
+<span class="normal">387</span>
+<span class="normal">388</span>
+<span class="normal">389</span>
+<span class="normal">390</span>
+<span class="normal">391</span>
+<span class="normal">392</span>
+<span class="normal">393</span>
+<span class="normal">394</span>
+<span class="normal">395</span>
+<span class="normal">396</span>
+<span class="normal">397</span>
+<span class="normal">398</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">model</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">=</span> <span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span>
     <span class="n">nb_threshold</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">120</span><span class="p">,</span>
@@ -3960,12 +3975,24 @@ external_dftd3 : DFTD3 | None
         <span class="n">model_import_mode</span><span class="o">=</span><span class="n">model_import_mode</span><span class="p">,</span>
     <span class="p">)</span>
 
-    <span class="c1"># Compile model if requested</span>
-    <span class="bp">self</span><span class="o">.</span><span class="n">_was_compiled</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">compile_model</span><span class="p">)</span>
+    <span class="c1"># Keep the original module as the sole owner of parameters and state.</span>
+    <span class="c1"># The compiled callable references that same module; replacing</span>
+    <span class="c1"># ``self.model`` makes checkpoints and higher derivatives operate on a</span>
+    <span class="c1"># Dynamo wrapper instead of the AIMNet2 instance.</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_compiled_forward</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="k">if</span> <span class="n">compile_model</span><span class="p">:</span>
-        <span class="n">kwargs</span> <span class="o">=</span> <span class="n">compile_kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
-
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">ScriptModule</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;compile_model=True is not supported for legacy TorchScript .jpt models.&quot;</span><span class="p">)</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;fullgraph&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">compile_kwargs</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fullgraph&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;compile_kwargs[&#39;fullgraph&#39;]=False is not supported; compiled inference requires a full graph.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_compiled_forward</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span>
+            <span class="n">Callable</span><span class="p">[[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]],</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">),</span>
+        <span class="p">)</span>
     <span class="c1"># Resolve final flags (explicit overrides metadata)</span>
     <span class="n">final_needs_coulomb</span> <span class="o">=</span> <span class="p">(</span>
         <span class="n">needs_coulomb</span>
@@ -4355,22 +4382,7 @@ for each key (molecules are independent and generally ragged).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 974</span>
-<span class="normal"> 975</span>
-<span class="normal"> 976</span>
-<span class="normal"> 977</span>
-<span class="normal"> 978</span>
-<span class="normal"> 979</span>
-<span class="normal"> 980</span>
-<span class="normal"> 981</span>
-<span class="normal"> 982</span>
-<span class="normal"> 983</span>
-<span class="normal"> 984</span>
-<span class="normal"> 985</span>
-<span class="normal"> 986</span>
-<span class="normal"> 987</span>
-<span class="normal"> 988</span>
-<span class="normal"> 989</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 989</span>
 <span class="normal"> 990</span>
 <span class="normal"> 991</span>
 <span class="normal"> 992</span>
@@ -4433,7 +4445,14 @@ for each key (molecules are independent and generally ragged).</p>
 <span class="normal">1049</span>
 <span class="normal">1050</span>
 <span class="normal">1051</span>
-<span class="normal">1052</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">eval</span><span class="p">(</span>
+<span class="normal">1052</span>
+<span class="normal">1053</span>
+<span class="normal">1054</span>
+<span class="normal">1055</span>
+<span class="normal">1056</span>
+<span class="normal">1057</span>
+<span class="normal">1058</span>
+<span class="normal">1059</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">eval</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">forces</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">stress</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">hessian</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">validate_species</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Run the model on ``data`` and return the output dict.</span>
@@ -4449,15 +4468,6 @@ for each key (molecules are independent and generally ragged).</p>
         <span class="bp">self</span><span class="o">.</span><span class="n">_validate_species_and_charge</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
     <span class="c1"># Warn once if the caller requests an open-shell `mult` this model ignores.</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_warn_mult_ignored</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-    <span class="c1"># Hessian + torch.compile is known to hang on the double-backward</span>
-    <span class="c1"># path through GELU activations. Fail fast instead.</span>
-    <span class="k">if</span> <span class="n">hessian</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_was_compiled&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-            <span class="s2">&quot;Hessian computation is incompatible with compile_model=True &quot;</span>
-            <span class="s2">&quot;(Dynamo + double-backward through GELU hangs). Reconstruct calculator &quot;</span>
-            <span class="s2">&quot;with compile_model=False.&quot;</span>
-        <span class="p">)</span>
-
     <span class="k">if</span> <span class="n">hessian</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_reject_embedded_tabulated_dftd3</span><span class="p">(</span><span class="s2">&quot;A Hessian&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">stress</span><span class="p">:</span>
@@ -4475,7 +4485,6 @@ for each key (molecules are independent and generally ragged).</p>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_eval_hessian_batched</span><span class="p">(</span>
                 <span class="n">subsystems</span><span class="p">,</span> <span class="n">forces</span><span class="o">=</span><span class="n">forces</span><span class="p">,</span> <span class="n">stress</span><span class="o">=</span><span class="n">stress</span><span class="p">,</span> <span class="n">validate_species</span><span class="o">=</span><span class="n">validate_species</span><span class="p">,</span> <span class="n">stack</span><span class="o">=</span><span class="n">stack</span>
             <span class="p">)</span>
-
     <span class="c1"># The simple-&gt;dsf PBC auto-switch in prepare_input is scoped to this</span>
     <span class="c1"># evaluation: any pending restore is consumed in the finally block, so</span>
     <span class="c1"># an exception mid-eval cannot leave the calculator on the switched method.</span>
@@ -4492,6 +4501,8 @@ for each key (molecules are independent and generally ragged).</p>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">ScriptModule</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">optimized_execution</span><span class="p">(</span><span class="kc">False</span><span class="p">):</span>  <span class="c1"># type: ignore</span>
                 <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compiled_forward</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">hessian</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compiled_forward</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
         <span class="c1"># Run external modules if present</span>
@@ -4541,22 +4552,7 @@ rejected because the model is supplied by <code>path</code>.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">385</span>
-<span class="normal">386</span>
-<span class="normal">387</span>
-<span class="normal">388</span>
-<span class="normal">389</span>
-<span class="normal">390</span>
-<span class="normal">391</span>
-<span class="normal">392</span>
-<span class="normal">393</span>
-<span class="normal">394</span>
-<span class="normal">395</span>
-<span class="normal">396</span>
-<span class="normal">397</span>
-<span class="normal">398</span>
-<span class="normal">399</span>
-<span class="normal">400</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">400</span>
 <span class="normal">401</span>
 <span class="normal">402</span>
 <span class="normal">403</span>
@@ -4565,7 +4561,22 @@ rejected because the model is supplied by <code>path</code>.</p>
 <span class="normal">406</span>
 <span class="normal">407</span>
 <span class="normal">408</span>
-<span class="normal">409</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+<span class="normal">409</span>
+<span class="normal">410</span>
+<span class="normal">411</span>
+<span class="normal">412</span>
+<span class="normal">413</span>
+<span class="normal">414</span>
+<span class="normal">415</span>
+<span class="normal">416</span>
+<span class="normal">417</span>
+<span class="normal">418</span>
+<span class="normal">419</span>
+<span class="normal">420</span>
+<span class="normal">421</span>
+<span class="normal">422</span>
+<span class="normal">423</span>
+<span class="normal">424</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">from_legacy_jit</span><span class="p">(</span>
     <span class="bp">cls</span><span class="p">,</span>
     <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
@@ -4631,10 +4642,10 @@ create_graph : bool
     <code>H @ v</code>, shape <code>(N, 3)</code> or <code>(K, N, 3)</code>, matching <code>vectors</code>.</p>
 <h5 id="aimnet.calculators.AIMNet2Calculator.hessian_vector_product--notes">Notes<a class="headerlink" href="#aimnet.calculators.AIMNet2Calculator.hessian_vector_product--notes" title="Permanent link">&para;</a></h5>
 <p>The product is an exact reverse-mode autograd computation for every
-backend: the NN, short-range, <code>simple</code>/<code>dsf</code> Coulomb, DFTD3, and
-periodic <code>ewald</code>/<code>pme</code> energies are all in the autograd graph, so
-the vjp captures the full curvature, including the relaxed-charge
-response <code>d^2E/(dq.dr)</code>. This mirrors the dense
+backend, including external Coulomb and DFTD3 terms. It uses the
+original eager model, including when <code>compile_model=True</code>, because
+higher derivatives require an autograd graph rather than the compiled
+inference forward. It mirrors the dense
 :meth:<code>calculate_hessian</code> assembly, so <code>hessian_vector_product(v)</code>
 equals <code>H.reshape(3N, 3N) @ v</code> to the backend's tolerance. The
 default return is detached; set <code>create_graph=True</code> when the HVP
@@ -4664,39 +4675,7 @@ graph.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1907</span>
-<span class="normal">1908</span>
-<span class="normal">1909</span>
-<span class="normal">1910</span>
-<span class="normal">1911</span>
-<span class="normal">1912</span>
-<span class="normal">1913</span>
-<span class="normal">1914</span>
-<span class="normal">1915</span>
-<span class="normal">1916</span>
-<span class="normal">1917</span>
-<span class="normal">1918</span>
-<span class="normal">1919</span>
-<span class="normal">1920</span>
-<span class="normal">1921</span>
-<span class="normal">1922</span>
-<span class="normal">1923</span>
-<span class="normal">1924</span>
-<span class="normal">1925</span>
-<span class="normal">1926</span>
-<span class="normal">1927</span>
-<span class="normal">1928</span>
-<span class="normal">1929</span>
-<span class="normal">1930</span>
-<span class="normal">1931</span>
-<span class="normal">1932</span>
-<span class="normal">1933</span>
-<span class="normal">1934</span>
-<span class="normal">1935</span>
-<span class="normal">1936</span>
-<span class="normal">1937</span>
-<span class="normal">1938</span>
-<span class="normal">1939</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1939</span>
 <span class="normal">1940</span>
 <span class="normal">1941</span>
 <span class="normal">1942</span>
@@ -4782,7 +4761,34 @@ graph.</p>
 <span class="normal">2022</span>
 <span class="normal">2023</span>
 <span class="normal">2024</span>
-<span class="normal">2025</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@torch</span><span class="o">.</span><span class="n">inference_mode</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+<span class="normal">2025</span>
+<span class="normal">2026</span>
+<span class="normal">2027</span>
+<span class="normal">2028</span>
+<span class="normal">2029</span>
+<span class="normal">2030</span>
+<span class="normal">2031</span>
+<span class="normal">2032</span>
+<span class="normal">2033</span>
+<span class="normal">2034</span>
+<span class="normal">2035</span>
+<span class="normal">2036</span>
+<span class="normal">2037</span>
+<span class="normal">2038</span>
+<span class="normal">2039</span>
+<span class="normal">2040</span>
+<span class="normal">2041</span>
+<span class="normal">2042</span>
+<span class="normal">2043</span>
+<span class="normal">2044</span>
+<span class="normal">2045</span>
+<span class="normal">2046</span>
+<span class="normal">2047</span>
+<span class="normal">2048</span>
+<span class="normal">2049</span>
+<span class="normal">2050</span>
+<span class="normal">2051</span>
+<span class="normal">2052</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@torch</span><span class="o">.</span><span class="n">inference_mode</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
 <span class="nd">@torch</span><span class="o">.</span><span class="n">enable_grad</span><span class="p">()</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">hessian_vector_product</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
@@ -4824,10 +4830,10 @@ graph.</p>
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
 <span class="sd">    The product is an exact reverse-mode autograd computation for every</span>
-<span class="sd">    backend: the NN, short-range, ``simple``/``dsf`` Coulomb, DFTD3, and</span>
-<span class="sd">    periodic ``ewald``/``pme`` energies are all in the autograd graph, so</span>
-<span class="sd">    the vjp captures the full curvature, including the relaxed-charge</span>
-<span class="sd">    response ``d^2E/(dq.dr)``. This mirrors the dense</span>
+<span class="sd">    backend, including external Coulomb and DFTD3 terms. It uses the</span>
+<span class="sd">    original eager model, including when ``compile_model=True``, because</span>
+<span class="sd">    higher derivatives require an autograd graph rather than the compiled</span>
+<span class="sd">    inference forward. It mirrors the dense</span>
 <span class="sd">    :meth:`calculate_hessian` assembly, so ``hessian_vector_product(v)``</span>
 <span class="sd">    equals ``H.reshape(3N, 3N) @ v`` to the backend&#39;s tolerance. The</span>
 <span class="sd">    default return is detached; set ``create_graph=True`` when the HVP</span>
@@ -4861,11 +4867,6 @@ graph.</p>
             <span class="s2">&quot;migration (all backends are exact reverse-mode autograd) and will be removed.&quot;</span><span class="p">,</span>
             <span class="ne">DeprecationWarning</span><span class="p">,</span>
             <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_was_compiled&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-            <span class="s2">&quot;hessian_vector_product is incompatible with compile_model=True &quot;</span>
-            <span class="s2">&quot;(Dynamo + double-backward through GELU hangs). Reconstruct with compile_model=False.&quot;</span>
         <span class="p">)</span>
     <span class="c1"># Same species/charge validation contract as `eval` (opt-out via</span>
     <span class="c1"># validate_species=False); otherwise unsupported elements / charged</span>
@@ -4924,33 +4925,7 @@ Will not flatten for batched input and molecule size below threshold.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1624</span>
-<span class="normal">1625</span>
-<span class="normal">1626</span>
-<span class="normal">1627</span>
-<span class="normal">1628</span>
-<span class="normal">1629</span>
-<span class="normal">1630</span>
-<span class="normal">1631</span>
-<span class="normal">1632</span>
-<span class="normal">1633</span>
-<span class="normal">1634</span>
-<span class="normal">1635</span>
-<span class="normal">1636</span>
-<span class="normal">1637</span>
-<span class="normal">1638</span>
-<span class="normal">1639</span>
-<span class="normal">1640</span>
-<span class="normal">1641</span>
-<span class="normal">1642</span>
-<span class="normal">1643</span>
-<span class="normal">1644</span>
-<span class="normal">1645</span>
-<span class="normal">1646</span>
-<span class="normal">1647</span>
-<span class="normal">1648</span>
-<span class="normal">1649</span>
-<span class="normal">1650</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1650</span>
 <span class="normal">1651</span>
 <span class="normal">1652</span>
 <span class="normal">1653</span>
@@ -4965,13 +4940,46 @@ Will not flatten for batched input and molecule size below threshold.</p>
 <span class="normal">1662</span>
 <span class="normal">1663</span>
 <span class="normal">1664</span>
-<span class="normal">1665</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">mol_flatten</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span> <span class="n">hessian</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]:</span>
+<span class="normal">1665</span>
+<span class="normal">1666</span>
+<span class="normal">1667</span>
+<span class="normal">1668</span>
+<span class="normal">1669</span>
+<span class="normal">1670</span>
+<span class="normal">1671</span>
+<span class="normal">1672</span>
+<span class="normal">1673</span>
+<span class="normal">1674</span>
+<span class="normal">1675</span>
+<span class="normal">1676</span>
+<span class="normal">1677</span>
+<span class="normal">1678</span>
+<span class="normal">1679</span>
+<span class="normal">1680</span>
+<span class="normal">1681</span>
+<span class="normal">1682</span>
+<span class="normal">1683</span>
+<span class="normal">1684</span>
+<span class="normal">1685</span>
+<span class="normal">1686</span>
+<span class="normal">1687</span>
+<span class="normal">1688</span>
+<span class="normal">1689</span>
+<span class="normal">1690</span>
+<span class="normal">1691</span>
+<span class="normal">1692</span>
+<span class="normal">1693</span>
+<span class="normal">1694</span>
+<span class="normal">1695</span>
+<span class="normal">1696</span>
+<span class="normal">1697</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">mol_flatten</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span> <span class="n">hessian</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Flatten the input data for multiple molecules.</span>
 <span class="sd">    Will not flatten for batched input and molecule size below threshold.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">ndim</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;coord&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">ndim</span>
     <span class="n">explicit_mode2</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;nbmat&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;nbmat&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span>
     <span class="k">if</span> <span class="n">explicit_mode2</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_broadcast_per_system</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;coord&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_batch</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_max_mol_size</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;coord&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
         <span class="k">return</span> <span class="n">data</span>
@@ -4980,13 +4988,18 @@ Will not flatten for batched input and molecule size below threshold.</p>
         <span class="k">if</span> <span class="s2">&quot;mol_idx&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
             <span class="n">data</span><span class="p">[</span><span class="s2">&quot;mol_idx&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;coord&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_max_mol_size</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;coord&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">n_systems</span> <span class="o">=</span> <span class="mi">1</span>
         <span class="k">elif</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;mol_idx&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_max_mol_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;mol_idx&quot;</span><span class="p">])</span>
+            <span class="n">n_systems</span> <span class="o">=</span> <span class="mi">1</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_max_mol_size</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;mol_idx&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">return_counts</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+            <span class="n">n_systems</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;mol_idx&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_broadcast_per_system</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">n_systems</span><span class="p">)</span>
 
     <span class="k">elif</span> <span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
         <span class="n">B</span><span class="p">,</span> <span class="n">N</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;coord&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_broadcast_per_system</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">B</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">hessian</span> <span class="ow">and</span> <span class="n">B</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Hessian calculation is not supported for batched inputs with B &gt; 1&quot;</span><span class="p">)</span>
         <span class="c1"># Force flattening for PBC (cell present) to ensure make_nbmat computes proper neighbor lists with shifts</span>
@@ -5041,22 +5054,7 @@ the smoothing is fixed.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">826</span>
-<span class="normal">827</span>
-<span class="normal">828</span>
-<span class="normal">829</span>
-<span class="normal">830</span>
-<span class="normal">831</span>
-<span class="normal">832</span>
-<span class="normal">833</span>
-<span class="normal">834</span>
-<span class="normal">835</span>
-<span class="normal">836</span>
-<span class="normal">837</span>
-<span class="normal">838</span>
-<span class="normal">839</span>
-<span class="normal">840</span>
-<span class="normal">841</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">841</span>
 <span class="normal">842</span>
 <span class="normal">843</span>
 <span class="normal">844</span>
@@ -5072,7 +5070,22 @@ the smoothing is fixed.</p>
 <span class="normal">854</span>
 <span class="normal">855</span>
 <span class="normal">856</span>
-<span class="normal">857</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_dftd3_cutoff</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">smoothing_fraction</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">857</span>
+<span class="normal">858</span>
+<span class="normal">859</span>
+<span class="normal">860</span>
+<span class="normal">861</span>
+<span class="normal">862</span>
+<span class="normal">863</span>
+<span class="normal">864</span>
+<span class="normal">865</span>
+<span class="normal">866</span>
+<span class="normal">867</span>
+<span class="normal">868</span>
+<span class="normal">869</span>
+<span class="normal">870</span>
+<span class="normal">871</span>
+<span class="normal">872</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_dftd3_cutoff</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">smoothing_fraction</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Set DFTD3 cutoff and smoothing.</span>
 
 <span class="sd">    Parameters</span>
@@ -5132,28 +5145,28 @@ Ewald/PME use their own per-call neighbor lists and ignore this cutoff.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">803</span>
-<span class="normal">804</span>
-<span class="normal">805</span>
-<span class="normal">806</span>
-<span class="normal">807</span>
-<span class="normal">808</span>
-<span class="normal">809</span>
-<span class="normal">810</span>
-<span class="normal">811</span>
-<span class="normal">812</span>
-<span class="normal">813</span>
-<span class="normal">814</span>
-<span class="normal">815</span>
-<span class="normal">816</span>
-<span class="normal">817</span>
-<span class="normal">818</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">818</span>
 <span class="normal">819</span>
 <span class="normal">820</span>
 <span class="normal">821</span>
 <span class="normal">822</span>
 <span class="normal">823</span>
-<span class="normal">824</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_lr_cutoff</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">824</span>
+<span class="normal">825</span>
+<span class="normal">826</span>
+<span class="normal">827</span>
+<span class="normal">828</span>
+<span class="normal">829</span>
+<span class="normal">830</span>
+<span class="normal">831</span>
+<span class="normal">832</span>
+<span class="normal">833</span>
+<span class="normal">834</span>
+<span class="normal">835</span>
+<span class="normal">836</span>
+<span class="normal">837</span>
+<span class="normal">838</span>
+<span class="normal">839</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_lr_cutoff</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Set the unified long-range cutoff for all LR modules.</span>
 
 <span class="sd">    Parameters</span>
@@ -5233,22 +5246,7 @@ PME forces).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>aimnet/calculators/calculator.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">705</span>
-<span class="normal">706</span>
-<span class="normal">707</span>
-<span class="normal">708</span>
-<span class="normal">709</span>
-<span class="normal">710</span>
-<span class="normal">711</span>
-<span class="normal">712</span>
-<span class="normal">713</span>
-<span class="normal">714</span>
-<span class="normal">715</span>
-<span class="normal">716</span>
-<span class="normal">717</span>
-<span class="normal">718</span>
-<span class="normal">719</span>
-<span class="normal">720</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">720</span>
 <span class="normal">721</span>
 <span class="normal">722</span>
 <span class="normal">723</span>
@@ -5329,7 +5327,22 @@ PME forces).</p>
 <span class="normal">798</span>
 <span class="normal">799</span>
 <span class="normal">800</span>
-<span class="normal">801</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_lrcoulomb_method</span><span class="p">(</span>
+<span class="normal">801</span>
+<span class="normal">802</span>
+<span class="normal">803</span>
+<span class="normal">804</span>
+<span class="normal">805</span>
+<span class="normal">806</span>
+<span class="normal">807</span>
+<span class="normal">808</span>
+<span class="normal">809</span>
+<span class="normal">810</span>
+<span class="normal">811</span>
+<span class="normal">812</span>
+<span class="normal">813</span>
+<span class="normal">814</span>
+<span class="normal">815</span>
+<span class="normal">816</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_lrcoulomb_method</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;simple&quot;</span><span class="p">,</span> <span class="s2">&quot;dsf&quot;</span><span class="p">,</span> <span class="s2">&quot;ewald&quot;</span><span class="p">,</span> <span class="s2">&quot;pme&quot;</span><span class="p">],</span>
     <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">15.0</span><span class="p">,</span>
@@ -5564,9 +5577,10 @@ PME forces).</p>
 
         <p>Return Cartesian Hessian as a (3N, 3N) ndarray in eV/Å^2.</p>
 <p>Designed for use as <code>Sella(atoms, hessian_function=atoms.calc.get_hessian)</code>.
-Computed via double-backward through the AIMNet2 energy graph; cost scales
-as O(3N) backward passes per call. Not supported when <code>compile_model=True</code>
-or for batched / multi-molecule input.</p>
+Computed via the original eager AIMNet2 module, including when the
+calculator's inference forward is compiled. Cost scales as O(3N)
+backward passes per call. Batched or multi-molecule input is not
+supported.</p>
 <p>This method intentionally bypasses the standard ASE
 <code>Calculator.calculate(properties=['hessian'])</code> flow and <code>self.results</code>
 cache. The Sella callback contract is <code>(atoms) -&gt; ndarray</code>, so a direct
@@ -5644,13 +5658,15 @@ be updated as a side effect, mirroring the <code>calculate()</code> behavior).</
 <span class="normal">223</span>
 <span class="normal">224</span>
 <span class="normal">225</span>
-<span class="normal">226</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_hessian</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">atoms</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="normal">226</span>
+<span class="normal">227</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_hessian</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">atoms</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Return Cartesian Hessian as a (3N, 3N) ndarray in eV/Å^2.</span>
 
 <span class="sd">    Designed for use as ``Sella(atoms, hessian_function=atoms.calc.get_hessian)``.</span>
-<span class="sd">    Computed via double-backward through the AIMNet2 energy graph; cost scales</span>
-<span class="sd">    as O(3N) backward passes per call. Not supported when ``compile_model=True``</span>
-<span class="sd">    or for batched / multi-molecule input.</span>
+<span class="sd">    Computed via the original eager AIMNet2 module, including when the</span>
+<span class="sd">    calculator&#39;s inference forward is compiled. Cost scales as O(3N)</span>
+<span class="sd">    backward passes per call. Batched or multi-molecule input is not</span>
+<span class="sd">    supported.</span>
 
 <span class="sd">    This method intentionally bypasses the standard ASE</span>
 <span class="sd">    ``Calculator.calculate(properties=[&#39;hessian&#39;])`` flow and ``self.results``</span>
