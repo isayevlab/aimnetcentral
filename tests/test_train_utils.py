@@ -696,6 +696,7 @@ def _ddp_train_utils_worker(rank, world_size, init_file, result_dir):
         dist.destroy_process_group()
 
 
+@pytest.mark.slow
 def test_cpu_ddp_training_runner_handles_rank_local_shapes_and_unused_energy_parameter(tmp_path):
     pytest.importorskip("ignite")
     torch = pytest.importorskip("torch")
