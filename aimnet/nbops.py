@@ -725,11 +725,15 @@ def mol_sum(x: Tensor, data: dict[str, Tensor]) -> Tensor:
             idx = idx.unsqueeze(-1).expand(-1, x.shape[1])
             shape = (out_size, x.shape[1])
         if _is_compiling():
-            # An unused row avoids a PyTorch 2.12 Inductor bug in a compiled
-            # size-one scatter reduction followed by a gather.  Slicing the
-            # row away preserves the public shape and one dynamic graph also
-            # handles larger batches.  Eager execution keeps the exact-sized
-            # allocation above.
+            # An unused row keeps compiled scatter/gather buffers larger than
+            # the reachable rows. It avoids a PyTorch 2.12 Inductor bug in a
+            # compiled size-one scatter reduction followed by a gather, and it
+            # also breaks up the PyTorch 2.10 CPU fusion that crashed
+            # CppScheduling.try_loop_split (`expected_var_ranges ==
+            # extra_indexing_ranges`, fixed upstream in 2.11 by
+            # pytorch/pytorch#172301). Slicing the row away preserves the
+            # public shape and one dynamic graph also handles larger batches.
+            # Eager execution keeps the exact-sized allocation above.
             shape = (shape[0] + 1, *shape[1:])
         res = torch.zeros(shape, device=x.device, dtype=x.dtype)
         res.scatter_add_(0, idx, x)

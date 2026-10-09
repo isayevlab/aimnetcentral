@@ -66,8 +66,9 @@ class AIMNet2Calculator:
         Device to run the model on ("cuda", "cpu", or specific like "cuda:0").
         If None (default), auto-detects CUDA availability.
     compile_model : bool
-        Compile the model forward with ``torch.compile``. CUDA defaults to
-        ``fullgraph=True``; CPU uses ``compile_kwargs`` unchanged. Default is
+        Compile the model forward with ``torch.compile``. ``fullgraph=True``
+        is always requested (on CPU and CUDA); other ``compile_kwargs`` are
+        passed through, and ``fullgraph=False`` is rejected. Default is
         False.
     compile_kwargs : dict | None
         Additional keyword arguments to pass to torch.compile(). Default is None.

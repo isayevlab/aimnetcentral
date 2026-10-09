@@ -131,6 +131,8 @@ def nse(
             # PyTorch 2.12.  Together with mol_sum's unused accumulation row,
             # this avoids singleton scatter/gather fusion corruption while
             # leaving every reachable index and returned value unchanged.
+            # The same padding also avoids the torch 2.10 CPU fusion crash
+            # noted in nbops.mol_sum.
             F_u = torch.cat((F_u, torch.zeros_like(F_u[:1])), dim=0)
             dQ = torch.cat((dQ, torch.zeros_like(dQ[:1])), dim=0)
         F_u = torch.index_select(F_u, 0, mol_idx)

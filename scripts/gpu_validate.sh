@@ -60,11 +60,15 @@ for V in $TORCH_VERSIONS; do
         VIRTUAL_ENV=$VENV uv pip install 'torch==$V.*' --index-url $CUDA_INDEX && \
         VIRTUAL_ENV=$VENV uv pip install -e '$REPO[ase,train]' pytest"
     suite_cmd="'$VENV/bin/python' -m pytest '$REPO/tests' -m gpu"
+    # torch 2.10's CPU inductor had a fusion crash on the PBC force graph;
+    # run the CPU compile tests with CUDA hidden on every version.
+    cpu_compile_cmd="CUDA_VISIBLE_DEVICES= '$VENV/bin/python' -m pytest '$REPO/tests/test_pbc.py' -k TestTorchCompilePBC"
     dump_cmd="'$VENV/bin/python' -m aimnet.validation.gpu_observables --out '$RESULTS/$V.json'"
 
     if [ "$DRY_RUN" = "1" ]; then
         echo "  install: $install_cmd"
         echo "  suite:   $suite_cmd"
+        echo "  cpu-compile: $cpu_compile_cmd"
         echo "  dump:    $dump_cmd"
         continue
     fi
@@ -79,6 +83,7 @@ for V in $TORCH_VERSIONS; do
     fi
 
     if eval "$suite_cmd"; then _set_status "$V" gpu_suite ok; else _set_status "$V" gpu_suite fail; fi
+    if eval "$cpu_compile_cmd"; then _set_status "$V" cpu_compile ok; else _set_status "$V" cpu_compile fail; fi
     eval "$dump_cmd" || echo "  observables dump FAILED for torch $V"
 done
 
