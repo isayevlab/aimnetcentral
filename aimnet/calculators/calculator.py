@@ -1627,6 +1627,25 @@ class AIMNet2Calculator:
                 ret[k] = v.unsqueeze(0)
         return ret
 
+    @staticmethod
+    def _broadcast_per_system(data: dict[str, Tensor], n_systems: int) -> None:
+        """Expand a shared scalar ``charge``/``mult`` to one entry per system.
+
+        Compiled inference sizes per-molecule reductions from ``charge``'s
+        length, so every system needs its own entry. ``expand`` keeps any
+        caller autograd link on the shared value.
+        """
+        for key in ("charge", "mult"):
+            value = data.get(key)
+            if value is None or value.shape[0] == n_systems:
+                continue
+            if value.shape[0] != 1:
+                raise ValueError(
+                    f"'{key}' has {value.shape[0]} entries for {n_systems} systems; "
+                    "pass one value per system or a single shared value."
+                )
+            data[key] = value.expand(n_systems)
+
     def mol_flatten(self, data: dict[str, Tensor], *, hessian: bool = False) -> dict[str, Tensor]:
         """Flatten the input data for multiple molecules.
         Will not flatten for batched input and molecule size below threshold.
@@ -1634,6 +1653,7 @@ class AIMNet2Calculator:
         ndim = data["coord"].ndim
         explicit_mode2 = data.get("nbmat") is not None and data["nbmat"].ndim == 3
         if explicit_mode2:
+            self._broadcast_per_system(data, data["coord"].shape[0])
             self._batch = None
             self._max_mol_size = data["coord"].shape[1]
             return data
@@ -1642,13 +1662,18 @@ class AIMNet2Calculator:
             if "mol_idx" not in data:
                 data["mol_idx"] = torch.zeros(data["coord"].shape[0], dtype=torch.long, device=self.device)
                 self._max_mol_size = data["coord"].shape[0]
+                n_systems = 1
             elif data["mol_idx"][-1] == 0:
                 self._max_mol_size = len(data["mol_idx"])
+                n_systems = 1
             else:
                 self._max_mol_size = data["mol_idx"].unique(return_counts=True)[1].max().item()
+                n_systems = int(data["mol_idx"].max().item()) + 1
+            self._broadcast_per_system(data, n_systems)
 
         elif ndim == 3:
             B, N = data["coord"].shape[:2]
+            self._broadcast_per_system(data, B)
             if hessian and B != 1:
                 raise NotImplementedError("Hessian calculation is not supported for batched inputs with B > 1")
             # Force flattening for PBC (cell present) to ensure make_nbmat computes proper neighbor lists with shifts
