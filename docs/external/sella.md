@@ -40,7 +40,7 @@ The Hessian is computed in eV/Å² and shaped `(3N, 3N)` to match Sella's conven
 ## Limitations
 
 - Gas-phase only. The `internal=True` path assumes molecular topology; periodic TS searches are not supported by `AIMNet2ASE.get_hessian`.
-- `compile_model=True` is incompatible with the Hessian path — Dynamo + double-backward through GELU hangs (`AIMNet2Calculator` raises `RuntimeError` if you combine them).
+- `compile_model=True` does not compile the Hessian path. The Hessian callback uses the original eager model while repeated ordinary force evaluations can still use the compiled inference forward.
 - Multi-molecule batching is not available for the Hessian; each `Sella` instance must hold one structure.
 
 ## Minima with Sella

@@ -1,8 +1,25 @@
+from contextlib import contextmanager
+from contextvars import ContextVar
+
 import torch
 from torch import Tensor
 
 NBMAT_SUFFIXES = ("", "_lr", "_coulomb", "_dftd3")
 _SIGNED_INTEGER_DTYPES = {torch.int8, torch.int16, torch.int32, torch.int64}
+_symbolic_trace = ContextVar("aimnet_symbolic_trace", default=False)
+
+
+@contextmanager
+def _symbolic_trace_context():
+    token = _symbolic_trace.set(True)
+    try:
+        yield
+    finally:
+        _symbolic_trace.reset(token)
+
+
+def _is_compiling() -> bool:
+    return torch.compiler.is_compiling() or _symbolic_trace.get()
 
 
 def _mode2_check(condition: Tensor, message: str) -> None:
@@ -14,7 +31,7 @@ def _mode2_check(condition: Tensor, message: str) -> None:
     when it fires (on CUDA as a device-side assertion that poisons the
     context, so restart the process after a validation failure there).
     """
-    if condition.device.type == "cuda" or torch.compiler.is_compiling():
+    if condition.device.type == "cuda" or _is_compiling():
         torch._assert_async(condition, message)
     elif not condition.item():
         raise ValueError(message)
@@ -190,15 +207,17 @@ def validate_mode2_nbmat_raw(data: dict[str, Tensor], *, suffix: str) -> None:
 
     mask_i = numbers == 0
     _mode2_check(mask_i[..., -1].all(), "numbers must reserve the final atom as the final dummy.")
+    previous_mask_i = torch.cat((torch.zeros_like(mask_i[..., :1]), mask_i), dim=-1)[..., :-1]
     _mode2_check(
-        ~(mask_i[..., :-1] & ~mask_i[..., 1:]).any(),
+        ~(previous_mask_i & ~mask_i).any(),
         "numbers padding must be a contiguous tail.",
     )
     safe_idx = nbmat.clamp(0, sentinel - 1)
     padded_neighbor = numbers.flatten().index_select(0, safe_idx.flatten()).view_as(nbmat) == 0
     excluded = is_sentinel | padded_neighbor
+    previous_excluded = torch.cat((torch.zeros_like(excluded[..., :1]), excluded), dim=-1)[..., :-1]
     _mode2_check(
-        ~(excluded[..., :-1] & ~excluded[..., 1:]).any(),
+        ~(previous_excluded & ~excluded).any(),
         f"{nbmat_key} must have a packed sentinel/padded-neighbor tail.",
     )
     _mode2_check(
@@ -291,7 +310,7 @@ def _prepare_mode2_neighbor_tensors(data: dict[str, Tensor]) -> None:
     # Identity dedup is eager-only for the same reason as in `calc_masks`
     # below: a Python-level identity test would bake a wrong guard into a
     # traced graph.
-    dedup = not torch.compiler.is_compiling()
+    dedup = not _is_compiling()
     previous: list[tuple[Tensor, Tensor, Tensor, Tensor]] = []
     mask_i = data["mask_i"]
     for suffix in NBMAT_SUFFIXES:
@@ -420,7 +439,7 @@ def get_nb_mode(data: dict[str, Tensor]) -> int:
     `set_nb_mode`, which every model forward calls in `prepare_input` before
     any consumer runs.
     """
-    if torch.compiler.is_compiling():
+    if _is_compiling():
         return infer_nb_mode(data)
     return int(data["_nb_mode"].item())
 
@@ -433,7 +452,12 @@ def calc_masks(data: dict[str, Tensor]) -> dict[str, Tensor]:
         data["mask_ij"] = torch.eye(
             data["numbers"].shape[1], device=data["numbers"].device, dtype=torch.bool
         ).unsqueeze(0)
-        if data["mask_i"].any():
+        if _is_compiling():
+            data["_input_padded"] = data["mask_i"].any()
+            data["_natom"] = data["mask_i"].logical_not().sum(-1)
+            data["mol_sizes"] = data["mask_i"].logical_not().sum(-1)
+            data["mask_ij"] = data["mask_ij"] | (data["mask_i"].unsqueeze(-2) | data["mask_i"].unsqueeze(-1))
+        elif data["mask_i"].any():
             data["_input_padded"] = torch.tensor(True)
             data["_natom"] = data["mask_i"].logical_not().sum(-1)
             data["mol_sizes"] = (~data["mask_i"]).sum(-1)
@@ -445,8 +469,9 @@ def calc_masks(data: dict[str, Tensor]) -> dict[str, Tensor]:
         data["mask_ij_lr"] = data["mask_ij"]
     elif nb_mode == 1:
         # padding must be the last atom
-        data["mask_i"] = torch.zeros(data["numbers"].shape[0], device=data["numbers"].device, dtype=torch.bool)
-        data["mask_i"][-1] = True
+        data["mask_i"] = torch.arange(data["numbers"].shape[0], device=data["numbers"].device).eq(
+            data["numbers"].shape[0] - 1
+        )
         # Track processed arrays by their data pointer to avoid redundant mask
         # calculations. `Tensor.data_ptr()` is not traceable: under
         # torch.compile the resulting dict key is unhashable, and dynamo
@@ -454,7 +479,7 @@ def calc_masks(data: dict[str, Tensor]) -> dict[str, Tensor]:
         # the graph. Recomputing these masks -- one elementwise compare each --
         # is much cheaper than losing the compiled forward, so the dedup is
         # eager-only.
-        dedup = not torch.compiler.is_compiling()
+        dedup = not _is_compiling()
         processed: dict[int, str] = {}  # data_ptr -> mask_suffix
         for suffix in ("", "_lr", "_coulomb", "_dftd3"):
             nbmat_key = f"nbmat{suffix}"
@@ -467,21 +492,37 @@ def calc_masks(data: dict[str, Tensor]) -> dict[str, Tensor]:
                     processed[ptr] = suffix
                 data[f"mask_ij{suffix}"] = data[nbmat_key] == data["numbers"].shape[0] - 1
         data["_input_padded"] = torch.tensor(True)
-        data["mol_sizes"] = torch.bincount(data["mol_idx"])
-        # last atom is padding
-        data["mol_sizes"][-1] -= 1
-        # cache number of molecules as a CPU tensor (same pattern as _nb_mode),
-        # so mol_sum does not need a device-to-host sync on every call. Not
-        # cached under torch.compile: materializing bincount's data-dependent
-        # shape as a tensor inside the traced graph trips inductor codegen,
-        # and compiled mol_sum does not read the cache.
-        if not torch.compiler.is_compiling():
-            data["_num_mol"] = torch.tensor(data["mol_sizes"].shape[0])
+        mol_idx = data["mol_idx"]
+        real_idx = mol_idx[:-1].to(torch.long)
+        if _is_compiling() and "charge" in data:
+            # ``charge`` has one entry per molecule, so its length is static
+            # shape metadata: no device sync and no unbacked symbol. The
+            # calculator broadcasts a shared scalar charge to this length
+            # before the compiled forward.
+            n_mol = data["charge"].shape[0]
+        else:
+            # Count molecules from mol_idx, ignoring the trailing dummy, so a
+            # scalar charge shared by several molecules keeps working. The
+            # host read costs the same sync bincount paid before.
+            n_mol = int(real_idx.max().item()) + 1 if real_idx.numel() > 0 else 1
+        # The dummy may carry its own bucket index (mol_idx[-1] == n_mol).
+        # Fold it into the last molecule so eager and compiled reductions
+        # agree; build a new tensor so the caller's mol_idx is untouched.
+        data["mol_idx"] = torch.cat((mol_idx[:-1], mol_idx[-1:].clamp(max=n_mol - 1)))
+        mol_sizes = torch.zeros(n_mol, device=mol_idx.device, dtype=torch.long)
+        mol_sizes.scatter_add_(0, real_idx, torch.ones_like(real_idx))
+        data["mol_sizes"] = mol_sizes
+        # Cache the molecule count as a CPU tensor for eager mol_sum. Compiled
+        # mol_sum derives it from the charge input instead of this cache.
+        if not _is_compiling():
+            data["_num_mol"] = torch.tensor(n_mol)
+        data["_natom"] = data["mol_sizes"]
     elif nb_mode == 2:
         data["mask_i"] = data["numbers"] == 0
         _prepare_mode2_neighbor_tensors(data)
         data["_input_padded"] = torch.tensor(True)
         data["mol_sizes"] = (~data["mask_i"]).sum(-1)
+        data["_natom"] = data["mol_sizes"]
     else:
         raise ValueError(f"Invalid neighbor mode: {nb_mode}")
 
@@ -518,7 +559,7 @@ def is_input_padded(data: dict[str, Tensor]) -> bool:
     `masked_fill` with an all-false mask is the identity, on values and on
     gradients alike, so the result is unchanged either way.
     """
-    if torch.compiler.is_compiling():
+    if _is_compiling():
         return True
     return bool(data["_input_padded"].item())
 
@@ -535,6 +576,8 @@ def mask_i_(x: Tensor, data: dict[str, Tensor], mask_value: float = 0.0, inplace
             else:
                 x = x.masked_fill(mask, mask_value)
     elif nb_mode == 1:
+        if _is_compiling():
+            return torch.cat([x[:-1], torch.full_like(x[:1], mask_value)], dim=0)
         if inplace:
             x[-1] = mask_value
         else:
@@ -648,30 +691,20 @@ def mol_sum(x: Tensor, data: dict[str, Tensor]) -> Tensor:
             1,
             2,
         ), "Invalid tensor shape for mol_sum, ndim should be 1 or 2"
-        idx = data["mol_idx"]
-        if torch.compiler.is_compiling() and "charge" in data and x.device.type != "cpu":
+        idx = data["mol_idx"].to(torch.long)
+        if _is_compiling() and "charge" in data:
             # `charge` carries one entry per molecule and is a genuine model
             # input, so its length is static shape metadata: reading it costs
             # no device sync and no graph break.
             #
             # Deliberately NOT `data["mol_sizes"].shape[0]`, even though it
-            # is the same number: mol_sizes comes out of `torch.bincount`, so
-            # its length is a data-dependent (unbacked) symbol and sizing an
-            # allocation from it hands inductor a shape it cannot reason about.
+            # is the same number: this preparation metadata is not a reliable
+            # allocation-size source under dynamic tracing.
             #
-            # CPU is excluded on purpose: it keeps the .item() graph break
-            # below. Through torch 2.10, inductor's CPU scheduler fuses the
-            # atomic_add scatters of the PBC distance backward with a
-            # dependent pointwise, and CppScheduling.try_loop_split then dies
-            # on the fused group with `AssertionError: expected_var_ranges ==
-            # extra_indexing_ranges` (a degenerate loop split). The fusion is
-            # outlawed upstream by pytorch/pytorch#172301, first released in
-            # torch 2.11. The break costs nothing on CPU -- .item() has no
-            # device sync there -- and restores the graph partitioning that
-            # avoids the fused group. Drop this exclusion when the supported
-            # torch floor reaches 2.11.
+            # This also keeps CPU fullgraph compilation free of the
+            # data-dependent scalar read in the eager branch below.
             out_size = data["charge"].shape[0]
-        elif torch.compiler.is_compiling():
+        elif _is_compiling():
             # data dict assembled without `charge`: dynamo handles the .item()
             # graph break, while routing it through a cached scalar tensor
             # trips inductor codegen
@@ -686,25 +719,26 @@ def mol_sum(x: Tensor, data: dict[str, Tensor]) -> Tensor:
                 data["_num_mol"] = torch.tensor(int(idx[-1].item()) + 1)
             out_size = int(data["_num_mol"].item())
 
-        if torch.compiler.is_compiling() and out_size == 1:
-            # A single molecule makes the scatter degenerate into a plain sum
-            # over atoms. Spell it that way under torch.compile: inductor
-            # (2.9.1+cu128) miscompiles `scatter_add_` into a size-1 leading
-            # dim when the result is gathered from later in the same graph --
-            # it fuses the degenerate reduction into the consumer and returns
-            # garbage, silently, with no error. Verified standalone: the same
-            # pattern is correct for out_size >= 2.
-            # Compile-only so eager stays bit-for-bit unchanged; mol_idx is all
-            # zeros whenever out_size is 1, so the two agree exactly up to
-            # summation order.
-            res = x.sum(dim=0, keepdim=True)
+        if x.ndim == 1:
+            shape = (out_size,)
         else:
-            if x.ndim == 1:
-                res = torch.zeros(out_size, device=x.device, dtype=x.dtype)
-            else:
-                idx = idx.unsqueeze(-1).expand(-1, x.shape[1])
-                res = torch.zeros(out_size, x.shape[1], device=x.device, dtype=x.dtype)
-            res.scatter_add_(0, idx, x)
+            idx = idx.unsqueeze(-1).expand(-1, x.shape[1])
+            shape = (out_size, x.shape[1])
+        if _is_compiling():
+            # An unused row keeps compiled scatter/gather buffers larger than
+            # the reachable rows. It avoids a PyTorch 2.12 Inductor bug in a
+            # compiled size-one scatter reduction followed by a gather, and it
+            # also breaks up the PyTorch 2.10 CPU fusion that crashed
+            # CppScheduling.try_loop_split (`expected_var_ranges ==
+            # extra_indexing_ranges`, fixed upstream in 2.11 by
+            # pytorch/pytorch#172301). Slicing the row away preserves the
+            # public shape and one dynamic graph also handles larger batches.
+            # Eager execution keeps the exact-sized allocation above.
+            shape = (shape[0] + 1, *shape[1:])
+        res = torch.zeros(shape, device=x.device, dtype=x.dtype)
+        res.scatter_add_(0, idx, x)
+        if _is_compiling():
+            res = res[:out_size]
     else:
         raise ValueError(f"Invalid neighbor mode: {nb_mode}")
     return res

@@ -134,7 +134,7 @@ def render(rows, base_label: str) -> str:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("results_dir", help="directory containing <label>.json and status.json")
-    ap.add_argument("--baseline", default="2.9", help="torch version prefix used as the reference")
+    ap.add_argument("--baseline", default="2.10", help="torch version prefix used as the reference")
     ap.add_argument("--energy-atol", type=float, default=1e-5, help="Hartree")
     ap.add_argument("--force-atol", type=float, default=1e-4, help="Hartree/Angstrom")
     args = ap.parse_args(argv)
