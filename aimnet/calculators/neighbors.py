@@ -276,6 +276,8 @@ def _add_padding_row(
     nbmat: Tensor,
     shifts: Tensor | None,
     N: int,
+    *,
+    sort: bool = False,
 ) -> tuple[Tensor, Tensor | None]:
     """Add padding row to neighbor matrix and shifts.
 
@@ -287,12 +289,20 @@ def _add_padding_row(
         Shift vectors for PBC or None, shape (N, max_neighbors, 3).
     N : int
         Number of atoms (used as fill value for padding row).
+    sort : bool
+        Put each row in canonical order first: ascending neighbor index, ties
+        between periodic images broken by shift, fill entries last with zero
+        shift. The CUDA neighbor-list kernels assign slots with atomics, so
+        without this the slot order, and with it the summation order
+        downstream, varies from run to run.
 
     Returns
     -------
     tuple[Tensor, Tensor | None]
         Tuple of (nbmat, shifts) with padding row added.
     """
+    if sort:
+        nbmat, shifts = _sort_neighbor_rows(nbmat, shifts, N)
     device = nbmat.device
     dtype = nbmat.dtype
     nnb_max = nbmat.shape[1]
@@ -303,6 +313,21 @@ def _add_padding_row(
         shifts_padding = torch.zeros((1, nnb_max, 3), dtype=shifts.dtype, device=device)
         shifts = torch.cat([shifts, shifts_padding], dim=0)
 
+    return nbmat, shifts
+
+
+def _sort_neighbor_rows(nbmat: Tensor, shifts: Tensor | None, N: int) -> tuple[Tensor, Tensor | None]:
+    """Sort each neighbor row by (index, shift_x, shift_y, shift_z)."""
+    if shifts is None:
+        return torch.sort(nbmat, dim=1).values, None
+    # Fill slots carry arbitrary shifts; zero them so equal rows sort equally.
+    shifts = shifts.masked_fill((nbmat == N).unsqueeze(-1), 0)
+    # Lexicographic order via stable argsorts, least significant key first.
+    order = torch.argsort(shifts[..., 2], dim=1, stable=True)
+    for key in (shifts[..., 1], shifts[..., 0], nbmat):
+        order = order.gather(1, torch.argsort(key.gather(1, order), dim=1, stable=True))
+    nbmat = nbmat.gather(1, order)
+    shifts = shifts.gather(1, order.unsqueeze(-1).expand(-1, -1, 3))
     return nbmat, shifts
 
 

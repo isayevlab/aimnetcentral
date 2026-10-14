@@ -89,9 +89,14 @@ class AIMNet2Calculator:
         kernels. Default is False. On CUDA this makes repeated identical
         evaluations bitwise reproducible only on the dense layout: 3D input
         with at most ``nb_threshold`` atoms per system, no ``cell``, no
-        Hessian, and no caller-supplied ``mol_idx`` or ``nbmat``. On CUDA the
-        packed neighbor-list layout used otherwise keeps run-to-run noise of
-        ~1e-6 eV/A in forces (issue #140). CPU always uses the packed layout;
+        Hessian, and no caller-supplied ``mol_idx`` or ``nbmat``. On the
+        packed neighbor-list layout used otherwise, the calculator sorts the
+        neighbor rows it builds into a canonical order (a caller-supplied
+        ``nbmat`` is used as given), so energies are also bitwise
+        reproducible on CUDA once ``torch.use_deterministic_algorithms(True)``
+        is enabled (a one-time warning fires without it); forces there keep
+        run-to-run noise of ~1e-6 eV/A (issue #140). CPU always uses the
+        packed layout;
         repeated CPU evaluations have been bitwise identical in testing, but
         that is not yet guaranteed. Ewald/PME Coulomb is not covered (a
         one-time warning fires). Reproducibility also requires
@@ -390,6 +395,7 @@ class AIMNet2Calculator:
         # deterministic, instead of the atomics-based nvalchemiops kernels.
         self._deterministic = bool(deterministic)
         self._warned_deterministic_lr = False
+        self._warned_deterministic_packed = False
         self.model.train(train)
         if not train:
             # Disable gradients on all parameters for inference mode
@@ -1187,6 +1193,7 @@ class AIMNet2Calculator:
                 "to a non-periodic method via set_lrcoulomb_method('simple' | 'dsf')."
             )
         if data["coord"].ndim == 2:
+            self._warn_deterministic_packed()
             # Skip neighbor list calculation if already provided
             if "nbmat" not in data:
                 cache_key = self._static_nbmat_cache_key(
@@ -1207,6 +1214,24 @@ class AIMNet2Calculator:
                         self._remember_static_nbmat(cache_key, raw_data, data)
             data = self.pad_input(data)
         return data
+
+    def _warn_deterministic_packed(self) -> None:
+        """Warn once that packed-layout determinism needs torch's deterministic mode."""
+        if (
+            not getattr(self, "_deterministic", False)
+            or getattr(self, "_warned_deterministic_packed", False)
+            or torch.device(self.device).type != "cuda"
+            or torch.are_deterministic_algorithms_enabled()
+        ):
+            return
+        warnings.warn(
+            "deterministic=True on the packed neighbor-list layout gives bitwise-reproducible "
+            "energies only with torch.use_deterministic_algorithms(True) (set "
+            "CUBLAS_WORKSPACE_CONFIG=:4096:8 before CUDA starts, or pass warn_only=True); "
+            "forces are not yet covered (issue #140).",
+            stacklevel=5,  # the caller of __call__
+        )
+        self._warned_deterministic_packed = True
 
     def _static_nbmat_cache_key(
         self,
@@ -1715,6 +1740,8 @@ class AIMNet2Calculator:
 
     def make_nbmat(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         assert self._max_mol_size > 0, "Molecule size is not set"
+        # Canonical row order makes the downstream summation order repeatable.
+        sort_rows = getattr(self, "_deterministic", False)
 
         # Prepare batch_idx from mol_idx
         mol_idx = data.get("mol_idx")
@@ -1746,7 +1773,7 @@ class AIMNet2Calculator:
             fill_value=N,
         )
 
-        nbmat1, shifts1 = _add_padding_row(nbmat1, shifts1, N)
+        nbmat1, shifts1 = _add_padding_row(nbmat1, shifts1, N, sort=sort_rows)
         data["nbmat"] = nbmat1
         if cell is not None:
             assert shifts1 is not None
@@ -1790,7 +1817,7 @@ class AIMNet2Calculator:
                 batch_idx=batch_idx,
                 fill_value=N,
             )
-            nbmat_coulomb, shifts_coulomb = _add_padding_row(nbmat_coulomb, shifts_coulomb, N)
+            nbmat_coulomb, shifts_coulomb = _add_padding_row(nbmat_coulomb, shifts_coulomb, N, sort=sort_rows)
             data["nbmat_coulomb"] = nbmat_coulomb
             data["nbmat_lr"] = nbmat_coulomb
             assert shifts_coulomb is not None
@@ -1806,7 +1833,7 @@ class AIMNet2Calculator:
                     batch_idx=batch_idx,
                     fill_value=N,
                 )
-                nbmat_dftd3, shifts_dftd3 = _add_padding_row(nbmat_dftd3, shifts_dftd3, N)
+                nbmat_dftd3, shifts_dftd3 = _add_padding_row(nbmat_dftd3, shifts_dftd3, N, sort=sort_rows)
                 data["nbmat_dftd3"] = nbmat_dftd3
                 if shifts_dftd3 is not None:
                     data["shifts_dftd3"] = shifts_dftd3
@@ -1819,7 +1846,7 @@ class AIMNet2Calculator:
                     batch_idx=batch_idx,
                     fill_value=N,
                 )
-                nbmat_dftd3, shifts_dftd3 = _add_padding_row(nbmat_dftd3, shifts_dftd3, N)
+                nbmat_dftd3, shifts_dftd3 = _add_padding_row(nbmat_dftd3, shifts_dftd3, N, sort=sort_rows)
                 data["nbmat_dftd3"] = nbmat_dftd3
                 if shifts_dftd3 is not None:
                     data["shifts_dftd3"] = shifts_dftd3
@@ -1836,7 +1863,7 @@ class AIMNet2Calculator:
                 batch_idx=batch_idx,
                 fill_value=N,
             )
-            nbmat_lr, shifts_lr = _add_padding_row(nbmat_lr, shifts_lr, N)
+            nbmat_lr, shifts_lr = _add_padding_row(nbmat_lr, shifts_lr, N, sort=sort_rows)
 
             # All LR modules share the same neighbor list when cutoffs are similar
             data["nbmat_lr"] = nbmat_lr
@@ -1857,7 +1884,7 @@ class AIMNet2Calculator:
                     batch_idx=batch_idx,
                     fill_value=N,
                 )
-                nbmat_coulomb, shifts_coulomb = _add_padding_row(nbmat_coulomb, shifts_coulomb, N)
+                nbmat_coulomb, shifts_coulomb = _add_padding_row(nbmat_coulomb, shifts_coulomb, N, sort=sort_rows)
                 data["nbmat_coulomb"] = nbmat_coulomb
                 # Set nbmat_lr for backward compatibility with code expecting unified LR neighbor list
                 data["nbmat_lr"] = nbmat_coulomb
@@ -1873,7 +1900,7 @@ class AIMNet2Calculator:
                         batch_idx=batch_idx,
                         fill_value=N,
                     )
-                    nbmat_dftd3, shifts_dftd3 = _add_padding_row(nbmat_dftd3, shifts_dftd3, N)
+                    nbmat_dftd3, shifts_dftd3 = _add_padding_row(nbmat_dftd3, shifts_dftd3, N, sort=sort_rows)
                     data["nbmat_dftd3"] = nbmat_dftd3
                     if cell is not None and shifts_dftd3 is not None:
                         data["shifts_dftd3"] = shifts_dftd3
@@ -1887,7 +1914,7 @@ class AIMNet2Calculator:
                     batch_idx=batch_idx,
                     fill_value=N,
                 )
-                nbmat_dftd3, shifts_dftd3 = _add_padding_row(nbmat_dftd3, shifts_dftd3, N)
+                nbmat_dftd3, shifts_dftd3 = _add_padding_row(nbmat_dftd3, shifts_dftd3, N, sort=sort_rows)
                 data["nbmat_dftd3"] = nbmat_dftd3
                 data["nbmat_lr"] = nbmat_dftd3
                 if cell is not None and shifts_dftd3 is not None:

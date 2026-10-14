@@ -117,3 +117,47 @@ def test_fresh_periodic_instance_is_not_truncated_by_the_initial_estimate(device
     assert int(num_neighbors.max().item()) == expected
     assert nbmat.shape[1] >= expected, "periodic neighbor matrix was silently truncated on a fresh instance"
     assert shifts is not None and shifts.shape[:2] == nbmat.shape
+
+
+def test_padding_row_sort_makes_gas_rows_order_independent() -> None:
+    """The same neighbors in any slot order give one canonical row, fills last."""
+    from aimnet.calculators.neighbors import _add_padding_row
+
+    N = 6
+    a = torch.tensor([[3, N, 1, 5], [N, 2, N, 0]], dtype=torch.int32)
+    b = torch.tensor([[5, 1, N, 3], [0, N, 2, N]], dtype=torch.int32)
+    nb_a, _ = _add_padding_row(a, None, N, sort=True)
+    nb_b, _ = _add_padding_row(b, None, N, sort=True)
+    assert torch.equal(nb_a, nb_b)
+    assert nb_a.tolist() == [[1, 3, 5, N], [0, 2, N, N], [N, N, N, N]]
+
+
+def test_padding_row_sort_orders_periodic_images_by_shift() -> None:
+    """Periodic images repeat a neighbor index; the shift breaks the tie, and
+    the arbitrary shifts left in fill slots must not affect the result."""
+    from aimnet.calculators.neighbors import _add_padding_row
+
+    N = 4
+    a = torch.tensor([[2, N, 2, 1]], dtype=torch.int32)
+    sa = torch.tensor([[[1, 0, 0], [7, 7, 7], [0, 0, -1], [0, 1, 0]]], dtype=torch.int32)
+    b = torch.tensor([[1, 2, 2, N]], dtype=torch.int32)
+    sb = torch.tensor([[[0, 1, 0], [0, 0, -1], [1, 0, 0], [-3, 2, 9]]], dtype=torch.int32)
+    nb_a, sh_a = _add_padding_row(a, sa, N, sort=True)
+    nb_b, sh_b = _add_padding_row(b, sb, N, sort=True)
+    assert sh_a is not None and sh_b is not None
+    assert torch.equal(nb_a, nb_b)
+    assert torch.equal(sh_a, sh_b)
+    assert nb_a[0].tolist() == [1, 2, 2, N]
+    assert sh_a[0].tolist() == [[0, 1, 0], [0, 0, -1], [1, 0, 0], [0, 0, 0]]
+
+
+def test_padding_row_without_sort_keeps_slot_order() -> None:
+    from aimnet.calculators.neighbors import _add_padding_row
+
+    N = 4
+    nbmat = torch.tensor([[2, N, 0, 1]], dtype=torch.int32)
+    shifts = torch.tensor([[[1, 0, 0], [7, 7, 7], [0, 0, 0], [0, 1, 0]]], dtype=torch.int32)
+    nb, sh = _add_padding_row(nbmat, shifts, N)
+    assert sh is not None
+    assert torch.equal(nb[:1], nbmat)
+    assert torch.equal(sh[:1], shifts)

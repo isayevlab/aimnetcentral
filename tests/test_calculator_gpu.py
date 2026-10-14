@@ -4,9 +4,11 @@ All tests in this module require CUDA and are marked with @pytest.mark.gpu.
 Run with: pytest -m gpu
 """
 
+import warnings
+
 import pytest
 import torch
-from conftest import CAFFEINE_FILE, TAXOL_FILE, load_mol
+from conftest import CAFFEINE_FILE, CIF_SPIRO, TAXOL_FILE, load_mol
 
 from aimnet.calculators import AIMNet2Calculator
 from aimnet.modules.lr import _mode2_backend_inputs
@@ -796,14 +798,75 @@ class TestDeterministicMode:
             assert torch.equal(out["energy"], outs[0]["energy"])
             assert torch.equal(out["forces"], outs[0]["forces"])
 
+    @pytest.fixture
+    def torch_deterministic(self):
+        """Enable torch's deterministic algorithms for one test, then restore."""
+        enabled = torch.are_deterministic_algorithms_enabled()
+        warn_only = torch.is_deterministic_algorithms_warn_only_enabled()
+        torch.use_deterministic_algorithms(True, warn_only=True)
+        yield
+        torch.use_deterministic_algorithms(enabled, warn_only=warn_only)
+
     @pytest.mark.ase
-    @pytest.mark.xfail(strict=True, reason="#140: packed-layout neighbor order and reductions are nondeterministic")
-    def test_packed_layout_energy_bitwise_reproducible(self):
+    def test_packed_layout_energy_bitwise_reproducible(self, torch_deterministic):
         outs = self._repeat_taxol(nb_threshold=0)
         assert all(torch.equal(out["energy"], outs[0]["energy"]) for out in outs[1:])
 
     @pytest.mark.ase
+    def test_packed_layout_periodic_energy_bitwise_reproducible(self, torch_deterministic):
+        """Periodic images repeat neighbor indices, so the row order needs the shift tie-break."""
+        crystal = load_mol(CIF_SPIRO)
+        calc = AIMNet2Calculator("aimnet2", deterministic=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # the DSF auto-switch for periodic input
+            energies = [calc(dict(crystal))["energy"] for _ in range(self._REPEATS)]
+        assert all(torch.equal(e, energies[0]) for e in energies[1:])
+
+    @pytest.mark.ase
     @pytest.mark.xfail(strict=True, reason="#140: the Warp conv_sv_2d_sp backward accumulates with atomics")
-    def test_packed_layout_forces_bitwise_reproducible(self):
+    def test_packed_layout_forces_bitwise_reproducible(self, torch_deterministic):
         outs = self._repeat_taxol(nb_threshold=0)
         assert all(torch.equal(out["forces"], outs[0]["forces"]) for out in outs[1:])
+
+    @staticmethod
+    def _packed_warnings(calc: AIMNet2Calculator, batched: bool = False) -> list[warnings.WarningMessage]:
+        """Packed-layout warnings from two evaluations of caffeine.
+
+        2D input always takes the packed layout; ``batched`` gives 3D input,
+        which stays dense up to ``nb_threshold`` atoms.
+        """
+        mol = load_mol(CAFFEINE_FILE)
+        data = {
+            "coord": torch.as_tensor(mol["coord"], dtype=torch.float32, device="cuda"),
+            "numbers": torch.as_tensor(mol["numbers"], device="cuda"),
+            "charge": torch.zeros(1, device="cuda"),
+        }
+        if batched:
+            data["coord"] = data["coord"].unsqueeze(0)
+            data["numbers"] = data["numbers"].unsqueeze(0)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            for _ in range(2):
+                calc(dict(data), forces=True)
+        return [w for w in caught if "packed neighbor-list layout" in str(w.message)]
+
+    @pytest.mark.ase
+    def test_packed_layout_warns_once_without_torch_deterministic(self):
+        assert not torch.are_deterministic_algorithms_enabled()
+        calc = AIMNet2Calculator("aimnet2", deterministic=True, nb_threshold=0)
+        assert len(self._packed_warnings(calc)) == 1
+
+    @pytest.mark.ase
+    def test_packed_layout_does_not_warn_with_torch_deterministic(self, torch_deterministic):
+        calc = AIMNet2Calculator("aimnet2", deterministic=True, nb_threshold=0)
+        assert self._packed_warnings(calc) == []
+
+    @pytest.mark.ase
+    def test_dense_layout_does_not_warn(self):
+        calc = AIMNet2Calculator("aimnet2", deterministic=True)
+        assert self._packed_warnings(calc, batched=True) == []
+
+    @pytest.mark.ase
+    def test_packed_layout_does_not_warn_without_deterministic(self):
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        assert self._packed_warnings(calc) == []
