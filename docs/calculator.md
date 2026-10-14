@@ -275,7 +275,9 @@ For ordinary energy/force/charge inference (including external autograd through 
 
 Route external DFT-D3 (and DSF Coulomb) through their differentiable pure-torch paths instead of the atomics-based nvalchemiops CUDA kernels. Default: `False`.
 
-The kernel defaults accumulate pairwise terms with atomic adds, so repeated identical evaluations differ at the float32 rounding level (~1e-7 eV in energies). That noise is physically negligible but is amplified chaotically by iterative optimizers: batched geometry optimizations from byte-identical inputs can follow different trajectories. With `deterministic=True`, identical inputs give bitwise-identical energies and forces on the same machine and build, at negligible cost for typical batched workloads.
+The kernel defaults accumulate pairwise terms with atomic adds, so repeated identical evaluations differ at the float32 rounding level (~1e-7 eV in energies). That noise is physically negligible but is amplified chaotically by iterative optimizers: batched geometry optimizations from byte-identical inputs can follow different trajectories. With `deterministic=True`, identical inputs give bitwise-identical energies and forces on the same machine and build **on the dense layout only**, at negligible cost for typical batched workloads.
+
+The dense layout is used on CUDA for 3D input with at most `nb_threshold` atoms per system (default 120), no `cell`, no Hessian, and no caller-supplied `mol_idx` or `nbmat`. Everything else runs on the packed neighbor-list layout, which `deterministic=True` does not yet make reproducible on CUDA: its neighbor-list row order, per-molecule reductions, and the ConvSV backward kernel still accumulate in varying order, leaving run-to-run noise of about 1e-6 eV/Å in forces ([#140](https://github.com/isayevlab/aimnetcentral/issues/140)). CPU evaluations always use the packed layout; they have been bitwise repeatable in testing, but that is not yet guaranteed.
 
 ```python
 calc = AIMNet2Calculator("aimnet2", deterministic=True)
@@ -286,6 +288,8 @@ Notes:
 - Covers external D3 and `simple`/`dsf` Coulomb. Ewald/PME kernels are not covered; a one-time `UserWarning` fires if combined.
 - The pure-torch paths materialize pairwise tensors, so for very large single systems the kernel defaults are faster; benchmark before enabling in large-system MD.
 - Reproducibility holds per machine/build; a different GPU or PyTorch build still shifts results at rounding level.
+- Reproducibility also requires the same batch composition and order. Adding an unrelated molecule to a batch, or switching between the dense and packed layouts, changes forces at the rounding level (about 1e-6 eV/Å), and an optimizer can amplify that into a different local minimum.
+- For conformer ranking, converge tightly (for example `fmax` of 1e-3 eV/Å) before ranking, and re-optimize the finalists one at a time on the dense layout (raise `nb_threshold` above the molecule size if needed; peak memory grows, roughly 3x at 128 atoms).
 - The `cache_static` DFTD3 term cache does not apply in this mode.
 
 #### `ensemble_member`
