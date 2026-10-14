@@ -89,10 +89,12 @@ class AIMNet2Calculator:
         kernels. Default is False. On CUDA this makes repeated identical
         evaluations bitwise reproducible only on the dense layout: 3D input
         with at most ``nb_threshold`` atoms per system, no ``cell``, no
-        Hessian, and no caller-supplied ``mol_idx`` or ``nbmat``. The packed
-        neighbor-list layout used otherwise (always on CPU) keeps run-to-run
-        noise of ~1e-6 eV/A in forces (issue #140), and Ewald/PME Coulomb is
-        not covered (a one-time warning fires). Reproducibility also requires
+        Hessian, and no caller-supplied ``mol_idx`` or ``nbmat``. On CUDA the
+        packed neighbor-list layout used otherwise keeps run-to-run noise of
+        ~1e-6 eV/A in forces (issue #140). CPU always uses the packed layout;
+        repeated CPU evaluations have been bitwise identical in testing, but
+        that is not yet guaranteed. Ewald/PME Coulomb is not covered (a
+        one-time warning fires). Reproducibility also requires
         the same batch composition and order, GPU, and software build;
         changing any of them, or switching layout, shifts results at the
         rounding level, which iterative optimizers can amplify. The static
