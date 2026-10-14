@@ -277,7 +277,7 @@ Route external DFT-D3 (and DSF Coulomb) through their differentiable pure-torch 
 
 The kernel defaults accumulate pairwise terms with atomic adds, so repeated identical evaluations differ at the float32 rounding level (~1e-7 eV in energies). That noise is physically negligible but is amplified chaotically by iterative optimizers: batched geometry optimizations from byte-identical inputs can follow different trajectories. With `deterministic=True`, identical inputs give bitwise-identical energies and forces on the same machine and build **on the dense layout only**, at negligible cost for typical batched workloads.
 
-The dense layout is used on CUDA for 3D input with at most `nb_threshold` atoms per system (default 120), no `cell`, no Hessian, and no caller-supplied `mol_idx` or `nbmat`. Everything else runs on the packed neighbor-list layout. There, `deterministic=True` sorts each neighbor-list row into a canonical order, which makes energies bitwise reproducible on CUDA once PyTorch's deterministic mode is also on; without it a one-time `UserWarning` fires. Forces on the packed layout are not yet covered: the ConvSV backward kernel still accumulates in varying order, leaving run-to-run noise of about 1e-6 eV/Å ([#140](https://github.com/isayevlab/aimnetcentral/issues/140)). CPU evaluations always use the packed layout; they have been bitwise repeatable in testing, but that is not yet guaranteed.
+The dense layout is used on CUDA for 3D input with at most `nb_threshold` atoms per system (default 120), no `cell`, no Hessian, and no caller-supplied `mol_idx` or `nbmat`. Everything else runs on the packed neighbor-list layout. There, `deterministic=True` sorts each row of the neighbor lists the calculator builds into a canonical order (a caller-supplied `nbmat` is used in the order given), which makes energies bitwise reproducible on CUDA once PyTorch's deterministic mode is also on; without it a one-time `UserWarning` fires. Forces on the packed layout are not yet covered: the ConvSV backward kernel still accumulates in varying order, leaving run-to-run noise of about 1e-6 eV/Å ([#140](https://github.com/isayevlab/aimnetcentral/issues/140)). CPU evaluations always use the packed layout; they have been bitwise repeatable in testing, but that is not yet guaranteed.
 
 ```python
 calc = AIMNet2Calculator("aimnet2", deterministic=True)
@@ -292,7 +292,7 @@ os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"  # before CUDA is first used
 torch.use_deterministic_algorithms(True)  # or (True, warn_only=True) without the variable
 ```
 
-PyTorch's deterministic reductions are slower; at a batch of 32 molecules they roughly double the cost of an energy-and-forces call.
+PyTorch's deterministic reductions are slower; in one measurement on an L40S they roughly doubled the cost of an energy-and-forces call for a batch of 32 molecules, so benchmark your workload.
 
 Notes:
 

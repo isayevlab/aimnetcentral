@@ -90,8 +90,9 @@ class AIMNet2Calculator:
         evaluations bitwise reproducible only on the dense layout: 3D input
         with at most ``nb_threshold`` atoms per system, no ``cell``, no
         Hessian, and no caller-supplied ``mol_idx`` or ``nbmat``. On the
-        packed neighbor-list layout used otherwise, the calculator sorts its
-        neighbor rows into a canonical order, so energies are also bitwise
+        packed neighbor-list layout used otherwise, the calculator sorts the
+        neighbor rows it builds into a canonical order (a caller-supplied
+        ``nbmat`` is used as given), so energies are also bitwise
         reproducible on CUDA once ``torch.use_deterministic_algorithms(True)``
         is enabled (a one-time warning fires without it); forces there keep
         run-to-run noise of ~1e-6 eV/A (issue #140). CPU always uses the
@@ -1228,7 +1229,7 @@ class AIMNet2Calculator:
             "energies only with torch.use_deterministic_algorithms(True) (set "
             "CUBLAS_WORKSPACE_CONFIG=:4096:8 before CUDA starts, or pass warn_only=True); "
             "forces are not yet covered (issue #140).",
-            stacklevel=3,
+            stacklevel=5,  # the caller of __call__
         )
         self._warned_deterministic_packed = True
 
