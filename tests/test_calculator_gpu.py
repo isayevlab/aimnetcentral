@@ -6,7 +6,7 @@ Run with: pytest -m gpu
 
 import pytest
 import torch
-from conftest import CAFFEINE_FILE, load_mol
+from conftest import CAFFEINE_FILE, TAXOL_FILE, load_mol
 
 from aimnet.calculators import AIMNet2Calculator
 from aimnet.modules.lr import _mode2_backend_inputs
@@ -772,3 +772,38 @@ class TestDeterministicMode:
             out = calc(dict(data), forces=True)
             assert torch.equal(out["energy"], out0["energy"])
             assert torch.equal(out["forces"], out0["forces"])
+
+    # Ten repeats: a single packed-layout repeat matched by chance about one
+    # time in twenty, so a strict xfail with fewer repeats could pass spuriously.
+    _REPEATS = 10
+
+    @staticmethod
+    def _repeat_taxol(nb_threshold: int) -> list[dict[str, torch.Tensor]]:
+        """Evaluate taxol (113 atoms) repeatedly on the dense or packed layout."""
+        mol = load_mol(TAXOL_FILE)
+        data = {
+            "coord": torch.as_tensor(mol["coord"], dtype=torch.float32, device="cuda").unsqueeze(0),
+            "numbers": torch.as_tensor(mol["numbers"], device="cuda").unsqueeze(0),
+            "charge": torch.zeros(1, device="cuda"),
+        }
+        calc = AIMNet2Calculator("aimnet2", deterministic=True, nb_threshold=nb_threshold)
+        return [calc(dict(data), forces=True) for _ in range(TestDeterministicMode._REPEATS)]
+
+    @pytest.mark.ase
+    def test_dense_layout_bitwise_reproducible_for_drug_sized_molecule(self):
+        outs = self._repeat_taxol(nb_threshold=200)
+        for out in outs[1:]:
+            assert torch.equal(out["energy"], outs[0]["energy"])
+            assert torch.equal(out["forces"], outs[0]["forces"])
+
+    @pytest.mark.ase
+    @pytest.mark.xfail(strict=True, reason="#140: packed-layout neighbor order and reductions are nondeterministic")
+    def test_packed_layout_energy_bitwise_reproducible(self):
+        outs = self._repeat_taxol(nb_threshold=0)
+        assert all(torch.equal(out["energy"], outs[0]["energy"]) for out in outs[1:])
+
+    @pytest.mark.ase
+    @pytest.mark.xfail(strict=True, reason="#140: the Warp conv_sv_2d_sp backward accumulates with atomics")
+    def test_packed_layout_forces_bitwise_reproducible(self):
+        outs = self._repeat_taxol(nb_threshold=0)
+        assert all(torch.equal(out["forces"], outs[0]["forces"]) for out in outs[1:])
