@@ -86,12 +86,17 @@ class AIMNet2Calculator:
     deterministic : bool
         Route external DFT-D3 (and DSF Coulomb) through their differentiable
         pure-torch paths instead of the atomics-based nvalchemiops CUDA
-        kernels, making repeated identical evaluations bitwise reproducible
-        (same machine, same build). Default is False. The kernel defaults are
-        faster on large systems but accumulate in nondeterministic order,
-        giving run-to-run noise of ~1e-7 eV that iterative optimizers can
-        amplify. Ewald/PME Coulomb is not covered (a one-time warning fires);
-        the static DFTD3 cache does not apply in this mode.
+        kernels. Default is False. On CUDA this makes repeated identical
+        evaluations bitwise reproducible only on the dense layout: 3D input
+        with at most ``nb_threshold`` atoms per system, no ``cell``, no
+        Hessian, and no caller-supplied ``mol_idx`` or ``nbmat``. The packed
+        neighbor-list layout used otherwise (always on CPU) keeps run-to-run
+        noise of ~1e-6 eV/A in forces (issue #140), and Ewald/PME Coulomb is
+        not covered (a one-time warning fires). Reproducibility also requires
+        the same batch composition and order, GPU, and software build;
+        changing any of them, or switching layout, shifts results at the
+        rounding level, which iterative optimizers can amplify. The static
+        DFTD3 cache does not apply in this mode.
     ensemble_member : int
         Zero-based member selected from a Hugging Face ensemble.
     revision : str | None

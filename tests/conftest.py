@@ -152,6 +152,7 @@ def temp_pt_file():
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 CAFFEINE_FILE = os.path.join(DATA_DIR, "caffeine.xyz")
+TAXOL_FILE = os.path.join(os.path.dirname(__file__), "..", "examples", "taxol.xyz")  # 113 atoms
 CIF_PHENYLGLYCINIUM = os.path.join(DATA_DIR, "1100172.cif")  # Phenylglycinium nitrate (~50 atoms)
 CIF_SPIRO = os.path.join(DATA_DIR, "2000054.cif")  # Spiro compound (~28 atoms)
 
