@@ -22,6 +22,7 @@ from aimnet.modules import DFTD3, LRCoulomb
 from aimnet.modules.lr import ExternalDerivativeTerms, _require_pme_capable_nvalchemiops
 
 from . import derivatives
+from .cuda_graph import CUDAGraphCache
 from .neighbors import (  # noqa: F401  (re-exported for backwards compatibility)
     AdaptiveNeighborList,
     StaticInputCache,
@@ -123,6 +124,17 @@ class AIMNet2Calculator:
         names and aliases, registry HF fallback, raw modules, and ``.jpt``
         files accept only the default settings. No mode relaxes artifact or
         metadata validation.
+    cuda_graph : bool | None
+        Replay repeated CUDA evaluations as CUDA graphs
+        (:mod:`aimnet.calculators.cuda_graph`): when a call with
+        ``coord``/``numbers``/``charge`` (and optionally ``mult``) input
+        repeats a layout (same species, charges and shape), a static-layout
+        engine is captured once and then replayed, with the same outputs as
+        the regular path. Other inputs (``cell``, ``mol_idx``, ``nbmat``,
+        padded batches, ``coord`` requiring grad), Hessian and stress
+        requests, and unsupported models use the regular path. ``None``
+        (default) enables it unless the environment variable
+        ``AIMNET_CUDA_GRAPH`` is ``0``; ignored on CPU.
 
     Attributes
     ----------
@@ -191,6 +203,7 @@ class AIMNet2Calculator:
         *,
         model_import_paths: Collection[str] | None = None,
         model_import_mode: Literal["extend", "replace", "unsafe"] = "extend",
+        cuda_graph: bool | None = None,
     ):
         # Device selection: use provided or auto-detect
         if device is None:
@@ -409,6 +422,9 @@ class AIMNet2Calculator:
                     param.requires_grad_(False)
 
         self._maybe_warn_family_mix((metadata or {}).get("family") if metadata else None)
+
+        # CUDA-graph replay of repeated evaluations; None when disabled or not applicable.
+        self._cuda_graph = CUDAGraphCache.create(self, cuda_graph)
 
     @classmethod
     def from_legacy_jit(
@@ -1010,6 +1026,11 @@ class AIMNet2Calculator:
         multi-molecule ``mol_idx`` input yields a per-molecule ``list[Tensor]``
         for each key (molecules are independent and generally ragged).
         """
+        graphs = getattr(self, "_cuda_graph", None)
+        if graphs is not None and not stress and not hessian:
+            out = graphs.eval(data, forces=forces, validate_species=validate_species)
+            if out is not None:
+                return out
         # Species validation — opt-out via validate_species=False.
         if validate_species:
             self._validate_species_and_charge(data)
