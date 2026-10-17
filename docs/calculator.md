@@ -139,6 +139,7 @@ AIMNet2Calculator(
     *,
     model_import_paths: Collection[str] | None = None,
     model_import_mode: Literal["extend", "replace", "unsafe"] = "extend",
+    cuda_graph: bool | None = None,
 )
 ```
 
@@ -233,13 +234,22 @@ Whether to compile the model with `torch.compile()` for faster inference.
 
 Compilation adds overhead on first call but speeds up subsequent calls. Useful for MD trajectories, geometry optimizations, or repeated evaluations. Compilation always uses `fullgraph=True`; passing `fullgraph=False` in `compile_kwargs` is rejected. Legacy TorchScript `.jpt` models do not support this option. Hessian and Hessian-vector-product requests use the original eager model while ordinary compiled evaluations continue to share that model's parameters and state.
 
+`compile_model=False` disables `torch.compile`, not CUDA-graph replay. This fork's independent `cuda_graph=None` default enables eligible repeated CUDA calls. Replay takes precedence over the compiled forward when both are enabled. Set `cuda_graph=False` for an unambiguous regular or compile-only comparison.
+
+#### `cuda_graph`
+
+Enable CUDA-graph replay for supported repeated inference layouts. `None` (default) uses `AIMNET_CUDA_GRAPH`, which defaults on; explicit `True`/`False` overrides it. CPU and unsupported models/calls use the regular path. No training, stress, Hessian, or input-gradient calculation is accelerated by this option. See [CUDA-Graph Inference](cuda_graph.md) for supported models, capture and memory costs, fallback, and mutation constraints.
+
 #### `compile_kwargs`
 
 Additional keyword arguments to pass to `torch.compile()`. Default is `None`.
 
 ```python
 # Example: use reduce-overhead mode for lower latency
-calc = AIMNet2Calculator("aimnet2", compile_model=True, compile_kwargs={"mode": "reduce-overhead"})
+calc = AIMNet2Calculator(
+    "aimnet2", compile_model=True, cuda_graph=False,
+    compile_kwargs={"mode": "reduce-overhead"},
+)
 ```
 
 See [torch.compile documentation](https://pytorch.org/docs/stable/generated/torch.compile.html) for available options.

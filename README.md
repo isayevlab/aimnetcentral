@@ -79,6 +79,8 @@ print(result["forces"])   # eV/Angstrom
 print(result["charges"])  # e
 ```
 
+`compile_model=False` remains the default. This fork separately enables eligible repeated CUDA evaluations through `cuda_graph=None`; use `cuda_graph=False` for the upstream-style regular path, or with `compile_model=True` for a compile-only comparison. See [CUDA-Graph Inference](docs/cuda_graph.md) for supported models, fallback behavior, capture costs, and cache memory.
+
 ### ASE
 
 ```python

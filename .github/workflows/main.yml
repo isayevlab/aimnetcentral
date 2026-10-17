@@ -8,6 +8,36 @@ on:
         types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
+    tests-wheel:
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+            - uses: actions/setup-python@v6.2.0
+              with:
+                  python-version: "3.11"
+            - uses: astral-sh/setup-uv@v8.1.0
+            - name: Build distributable wheel from sdist
+              run: uv build
+            - name: Install wheel with the minimum supported Torch on CPU
+              run: |
+                  uv venv --python 3.11 .wheel-smoke
+                  uv pip install --python .wheel-smoke/bin/python "torch==2.10.*" \
+                      --index-url https://download.pytorch.org/whl/cpu
+                  uv pip install --python .wheel-smoke/bin/python dist/*.whl
+                  uv pip check --python .wheel-smoke/bin/python
+            - name: Exercise installed package outside the source tree
+              env:
+                  CUDA_VISIBLE_DEVICES: ""
+                  OMP_NUM_THREADS: "1"
+                  MKL_NUM_THREADS: "1"
+              run: |
+                  cd "$RUNNER_TEMP"
+                  "$GITHUB_WORKSPACE/.wheel-smoke/bin/python" -I \
+                      "$GITHUB_WORKSPACE/scripts/wheel_smoke.py"
+
     quality:
         runs-on: ubuntu-latest
         timeout-minutes: 20
@@ -323,6 +353,7 @@ jobs:
         needs:
             [
                 quality,
+                tests-wheel,
                 tests-core,
                 tests-torch,
                 tests-ase,
