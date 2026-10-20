@@ -1,4 +1,7 @@
-"""Radial-vector AEV basis of the dense CUDA-graph engine in one kernel each way (Triton).
+"""Shared dense radial-vector AEV basis in one kernel each way (Triton).
+
+Used by ``aimnet.modules.aev`` through its explicit inference-kernel dispatch,
+independently of whether the calculator uses eager execution or CUDA graphs.
 
 Reference math (``AEVSV`` with ``ops.calc_distances`` and ``ops.exp_expand``; dense mode, unpadded), per pair
 ``(b, i, m)`` and shift ``s``::
@@ -9,7 +12,7 @@ Reference math (``AEVSV`` with ``ops.calc_distances`` and ``ops.exp_expand``; de
     g[b, s, m, i, :] = (gs_s, gs_s * u)
 
 The output is ``g_sv[b, i, m, s, :]`` stored in the ``[B, S, M, I, 4]`` layout that ``ConvSV``'s einsum uses for its
-``bmm`` (see ``aimnet.calculators.cuda_graph.dense``). The forward writes ``g`` once with the same float32 operations
+``bmm`` (see ``aimnet.modules.aev_inference``). The forward writes ``g`` once with the same float32 operations
 in the same order as the PyTorch expression (libdevice ``exp``/``cos``, IEEE division), so its values are bitwise
 equal. The backward is analytic and first order: from ``G = dL/dg``::
 
@@ -43,6 +46,7 @@ def _aev_sv_dense_fwd_kernel(
     r_ptr,  # (B, N, N, 3) float32
     sh_ptr,  # (S,) float32
     g_ptr,  # (B, S, N, N, 4) float32, output
+    pad_ptr,  # (B, N) int8 padding flags (read only when HAS_PAD)
     N,
     eta,
     rc,
@@ -50,6 +54,7 @@ def _aev_sv_dense_fwd_kernel(
     S: tl.constexpr,
     BLOCK_M: tl.constexpr,
     BLOCK_I: tl.constexpr,
+    HAS_PAD: tl.constexpr,
 ):
     b = tl.program_id(0)
     m = tl.program_id(1) * BLOCK_M + tl.arange(0, BLOCK_M)
@@ -62,7 +67,12 @@ def _aev_sv_dense_fwd_kernel(
     rz = tl.load(r_ptr + pair * 3 + 2, mask=msk, other=0.0)
     dc = tl.minimum(tl.maximum(d, 1e-6), rc)
     fc = 0.5 * (libdevice.cos(dc * scale) + 1.0)
-    fc = tl.where(m[:, None] == i[None, :], 0.0, fc)
+    masked = m[:, None] == i[None, :]
+    if HAS_PAD:  # mask_ij of padded dense input: a pair with a padding atom on either side
+        pm = tl.load(pad_ptr + b * N + m, mask=m < N, other=1)
+        pi = tl.load(pad_ptr + b * N + i, mask=i < N, other=1)
+        masked = masked | (pm[:, None] != 0) | (pi[None, :] != 0)
+    fc = tl.where(masked, 0.0, fc)
     ux = libdevice.div_rn(rx, d)
     uy = libdevice.div_rn(ry, d)
     uz = libdevice.div_rn(rz, d)
@@ -84,6 +94,7 @@ def _aev_sv_dense_bwd_kernel(
     gg_ptr,  # (B, S, N, N, 4) float32, dL/dg
     gd_ptr,  # (B, N, N) float32, output dL/dd
     gr_ptr,  # (B, N, N, 3) float32, output dL/dr
+    pad_ptr,  # (B, N) int8 padding flags (read only when HAS_PAD)
     N,
     eta,
     rc,
@@ -91,6 +102,7 @@ def _aev_sv_dense_bwd_kernel(
     S: tl.constexpr,
     BLOCK_M: tl.constexpr,
     BLOCK_I: tl.constexpr,
+    HAS_PAD: tl.constexpr,
 ):
     b = tl.program_id(0)
     m = tl.program_id(1) * BLOCK_M + tl.arange(0, BLOCK_M)
@@ -102,6 +114,10 @@ def _aev_sv_dense_bwd_kernel(
     ry = tl.load(r_ptr + pair * 3 + 1, mask=msk, other=0.0)
     rz = tl.load(r_ptr + pair * 3 + 2, mask=msk, other=0.0)
     diag = m[:, None] == i[None, :]
+    if HAS_PAD:
+        pm = tl.load(pad_ptr + b * N + m, mask=m < N, other=1)
+        pi = tl.load(pad_ptr + b * N + i, mask=i < N, other=1)
+        diag = diag | (pm[:, None] != 0) | (pi[None, :] != 0)  # every masked pair, as masked_fill's backward
     dc = tl.minimum(tl.maximum(d, 1e-6), rc)
     x = dc * scale
     fc = tl.where(diag, 0.0, 0.5 * (libdevice.cos(x) + 1.0))
@@ -149,7 +165,7 @@ class AEVSVDense(torch.autograd.Function):
     """``g`` [B, S, N, N, 4] from ``d`` [B, N, N] and ``r`` [B, N, N, 3] (float32); see the module docstring."""
 
     @staticmethod
-    def forward(ctx, d: Tensor, r: Tensor, shifts: Tensor, eta: float, rc: float, scale: float) -> Tensor:
+    def forward(ctx, d: Tensor, r: Tensor, shifts: Tensor, eta: float, rc: float, scale: float, pad=None) -> Tensor:
         if d.dtype != torch.float32 or r.dtype != torch.float32:
             raise TypeError("aev_sv_dense requires float32 distances.")
         B, N = d.shape[0], d.shape[1]
@@ -157,19 +173,22 @@ class AEVSVDense(torch.autograd.Function):
             raise ValueError(f"aev_sv_dense supports at most {MAX_ATOMS} atoms per molecule, got {N}.")
         S = shifts.numel()
         d, r, shifts = d.detach().contiguous(), r.detach().contiguous(), shifts.detach().contiguous()
+        has_pad = pad is not None
+        pad = pad.detach().to(torch.int8).contiguous() if has_pad else d  # placeholder pointer when unused
         g = torch.empty((B, S, N, N, 4), dtype=torch.float32, device=d.device)
         block_m, block_i = _tiles(N)
         _aev_sv_dense_fwd_kernel[(B, triton.cdiv(N, block_m))](
-            d, r, shifts, g, N, eta, rc, scale, S=S, BLOCK_M=block_m, BLOCK_I=block_i
+            d, r, shifts, g, pad, N, eta, rc, scale, S=S, BLOCK_M=block_m, BLOCK_I=block_i, HAS_PAD=has_pad
         )
-        ctx.save_for_backward(d, r, shifts)
+        ctx.save_for_backward(d, r, shifts, pad)
+        ctx.has_pad = has_pad
         ctx.consts = (eta, rc, scale)
         return g
 
     @staticmethod
     @once_differentiable
     def backward(ctx, grad_g: Tensor):
-        d, r, shifts = ctx.saved_tensors
+        d, r, shifts, pad = ctx.saved_tensors
         eta, rc, scale = ctx.consts
         B, N = d.shape[0], d.shape[1]
         S = shifts.numel()
@@ -177,11 +196,28 @@ class AEVSVDense(torch.autograd.Function):
         gr = torch.empty_like(r)
         block_m, block_i = _tiles(N)
         _aev_sv_dense_bwd_kernel[(B, triton.cdiv(N, block_m))](
-            d, r, shifts, grad_g.contiguous(), gd, gr, N, eta, rc, scale, S=S, BLOCK_M=block_m, BLOCK_I=block_i
+            d,
+            r,
+            shifts,
+            grad_g.contiguous(),
+            gd,
+            gr,
+            pad,
+            N,
+            eta,
+            rc,
+            scale,
+            S=S,
+            BLOCK_M=block_m,
+            BLOCK_I=block_i,
+            HAS_PAD=ctx.has_pad,
         )
-        return gd, gr, None, None, None, None
+        return gd, gr, None, None, None, None, None
 
 
-def aev_sv_dense(d: Tensor, r: Tensor, shifts: Tensor, eta: float, rc: float, scale: float) -> Tensor:
-    """AEV basis ``g[b, s, m, i, :] = g_sv[b, i, m, s, :]``; ``eta``, ``rc`` and ``scale = pi / rc`` as float32 values."""
-    return AEVSVDense.apply(d, r, shifts, eta, rc, scale)
+def aev_sv_dense(d: Tensor, r: Tensor, shifts: Tensor, eta: float, rc: float, scale: float, pad=None) -> Tensor:
+    """AEV basis ``g[b, s, m, i, :] = g_sv[b, i, m, s, :]``; ``eta``, ``rc`` and ``scale = pi / rc`` as float32 values.
+
+    ``pad`` (optional, ``[B, N]`` bool): padding atoms of padded dense input; pairs with a padding atom are masked like
+    the diagonal (``fc = 0``, zero gradient), as ``mask_ij`` does on the regular path."""
+    return AEVSVDense.apply(d, r, shifts, eta, rc, scale, pad)

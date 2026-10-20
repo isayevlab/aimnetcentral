@@ -7,6 +7,7 @@ from torch import Tensor, nn
 from aimnet import nbops, ops
 from aimnet.models.base import AIMNet2Base
 from aimnet.modules import AEVSV, MLP, ConvSV, Embedding
+from aimnet.modules.aev import _can_group_dense_convolutions
 
 
 class AIMNet2(AIMNet2Base):
@@ -119,6 +120,36 @@ class AIMNet2(AIMNet2Base):
         _in = torch.cat([q_i.squeeze(-2), avf_q], dim=-1)
         return _in
 
+    def _prepare_in_aq(self, data: dict[str, Tensor]) -> Tensor:
+        # A and Q within a pass are independent consumers of the same basis.
+        # Group only their contraction, keeping the canonical charge iterations
+        # and the individual ConvSV output projections. Hooks and overrides must
+        # still observe the original module calls, so they use the fallback.
+        if (
+            not self.training
+            and getattr(self._prepare_in_a, "__func__", None) is _CANONICAL_PREPARE_IN_A
+            and getattr(self._prepare_in_q, "__func__", None) is _CANONICAL_PREPARE_IN_Q
+            and _can_group_dense_convolutions(data, self.conv_a, self.conv_q)
+        ):
+            from aimnet.modules.aev_inference import dense_convolutions, dense_convolutions_carry, geometry_carry_basis
+
+            features = (data["a"], data["charges"])
+            flags = (self.conv_a.d2features, self.conv_q.d2features)
+            if "_geometry_carry" in data:
+                (avf_a, avf_q), data["_geometry_carry"] = dense_convolutions_carry(
+                    features, geometry_carry_basis(data), flags
+                )
+            else:
+                avf_a, avf_q = dense_convolutions(features, data["g_sv"].permute(0, 3, 2, 1, 4), flags)
+            avf_a = self.conv_a._finish_convolution(data, avf_a, 0)
+            avf_q = self.conv_q._finish_convolution(data, avf_q, 0)
+            a_i = nbops.get_i(data["a"], data)
+            if self.d2features:
+                a_i = a_i.flatten(-2, -1)
+            q_i = nbops.get_i(data["charges"], data)
+            return torch.cat([a_i.squeeze(-2), avf_a, q_i.squeeze(-2), avf_q], dim=-1)
+        return torch.cat([self._prepare_in_a(data), self._prepare_in_q(data)], dim=-1)
+
     def _update_q(self, data: dict[str, Tensor], x: Tensor, delta_q: bool = True) -> dict[str, Tensor]:
         _q, _f, delta_a = x.split(
             [
@@ -139,7 +170,15 @@ class AIMNet2(AIMNet2Base):
         return data
 
     def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
-        data = self.prepare_input(data)
+        return self.forward_prepared(self.prepare_input(data))
+
+    def forward_prepared(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+        """Canonical model computation on validated, masked inputs.
+
+        Regular execution prepares inputs in ``forward``. Static-layout runners
+        prepare their reusable input buffers separately and call this same body;
+        they do not own a second implementation of the model equations.
+        """
 
         # initial features
         a: Tensor = self.afv(data["numbers"])
@@ -154,25 +193,35 @@ class AIMNet2(AIMNet2Base):
             # Ensure charge tensor has channel dimension for consistency with features
             data["charge"] = data["charge"].unsqueeze(-1)
 
+        data.pop("_geometry_carry", None)
+        data.pop("_geometry_carry_root", None)
         data = self.aev(data)
 
+        if _can_carry_dense_geometry(self, data):
+            data["_geometry_carry_root"] = data["g_sv"]
+            data["_geometry_carry"] = data["g_sv"].permute(0, 3, 2, 1, 4)
+
         _npass = len(self.mlps)
-        for ipass, mlp in enumerate(self.mlps):
-            if ipass == 0:
-                _in = self._prepare_in_a(data)
-            else:
-                _in = torch.cat([self._prepare_in_a(data), self._prepare_in_q(data)], dim=-1)
+        try:
+            for ipass, mlp in enumerate(self.mlps):
+                if ipass == 0:
+                    _in = self._prepare_in_a(data)
+                else:
+                    _in = self._prepare_in_aq(data)
 
-            _out = mlp(_in)
-            if nbops.is_input_padded(data):
-                _out = nbops.mask_i_(_out, data, mask_value=0.0)
+                _out = mlp(_in)
+                if nbops.is_input_padded(data):
+                    _out = nbops.mask_i_(_out, data, mask_value=0.0)
 
-            if ipass == 0:
-                data = self._update_q(data, _out, delta_q=False)
-            elif ipass < _npass - 1:
-                data = self._update_q(data, _out, delta_q=True)
-            else:
-                data["aim"] = _out
+                if ipass == 0:
+                    data = self._update_q(data, _out, delta_q=False)
+                elif ipass < _npass - 1:
+                    data = self._update_q(data, _out, delta_q=True)
+                else:
+                    data["aim"] = _out
+        finally:
+            data.pop("_geometry_carry", None)
+            data.pop("_geometry_carry_root", None)
 
         # squeeze charges
         if self.num_charge_channels == 2:
@@ -185,3 +234,38 @@ class AIMNet2(AIMNet2Base):
             data = m(data)
 
         return data
+
+
+_CANONICAL_PREPARE_IN_A = AIMNet2._prepare_in_a
+_CANONICAL_PREPARE_IN_Q = AIMNet2._prepare_in_q
+_CANONICAL_PREPARE_IN_AQ = AIMNet2._prepare_in_aq
+_CANONICAL_UPDATE_Q = AIMNet2._update_q
+
+
+def _can_carry_dense_geometry(model: AIMNet2, data: dict[str, Tensor]) -> bool:
+    """Scope geometry continuation to an unobserved canonical dense loop.
+
+    Public geometry remains the original tensor, and custom methods/hooks keep
+    the existing independent-autograd path. Single structures do not benefit
+    from this bandwidth optimization and retain the simpler grouped path.
+    """
+    if (
+        type(model) is not AIMNet2
+        or model.training
+        or not _can_group_dense_convolutions(data, model.conv_a, model.conv_q)
+    ):
+        return False
+    if data["g_sv"].shape[0] < 2:
+        return False
+    if torch.is_autocast_enabled(data["g_sv"].device.type):
+        return False
+    methods = (
+        ("_prepare_in_a", _CANONICAL_PREPARE_IN_A),
+        ("_prepare_in_q", _CANONICAL_PREPARE_IN_Q),
+        ("_prepare_in_aq", _CANONICAL_PREPARE_IN_AQ),
+        ("_update_q", _CANONICAL_UPDATE_Q),
+    )
+    if any(getattr(getattr(model, name), "__func__", None) is not method for name, method in methods):
+        return False
+    hook_names = ("_forward_pre_hooks", "_forward_hooks", "_backward_pre_hooks", "_backward_hooks")
+    return not any(getattr(module, name, {}) for module in model.modules() for name in hook_names)

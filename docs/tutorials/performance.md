@@ -60,7 +60,7 @@ result = calc({
 
 !!! note "CUDA-graph replay is a separate option in this fork"
 
-    `compile_model=False` is still the default. Independently, `cuda_graph=None` enables eligible replay unless `AIMNET_CUDA_GRAPH` disables it. When both are enabled, graph replay takes precedence on supported repeated layouts. To compare the regular path with `torch.compile` alone, pass `cuda_graph=False` to **both** calculators in the examples below. See [CUDA-Graph Inference](../cuda_graph.md) for an explicit comparison table, supported calls, and capture/cache costs.
+    Both `compile_model=False` and `cuda_graph=False` are defaults. Graph replay requires explicit opt-in with `cuda_graph=True`. To compare the regular path with `torch.compile` alone, pass `cuda_graph=False` to **both** calculators in the examples below. See [CUDA-Graph Inference](../cuda_graph.md) for an explicit comparison table, supported calls, and capture/cache costs.
 
 The `compile_model=True` parameter applies `torch.compile()` to the neural network forward pass:
 

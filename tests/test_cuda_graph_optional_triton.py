@@ -18,7 +18,7 @@ if not torch.cuda.is_available():
 @pytest.mark.parametrize("forces", [False, True], ids=["energy", "energy_forces"])
 def test_missing_triton_keeps_dense_graph_replay(monkeypatch, model, forces):
     """Exercise the real ImportError branch, not merely ``fused_aev=False``."""
-    graph = AIMNet2Calculator(model, device="cuda", compile_model=False, cuda_graph=True)
+    graph = AIMNet2Calculator(model, device="cuda", compile_model=False, cuda_graph=True, inference_kernels=True)
     regular = AIMNet2Calculator(model, device="cuda", compile_model=False, cuda_graph=False)
     molecule = load_mol(CAFFEINE_FILE)
     coord = torch.as_tensor(molecule["coord"], dtype=torch.float32, device="cuda")
@@ -47,7 +47,10 @@ def test_missing_triton_keeps_dense_graph_replay(monkeypatch, model, forces):
                 graph(data, forces=forces)
             assert blocked_imports, "the optional import failure must actually be exercised"
             (entry,) = graph._cuda_graph._engines.values()
-            assert entry.runner.engine._aev_kernel is None
+            # Kernel dispatch now belongs to the shared AEV module, not to a
+            # graph-specific copy of the neural-network computation.
+            assert entry.runner.engine.model.aev is graph.model.aev
+            assert not hasattr(entry.runner.engine, "_aev_kernel")
             original_launch = entry.runner.launch
             replays = []
 
@@ -70,7 +73,7 @@ def test_missing_triton_keeps_dense_graph_replay(monkeypatch, model, forces):
                     torch.testing.assert_close(actual[key], expected[key], atol=atol, rtol=rtol)
                 assert len(graph._cuda_graph._engines) == 1
                 assert next(iter(graph._cuda_graph._engines.values())) is entry
-                assert entry.runner.engine._aev_kernel is None
+                assert not hasattr(entry.runner.engine, "_aev_kernel")
             assert len(replays) == 3, "parity must come from replay, not silently using regular evaluation"
     finally:
         graph._cuda_graph.clear()

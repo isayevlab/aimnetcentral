@@ -11,24 +11,47 @@ Handled calls (all of):
 * stock GELU modules/forward methods, without hooks or trainable parameters; module state changes invalidate graphs;
 * input keys ``coord``, ``numbers``, ``charge`` and optionally ``mult`` (ignored by closed-shell models, as on the
   regular path); no ``cell``, ``mol_idx``, ``nbmat``, ...; no input tensor with ``requires_grad``; a single molecule
-  ``[N, 3]`` or an equal-size batch ``[B, N, 3]`` without padding atoms;
+  ``[N, 3]`` without padding atoms, or a batch ``[B, N, 3]``; in dense mode (``N <= nb_threshold``) the batch may
+  mix molecule sizes with ``Z = 0`` padding atoms;
 * ``stress=False`` and ``hessian=False``.
 
 Policy:
 
-* a layout (species, charges, ``B``, ``N``, ``forces``, calculator settings) is left to the regular path the first time
-  it is seen; from the second call on, a static-layout engine is built (~0.05-0.2 s) and replayed as one CUDA graph.
-  A layout evaluated once costs what it costs on the regular path; repeated layouts (MD, optimization, scans) are
-  replayed;
+* single molecules and neighbor-list batches: a layout (species, charges, ``B``, ``N``, ``forces``, calculator
+  settings) is left to the regular path the first time it is seen; from the second call on, a static-layout engine is
+  built (~0.05-0.2 s) and replayed as one CUDA graph. A layout evaluated once costs what it costs on the regular path;
+  repeated layouts (MD, optimization, scans) are replayed;
+* dense batches (``B > 1``, padded or not): species and charges are inputs of the graph, so a graph is keyed by its
+  shape (rows, ``N``, ``forces``, settings) and serves every composition; mixed-size batches and batches whose
+  molecules change between calls replay without new captures. A batch of ``B`` uses a graph recorded for exactly
+  ``B`` rows, else the smallest recorded one with at most ``max(1, B // 3)`` extra rows (copies of molecule 0,
+  computed and discarded), else it records ``B`` rows once ``B`` has been seen twice. A batch that shrinks as
+  molecules converge records a few graphs (64 -> 1: ten) instead of one per batch size;
 * ``N <= nb_threshold`` uses the dense engine (``dense.py``), larger systems the neighbor-list engine (``sparse.py``);
-* each new or capacity-rebuilt engine is checked against the regular path on the same input; an engine that
-  disagrees beyond float32 noise is not used;
+* each new or capacity-rebuilt engine is checked against the regular path on the input that triggered the capture
+  (a dense batch graph is then reused for other compositions); an engine that disagrees beyond float32 noise is not
+  used;
 * before a replay, captured allocation addresses and sizes are checked on the CPU. The full model contract
-  (``contracts.py``) is checked on every call while the GPU runs; a changed model's result is discarded unread
+  (``contracts.py``) is checked on every call while the GPU replays; a changed model's result is discarded unread
   (the regular path answers). Detached views keep replaced parameter/buffer storage alive, while the address/size
   guard prevents replay after ``resize_`` reallocates a still-live storage;
-* engines live in an LRU cache bounded by ``cache_size`` entries and ``cache_memory_fraction`` of GPU memory;
-* a failure while building, checking or running an engine sends that layout back to the regular path (warned once).
+* a failure while building, checking or running an engine sends that layout back to the regular path (warned once);
+  CUDA errors that leave the context unusable (illegal address, device-side assert, ...) are raised.
+
+Memory:
+
+* the graphs of a calculator share one memory pool (a *generation*, ``_Generation``), created by the first capture:
+  graphs are replayed one at a time and their outputs are copied before another replay, so their intermediates can
+  share memory. The pool holds what its graphs use and keeps the blocks of dropped graphs reserved for later captures;
+* the cache retains the pool's reserved segments plus the engines' own buffers outside it (static inputs, masks,
+  neighbor buffers), both measured from the allocator when a graph is captured or rebuilt (never on replay). An
+  engine is admitted only if this total stays within ``cache_memory_fraction`` of the device memory; otherwise its
+  layout stays on the regular path and the generation is retired, which returns its pool to the device. Model
+  weights, returned outputs and the temporary peak of a capture are not part of the budget;
+* at most ``cache_size`` engines are kept (least recently used dropped first). Dropping an engine frees its buffers
+  and returns its blocks to the pool for later captures; the pool reservation itself is returned only when the
+  generation retires: ``clear``, a model change, an over-budget capture or rebuild, a capture that runs out of memory,
+  a failed capture that leaves no engine, or deletion of the calculator.
 
 Outputs have the regular path's keys, shapes and dtypes: ``energy`` ``[B]`` (``[1]`` for ``[N, 3]`` input),
 ``charges`` ``[B, N]`` (``[N]``), ``forces`` ``[B, N, 3]`` (``[N, 3]``, only when ``forces=True``).
@@ -38,7 +61,6 @@ from __future__ import annotations
 
 import collections
 import math
-import os
 import warnings
 import weakref
 from collections.abc import Mapping
@@ -49,6 +71,7 @@ import torch
 
 from aimnet.modules.lr import DFTD3, LRCoulomb
 
+from .._graph_options import cuda_graph_enabled
 from .contracts import ModelContract
 from .dense import GraphedEF, StaticDenseAIMNet2, check_dense_model
 from .sparse import AutoGraphedSparseEF, check_sparse_model
@@ -62,20 +85,117 @@ _REGULAR_ONLY = -1  # count of a layout that stays on the regular path
 _CHECK_E_PER_ATOM = 1e-5  # eV
 _CHECK_F = 1e-3  # eV/A, plus 1e-5 of the largest force component
 _CHECK_Q = 1e-4  # e
+# CUDA errors after which the context is unusable: raised, never answered by the regular path
+_FATAL_CUDA_ERRORS = (
+    "illegal memory access",
+    "device-side assert",
+    "unspecified launch failure",
+    "misaligned address",
+    "illegal instruction",
+)
+_PACKAGE = __name__.rpartition(".")[0]
 
 
-def cuda_graph_enabled(cuda_graph: bool | None) -> bool:
-    """Resolve the ``cuda_graph`` argument; ``None`` defers to ``AIMNET_CUDA_GRAPH`` (default on)."""
-    if cuda_graph is not None:
-        return bool(cuda_graph)
-    return os.environ.get("AIMNET_CUDA_GRAPH", "1").strip().lower() not in ("0", "false", "no", "off")
+def _failure(exc: Exception) -> str:
+    """Description of a recoverable failure; re-raises CUDA errors that leave the context unusable."""
+    text = str(exc)
+    if any(marker in text.lower() for marker in _FATAL_CUDA_ERRORS):
+        raise exc
+    return f"{type(exc).__name__}: {text}"
+
+
+class _Generation:
+    """Owner of the graph memory pool (``torch.cuda.MemPool``) the cached graphs are captured into.
+
+    PyTorch keeps a pool while its owner or a graph captured into it is alive, so graphs can be dropped and
+    recaptured into the same pool. ``retire`` drops the owner; once its graphs are gone too, the pool's segments are
+    released (``empty_cache`` returns them to the device). A retired generation is never captured into again."""
+
+    __slots__ = ("pool", "pool_bytes")
+
+    def __init__(self, device: torch.device):
+        with torch.cuda.device(device):
+            self.pool = torch.cuda.MemPool()
+        self.pool_bytes = 0  # reserved segments, as of the last ``measure``
+
+    @property
+    def id(self) -> tuple[int, int]:
+        if self.pool is None:
+            raise RuntimeError("the CUDA-graph memory pool was retired")
+        return self.pool.id
+
+    def measure(self) -> list:
+        """The pool's segments from the allocator snapshot (capture / rebuild / diagnostic boundaries only)."""
+        if self.pool is None:
+            self.pool_bytes = 0
+            return []
+        pid = tuple(self.pool.id)
+        try:
+            segments = torch.cuda.memory_snapshot(pid, include_traces=False)
+        except TypeError:  # no per-pool snapshot: filter the full one
+            segments = torch.cuda.memory_snapshot()
+        segments = [s for s in segments if tuple(s.get("segment_pool_id", ())) == pid]
+        self.pool_bytes = sum(int(s["total_size"]) for s in segments)
+        return segments
+
+    def retire(self) -> None:
+        self.pool = None
+        self.pool_bytes = 0
+
+
+def _owned_bytes(runner, segments: list, exclude: set) -> int:
+    """Bytes of CUDA tensors an engine holds outside its graph pool (static inputs, masks, neighbor buffers).
+
+    Follows the runner, the graph wrappers and engines of this package and their containers; storages inside the
+    pool ``segments`` (graph outputs and capture allocations) and in ``exclude`` (model parameters and buffers) are
+    not counted. Each storage counts once."""
+    ranges = [(int(s["address"]), int(s["address"]) + int(s["total_size"])) for s in segments]
+    seen, ptrs, total, stack = set(), set(exclude), 0, [runner]
+    while stack:
+        obj = stack.pop()
+        if id(obj) in seen:
+            continue
+        seen.add(id(obj))
+        if isinstance(obj, torch.Tensor):
+            if obj.is_cuda:
+                storage = obj.untyped_storage()
+                ptr = storage.data_ptr()
+                if ptr not in ptrs and not any(lo <= ptr < hi for lo, hi in ranges):
+                    ptrs.add(ptr)
+                    total += storage.nbytes()
+        elif isinstance(obj, dict):
+            stack.extend(obj.values())
+        elif isinstance(obj, (list, tuple)):
+            stack.extend(obj)
+        elif type(obj).__module__.startswith(_PACKAGE) or type(obj).__module__ == "aimnet.calculators.neighbor_buffers":
+            stack.extend(getattr(obj, "__dict__", {}).values())  # (a pool owner has slots and no tensors)
+    return total
+
+
+def _packed_d3_cutoff(calc) -> float | None:
+    """Cutoff of the neighbor list the regular path gives DFT-D3 for packed ``[N, 3]`` input (nb_mode 1).
+
+    Dense ``[B, N, 3]`` input uses DFT-D3's own ``smoothing_off`` list (nb_mode 0), but packed input shares the
+    calculator's long-range list (all pairs with full Coulomb, the D3 cutoff without Coulomb). Coordination numbers
+    count every listed pair, so a dense replay of packed input must use that list."""
+    for nblist in (getattr(calc, "_nblist_lr", None), getattr(calc, "_nblist_dftd3", None)):
+        if nblist is not None:
+            return float(nblist.cutoff)
+    return None
+
+
+def _max_filler_rows(b: int) -> int:
+    """Filler rows a batch of ``b`` may carry when it reuses a graph recorded for a larger batch (a third of ``b``,
+    at least one): a batch that shrinks as molecules converge reuses a few captures instead of one per batch size."""
+    return max(1, b // 3)
 
 
 class _Entry:
-    __slots__ = ("keepalive", "mem", "rebuilds", "runner", "storages", "validated")
+    __slots__ = ("gen", "keepalive", "owned", "rebuilds", "runner", "storages", "validated")
 
-    def __init__(self, runner, mem: int, keepalive: tuple = ()):
-        self.runner, self.mem = runner, mem
+    def __init__(self, runner, gen: _Generation, keepalive: tuple = ()):
+        self.runner, self.gen = runner, gen
+        self.owned = 0  # engine bytes outside the pool, measured at admission
         self.rebuilds = getattr(runner, "rebuilds", 0)
         self.validated = False  # species / charge validation passed for this layout (its content is in the key)
         self.keepalive = keepalive  # storages of every parameter / buffer the graph reads
@@ -103,6 +223,7 @@ class CUDAGraphCache:
     def __init__(self, calc, capture_after: int = 2, cache_size: int = 16, cache_memory_fraction: float = 0.25):
         self._calc = weakref.proxy(calc)  # the calculator owns this cache
         self._model = calc.model
+        self._device = torch.device(calc.device)
         self.capture_after = max(1, int(capture_after))
         self.cache_size = max(1, int(cache_size))
         self.cache_memory_fraction = float(cache_memory_fraction)
@@ -114,9 +235,13 @@ class CUDAGraphCache:
         self._contract = ModelContract(calc.model, calc.external_coulomb, calc.external_dftd3)
         self._contract_roots = (calc.model, calc.external_coulomb, calc.external_dftd3)
         self._model_state = self._contract.snapshot()
+        self._answer: dict | None = None  # regular result of a capture that was rejected (see _regular_answer)
+        self._gen: _Generation | None = None  # pool of the cached graphs; created by the first capture
+        self.generations = 0  # pools created (diagnostic)
+        self.captures = 0  # graphs captured, neighbor-capacity rebuilds included (diagnostic)
 
     @classmethod
-    def create(cls, calc, cuda_graph: bool | None = None, **kwargs) -> CUDAGraphCache | None:
+    def create(cls, calc, cuda_graph: bool | None = False, **kwargs) -> CUDAGraphCache | None:
         """A cache for ``calc``, or None when it cannot apply (disabled, not CUDA, unsupported model)."""
         if not cuda_graph_enabled(cuda_graph) or torch.device(calc.device).type != "cuda":
             return None
@@ -148,9 +273,10 @@ class CUDAGraphCache:
             return None  # the regular path would drop D3 pairs inside the smoothing range
         return (
             None if c is None else id(c),
-            None if d is None else (id(d), float(d.smoothing_on), float(d.smoothing_off)),
+            None if d is None else (id(d), float(d.smoothing_on), float(d.smoothing_off), float(calc._dftd3_cutoff)),
             float(calc.cutoff),
             int(calc.nb_threshold),
+            bool(calc.inference_kernels),
         )
 
     def _check_model(self) -> tuple[bool, bool]:
@@ -167,9 +293,7 @@ class CUDAGraphCache:
         if not unchanged:
             # CPU-only tensor versions/configuration; no per-step device scalar reads.
             # Old graphs must not remain reachable after a changed model is restored.
-            if self._engines:
-                torch.cuda.synchronize(torch.device(calc.device))  # a discarded replay may still be running
-            self.clear()
+            self.clear()  # waits for a discarded replay that may still be running
             self._model_state = state
         return state is not None, unchanged
 
@@ -207,11 +331,13 @@ class CUDAGraphCache:
             return ("s", float(value)), None
         return None
 
-    def _layout_key(self, numbers, charge, B: int, N: int, forces: bool, settings: tuple):
+    def _layout_key(self, numbers, charge, B: int, N: int, forces: bool, settings: tuple, packed: bool = False):
+        """``packed``: ``[N, 3]`` input, which the regular path evaluates in nb_mode 1 (``[1, N, 3]`` is nb_mode 0 in
+        dense mode); the two give DFT-D3 different neighbor lists, so they are separate layouts."""
         idn, idq = self._identity(numbers), self._identity(charge)
         ident = None
         if idn is not None and idq is not None:
-            ident = (idn[0], idq[0], B, N, forces, settings)
+            ident = (idn[0], idq[0], B, N, forces, settings, packed)
             hit = self._ident
             if (
                 hit is not None
@@ -227,7 +353,7 @@ class CUDAGraphCache:
             q = np.repeat(q, B)
         if q.size != B:
             return None
-        key = (B, N, forces, z.reshape(B, N).tobytes(), q.tobytes(), settings)
+        key = (B, N, forces, z.reshape(B, N).tobytes(), q.tobytes(), settings, packed)
         if ident is not None:
             refs = tuple(None if o is None else weakref.ref(o) for o in (idn[1], idq[1]))
             self._ident = (ident, refs, key)
@@ -243,49 +369,118 @@ class CUDAGraphCache:
             self._seen.popitem(last=False)
         return n
 
-    # --- engine cache ---------------------------------------------------------------------------------------------
-    def _evict(self, budget: float, keep: int) -> None:
-        evicted = False
-        while self._engines and (len(self._engines) > keep or sum(e.mem for e in self._engines.values()) > budget):
+    # --- engine cache and its memory ------------------------------------------------------------------------------
+    def _budget(self) -> float:
+        return self.cache_memory_fraction * torch.cuda.get_device_properties(self._device).total_memory
+
+    def _retained(self, entry: _Entry | None = None) -> int:
+        """Bytes the cache retains, with ``entry`` (measured here) admitted: the pool's reserved segments plus engine
+        buffers outside the pool. Walks the allocator: capture / rebuild / failure / diagnostic boundaries only."""
+        gen = self._gen
+        segments = [] if gen is None else gen.measure()
+        owned = sum(e.owned for e in self._engines.values() if e is not entry)
+        if entry is not None:
+            entry.owned = _owned_bytes(entry.runner, segments, {ptr for _, ptr, _ in entry.storages})
+            owned += entry.owned
+        return (0 if gen is None else gen.pool_bytes) + owned
+
+    def _evict(self, keep: int) -> None:
+        """Drop least recently used engines beyond ``keep``. Their blocks stay in the pool for later captures."""
+        while len(self._engines) > keep:
             self._engines.popitem(last=False)
-            evicted = True
-        if evicted:
-            torch.cuda.empty_cache()
 
-    def _build(self, key, B: int, N: int, coord, data, forces: bool) -> _Entry | None:
+    def _retire(self) -> None:
+        """Drop every engine and the pool owner; the pool is released once its graphs are gone.
+
+        A rare boundary (``clear``, model change, rejection): waits for replays that may still read the pool."""
+        if self._gen is not None or self._engines:
+            torch.cuda.synchronize(self._device)
+        self._engines.clear()
+        if self._gen is not None:
+            self._gen.retire()
+            self._gen = None
+
+    def _capture(
+        self, key, B: int, N: int, x, data, forces: bool, padded: tuple | None = None, packed: bool = False
+    ) -> tuple | None:
+        """Capture, check and admit an engine, returning its validated E/F/q; None requests the regular path.
+
+        ``padded``: the (species, charge) input buffers of a padded dense layout (``x`` holds its capacity rows).
+        ``packed``: ``[N, 3]`` input (see ``_layout_key``)."""
         calc = self._calc
-        dev = coord.device
-        budget = self.cache_memory_fraction * torch.cuda.get_device_properties(dev).total_memory
-        self._evict(budget, self.cache_size - 1)
-        # The key owns a value snapshot, so the runner must own the same immutable
-        # snapshot, never caller storage (including already-CUDA same-dtype inputs).
-        z = torch.as_tensor(data["numbers"], device=dev).to(torch.int64).reshape(B, N).detach().clone()
-        q = torch.as_tensor(data["charge"], dtype=torch.float32, device=dev).reshape(-1).detach().clone()
-        q = q.expand(B).contiguous() if q.numel() == 1 else q.reshape(B)
-        torch.cuda.synchronize(dev)
-        before = torch.cuda.memory_reserved(dev)
-        if calc.nb_threshold >= N:
-            runner = GraphedEF(StaticDenseAIMNet2(calc, z, q), coord, forces=forces)
-        else:
-            runner = AutoGraphedSparseEF(calc, z, q, coord, forces=forces)
-        torch.cuda.synchronize(dev)
-        entry = _Entry(runner, max(0, torch.cuda.memory_reserved(dev) - before), self._captured_state())
-        self._check(entry, coord, data, forces, B, N)
-        if entry.mem > budget:
-            self._regular_only(key, RuntimeError(f"engine needs {entry.mem / 2**20:.0f} MiB, over the cache budget"))
-            return None
-        self._engines[key] = entry
-        self._evict(budget, self.cache_size)
-        return entry
+        self._evict(self.cache_size - 1)
+        failure, oom, engine, runner, entry, checked, reference = None, False, None, None, None, None, None
+        self._answer = None
+        try:
+            # Run the same-call reference before allocating a new private graph pool.
+            # Only compact E/F/q outputs survive; warm-up can release its temporary cache.
+            reference = self._reference(data, forces)
+            if self._gen is None:
+                self._gen = _Generation(self._device)
+                self.generations += 1
+            gen = self._gen
+            if padded is not None:
+                z, q = padded
+                engine = StaticDenseAIMNet2(calc, z.to(torch.int64), q, padded=True)
+                runner = GraphedEF(engine, x, forces=forces, pool=gen.id)
+            else:
+                # The key owns a value snapshot, so the runner must own the same immutable
+                # snapshot, never caller storage (including already-CUDA same-dtype inputs).
+                z = torch.as_tensor(data["numbers"], device=x.device).to(torch.int64).reshape(B, N).detach().clone()
+                q = torch.as_tensor(data["charge"], dtype=torch.float32, device=x.device).reshape(-1).detach().clone()
+                q = q.expand(B).contiguous() if q.numel() == 1 else q.reshape(B)
+                if calc.nb_threshold >= N:
+                    d3_cutoff = _packed_d3_cutoff(calc) if packed else None
+                    engine = StaticDenseAIMNet2(calc, z, q, d3_cutoff=d3_cutoff)
+                    runner = GraphedEF(engine, x, forces=forces, pool=gen.id)
+                else:
+                    runner = AutoGraphedSparseEF(calc, z, q, x, forces=forces, pool=gen)
+            self.captures += 1
+            entry = _Entry(runner, gen, self._captured_state())
+            engine = runner = None
+            checked = self._check(
+                entry, x, data, forces, B, N, inputs=() if padded is None else padded, reference=reference
+            )
+            retained, budget = self._retained(entry), self._budget()
+            if gen.pool_bytes == 0:
+                failure = "RuntimeError: the allocator reports no segments for the graph pool (no pool accounting)"
+            elif retained > budget:
+                failure = (
+                    f"RuntimeError: engine needs {retained / 2**20:.0f} MiB with the cached graphs, over the cache "
+                    f"budget of {budget / 2**20:.0f} MiB"
+                )
+        except Exception as exc:  # never fail where the regular path works
+            failure, oom = _failure(exc), isinstance(exc, torch.OutOfMemoryError)
+        if failure is None:
+            self._engines[key] = entry
+            return checked
+        engine = runner = entry = checked = None  # release rejected graph outputs before retiring its pool
+        self._reject(key, failure, retire=oom)
+        self._answer = reference  # the regular result of this very call, so the caller need not recompute it
+        return None
 
-    def _check(self, entry: _Entry, coord, data, forces: bool, B: int, N: int) -> None:
-        """Raise unless the captured engine reproduces the regular path on this input (run once per layout)."""
-        e, f, q = entry.runner(coord)
+    def _reference(self, data, forces: bool) -> dict[str, torch.Tensor]:
+        """Same-call regular result (detached); its E/F/q are the capture-time reference."""
         self._checking = True
         try:
-            ref = self._calc(dict(data), forces=forces, validate_species=False)
+            result = self._calc(dict(data), forces=forces, validate_species=False)
+            return {key: value.detach() if isinstance(value, torch.Tensor) else value for key, value in result.items()}
         finally:
             self._checking = False
+
+    def _regular_answer(self):
+        """The regular result computed by a rejected capture of this call, or None (the regular path runs)."""
+        answer, self._answer = self._answer, None
+        return answer
+
+    def _check(self, entry: _Entry, coord, data, forces: bool, B: int, N: int, inputs=(), reference=None) -> tuple:
+        """Raise unless the captured engine reproduces the regular path on this input (run once per layout).
+
+        ``inputs``: species/charge buffers of a padded layout; its filler rows past ``B`` are not compared."""
+        e, f, q = entry.runner(coord, *inputs)
+        e, q = e[:B], q[:B]
+        f = None if f is None else f[:B]
+        ref = self._reference(data, forces) if reference is None else reference
         bad = []
         de = float((e.detach().double() - ref["energy"].detach().double().reshape(B)).abs().max())
         if not de <= _CHECK_E_PER_ATOM * N:
@@ -300,13 +495,34 @@ class CUDAGraphCache:
                 bad.append(f"forces {df:.2e} eV/A")
         if bad:
             raise RuntimeError("captured engine disagrees with the regular path: " + ", ".join(bad))
+        return e, f, q
 
     def clear(self) -> None:
-        """Drop engines/graphs; also required after deliberate .data/raw-storage mutation."""
-        self._engines.clear()
+        """Drop every engine, release the graph memory pool and forget the layouts seen (including rejected ones).
+
+        Waits for running replays; outputs returned earlier are copies and stay valid. The next capture creates a
+        new pool. Also required after deliberate .data/raw-storage mutation."""
+        self._retire()
         self._seen.clear()
         self._ident = None
         torch.cuda.empty_cache()
+
+    def memory_stats(self) -> dict[str, int]:
+        """Bytes the cache retains: ``pool_reserved`` (graph pool segments) + ``engine_buffers`` (engine tensors
+        outside the pool) = ``retained``, limited by ``budget`` at admission; counts of ``engines``, pools created
+        (``generations``) and ``captures``. Walks the allocator (a diagnostic call)."""
+        retained = self._retained()
+        pool = 0 if self._gen is None else self._gen.pool_bytes
+        return {
+            "engines": len(self._engines),
+            "pool_reserved": pool,
+            "engine_buffers": retained - pool,
+            "retained": retained,
+            "budget": int(self._budget()),
+            "pool_alive": int(self._gen is not None),
+            "generations": self.generations,
+            "captures": self.captures,
+        }
 
     # --- dispatch -------------------------------------------------------------------------------------------------
     def eval(self, data: Mapping[str, Any], forces: bool, validate_species: bool) -> dict[str, torch.Tensor] | None:
@@ -329,7 +545,9 @@ class CUDAGraphCache:
         if settings is None:
             return None
         forces = bool(forces)
-        key = self._layout_key(data["numbers"], data["charge"], B, N, forces, settings)
+        if B > 1 and self._calc.nb_threshold >= N:
+            return self._eval_padded(data, coord, B, N, forces, settings, validate_species)
+        key = self._layout_key(data["numbers"], data["charge"], B, N, forces, settings, packed=single)
         if key is None:
             return None
         entry = self._engines.get(key)
@@ -339,71 +557,132 @@ class CUDAGraphCache:
         if validate_species and (entry is None or not entry.validated):
             calc._validate_species_and_charge(data)
         calc._maybe_warn_mult_ignored(data)
-        dev = torch.device(calc.device)
+        cached, entry = entry is not None, None  # hold no graph across the contract check: it may drop the cache
+        dev = self._device
         with torch.inference_mode(False), torch.cuda.device(dev):
             x = torch.as_tensor(coord, dtype=torch.float32, device=dev).reshape(B, N, 3)
-            if entry is None:
-                try:
-                    entry = self._build(key, B, N, x, data, forces)
-                except Exception as exc:  # never fail where the regular path works
-                    self._regular_only(key, exc)
-                    return None
-                if entry is None:
-                    return None
-                entry.runner.launch(x)
-            else:
-                if not entry.storage_valid():
-                    # A resize can leave the captured raw pointers dangling.
-                    # Do not enqueue even a speculative replay in this case.
-                    self._check_model()
-                    if self._engines:
-                        # Raw storage mutation need not bump tensor versions;
-                        # invalidate independently of the full model token.
-                        torch.cuda.synchronize(dev)
-                        self.clear()
-                    return None
-                # Launch first; the contract check below runs on the CPU while the GPU replays.
-                try:
-                    entry.runner.launch(x)
-                except Exception as exc:
-                    self._regular_only(key, exc)
-                    return None
-                supported, unchanged = self._check_model()
-                if not (supported and unchanged):
-                    return None  # the replay is discarded unread; the regular path answers
-                self._engines.move_to_end(key)
+            checked = None
+            if not cached:
+                checked = self._capture(key, B, N, x, data, forces, packed=single)
+                if checked is None:
+                    return self._regular_answer()
+            elif not self._launch(key, x):
+                return None
+            entry = self._engines[key]
             entry.validated = entry.validated or validate_species
+            failure = None
             try:
-                e, f, q = entry.runner.result()
+                # The capture-time check already evaluated these exact inputs.
+                e, f, q = entry.runner.result() if checked is None else checked
                 rebuilds = getattr(entry.runner, "rebuilds", 0)
                 if rebuilds != entry.rebuilds:
                     # Recapture changes the neighbor layout: repeat both the
                     # numerical acceptance gate and memory-budget accounting.
-                    self._check(entry, x, data, forces, B, N)
+                    self.captures += rebuilds - entry.rebuilds
                     entry.rebuilds = rebuilds
-                    growth = entry.runner.unaccounted_memory_growth
-                    entry.mem += growth
-                    entry.runner.unaccounted_memory_growth = 0
-                    budget = self.cache_memory_fraction * torch.cuda.get_device_properties(dev).total_memory
-                    if entry.mem > budget:
-                        self._regular_only(key, RuntimeError("rebuilt sparse engine exceeds the cache memory budget"))
-                        return None
-                    self._evict(budget, self.cache_size)
+                    self._check(entry, x, data, forces, B, N)
+                    if self._retained(entry) > self._budget():
+                        failure = "RuntimeError: rebuilt sparse engine exceeds the cache memory budget"
             except Exception as exc:
-                self._regular_only(key, exc)
+                failure = _failure(exc)
+            if failure is not None:
+                entry = checked = e = f = q = None
+                self._reject(key, failure)
                 return None
             out = {"energy": e.clone(), "charges": (q[0] if single else q).clone()}
             if forces:
                 out["forces"] = (f[0] if single else f).clone()
         return out
 
-    def _regular_only(self, key, exc: Exception) -> None:
+    def _launch(self, key, x, *inputs) -> bool:
+        """Launch the cached entry of ``key``, then check the model contract on the CPU while the GPU replays.
+
+        False: the regular path answers (the replay, if any, is discarded unread)."""
+        entry = self._engines[key]
+        if not entry.storage_valid():
+            # A resize can leave the captured raw pointers dangling.
+            # Do not enqueue even a speculative replay in this case.
+            del entry
+            self._check_model()
+            if self._engines:
+                # Raw storage mutation need not bump tensor versions;
+                # invalidate independently of the full model token.
+                self.clear()
+            return False
+        failure = None
+        try:
+            entry.runner.launch(x, *inputs)
+        except Exception as exc:
+            failure = _failure(exc)
+        del entry  # the contract check may drop the cache: hold no graph past it
+        if failure is not None:
+            self._reject(key, failure)
+            return False
+        supported, unchanged = self._check_model()
+        if not (supported and unchanged):
+            return False
+        self._engines.move_to_end(key)
+        return True
+
+    def _eval_padded(self, data, coord, B: int, N: int, forces: bool, settings: tuple, validate_species: bool):
+        """Dense batch, possibly with ``Z = 0`` padding: one graph per (batch capacity, ``N``), species and charges are
+        per-call inputs, so mixed-size and shrinking batches replay without new captures."""
+        calc = self._calc
+        # A graph recorded for exactly B rows, else the smallest recorded one with few enough filler rows, else
+        # record B rows exactly once this batch size has been seen ``capture_after`` times.
+        cap, entry = B, self._engines.get(("padded", B, N, forces, settings))
+        if entry is None:
+            fits = [
+                k[1]
+                for k in self._engines
+                if k[0] == "padded" and k[2:] == (N, forces, settings) and B < k[1] <= B + _max_filler_rows(B)
+            ]
+            if fits:
+                cap = min(fits)
+                entry = self._engines[("padded", cap, N, forces, settings)]
+        key = ("padded", cap, N, forces, settings)
+        if entry is None and (not self._check_model()[0] or self._count(key) < self.capture_after):
+            return None
+        if validate_species:  # the species can change on every call
+            calc._validate_species_and_charge(data)
+        calc._maybe_warn_mult_ignored(data)
+        cached, entry = entry is not None, None  # hold no graph across the contract check: it may drop the cache
+        dev = self._device
+        with torch.inference_mode(False), torch.cuda.device(dev):
+            x = torch.as_tensor(coord, dtype=torch.float32, device=dev).reshape(B, N, 3)
+            z = torch.as_tensor(data["numbers"], device=dev).reshape(B, N)
+            q = torch.as_tensor(data["charge"], dtype=torch.float32, device=dev).reshape(-1)
+            q = q.expand(B) if q.numel() == 1 else q.reshape(B)
+            if cap > B:  # filler rows: copies of molecule 0, computed and discarded
+                x = torch.cat([x, x[:1].expand(cap - B, N, 3)])
+                z = torch.cat([z, z[:1].expand(cap - B, N)])
+                q = torch.cat([q, q[:1].expand(cap - B)])
+            if not cached:
+                checked = self._capture(key, B, N, x, data, forces, padded=(z, q))
+                if checked is None:
+                    return self._regular_answer()
+            elif not self._launch(key, x, z, q):
+                return None
+            e, f, qq = self._engines[key].runner.result() if cached else checked
+            out = {"energy": e[:B].clone(), "charges": qq[:B].clone()}
+            if forces:
+                out["forces"] = f[:B].clone()
+        return out
+
+    def _reject(self, key, reason: str, retire: bool = False) -> None:
+        """Keep ``key`` on the regular path (warned once) and drop its engine.
+
+        The generation is retired as well when asked (out of memory), when no engine is left in it, or when it is over
+        the budget, so a rejected or failed capture leaves no pool behind."""
         self._engines.pop(key, None)
         self._seen.pop(key, None)
         self._seen[key] = _REGULAR_ONLY
+        if retire or not self._engines or self._retained() > self._budget():
+            self._retire()
+            torch.cuda.empty_cache()
         if not self._warned:
             warnings.warn(
-                f"AIMNet2Calculator: CUDA-graph replay disabled for one input layout ({type(exc).__name__}: {exc}); "
+                f"AIMNet2Calculator: CUDA-graph replay disabled for one input layout ({reason}); "
                 "using the regular code path for it.",
                 RuntimeWarning,
                 stacklevel=4,

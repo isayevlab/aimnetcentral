@@ -172,6 +172,101 @@ class TestReplayMatchesRegularPath:
         assert not torch.equal(outs[2]["forces"], outs[3]["forces"])
 
 
+def _padded(mols: list[dict], n: int | None = None) -> dict:
+    """[B, n, 3] batch of molecules of different sizes, ``Z = 0`` padding at the end (coordinates 0)."""
+    n = n or max(len(m["numbers"]) for m in mols)
+    coord = np.zeros((len(mols), n, 3))
+    numbers = np.zeros((len(mols), n), dtype=np.int64)
+    for i, m in enumerate(mols):
+        k = len(m["numbers"])
+        coord[i, :k], numbers[i, :k] = m["coord"], m["numbers"]
+    return {"coord": coord, "numbers": numbers, "charge": [float(np.sum(m.get("charge", 0.0))) for m in mols]}
+
+
+class TestPaddedBatches:
+    """Dense batches with ``Z = 0`` padding (mixed-size molecules): species and charges are inputs of the graph, so one
+    capture per (batch capacity, atom count) serves every composition."""
+
+    def _same(self, graph, regular, data, **kwargs):
+        _assert_close_all(graph(data, **kwargs), regular(data, **kwargs))
+
+    def test_padded_batch_replayed(self, calcs, caffeine):
+        graph, regular = calcs
+        numbers = np.stack([caffeine["numbers"], caffeine["numbers"]])
+        numbers[1, -1] = 0
+        data = {"coord": np.stack([caffeine["coord"]] * 2), "numbers": numbers, "charge": [0.0, 0.0]}
+        for _ in range(3):
+            self._same(graph, regular, data, forces=True)
+        assert _n_engines(graph) == 1
+        self._same(graph, regular, data)  # energy only: its own layout, regular path on first sight
+        self._same(graph, regular, data)
+
+    def test_new_composition_same_shape(self, calcs, caffeine):
+        graph, regular = calcs
+        a = _padded([caffeine, {k: v[:-3] for k, v in caffeine.items() if k != "charge"}])
+        b = _padded([{k: v[:-5] for k, v in caffeine.items() if k != "charge"}, caffeine])
+        for _ in range(2):
+            self._same(graph, regular, a, forces=True)
+        assert _n_engines(graph) == 1
+        for step in range(3):
+            b_step = {**b, "coord": _jitter(b["coord"], step)}
+            self._same(graph, regular, b_step, forces=True)
+        assert _n_engines(graph) == 1  # no recapture for a new composition
+
+    def test_mixed_sizes_and_padding_positions(self, calcs, caffeine):
+        graph, regular = calcs
+        taxol = load_mol(TAXOL_FILE)
+        data = _padded([caffeine, taxol, caffeine])
+        numbers, coord = data["numbers"].copy(), data["coord"].copy()
+        numbers[2], coord[2] = np.roll(numbers[2], 7), np.roll(coord[2], 7, axis=0)  # padding in the middle of a row
+        data_mid = {**data, "numbers": numbers, "coord": coord}
+        for d in (data, data_mid):
+            for _ in range(3):
+                self._same(graph, regular, d, forces=True)
+
+    def test_batch_capacity_rows_and_shrinking(self, calcs, caffeine):
+        graph, regular = calcs
+        full = _padded([caffeine] * 8)
+        for b in (8, 8, 7, 7, 5, 5, 3, 3, 2, 2):
+            d = {"coord": _jitter(full["coord"][:b], b), "numbers": full["numbers"][:b], "charge": full["charge"][:b]}
+            out = graph(d, forces=True)
+            assert out["energy"].shape == (b,) and out["forces"].shape == (b, *full["coord"].shape[1:])
+            _assert_close_all(out, regular(d, forces=True))
+        assert _n_engines(graph) <= 5  # capacities 8, 6, 3, 2 (and 8 again for 7): not one per batch size
+
+    def test_species_validated_on_every_call(self, calcs, caffeine):
+        graph, regular = calcs
+        data = _padded([caffeine, caffeine])
+        for _ in range(3):
+            self._same(graph, regular, data, forces=True)
+        bad = {**data, "numbers": data["numbers"].copy()}
+        bad["numbers"][0, 0] = 92  # uranium: outside the model's species
+        with pytest.raises(ValueError):
+            regular(bad, forces=True)
+        with pytest.raises(ValueError):
+            graph(bad, forces=True)
+
+
+class TestMemory:
+    def test_deleting_a_calculator_releases_its_graphs(self, caffeine):
+        """Create a graph calculator, record two layouts, delete it: repeated cycles must not grow memory."""
+        import gc
+
+        data = _padded([caffeine, caffeine])
+        left = []
+        for _ in range(3):
+            calc = AIMNet2Calculator("aimnet2-2025", cuda_graph=True)
+            for d in (caffeine, data):
+                for _ in range(3):
+                    calc(d, forces=True)
+            assert _n_engines(calc) == 2
+            del calc
+            gc.collect()
+            torch.cuda.empty_cache()
+            left.append(torch.cuda.memory_allocated())
+        assert left[2] <= left[0] + 2**20
+
+
 class TestRegularPathInputs:
     """Inputs and requests the CUDA-graph replay does not handle run on the regular path, unchanged."""
 
@@ -195,13 +290,6 @@ class TestRegularPathInputs:
             "charge": [0.0, 0.0],
             "mol_idx": np.repeat([0, 1], n),
         }
-        self._check(graph, regular, data, forces=True)
-
-    def test_padded_batch(self, calcs, caffeine):
-        graph, regular = calcs
-        numbers = np.stack([caffeine["numbers"], caffeine["numbers"]])
-        numbers[1, -1] = 0
-        data = {"coord": np.stack([caffeine["coord"]] * 2), "numbers": numbers, "charge": [0.0, 0.0]}
         self._check(graph, regular, data, forces=True)
 
     def test_hessian(self, calcs, caffeine):
@@ -290,37 +378,44 @@ class TestLayoutAndSettingsChanges:
 class TestEnablement:
     def test_disabled_by_environment(self, monkeypatch):
         monkeypatch.setenv("AIMNET_CUDA_GRAPH", "0")
-        assert AIMNet2Calculator("aimnet2")._cuda_graph is None
+        assert AIMNet2Calculator("aimnet2", cuda_graph=None)._cuda_graph is None
         assert AIMNet2Calculator("aimnet2", cuda_graph=True)._cuda_graph is not None
 
     def test_cpu_calculator(self):
         assert AIMNet2Calculator("aimnet2", device="cpu")._cuda_graph is None
 
     def test_open_shell_model_uses_regular_path(self):
-        assert AIMNet2Calculator("aimnet2-nse")._cuda_graph is None
+        assert AIMNet2Calculator("aimnet2-nse", cuda_graph=True)._cuda_graph is None
 
 
 class TestAEVSVDenseKernel:
-    """Triton AEV basis vs the PyTorch expression of the dense engine: forward bitwise, gradients at float32 level."""
+    """Shared Triton AEV vs its shared Torch fallback, without a graph engine."""
 
     @pytest.mark.parametrize("system", ["caffeine", "taxol", "caffeine_x3"])
-    def test_matches_pytorch_expression(self, calc_pair, system):
+    def test_matches_pytorch_expression(self, calc_pair, system, monkeypatch):
         pytest.importorskip("triton")
-        from aimnet.calculators.cuda_graph.dense import StaticDenseAIMNet2
+        from aimnet import nbops
+        from aimnet.modules import aev_inference
 
         graph, _ = calc_pair
         mol = load_mol(TAXOL_FILE if system == "taxol" else CAFFEINE_FILE)
         B = 3 if system == "caffeine_x3" else 1
         x = torch.as_tensor(np.stack([_jitter(mol["coord"], b) for b in range(B)]), dtype=torch.float32, device="cuda")
         z = torch.as_tensor(np.tile(mol["numbers"], (B, 1)), device="cuda")
-        q = torch.zeros(B, device="cuda")
-        kernel = StaticDenseAIMNet2(graph, z, q)
-        torch_expr = StaticDenseAIMNet2(graph, z, q, fused_aev=False)
-        assert kernel._aev_kernel is not None
-        assert torch_expr._aev_kernel is None
         x = x.requires_grad_(True)
-        g_k = kernel._aev_bmm_layout({**kernel.static, "coord": x})["g_L"]
-        g_t = torch_expr._aev_bmm_layout({**torch_expr.static, "coord": x})["g_L"]
+        aev = graph.model.aev
+
+        def evaluate():
+            data = nbops.calc_masks(nbops.set_nb_mode({"numbers": z, "coord": x}))
+            data["_inference_kernels"] = torch.tensor(True)
+            data["_aev_inference_constants"] = aev.prepare_inference()
+            return aev(data)["g_L"]
+
+        assert aev_inference._triton_kernel() is not None
+        g_k = evaluate()
+        with monkeypatch.context() as patch:
+            patch.setattr(aev_inference, "_triton_kernel", lambda: None)
+            g_t = evaluate()
         assert torch.equal(g_k, g_t)
         w = torch.randn_like(g_t)
         (dx_k,) = torch.autograd.grad((g_k * w).sum(), x)

@@ -20,6 +20,9 @@ package = Path(aimnet.__file__).resolve()
 assert package.is_relative_to(Path(sys.prefix).resolve()), package
 assert "site-packages" in package.parts, package
 assert inspect.signature(AIMNet2Calculator).parameters["compile_model"].default is False
+assert inspect.signature(AIMNet2Calculator).parameters["cuda_graph"].default is False
+assert inspect.signature(AIMNet2Calculator).parameters["inference_kernels"].default is False
+assert not any(name.startswith("aimnet.calculators.cuda_graph") for name in sys.modules)
 
 for module in (
     "aimnet.calculators.cuda_graph.cache",

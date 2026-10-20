@@ -234,11 +234,15 @@ Whether to compile the model with `torch.compile()` for faster inference.
 
 Compilation adds overhead on first call but speeds up subsequent calls. Useful for MD trajectories, geometry optimizations, or repeated evaluations. Compilation always uses `fullgraph=True`; passing `fullgraph=False` in `compile_kwargs` is rejected. Legacy TorchScript `.jpt` models do not support this option. Hessian and Hessian-vector-product requests use the original eager model while ordinary compiled evaluations continue to share that model's parameters and state.
 
-`compile_model=False` disables `torch.compile`, not CUDA-graph replay. This fork's independent `cuda_graph=None` default enables eligible repeated CUDA calls. Replay takes precedence over the compiled forward when both are enabled. Set `cuda_graph=False` for an unambiguous regular or compile-only comparison.
+`compile_model` and `cuda_graph` are independent options, both disabled by default. Set `cuda_graph=False` for an unambiguous regular or compile-only comparison. See [CUDA-Graph Inference](cuda_graph.md) for the execution modes and their measurement boundaries.
 
 #### `cuda_graph`
 
-Enable CUDA-graph replay for supported repeated inference layouts. `None` (default) uses `AIMNET_CUDA_GRAPH`, which defaults on; explicit `True`/`False` overrides it. CPU and unsupported models/calls use the regular path. No training, stress, Hessian, or input-gradient calculation is accelerated by this option. See [CUDA-Graph Inference](cuda_graph.md) for supported models, capture and memory costs, fallback, and mutation constraints.
+Enable CUDA-graph replay for supported repeated inference layouts with `True`. The default is `False`, so constructing a calculator does not implicitly select graph capture. Explicit `None` delegates selection to `AIMNET_CUDA_GRAPH`: only `1`, `true`, `yes`, or `on` enables it (case-insensitive). Explicit booleans override the environment. CPU and unsupported models/calls use the regular path, and CPU or disabled calculators do not import the graph backend. No training, stress, Hessian, or input-gradient calculation is accelerated by this option. See [CUDA-Graph Inference](cuda_graph.md) for supported models, capture and memory costs, fallback, and mutation constraints.
+
+#### `inference_kernels`
+
+Opt into shared AEV/ConvSV and streaming full-Coulomb inference kernels with `True`. The default is `False`. Eligible regular eager and CUDA-graph calls use the same optimized primitives, so this option can be evaluated independently of graph replay. Compile-only calls retain their compiled path. Training and requests for higher derivatives use the appropriate regular implementations. See the independent comparison modes in [CUDA-Graph Inference](cuda_graph.md).
 
 #### `compile_kwargs`
 
