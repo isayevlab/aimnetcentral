@@ -9,10 +9,12 @@ calculator requests do not set the enabling ``_inference_kernels`` flag.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import torch
 from torch import Tensor
+
+from aimnet.kernels.triton_support import triton_kernels_supported
 
 if TYPE_CHECKING:
     from .aev import AEVSV
@@ -54,7 +56,12 @@ class _BmmGeometryCarry(torch.autograd.Function):
 def _geometry_baddbmm(accum: Tensor, left: Tensor, right: Tensor) -> Tensor:
     # Only the first-order CUDA backward needs the optional fused epilogue.
     # Keep ordinary differentiable operations for CPU and higher derivatives.
-    if not torch.is_grad_enabled() and accum.is_cuda and accum.dtype == torch.float32:
+    if (
+        not torch.is_grad_enabled()
+        and accum.is_cuda
+        and accum.dtype == torch.float32
+        and triton_kernels_supported(accum.device)
+    ):
         try:
             from aimnet.kernels.geometry_baddbmm_triton import geometry_baddbmm
         except ImportError:
@@ -113,7 +120,12 @@ def dense_aev_layout(aev: AEVSV, data: dict[str, Tensor], d_ij: Tensor, r_ij: Te
         raise ValueError("Inference AEV requires CPU constants from AEVSV.prepare_inference().")
     eta, rc, scale = constants.unbind()
     kernel = None
-    if d_ij.device.type == "cuda" and d_ij.dtype == torch.float32 and d_ij.shape[-1] <= 512:
+    if (
+        d_ij.device.type == "cuda"
+        and d_ij.dtype == torch.float32
+        and d_ij.shape[-1] <= 512
+        and triton_kernels_supported(d_ij.device)
+    ):
         kernel = _triton_kernel()
     if kernel is not None:
         result = kernel(d_ij, r_ij, aev.shifts_s, float(eta), float(rc), float(scale), pad=data["mask_i"])
@@ -121,10 +133,11 @@ def dense_aev_layout(aev: AEVSV, data: dict[str, Tensor], d_ij: Tensor, r_ij: Te
 
     # Same scalar operations and ordering as AEVSV._calc_aev. CPU zero-dimensional
     # constants preserve the cutoff's FP32 arithmetic without a device sync.
-    fc = 0.5 * (torch.cos(d_ij.clamp(min=1e-6, max=rc) * scale) + 1.0)
+    fc = 0.5 * (torch.cos(d_ij.clamp(min=1e-6, max=rc) * scale) + 1.0)  # type: ignore[call-overload]
     fc = fc.masked_fill(data["mask_ij"], 0.0)
     distance = d_ij.transpose(1, 2).unsqueeze(1)
-    gs = torch.exp(-aev.eta_s * (distance - aev.shifts_s.view(1, -1, 1, 1)).square())
+    eta_s, shifts_s = cast(Tensor, aev.eta_s), cast(Tensor, aev.shifts_s)
+    gs = torch.exp(-eta_s * (distance - shifts_s.view(1, -1, 1, 1)).square())
     gs = gs * fc.transpose(1, 2).unsqueeze(1)
     unit = (r_ij / d_ij.unsqueeze(-1)).transpose(1, 2).unsqueeze(1)
     return torch.cat((gs.unsqueeze(-1), gs.unsqueeze(-1) * unit), dim=-1)

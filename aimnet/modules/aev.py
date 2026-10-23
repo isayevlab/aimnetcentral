@@ -7,6 +7,7 @@ from torch import Tensor, nn
 
 from aimnet import nbops, ops
 from aimnet.kernels import WARP_CUDA_AVAILABLE, conv_sv_2d_sp
+from aimnet.kernels.triton_support import triton_kernels_supported
 
 
 class AEVSV(nn.Module):
@@ -276,13 +277,14 @@ class ConvSV(nn.Module):
             and avf_sv.dtype == torch.float32
             and avf_sv.shape[0] >= 2
             and not self.agh.requires_grad
+            and triton_kernels_supported(avf_sv.device)
         ):
             try:
                 from aimnet.kernels.conv_finish_triton import conv_finish
             except ImportError:
                 pass
             else:
-                return conv_finish(avf_sv, self.agh, data["mask_i"])
+                return conv_finish(avf_sv, cast(Tensor, self.agh), data["mask_i"])
         avf_s, avf_v = avf_sv.split([1, 3], dim=-1)
         avf_v = torch.einsum("agh,...agd->...ahd", self.agh, avf_v).pow(2).sum(-1)
         out = torch.cat([avf_s.squeeze(-1).flatten(-2, -1), avf_v.flatten(-2, -1)], dim=-1)

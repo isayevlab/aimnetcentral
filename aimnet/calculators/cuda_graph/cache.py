@@ -71,7 +71,7 @@ import torch
 
 from aimnet.modules.lr import DFTD3, LRCoulomb
 
-from .._graph_options import cuda_graph_enabled
+from .._graph_options import cuda_graph_dependency_problem, cuda_graph_enabled, cuda_graph_platform_problem
 from .contracts import ModelContract
 from .dense import GraphedEF, StaticDenseAIMNet2, check_dense_model
 from .sparse import AutoGraphedSparseEF, check_sparse_model
@@ -80,11 +80,21 @@ _REQUIRED_KEYS = frozenset({"coord", "numbers", "charge"})
 _ALLOWED_KEYS = _REQUIRED_KEYS | {"mult"}
 _MAX_TRACKED_LAYOUTS = 1024  # layouts remembered for the "seen before" count
 _REGULAR_ONLY = -1  # count of a layout that stays on the regular path
-# capture-time check against the regular path (measured engine-vs-regular differences: energy <= 3e-7 eV/atom,
-# forces <= 1.6e-5 eV/A, charges <= 6e-7 e)
-_CHECK_E_PER_ATOM = 1e-5  # eV
-_CHECK_F = 1e-3  # eV/A, plus 1e-5 of the largest force component
-_CHECK_Q = 1e-4  # e
+# Capture-time check against the regular path. FP32 noise measured on an L40S (Torch 2.13, Warp 1.16, nvalchemi
+# 0.5.0, inference_kernels off and on; water, caffeine, taxol dense and sparse, padded dense batches up to 32x48,
+# 960- and 4992-atom systems; at the capture geometry and after 0.02-0.2 A random displacements, |F|max <= 99 eV/A):
+#   regular vs regular (repeat call or second calculator): energy <= 2.2e-7 eV/atom, forces <= 1.4e-4 eV/A,
+#   charges <= 8.3e-7 e;
+#   graph vs regular: energy <= 3.8e-7 eV/atom, charges <= 8.9e-7 e, forces <= 1.5e-5 eV/A up to 113 atoms,
+#   2.3e-5 at 960 atoms and 2.2e-4 at 4992 atoms (2.2e-6 of |F|max): the force noise grows with the atom count
+#   (long-range sums), hence the per-atom force term.
+# The bounds keep a 5-10x-plus margin over these worst cases (old bounds: 1e-5 eV/atom, 1e-3 eV/A + 1e-5 |F|max,
+# 1e-4 e), so only a genuinely wrong capture is rejected; a false rejection costs speed, never correctness.
+_CHECK_E_PER_ATOM = 5e-6  # eV
+_CHECK_F = 1e-4  # eV/A, plus _CHECK_F_REL of the largest force component and _CHECK_F_PER_ATOM per atom
+_CHECK_F_REL = 1e-5
+_CHECK_F_PER_ATOM = 1e-7  # eV/A
+_CHECK_Q = 2e-5  # e
 # CUDA errors after which the context is unusable: raised, never answered by the regular path
 _FATAL_CUDA_ERRORS = (
     "illegal memory access",
@@ -94,6 +104,7 @@ _FATAL_CUDA_ERRORS = (
     "illegal instruction",
 )
 _PACKAGE = __name__.rpartition(".")[0]
+_UNSUPPORTED_MODEL = "the model is outside the graph contract (hooks, trainable parameters, custom modules or outputs)"
 
 
 def _failure(exc: Exception) -> str:
@@ -115,7 +126,7 @@ class _Generation:
 
     def __init__(self, device: torch.device):
         with torch.cuda.device(device):
-            self.pool = torch.cuda.MemPool()
+            self.pool: torch.cuda.MemPool | None = torch.cuda.MemPool()
         self.pool_bytes = 0  # reserved segments, as of the last ``measure``
 
     @property
@@ -191,13 +202,14 @@ def _max_filler_rows(b: int) -> int:
 
 
 class _Entry:
-    __slots__ = ("gen", "keepalive", "owned", "rebuilds", "runner", "storages", "validated")
+    __slots__ = ("gen", "keepalive", "owned", "rebuilds", "rows", "runner", "storages", "validated")
 
     def __init__(self, runner, gen: _Generation, keepalive: tuple = ()):
         self.runner, self.gen = runner, gen
         self.owned = 0  # engine bytes outside the pool, measured at admission
         self.rebuilds = getattr(runner, "rebuilds", 0)
         self.validated = False  # species / charge validation passed for this layout (its content is in the key)
+        self.rows: set[int] = set()  # dense batch sizes checked against the regular path on this padded graph
         self.keepalive = keepalive  # storages of every parameter / buffer the graph reads
         seen, storages = set(), []
         for tensor in keepalive:
@@ -237,47 +249,81 @@ class CUDAGraphCache:
         self._model_state = self._contract.snapshot()
         self._answer: dict | None = None  # regular result of a capture that was rejected (see _regular_answer)
         self._gen: _Generation | None = None  # pool of the cached graphs; created by the first capture
+        self._streams: set[torch.cuda.Stream] = set()  # streams graphs were replayed on (waited for on retire)
         self.generations = 0  # pools created (diagnostic)
         self.captures = 0  # graphs captured, neighbor-capacity rebuilds included (diagnostic)
 
     @classmethod
     def create(cls, calc, cuda_graph: bool | None = False, **kwargs) -> CUDAGraphCache | None:
-        """A cache for ``calc``, or None when it cannot apply (disabled, not CUDA, unsupported model)."""
+        """A cache for ``calc``, or None when it cannot apply (disabled, not CUDA, old dependencies, ROCm,
+        deterministic or training mode, unsupported model). Requested replay that cannot apply is warned once."""
         if not cuda_graph_enabled(cuda_graph) or torch.device(calc.device).type != "cuda":
             return None
+        reason = cuda_graph_dependency_problem() or cuda_graph_platform_problem() or cls._calculator_problem(calc)
+        cache = None
+        if reason is None:
+            cache = cls(calc, **kwargs)
+            if cache._model_state is None:
+                reason = _UNSUPPORTED_MODEL
+                cache = None
+        if reason is not None:
+            warn = getattr(calc, "_warn_cuda_graph_fallback", None)
+            if warn is not None:
+                warn(reason)
+        return cache
+
+    @staticmethod
+    def _calculator_problem(calc) -> str | None:
+        """Calculator-level reason the graph engines cannot reproduce the regular path, or None."""
+        if getattr(calc, "_deterministic", False):
+            return "deterministic=True"
+        if getattr(calc, "_train", False):
+            return "train=True"
         if isinstance(calc.model, torch.jit.ScriptModule):
-            return None
+            return "TorchScript (.jpt) models are not supported"
         try:
             check_dense_model(calc.model)
             check_sparse_model(calc.model, None)
-        except (NotImplementedError, AttributeError):
-            return None
-        cache = cls(calc, **kwargs)
-        return cache if cache._model_state is not None else None
+        except (NotImplementedError, AttributeError) as exc:
+            return f"unsupported model: {exc}"
+        return None
 
     # --- calculator settings the engines reproduce ------------------------------------------------------------
     def _settings(self) -> tuple | None:
-        """Hashable calculator settings an engine depends on, or None when the engines do not reproduce them.
+        """Hashable calculator settings an engine depends on, or None when the engines do not reproduce them."""
+        return self._settings_reason()[0]
+
+    def _settings_reason(self) -> tuple[tuple | None, str | None]:
+        """(settings, None), or (None, why the engines do not reproduce the calculator's settings).
 
         Plain attribute reads; the model contract is checked separately by ``_check_model``."""
         calc = self._calc
-        if calc.model is not self._model or getattr(calc, "_train", False) or getattr(calc, "_deterministic", False):
-            return None
+        if calc.model is not self._model:
+            return None, "the calculator's model was replaced after construction"
+        if getattr(calc, "_train", False):
+            return None, "train=True"
+        if getattr(calc, "_deterministic", False):
+            return None, "deterministic=True"
         c, d = calc.external_coulomb, calc.external_dftd3
         if (c is not None and type(c) is not LRCoulomb) or (d is not None and type(d) is not DFTD3):
-            return None  # reject custom modules before reading stock-only attributes
+            return None, "custom long-range modules"  # rejected before reading stock-only attributes
         if c is not None:
-            if c.method != "simple" or c.subtract_sr or calc._coulomb_cutoff != math.inf:
-                return None  # DSF/Ewald/PME, LR-only Coulomb, or set_lr_cutoff() truncated the full Coulomb
+            if c.method != "simple":
+                return None, f"{c.method} Coulomb (only full 'simple' Coulomb is captured)"
+            if c.subtract_sr:
+                return None, "long-range-only Coulomb (subtract_sr=True)"
+            if calc._coulomb_cutoff != math.inf:
+                return None, "truncated Coulomb cutoff (set_lr_cutoff)"
         elif d is not None and calc._dftd3_cutoff < d.smoothing_off:
-            return None  # the regular path would drop D3 pairs inside the smoothing range
+            # the regular path would drop D3 pairs inside the smoothing range
+            return None, "DFT-D3 cutoff below its smoothing range"
         return (
             None if c is None else id(c),
             None if d is None else (id(d), float(d.smoothing_on), float(d.smoothing_off), float(calc._dftd3_cutoff)),
             float(calc.cutoff),
             int(calc.nb_threshold),
             bool(calc.inference_kernels),
-        )
+        ), None
 
     def _check_model(self) -> tuple[bool, bool]:
         """Check the model contract on the CPU: (supported, unchanged since the last check).
@@ -296,6 +342,13 @@ class CUDAGraphCache:
             self.clear()  # waits for a discarded replay that may still be running
             self._model_state = state
         return state is not None, unchanged
+
+    def _model_supported(self) -> bool:
+        """``_check_model`` before a capture; an unsupported model state is warned once."""
+        supported = self._check_model()[0]
+        if not supported:
+            self._skip(_UNSUPPORTED_MODEL)
+        return supported
 
     def _captured_state(self) -> tuple:
         """Detached views of every parameter and buffer a graph reads: their storage outlives later replacement."""
@@ -354,7 +407,7 @@ class CUDAGraphCache:
         if q.size != B:
             return None
         key = (B, N, forces, z.reshape(B, N).tobytes(), q.tobytes(), settings, packed)
-        if ident is not None:
+        if ident is not None and idn is not None and idq is not None:
             refs = tuple(None if o is None else weakref.ref(o) for o in (idn[1], idq[1]))
             self._ident = (ident, refs, key)
         return key
@@ -392,9 +445,12 @@ class CUDAGraphCache:
     def _retire(self) -> None:
         """Drop every engine and the pool owner; the pool is released once its graphs are gone.
 
-        A rare boundary (``clear``, model change, rejection): waits for replays that may still read the pool."""
+        A rare boundary (``clear``, model change, rejection): waits for replays that may still read the pool. Only the
+        streams the graphs were replayed on are waited for, not the whole device."""
         if self._gen is not None or self._engines:
-            torch.cuda.synchronize(self._device)
+            for stream in self._streams:
+                stream.synchronize()
+        self._streams.clear()
         self._engines.clear()
         if self._gen is not None:
             self._gen.retire()
@@ -409,7 +465,10 @@ class CUDAGraphCache:
         ``packed``: ``[N, 3]`` input (see ``_layout_key``)."""
         calc = self._calc
         self._evict(self.cache_size - 1)
-        failure, oom, engine, runner, entry, checked, reference = None, False, None, None, None, None, None
+        failure, oom, checked, reference = None, False, None, None
+        engine: Any = None
+        runner: Any = None
+        entry: _Entry | None = None
         self._answer = None
         try:
             # Run the same-call reference before allocating a new private graph pool.
@@ -452,6 +511,7 @@ class CUDAGraphCache:
         except Exception as exc:  # never fail where the regular path works
             failure, oom = _failure(exc), isinstance(exc, torch.OutOfMemoryError)
         if failure is None:
+            assert entry is not None  # set before any check could pass
             self._engines[key] = entry
             return checked
         engine = runner = entry = checked = None  # release rejected graph outputs before retiring its pool
@@ -477,10 +537,16 @@ class CUDAGraphCache:
         """Raise unless the captured engine reproduces the regular path on this input (run once per layout).
 
         ``inputs``: species/charge buffers of a padded layout; its filler rows past ``B`` are not compared."""
+        self._streams.add(torch.cuda.current_stream(self._device))
         e, f, q = entry.runner(coord, *inputs)
+        ref = self._reference(data, forces) if reference is None else reference
+        return self._compare(e, f, q, ref, forces, B, N)
+
+    @staticmethod
+    def _compare(e, f, q, ref, forces: bool, B: int, N: int) -> tuple:
+        """Raise unless the first ``B`` rows of a graph's E/F/q match the regular result ``ref`` within fp32 noise."""
         e, q = e[:B], q[:B]
         f = None if f is None else f[:B]
-        ref = self._reference(data, forces) if reference is None else reference
         bad = []
         de = float((e.detach().double() - ref["energy"].detach().double().reshape(B)).abs().max())
         if not de <= _CHECK_E_PER_ATOM * N:
@@ -491,7 +557,7 @@ class CUDAGraphCache:
         if forces:
             rf = ref["forces"].detach().reshape(B, N, 3)
             df = float((f - rf).abs().max())
-            if not df <= _CHECK_F + 1e-5 * float(rf.abs().max()):
+            if not df <= _CHECK_F + _CHECK_F_REL * float(rf.abs().max()) + _CHECK_F_PER_ATOM * N:
                 bad.append(f"forces {df:.2e} eV/A")
         if bad:
             raise RuntimeError("captured engine disagrees with the regular path: " + ", ".join(bad))
@@ -525,12 +591,41 @@ class CUDAGraphCache:
         }
 
     # --- dispatch -------------------------------------------------------------------------------------------------
+    def _skip(self, reason: str) -> None:
+        """Warn once per calculator and reason that this call uses the regular path (``reason`` is structural, not
+        the normal first sighting of a layout)."""
+        warn = getattr(self._calc, "_warn_cuda_graph_fallback", None)
+        if warn is not None:
+            warn(reason)
+
+    @staticmethod
+    def _input_problem(data: Mapping[str, Any]) -> str | None:
+        """Why the input keys are outside the replayed contract, or None."""
+        keys = data.keys()
+        extra, missing = keys - _ALLOWED_KEYS, _REQUIRED_KEYS - keys
+        if "mol_idx" in extra:
+            return "flattened mol_idx batch input (e.g. TorchSim)"
+        if "cell" in extra or "pbc" in extra:
+            return "periodic cell input"
+        if "nbmat" in extra:
+            return "caller-supplied nbmat neighbor list"
+        if extra:
+            return f"unsupported input keys {sorted(extra)}"
+        if missing:
+            return f"input without {sorted(missing)}"
+        return None
+
     def eval(self, data: Mapping[str, Any], forces: bool, validate_species: bool) -> dict[str, torch.Tensor] | None:
         """Evaluate ``data`` by CUDA-graph replay, or return None to let the regular path run."""
-        if self._checking or not isinstance(data, Mapping) or not _REQUIRED_KEYS <= data.keys() <= _ALLOWED_KEYS:
+        if self._checking or not isinstance(data, Mapping):
+            return None  # (the capture-time reference itself runs the regular path)
+        problem = self._input_problem(data)
+        if problem is not None:
+            self._skip(problem)
             return None
         coord = data["coord"]
         if any(isinstance(value, torch.Tensor) and value.requires_grad for value in data.values()):
+            self._skip("input tensors require grad")
             return None  # preserve differentiation through charge as well as coordinates
         shape = tuple(coord.shape) if hasattr(coord, "shape") else np.shape(coord)
         if len(shape) == 2 and shape[1] == 3:
@@ -538,20 +633,27 @@ class CUDAGraphCache:
         elif len(shape) == 3 and shape[2] == 3:
             B, N, single = int(shape[0]), int(shape[1]), False
         else:
+            self._skip(f"coordinate shape {tuple(shape)} (expected [N, 3] or [B, N, 3])")
             return None
         if N < 2 or B < 1:
+            self._skip("fewer than two atoms per structure")
             return None
-        settings = self._settings()
+        settings, problem = self._settings_reason()
         if settings is None:
+            self._skip(problem or "unsupported calculator settings")
             return None
         forces = bool(forces)
         if B > 1 and self._calc.nb_threshold >= N:
             return self._eval_padded(data, coord, B, N, forces, settings, validate_species)
         key = self._layout_key(data["numbers"], data["charge"], B, N, forces, settings, packed=single)
         if key is None:
+            self._skip(
+                "zero-number padding atoms outside a dense batch (single molecule, or N > nb_threshold), "
+                "or numbers/charge shapes that do not match coord"
+            )
             return None
         entry = self._engines.get(key)
-        if entry is None and (not self._check_model()[0] or self._count(key) < self.capture_after):
+        if entry is None and (not self._model_supported() or self._count(key) < self.capture_after):
             return None  # unsupported model state, first sighting, or a layout kept on the regular path
         calc = self._calc
         if validate_species and (entry is None or not entry.validated):
@@ -610,6 +712,7 @@ class CUDAGraphCache:
                 self.clear()
             return False
         failure = None
+        self._streams.add(torch.cuda.current_stream(self._device))
         try:
             entry.runner.launch(x, *inputs)
         except Exception as exc:
@@ -641,7 +744,7 @@ class CUDAGraphCache:
                 cap = min(fits)
                 entry = self._engines[("padded", cap, N, forces, settings)]
         key = ("padded", cap, N, forces, settings)
-        if entry is None and (not self._check_model()[0] or self._count(key) < self.capture_after):
+        if entry is None and (not self._model_supported() or self._count(key) < self.capture_after):
             return None
         if validate_species:  # the species can change on every call
             calc._validate_species_and_charge(data)
@@ -657,17 +760,46 @@ class CUDAGraphCache:
                 x = torch.cat([x, x[:1].expand(cap - B, N, 3)])
                 z = torch.cat([z, z[:1].expand(cap - B, N)])
                 q = torch.cat([q, q[:1].expand(cap - B)])
+            checked = None
             if not cached:
                 checked = self._capture(key, B, N, x, data, forces, padded=(z, q))
                 if checked is None:
                     return self._regular_answer()
+                self._engines[key].rows.add(B)
             elif not self._launch(key, x, z, q):
                 return None
-            e, f, qq = self._engines[key].runner.result() if cached else checked
+            elif B not in self._engines[key].rows:
+                # First reuse of this graph for another row count (filler rows): check it against the regular path
+                # once, as a new capture is checked.
+                checked = self._check_reuse(key, data, forces, B, N)
+                if checked is None:
+                    return self._regular_answer()
+            e, f, qq = self._engines[key].runner.result() if checked is None else checked
             out = {"energy": e[:B].clone(), "charges": qq[:B].clone()}
             if forces:
                 out["forces"] = f[:B].clone()
         return out
+
+    def _check_reuse(self, key, data, forces: bool, B: int, N: int) -> tuple | None:
+        """Compare the launched replay of ``key`` with the regular result of this call; None after a rejection (the
+        regular result, when computed, is left for ``_regular_answer``)."""
+        failure, reference = None, None
+        entry: _Entry | None = None
+        self._answer = None
+        try:
+            reference = self._reference(data, forces)
+            entry = self._engines[key]
+            e, f, q = entry.runner.result()
+            checked = self._compare(e, f, q, reference, forces, B, N)
+        except Exception as exc:
+            failure = _failure(exc)
+        else:
+            entry.rows.add(B)
+            return checked
+        entry = None
+        self._reject(key, failure)
+        self._answer = reference
+        return None
 
     def _reject(self, key, reason: str, retire: bool = False) -> None:
         """Keep ``key`` on the regular path (warned once) and drop its engine.

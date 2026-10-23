@@ -22,7 +22,7 @@ from aimnet.modules import DFTD3, LRCoulomb
 from aimnet.modules.lr import ExternalDerivativeTerms, _require_pme_capable_nvalchemiops
 
 from . import derivatives
-from ._graph_options import cuda_graph_enabled
+from ._graph_options import cuda_graph_enabled, external_stacklevel
 from .neighbors import (  # noqa: F401  (re-exported for backwards compatibility)
     AdaptiveNeighborList,
     StaticInputCache,
@@ -137,7 +137,20 @@ class AIMNet2Calculator:
         Explicit ``None`` instead reads ``AIMNET_CUDA_GRAPH`` (enabled only
         for ``1``, ``true``, ``yes``, or ``on``). Explicit booleans override
         the environment. The graph backend is not imported on CPU or when
-        disabled.
+        disabled. Requested replay that cannot apply warns once per
+        calculator and reason (CPU device, ``deterministic=True``,
+        unsupported model, ``nvalchemi-toolkit-ops < 0.5.0`` or
+        ``warp-lang < 1.16``, ROCm, or one of the call-level reasons above).
+        With ``compile_model=True``, replayed calls run the eager model, not
+        the compiled forward. :meth:`clear_cuda_graphs` releases the
+        captured graphs and their memory pool.
+    inference_kernels : bool
+        Use the shared optimized AEV/ConvSV and streaming full-Coulomb
+        inference primitives on eligible CUDA calls. Default is ``False``.
+        The Triton kernels among them need compute capability >= 8.0 and an
+        importable ``triton``; otherwise the equivalent PyTorch expressions
+        run (warned once). No effect on compiled calls
+        (``compile_model=True``); inside CUDA-graph replays they are used.
 
     Attributes
     ----------
@@ -431,10 +444,68 @@ class AIMNet2Calculator:
 
         # Resolve opt-in before loading the backend, including on CPU-only installs.
         self._cuda_graph = None
-        if torch.device(self.device).type == "cuda" and cuda_graph_enabled(cuda_graph):
-            from .cuda_graph import CUDAGraphCache
+        self._cuda_graph_warned: set[str] = set()
+        on_cuda = torch.device(self.device).type == "cuda"
+        if self.inference_kernels and on_cuda:
+            from aimnet.kernels.triton_support import triton_unsupported_reason
 
-            self._cuda_graph = CUDAGraphCache.create(self, cuda_graph=True)
+            reason = triton_unsupported_reason(self.device)
+            if reason is not None:
+                warnings.warn(
+                    f"inference_kernels=True: the Triton inference kernels are not used ({reason}); "
+                    "the equivalent PyTorch expressions run instead.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+        if compile_model and self.inference_kernels:
+            warnings.warn(
+                "inference_kernels=True has no effect on compiled calls (compile_model=True): the compiled forward "
+                "keeps the stock primitives. The kernels are used only by CUDA-graph replays (cuda_graph=True).",
+                UserWarning,
+                stacklevel=2,
+            )
+        if cuda_graph_enabled(cuda_graph):
+            if not on_cuda:
+                self._warn_cuda_graph_fallback(f"the calculator runs on {self.device}, not CUDA")
+            else:
+                if compile_model:
+                    warnings.warn(
+                        "compile_model=True with cuda_graph=True: calls replayed as CUDA graphs run the eager model, "
+                        "not the compiled forward; only calls that fall back to the regular path use the compiled "
+                        "forward. Pass cuda_graph=False to benchmark torch.compile alone.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                from .cuda_graph import CUDAGraphCache
+
+                self._cuda_graph = CUDAGraphCache.create(self, cuda_graph=True)
+
+    def _warn_cuda_graph_fallback(self, reason: str) -> None:
+        """Warn once per calculator and reason that requested CUDA-graph replay is not used.
+
+        Mirrors ``_warn_deterministic_packed``: a flag on the instance, so long MD/optimization loops warn once.
+        """
+        warned = self.__dict__.setdefault("_cuda_graph_warned", set())
+        if reason in warned:
+            return
+        warned.add(reason)
+        warnings.warn(
+            f"AIMNet2Calculator: CUDA-graph replay is not used ({reason}); the regular code path runs instead.",
+            UserWarning,
+            stacklevel=external_stacklevel(),
+        )
+
+    def clear_cuda_graphs(self) -> None:
+        """Release every captured CUDA graph and its memory pool.
+
+        Waits for running replays, drops the cached engines, and returns the graph memory pool to the device
+        (``torch.cuda.empty_cache()``, which also releases other unused cached blocks of this process). Outputs
+        returned earlier are copies and stay valid. Later repeated calls are captured again. Also required after
+        deliberate ``.data``/raw-storage mutation of model parameters. A no-op when graphs are not enabled.
+        """
+        graphs = getattr(self, "_cuda_graph", None)
+        if graphs is not None:
+            graphs.clear()
 
     @classmethod
     def from_legacy_jit(
@@ -1037,10 +1108,13 @@ class AIMNet2Calculator:
         for each key (molecules are independent and generally ragged).
         """
         graphs = getattr(self, "_cuda_graph", None)
-        if graphs is not None and not stress and not hessian:
-            out = graphs.eval(data, forces=forces, validate_species=validate_species)
-            if out is not None:
-                return out
+        if graphs is not None:
+            if stress or hessian:
+                self._warn_cuda_graph_fallback("stress or Hessian requested")
+            else:
+                out = graphs.eval(data, forces=forces, validate_species=validate_species)
+                if out is not None:
+                    return out
         # Species validation — opt-out via validate_species=False.
         if validate_species:
             self._validate_species_and_charge(data)
