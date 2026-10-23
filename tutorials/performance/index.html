@@ -18,7 +18,7 @@
         <link rel="prev" href="../batch_processing/">
       
       
-        <link rel="next" href="../hugging_face/">
+        <link rel="next" href="../../cuda_graph/">
       
       
         
@@ -1172,6 +1172,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cuda_graph/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CUDA-Graph Inference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -2599,12 +2627,16 @@
 <p>Warp caches compiled kernels in <code>~/.cache/warp/</code> (or the directory set by <code>WARP_CACHE_PATH</code>). If you delete this cache, the next run will recompile.</p>
 </div>
 <h2 id="step-2-using-torchcompile-compile_model">Step 2: Using torch.compile (compile_model)<a class="headerlink" href="#step-2-using-torchcompile-compile_model" title="Permanent link">&para;</a></h2>
+<div class="admonition note">
+<p class="admonition-title">CUDA-graph replay is a separate option</p>
+<p>Both <code>compile_model=False</code> and <code>cuda_graph=False</code> are defaults. Graph replay requires explicit opt-in with <code>cuda_graph=True</code>. To compare the regular path with <code>torch.compile</code> alone, pass <code>cuda_graph=False</code> to <strong>both</strong> calculators in the examples below. See <a href="../../cuda_graph/">CUDA-Graph Inference</a> for an explicit comparison table, supported calls, and capture/cache costs.</p>
+</div>
 <p>The <code>compile_model=True</code> parameter applies <code>torch.compile()</code> to the neural network forward pass:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Without compilation</span>
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">cuda_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
 <span class="c1"># With compilation</span>
-<span class="n">calc_compiled</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">calc_compiled</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">cuda_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="what-gets-compiled">What Gets Compiled<a class="headerlink" href="#what-gets-compiled" title="Permanent link">&para;</a></h3>
 <p><code>torch.compile()</code> optimizes <strong>only the neural network forward pass</strong> (the model itself). It does <strong>not</strong> compile:</p>
@@ -2631,12 +2663,13 @@
 <h3 id="compile-options">Compile Options<a class="headerlink" href="#compile-options" title="Permanent link">&para;</a></h3>
 <p>You can pass additional arguments to <code>torch.compile()</code> via <code>compile_kwargs</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Default compilation (recommended starting point)</span>
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">cuda_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
 <span class="c1"># With max-autotune for maximum optimization (longer compile time)</span>
 <span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span>
     <span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span>
     <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">cuda_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="n">compile_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;max-autotune&quot;</span><span class="p">},</span>
 <span class="p">)</span>
 </code></pre></div>
@@ -2647,11 +2680,12 @@
 <span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span>
     <span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span>
     <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">cuda_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="n">compile_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;reduce-overhead&quot;</span><span class="p">},</span>  <span class="c1"># Bad for varying sizes</span>
 <span class="p">)</span>
 
 <span class="c1"># SAFE default</span>
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">cuda_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </code></pre></div>
 </div>
 <h2 id="step-3-dense-vs-sparse-mode">Step 3: Dense vs Sparse Mode<a class="headerlink" href="#step-3-dense-vs-sparse-mode" title="Permanent link">&para;</a></h2>
@@ -2731,7 +2765,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
 
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">cuda_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">50</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">),</span>
     <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="p">(</span><span class="mi">50</span><span class="p">,),</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">),</span>

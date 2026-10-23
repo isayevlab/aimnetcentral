@@ -813,6 +813,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../cuda_graph/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CUDA-Graph Inference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../tutorials/hugging_face/" class="md-nav__link">
         
   
@@ -1674,6 +1702,28 @@
     <span class="md-ellipsis">
       
         compile_model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cuda_graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cuda_graph
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#inference_kernels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        inference_kernels
       
     </span>
   </a>
@@ -3100,6 +3150,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cuda_graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cuda_graph
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#inference_kernels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        inference_kernels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#compile_kwargs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4044,6 +4116,8 @@
     <span class="o">*</span><span class="p">,</span>
     <span class="n">model_import_paths</span><span class="p">:</span> <span class="n">Collection</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">model_import_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;extend&quot;</span><span class="p">,</span> <span class="s2">&quot;replace&quot;</span><span class="p">,</span> <span class="s2">&quot;unsafe&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;extend&quot;</span><span class="p">,</span>
+    <span class="n">inference_kernels</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">cuda_graph</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 </code></pre></div>
 <h3 id="parameters">Parameters<a class="headerlink" href="#parameters" title="Permanent link">&para;</a></h3>
@@ -4219,10 +4293,18 @@
 </tbody>
 </table>
 <p>Compilation adds overhead on first call but speeds up subsequent calls. Useful for MD trajectories, geometry optimizations, or repeated evaluations. Compilation always uses <code>fullgraph=True</code>; passing <code>fullgraph=False</code> in <code>compile_kwargs</code> is rejected. Legacy TorchScript <code>.jpt</code> models do not support this option. Hessian and Hessian-vector-product requests use the original eager model while ordinary compiled evaluations continue to share that model's parameters and state.</p>
+<p><code>compile_model</code> and <code>cuda_graph</code> are independent options, both disabled by default. Set <code>cuda_graph=False</code> for an unambiguous regular or compile-only comparison. See <a href="../cuda_graph/">CUDA-Graph Inference</a> for the execution modes and their measurement boundaries.</p>
+<h4 id="cuda_graph"><code>cuda_graph</code><a class="headerlink" href="#cuda_graph" title="Permanent link">&para;</a></h4>
+<p>Enable CUDA-graph replay for supported repeated inference layouts with <code>True</code>. The default is <code>False</code>, so constructing a calculator does not implicitly select graph capture. Explicit <code>None</code> delegates selection to <code>AIMNET_CUDA_GRAPH</code>: only <code>1</code>, <code>true</code>, <code>yes</code>, or <code>on</code> enables it (case-insensitive). Explicit booleans override the environment. CPU and unsupported models/calls use the regular path, and CPU or disabled calculators do not import the graph backend. No training, stress, Hessian, or input-gradient calculation is accelerated by this option. Requested replay that cannot apply (CPU, <code>deterministic=True</code>, <code>mol_idx</code>/<code>cell</code>/<code>nbmat</code> input, unsupported models, <code>nvalchemi-toolkit-ops&lt;0.5.0</code>, ...) warns once per calculator and reason and uses the regular path. With <code>compile_model=True</code>, replayed calls run the eager model, not the compiled forward. <code>calc.clear_cuda_graphs()</code> releases the captured graphs and their memory pool. See <a href="../cuda_graph/">CUDA-Graph Inference</a> for supported models, capture and memory costs, fallback, and mutation constraints.</p>
+<h4 id="inference_kernels"><code>inference_kernels</code><a class="headerlink" href="#inference_kernels" title="Permanent link">&para;</a></h4>
+<p>Opt into shared AEV/ConvSV and streaming full-Coulomb inference kernels with <code>True</code>. The default is <code>False</code>. Eligible regular eager and CUDA-graph calls use the same optimized primitives, so this option can be evaluated independently of graph replay. Compile-only calls retain their compiled path, so the option has no effect there (warned once). The Triton kernels need compute capability 8.0 or newer; older GPUs use the equivalent PyTorch expressions. Training and requests for higher derivatives use the appropriate regular implementations. See the independent comparison modes in <a href="../cuda_graph/">CUDA-Graph Inference</a>.</p>
 <h4 id="compile_kwargs"><code>compile_kwargs</code><a class="headerlink" href="#compile_kwargs" title="Permanent link">&para;</a></h4>
 <p>Additional keyword arguments to pass to <code>torch.compile()</code>. Default is <code>None</code>.</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Example: use reduce-overhead mode for lower latency</span>
-<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span><span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">compile_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;reduce-overhead&quot;</span><span class="p">})</span>
+<span class="n">calc</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span>
+    <span class="s2">&quot;aimnet2&quot;</span><span class="p">,</span> <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">cuda_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">compile_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;reduce-overhead&quot;</span><span class="p">},</span>
+<span class="p">)</span>
 </code></pre></div>
 <p>See <a href="https://pytorch.org/docs/stable/generated/torch.compile.html">torch.compile documentation</a> for available options.</p>
 <h4 id="cache_static"><code>cache_static</code><a class="headerlink" href="#cache_static" title="Permanent link">&para;</a></h4>
