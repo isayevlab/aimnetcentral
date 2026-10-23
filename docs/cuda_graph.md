@@ -6,7 +6,7 @@ CUDA-graph replay accelerates repeated energy, force, and charge evaluations of 
 
 `compile_model=False` and `cuda_graph=False` are the constructor defaults. Graph capture adds startup cost and retains GPU memory between calls, so enable it explicitly with `cuda_graph=True` for repeated CUDA evaluations. The optional graph backend is imported only after CUDA execution and graph opt-in have both been selected; CPU and graph-disabled calculators do not import it.
 
-| Mode | Explicit constructor options in this fork | Execution |
+| Mode | Explicit constructor options | Execution |
 | --- | --- | --- |
 | Regular, stock primitives (default) | `compile_model=False, cuda_graph=False, inference_kernels=False` | Canonical calculator and model computation |
 | Regular, shared optimized primitives | `compile_model=False, cuda_graph=False, inference_kernels=True` | Same model computation with eligible AEV/ConvSV and Coulomb kernels |
@@ -15,7 +15,7 @@ CUDA-graph replay accelerates repeated energy, force, and charge evaluations of 
 | Compile only | `compile_model=True, cuda_graph=False, inference_kernels=False` | Regular calculator with a compiled NN forward |
 | Compile and graph selected | `compile_model=True, cuda_graph=True` | Eligible graph replay takes precedence; regular calls use the compiled forward |
 
-The upstream reference does not have the `cuda_graph` keyword: omit it when running unmodified upstream code. Here, “regular” does not mean “CPU” or “without Warp”; regular CUDA calculations already use supported Warp kernels. Dense/sparse layout, `torch.compile`, and CUDA-graph replay are separate choices.
+Here, “regular” does not mean “CPU” or “without Warp”; regular CUDA calculations already use supported Warp kernels. Dense/sparse layout, `torch.compile`, and CUDA-graph replay are separate choices.
 
 ```python
 from aimnet.calculators import AIMNet2Calculator
@@ -63,7 +63,7 @@ Outputs retain regular keys, shapes, dtypes, and device: energy is in **eV**, fo
 
 ### Artifacts and Models
 
-Registry models and v2 `.pt` artifacts are eligible only if the loaded module satisfies the contract above. A `.pt` suffix alone does not establish compatibility. Legacy `.jpt` models, custom CPCM/QEq/Flow heads, SR-repulsion heads, SiLU substitutions, and other custom forward implementations are **not** accelerated by this backend. They use the regular path if the existing loader and calculator support them; this change does not add compatibility to previously unsupported artifacts. In particular, `compile_model=True` remains unsupported for legacy `.jpt` files.
+Registry models and v2 `.pt` artifacts are eligible only if the loaded module satisfies the contract above. A `.pt` suffix alone does not establish compatibility. Legacy `.jpt` models, custom output heads, SR-repulsion heads, SiLU substitutions, and other custom forward implementations are **not** accelerated by this backend. They use the regular path if the existing loader and calculator support them; this change does not add compatibility to previously unsupported artifacts. In particular, `compile_model=True` remains unsupported for legacy `.jpt` files.
 
 ## Capture, Memory, and Fallback
 
@@ -112,7 +112,7 @@ The optional `pip install "aimnet[cuda-graph]"` extra declares the Linux Triton 
 
 Long-range neighbor storage belongs to the modules that consume it. Streaming Coulomb alone does not need an all-pairs matrix. When D3 shares the regular full-Coulomb list, the graph adapter retains those pairs, including pairs outside D3's energy smoothing range: coordination-number inputs must remain equivalent to the regular calculation. D3-only lists preserve the calculator's D3 cutoff policy. The dense adapter follows the regular path of the input shape: `[B, N, 3]` input keeps D3's own `smoothing_off` list (nb_mode 0), while packed `[N, 3]` input receives the regular packed path's long-range list (all pairs with full Coulomb), so the two shapes are separate cached layouts. No shorter physical cutoff is introduced to obtain a memory or timing improvement.
 
-The package's declared PyTorch minimum and upstream version matrix do not by themselves establish graph-backend coverage. Earlier specialized-engine validation, including padded batches and the graph-pool lifecycle, used RTX 3060 Laptop / WSL2 / Torch 2.11 / Warp 1.16 / Triton 3.6. That history does not establish the speed or peak memory of the shared-computation revision. Other GPU generations, operating systems, and supported Torch versions need their own release qualification. No V100, H100, or CPU-native-engine speedup is implied.
+The package's declared PyTorch minimum and CI version matrix do not by themselves establish graph-backend coverage. Earlier specialized-engine validation, including padded batches and the graph-pool lifecycle, used RTX 3060 Laptop / WSL2 / Torch 2.11 / Warp 1.16 / Triton 3.6. That history does not establish the speed or peak memory of the shared-computation revision. Other GPU generations, operating systems, and supported Torch versions need their own release qualification. No V100, H100, or CPU-native-engine speedup is implied.
 
 Historical validation of the preceding revision included the minimum Torch 2.10 CPU/core lane and an installed-wheel CPU smoke test without Triton. Repeat these checks for the shared-computation revision before release; historical checks do not qualify its CUDA graphs on Torch 2.10 or other GPU hardware.
 
@@ -123,7 +123,7 @@ Historical validation of the preceding revision included the minimum Torch 2.10 
 - Warm each path independently, synchronize CUDA around wall-clock timing, and report cold startup separately from steady state. Use multiple timing rounds and vary construction/measurement order.
 - Measure energy-only and E+F separately. Include both fixed and moving geometries, and state whether host-to-device transfers are timed.
 - Report allocated and reserved VRAM, capture peak, and retained cache memory separately. Do not infer memory savings from runtime.
-- For CPU comparisons, fix and report `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, and PyTorch thread counts. This fork adds no CPU replay accelerator; CPU remains a useful compatibility/control measurement.
+- For CPU comparisons, fix and report `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, and PyTorch thread counts. This backend adds no CPU replay accelerator; CPU remains a useful compatibility/control measurement.
 - Test E/F/charge parity and relevant derivative/long-range checks before interpreting a timing ratio as usable acceleration.
 
 See also [Performance Tuning](tutorials/performance.md) and [Calculator API](calculator.md).

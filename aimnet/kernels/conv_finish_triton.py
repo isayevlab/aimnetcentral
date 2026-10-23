@@ -134,7 +134,7 @@ def _conv_finish_backward_kernel(
     )
     gs = tl.where(padded[:, None], 0.0, gs)
     # Write the contraction's native B,S,F,N,4 storage, not a canonical-layout
-    # temporary that the upstream convolution would have to transpose/copy.
+    # temporary that the preceding convolution would have to transpose/copy.
     offset = (((batch[:, None] * S + shift[None, :]) * F + feature) * N + center[:, None]) * 4
     tl.store(out_ptr + offset, gs, mask=scalar_mask)
     tl.store(out_ptr + offset + 1, gx, mask=scalar_mask)

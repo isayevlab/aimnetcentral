@@ -141,7 +141,7 @@ def test_subclass_replacement_rejected(contract):
 
 
 def test_unknown_output_rejected(contract):
-    contract.model.outputs["custom_cpcm"] = nn.Identity()
+    contract.model.outputs["custom_head"] = nn.Identity()
     assert contract.snapshot() is None
 
 

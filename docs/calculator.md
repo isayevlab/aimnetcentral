@@ -139,7 +139,8 @@ AIMNet2Calculator(
     *,
     model_import_paths: Collection[str] | None = None,
     model_import_mode: Literal["extend", "replace", "unsafe"] = "extend",
-    cuda_graph: bool | None = None,
+    inference_kernels: bool = False,
+    cuda_graph: bool | None = False,
 )
 ```
 

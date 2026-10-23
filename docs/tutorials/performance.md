@@ -58,7 +58,7 @@ result = calc({
 
 ## Step 2: Using torch.compile (compile_model)
 
-!!! note "CUDA-graph replay is a separate option in this fork"
+!!! note "CUDA-graph replay is a separate option"
 
     Both `compile_model=False` and `cuda_graph=False` are defaults. Graph replay requires explicit opt-in with `cuda_graph=True`. To compare the regular path with `torch.compile` alone, pass `cuda_graph=False` to **both** calculators in the examples below. See [CUDA-Graph Inference](../cuda_graph.md) for an explicit comparison table, supported calls, and capture/cache costs.
 
