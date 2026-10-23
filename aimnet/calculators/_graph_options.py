@@ -7,10 +7,9 @@ import sys
 
 import torch
 
-# Minimum versions for CUDA-graph capture. nvalchemi-toolkit-ops 0.5.0 launches its Warp neighbor kernels on
-# PyTorch's current stream and orders buffer resets internally (see ``neighbor_buffers.ReusableNeighborMatrix``);
-# with 0.4.1 those launches escape the capture stream and replays return wrong energies (measured 1-4700 eV off).
-# 0.5.0 itself requires warp-lang >= 1.16. The package floor stays at the regular path's requirements, so older
+# Minimum versions for CUDA-graph capture. nvalchemi-toolkit-ops 0.5.0 orders its Warp neighbor kernels on
+# PyTorch's current stream and resets buffers internally (see ``neighbor_buffers.ReusableNeighborMatrix``); graphs
+# captured with 0.4.1 were measured to replay wrong energies (1-4700 eV off). 0.5.0 itself requires warp-lang >= 1.16. The package floor stays at the regular path's requirements, so older
 # installs keep working and only graph capture is refused.
 GRAPH_MIN_VERSIONS: dict[str, tuple[int, ...]] = {
     "nvalchemi-toolkit-ops": (0, 5, 0),

@@ -457,7 +457,7 @@ class AIMNet2Calculator:
                     UserWarning,
                     stacklevel=2,
                 )
-        if compile_model and self.inference_kernels:
+        if compile_model and self.inference_kernels and on_cuda:
             warnings.warn(
                 "inference_kernels=True has no effect on compiled calls (compile_model=True): the compiled forward "
                 "keeps the stock primitives. The kernels are used only by CUDA-graph replays (cuda_graph=True).",
