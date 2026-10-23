@@ -48,6 +48,12 @@ If you are unsure which model to use, start here. AIMNet2 provides the best bala
 
     Trained on single-determinant DFT data. Systems with strong multi-reference character (e.g., biradicals, stretched bonds near dissociation, certain transition states) may not be reliable.
 
+!!! warning "Compressed geminal hydrogens can collapse"
+
+    When two hydrogens on the same heavy atom (for example in a CH₂, CH₃, or NH₂ group) are pushed together, the energy rises normally to a peak of about +90 kcal/mol at an H–H distance of about 0.75 Å, but below that the H–H force reverses and the pair collapses toward 0 Å into a spurious low-energy region. An optimization started inside that range can converge to a collapsed structure that passes the usual convergence checks. Free H₂ is described correctly; the defect comes from a gap in the training data for compressed geminal pairs and is planned to be addressed in the next model release. It affects both `aimnet2` and `aimnet2_2025`.
+
+    Until then, reject starting geometries with any H–H distance below 0.8 Å (a 0.5 Å filter is not enough), and check optimized geometries for H–H distances below 0.6 Å. See [#139](https://github.com/isayevlab/aimnetcentral/issues/139).
+
 ## Typical Use Cases
 
 - **Drug-like molecule energetics** -- conformational energies, tautomer ranking, protonation states
