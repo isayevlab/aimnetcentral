@@ -2273,6 +2273,10 @@
 <p class="admonition-title">Same scope restrictions</p>
 <p>No transition metals, closed-shell only, molecular training data. See the <a href="../aimnet2/">AIMNet2 page</a> for the full list of limitations.</p>
 </div>
+<div class="admonition warning">
+<p class="admonition-title">Compressed geminal hydrogens can collapse</p>
+<p>Like <code>aimnet2</code>, this model has a spurious low-energy region when two hydrogens on the same heavy atom are compressed below an H–H distance of about 0.75 Å. Reject starting geometries with any H–H distance below 0.8 Å and check optimized geometries for H–H distances below 0.6 Å. See the <a href="../aimnet2/#limitations">AIMNet2 page</a> and <a href="https://github.com/isayevlab/aimnetcentral/issues/139">#139</a>.</p>
+</div>
 <h2 id="typical-use-cases">Typical Use Cases<a class="headerlink" href="#typical-use-cases" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>General-purpose B97-3c calculations</strong> -- recommended replacement for <code>aimnet2-b973c</code> in all workflows</li>
