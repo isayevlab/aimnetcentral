@@ -92,7 +92,7 @@ def test_cuda_fallback_matches_kernel_path(monkeypatch):
 def test_cpu_import_emits_no_cuda_error_noise():
     """Importing the kernels on a CUDA-less host must not spam stderr."""
     env = dict(os.environ, CUDA_VISIBLE_DEVICES="")
-    proc = subprocess.run(  # noqa: S603 -- fixed argv, no untrusted input
+    proc = subprocess.run(  # noqa: S603 -- Fixed Python command; no untrusted input.
         [sys.executable, "-c", "import aimnet.kernels"],
         capture_output=True,
         text=True,

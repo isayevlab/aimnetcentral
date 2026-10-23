@@ -139,6 +139,8 @@ AIMNet2Calculator(
     *,
     model_import_paths: Collection[str] | None = None,
     model_import_mode: Literal["extend", "replace", "unsafe"] = "extend",
+    inference_kernels: bool = False,
+    cuda_graph: bool | None = False,
 )
 ```
 
@@ -233,13 +235,26 @@ Whether to compile the model with `torch.compile()` for faster inference.
 
 Compilation adds overhead on first call but speeds up subsequent calls. Useful for MD trajectories, geometry optimizations, or repeated evaluations. Compilation always uses `fullgraph=True`; passing `fullgraph=False` in `compile_kwargs` is rejected. Legacy TorchScript `.jpt` models do not support this option. Hessian and Hessian-vector-product requests use the original eager model while ordinary compiled evaluations continue to share that model's parameters and state.
 
+`compile_model` and `cuda_graph` are independent options, both disabled by default. Set `cuda_graph=False` for an unambiguous regular or compile-only comparison. See [CUDA-Graph Inference](cuda_graph.md) for the execution modes and their measurement boundaries.
+
+#### `cuda_graph`
+
+Enable CUDA-graph replay for supported repeated inference layouts with `True`. The default is `False`, so constructing a calculator does not implicitly select graph capture. Explicit `None` delegates selection to `AIMNET_CUDA_GRAPH`: only `1`, `true`, `yes`, or `on` enables it (case-insensitive). Explicit booleans override the environment. CPU and unsupported models/calls use the regular path, and CPU or disabled calculators do not import the graph backend. No training, stress, Hessian, or input-gradient calculation is accelerated by this option. Requested replay that cannot apply (CPU, `deterministic=True`, `mol_idx`/`cell`/`nbmat` input, unsupported models, `nvalchemi-toolkit-ops<0.5.0`, ...) warns once per calculator and reason and uses the regular path. With `compile_model=True`, replayed calls run the eager model, not the compiled forward. `calc.clear_cuda_graphs()` releases the captured graphs and their memory pool. See [CUDA-Graph Inference](cuda_graph.md) for supported models, capture and memory costs, fallback, and mutation constraints.
+
+#### `inference_kernels`
+
+Opt into shared AEV/ConvSV and streaming full-Coulomb inference kernels with `True`. The default is `False`. Eligible regular eager and CUDA-graph calls use the same optimized primitives, so this option can be evaluated independently of graph replay. Compile-only calls retain their compiled path, so the option has no effect there (warned once). The Triton kernels need compute capability 8.0 or newer; older GPUs use the equivalent PyTorch expressions. Training and requests for higher derivatives use the appropriate regular implementations. See the independent comparison modes in [CUDA-Graph Inference](cuda_graph.md).
+
 #### `compile_kwargs`
 
 Additional keyword arguments to pass to `torch.compile()`. Default is `None`.
 
 ```python
 # Example: use reduce-overhead mode for lower latency
-calc = AIMNet2Calculator("aimnet2", compile_model=True, compile_kwargs={"mode": "reduce-overhead"})
+calc = AIMNet2Calculator(
+    "aimnet2", compile_model=True, cuda_graph=False,
+    compile_kwargs={"mode": "reduce-overhead"},
+)
 ```
 
 See [torch.compile documentation](https://pytorch.org/docs/stable/generated/torch.compile.html) for available options.

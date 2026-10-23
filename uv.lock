@@ -30,6 +30,9 @@ dependencies = [
 ase = [
     { name = "ase" },
 ]
+cuda-graph = [
+    { name = "triton", marker = "sys_platform == 'linux'" },
+]
 hf = [
     { name = "huggingface-hub" },
     { name = "safetensors" },
@@ -94,10 +97,11 @@ requires-dist = [
     { name = "sella", marker = "extra == 'sella'", specifier = ">=2.4.0" },
     { name = "torch", specifier = ">=2.10" },
     { name = "torch-sim-atomistic", marker = "python_full_version >= '3.12' and extra == 'torchsim'", specifier = ">=0.6.0,<0.7.0" },
+    { name = "triton", marker = "sys_platform == 'linux' and extra == 'cuda-graph'", specifier = ">=3.0" },
     { name = "wandb", marker = "extra == 'train'", specifier = ">=0.18.5" },
     { name = "warp-lang", specifier = ">=1.13,<2" },
 ]
-provides-extras = ["ase", "hf", "pysis", "sella", "torchsim", "train"]
+provides-extras = ["ase", "cuda-graph", "hf", "pysis", "sella", "torchsim", "train"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -373,6 +373,54 @@ class LRCoulomb(nn.Module):
     def coul_simple_sr(self, data: dict[str, Tensor]) -> Tensor:
         return _calc_coulomb_sr(data, self.rc, self.envelope, self.key_in, self._factor)
 
+    def _coul_simple_streaming(self, data: dict[str, Tensor]) -> Tensor | None:
+        """Optional first-order CUDA implementation shared by eager and graph calls.
+
+        The calculator supplies validated *CPU* layout metadata only for plain
+        inference. No all-pairs neighbor matrix is needed. Training, Hessian,
+        arbitrary/ragged layouts, padded dense inputs and unsupported precision
+        retain :meth:`coul_simple`; this first-order kernel is not a replacement
+        for the differentiable reference implementation.
+        """
+        enabled = data.get("_inference_kernels")
+        atoms_per_system = data.get("_inference_atoms_per_system")
+        if enabled is None or not bool(enabled) or atoms_per_system is None:
+            return None
+        coord, charges = data["coord"], data[self.key_in]
+        if coord.device.type != "cuda" or coord.dtype != torch.float32 or charges.dtype != torch.float32:
+            return None
+        if data.get("cell") is not None:
+            return None
+        mode = nbops.get_nb_mode(data)
+        n_mol = int(atoms_per_system)
+        if mode == 0:
+            # The kernel's rectangular range includes every dense slot; dummy
+            # slots must use the masked reference, even when their charge is 0.
+            if nbops.is_input_padded(data):
+                return None
+            B, N = coord.shape[:2]
+            if n_mol != N:
+                return None
+            coord_flat, charges_flat = coord.flatten(0, 1), charges.flatten()
+            n_real = B * N
+        elif mode == 1:
+            coord_flat, charges_flat = coord, charges
+            n_real = data["charge"].shape[0] * n_mol
+            if coord.shape[0] != n_real + 1:
+                return None
+        else:
+            return None
+
+        from aimnet.kernels.coulomb_wp import full_coulomb_rows  # type: ignore[attr-defined]
+
+        rows = full_coulomb_rows(coord_flat, charges_flat, n_mol, n_real)
+        if mode == 0:
+            rows = rows.view(B, N)
+        energy = self._factor * nbops.mol_sum(rows, data)
+        if self.subtract_sr:
+            energy = energy - self.coul_simple_sr(data)
+        return energy
+
     def _dsf_inputs_mode0(
         self,
         data: dict[str, Tensor],
@@ -742,7 +790,13 @@ class LRCoulomb(nn.Module):
         ``None``), and every derivative comes from autograd of the energy.
         """
         if self.method == "simple":
-            e = self.coul_simple(data)
+            # Opt-in shared primitive, never used by higher derivatives. The
+            # energy remains connected through both coordinates and charges.
+            e = None
+            if not (hessian or training_derivatives or compute_virial):
+                e = self._coul_simple_streaming(data)
+            if e is None:
+                e = self.coul_simple(data)
             terms = None
         elif self.method == "dsf":
             if hessian or training_derivatives:
@@ -1279,6 +1333,26 @@ class DFTD3(nn.Module):
             num_systems = B
             total_atoms = B * N
             fill_value = total_atoms
+            prepared_neighbors = data.get("_dftd3_neighbor_matrix")
+            if prepared_neighbors is not None:
+                # A capture adapter may own reusable buffers, but must fill
+                # them on every geometry with the neighbors the regular path
+                # gives D3 for the same input: this dense list (smoothing_off)
+                # for [B, N, 3], the packed long-range list for [N, 3]. CN
+                # counts every listed pair, so another list changes E and F.
+                batch_idx = data.get("_dftd3_batch_idx", batch_idx)
+                return _DFTD3KernelInputs(
+                    nb_mode=nb_mode,
+                    coord=coord,
+                    coord_flat=coord_flat,
+                    numbers_flat=numbers_flat,
+                    batch_idx=batch_idx,
+                    neighbor_matrix=prepared_neighbors.to(torch.int32),
+                    neighbor_matrix_shifts=None,
+                    num_systems=num_systems,
+                    fill_value=fill_value,
+                    cell_for_kernel=None,
+                )
             cutoff = float(self.smoothing_off)
             sphere_volume = 4.0 / 3.0 * math.pi * cutoff**3
             max_neighbors = max(16, min(max(1, N - 1), ((int(0.2 * sphere_volume) + 15) // 16) * 16))
@@ -1312,7 +1386,15 @@ class DFTD3(nn.Module):
             mol_idx = data.get("mol_idx")
             if mol_idx is not None:
                 batch_idx = mol_idx.to(torch.int32)
-                num_systems = int(mol_idx.max().item()) + 1
+                # Prepared inputs cache the validated count on CPU. Do not
+                # infer it from charge.shape: direct module callers can pass
+                # one shared scalar charge for several systems.
+                if "_num_mol" in data:
+                    num_systems = int(data["_num_mol"])
+                elif "_dftd3_num_systems" in data:
+                    num_systems = int(data["_dftd3_num_systems"])
+                else:
+                    num_systems = int(mol_idx.max().item()) + 1
             else:
                 batch_idx = torch.zeros(N, dtype=torch.int32, device=coord.device)
                 num_systems = 1

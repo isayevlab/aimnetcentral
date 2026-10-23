@@ -58,6 +58,7 @@ class _CountingExternalModule:
         return self.wrapped(*args, **kwargs)
 
 
+# Tests that count these calls pin cuda_graph=False: the calls happen on the regular path, not in a CUDA-graph replay.
 def _wrap_neighbor_lists(calc):
     for attr in ("_nblist", "_nblist_lr", "_nblist_coulomb", "_nblist_dftd3"):
         nblist = getattr(calc, attr)
@@ -395,7 +396,7 @@ class TestGPUBatching:
     def test_static_cache_reuses_neighbor_matrices_for_same_resident_tensors(self):
         """Opt-in static cache avoids rebuilding neighbor matrices on repeated CUDA tensors."""
         data = self._resident_water_cluster()
-        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cache_static=True)
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cuda_graph=False, cache_static=True)
         _wrap_neighbor_lists(calc)
 
         first = calc(data, forces=True)
@@ -418,7 +419,7 @@ class TestGPUBatching:
     def test_static_cache_is_disabled_by_default(self):
         """Default calculator behavior rebuilds neighbor matrices every call."""
         data = self._resident_water_cluster()
-        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cuda_graph=False)
         _wrap_neighbor_lists(calc)
 
         calc(data, forces=True)
@@ -431,7 +432,7 @@ class TestGPUBatching:
     def test_static_cache_reuses_dftd3_terms_for_same_resident_tensors(self):
         """Opt-in static cache avoids rerunning external DFTD3 on repeated CUDA tensors."""
         data = self._resident_water_cluster()
-        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cache_static=True)
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cuda_graph=False, cache_static=True)
         assert calc.external_dftd3 is not None
         calc.external_dftd3 = _CountingExternalModule(calc.external_dftd3)
 
@@ -453,7 +454,7 @@ class TestGPUBatching:
     def test_static_dftd3_cache_is_disabled_by_default(self):
         """Default calculator behavior reruns external DFTD3 every call."""
         data = self._resident_water_cluster()
-        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0)
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cuda_graph=False)
         assert calc.external_dftd3 is not None
         calc.external_dftd3 = _CountingExternalModule(calc.external_dftd3)
 
@@ -469,7 +470,7 @@ class TestGPUBatching:
         data_charged = dict(data_neutral)
         data_charged["charge"] = torch.tensor(1.0, device="cuda")
 
-        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cache_static=True)
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cuda_graph=False, cache_static=True)
         assert calc.external_dftd3 is not None
         _wrap_neighbor_lists(calc)
         calc.external_dftd3 = _CountingExternalModule(calc.external_dftd3)
@@ -497,7 +498,7 @@ class TestGPUBatching:
             "numbers": torch.stack([water["numbers"], water["numbers"]]).cuda(),
             "charge": torch.zeros(2, device="cuda"),
         }
-        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cache_static=True)
+        calc = AIMNet2Calculator("aimnet2", device="cuda", nb_threshold=0, cuda_graph=False, cache_static=True)
         _wrap_neighbor_lists(calc)
 
         calc(data, forces=True)

@@ -79,6 +79,8 @@ print(result["forces"])   # eV/Angstrom
 print(result["charges"])  # e
 ```
 
+`compile_model=False` and `cuda_graph=False` are the defaults. Opt into CUDA-graph replay for supported repeated evaluations with `cuda_graph=True`; use `compile_model=True, cuda_graph=False` for a compile-only comparison. See [CUDA-Graph Inference](docs/cuda_graph.md) for supported models, fallback behavior, capture costs, and cache memory.
+
 ### ASE
 
 ```python

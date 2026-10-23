@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [0.2.5] - 2026-10-24
 
-0.2.5 is a pre-1.0 release. Despite the patch-level version number it contains breaking changes, so if you pin `aimnet~=0.2.0` (or `>=0.2,<0.3`), read the breaking-changes list below before upgrading. A future major version is reserved for new models.
+0.2.5 is a pre-1.0 release. Despite the patch-level version number it contains breaking changes, so if you pin `aimnet~=0.2.0` (or `>=0.2,<0.3`), read the breaking-changes list below before upgrading.
 
 ### Breaking changes
 
@@ -33,8 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-<!-- CUDA-graph replay (#146): its merge adds the entry for this feature here. -->
-
+- Added CUDA-graph inference replay for supported stock closed-shell GELU AIMNet2 models, with dense/sparse engines, optional Triton dense AEV kernels, per-layout numerical checks, bounded cache admission, mutation/storage guards, and regular-path fallback. Graph replay is opt-in: the `cuda_graph` constructor default is `False`, and `cuda_graph=None` defers the choice to the `AIMNET_CUDA_GRAPH` environment variable. `compile_model=False` remains the default; pass `cuda_graph=False` to benchmark `torch.compile` alone. Requested replay that cannot apply (CPU, `deterministic=True`, `mol_idx`/`cell`/`nbmat` input, stress/Hessian requests, unsupported models, ROCm) warns once per calculator and reason, and `AIMNet2Calculator.clear_cuda_graphs()` releases the captured graphs and their memory pool. Graph capture requires `nvalchemi-toolkit-ops>=0.5.0` and `warp-lang>=1.16`; with older versions installed the calculator warns and uses the regular path (the package floor stays at `nvalchemi-toolkit-ops>=0.4.1`). The optional Triton inference kernels (`inference_kernels=True`) require compute capability 8.0 or newer and otherwise use the equivalent PyTorch expressions. This does not accelerate training or add custom-model/legacy-artifact compatibility.
 - Added Hessians for every long-range Coulomb method and batched Hessians. `eval(..., hessian=True)` now works with DSF, Ewald, and PME, which raised in 0.2.0; all three are relaxed-charge (they include the charge-response coupling), and Ewald and PME come from the calculator's total-energy autograd, so they are directly comparable for vibrational analysis while DSF still differs by its shifted-force truncation near the cutoff. A 3D batch `(B, N, 3)` or a flat input with a multi-molecule `mol_idx` is evaluated per structure and returns stacked `(B, N, 3, N, 3)` Hessians, or a list when the systems differ in size. The dense Hessian is returned in the force dtype (typically float32). DSF also supports force and stress training now, through the same differentiable torch path; in 0.2.0 it raised for `train=True` with forces or stress.
 - Added `AIMNet2Calculator.hessian_vector_product`, a matrix-free Hessian-vector product `H @ v` for one structure that avoids building the dense `(3N, 3N)` Hessian. It is exact reverse-mode autograd for every backend and returns float64 for Ewald and PME and the model dtype otherwise. Its `eps` argument is deprecated and unused; passing it emits a `DeprecationWarning`.
 - Added compiled AIMNet2 training for energy and forces in neighbor modes 0, 1, and 2, and for stress in explicit-topology modes 1 and 2. Each process captures one symbolic derivative graph whose batch, atom, and neighbor dimensions remain dynamic; there is no application-level graph cache, and the original model remains the sole owner of parameters and checkpoint state.
@@ -106,6 +105,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Documentation
 
+- Documented CUDA-graph eligibility, defaults and `torch.compile` precedence, startup/cache-memory costs, differentiation and mutation contracts, dependency limits, and fair backend comparisons.
 - Documented the rxn dipole origin convention: `center_coord=False` is origin-safe because the family is net-neutral-only; any future charged-system family must ship `center_coord=True`.
 - Documented offline/HPC installation (cache pre-seeding via `aimnet download`, `AIMNET_CACHE_DIR`, `WARP_CACHE_PATH`) and the model weight hosting immutability policy.
 - Added the AIMNet2-2025 paper citation (DOI and BibTeX) to the README and the documentation home page, and linked the paper from the model documentation and guides.
