@@ -1,3 +1,5 @@
+# type: ignore  # Warp kernel annotations (wp.array(dtype=...)) are not valid static types; as in conv_sv_2d_sp_wp.py
+
 """Full pairwise Coulomb energy rows without an N x N pair tensor (Warp).
 
 Reference: ``LRCoulomb.coul_simple`` (``aimnet.modules.lr``) on the all-pairs neighbor matrix with

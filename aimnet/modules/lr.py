@@ -411,7 +411,7 @@ class LRCoulomb(nn.Module):
         else:
             return None
 
-        from aimnet.kernels.coulomb_wp import full_coulomb_rows
+        from aimnet.kernels.coulomb_wp import full_coulomb_rows  # type: ignore[attr-defined]
 
         rows = full_coulomb_rows(coord_flat, charges_flat, n_mol, n_real)
         if mode == 0:
