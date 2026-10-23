@@ -135,7 +135,7 @@ dev = [
     {include-group="docs"},
 ]
 docs = [
-    "mkdocs>=1.4.2",
+    "mkdocs>=1.4.2,<2",
     "mkdocs-material>=9.2.7",
     "mkdocstrings[python]>=0.26.1",
     "griffe<3",
