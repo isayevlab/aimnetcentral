@@ -4,7 +4,7 @@ This guide will help you install AIMNet2 and verify your setup.
 
 ## Prerequisites
 
-- **Python**: Version 3.11, 3.12, or 3.13
+- **Python**: Version 3.11, 3.12, 3.13, or 3.14
 - **pip**: Package installer (usually included with Python)
 - **Optional**: CUDA-capable GPU for faster inference
 

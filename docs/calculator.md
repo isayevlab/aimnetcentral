@@ -314,6 +314,7 @@ Notes:
 - Covers external D3 and `simple`/`dsf` Coulomb. Ewald/PME kernels are not covered; a one-time `UserWarning` fires if combined.
 - The pure-torch paths materialize pairwise tensors, so for very large single systems the kernel defaults are faster; benchmark before enabling in large-system MD.
 - Reproducibility holds per machine/build; a different GPU or PyTorch build still shifts results at rounding level.
+- Hessians are outside the bitwise guarantee, even with `deterministic=True` and PyTorch's deterministic mode. The dense Hessian is built with `torch.func.vmap` over batched second-order operations, and on CUDA repeated evaluations differ by about 1e-5 eV/Å², which is negligible for vibrational frequencies ([#143](https://github.com/isayevlab/aimnetcentral/issues/143)).
 - Reproducibility also requires the same batch composition and order. Adding an unrelated molecule to a batch, or switching between the dense and packed layouts, changes forces at the rounding level (about 1e-6 eV/Å), and an optimizer can amplify that into a different local minimum.
 - For conformer ranking, converge tightly (for example `fmax` of 1e-3 eV/Å) before ranking, and re-optimize the finalists one at a time on the dense layout (raise `nb_threshold` above the molecule size if needed; peak memory grows, roughly 3x at 128 atoms).
 - The `cache_static` DFTD3 term cache does not apply in this mode.

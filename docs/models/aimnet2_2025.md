@@ -44,6 +44,10 @@ The `aimnet2-2025` model is described in [Critical benchmarking of machine-learn
 
     No transition metals, closed-shell only, molecular training data. See the [AIMNet2 page](aimnet2.md) for the full list of limitations.
 
+!!! warning "Compressed geminal hydrogens can collapse"
+
+    Like `aimnet2`, this model has a spurious low-energy region when two hydrogens on the same heavy atom are compressed below an H–H distance of about 0.75 Å. Reject starting geometries with any H–H distance below 0.8 Å and check optimized geometries for H–H distances below 0.6 Å. See the [AIMNet2 page](aimnet2.md#limitations) and [#139](https://github.com/isayevlab/aimnetcentral/issues/139).
+
 ## Typical Use Cases
 
 - **General-purpose B97-3c calculations** -- recommended replacement for `aimnet2-b973c` in all workflows
