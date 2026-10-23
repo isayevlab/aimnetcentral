@@ -31,11 +31,14 @@ def capture_stream(device: torch.device) -> torch.cuda.Stream:
 def warm_up(fn, x: torch.Tensor, warmup: int) -> torch.cuda.Stream:
     """``fn(x)`` ``warmup`` times on the capture stream, which is returned for the capture.
 
-    Ordering is stream-scoped: the capture stream waits for the caller's stream before the warm-up and the caller's
-    stream waits for the warm-up after it. No device-wide synchronize or ``empty_cache`` happens here; the capture
-    that follows (``torch.cuda.graph``) synchronizes the device and empties the allocator cache itself, once per
-    capture (PyTorch's own behavior for every capture). Captures are rare: at most one per new layout."""
+    Blocks cached for other streams cannot serve this stream, so they are returned to the device first (as
+    ``torch.cuda.graph`` does before capturing): the warm-up's memory does not stack on the regular path's cache
+    (measured, shrinking 64 -> 1 batch: peak reserved 1904 MiB without this, 1508 MiB with it). This is the same
+    process-wide ``empty_cache`` the capture that follows performs anyway, once per new layout. Ordering is
+    stream-scoped: the capture stream waits for the caller's stream before the warm-up and the caller's stream waits
+    for the warm-up after it; the device-wide synchronize is left to ``torch.cuda.graph``, which does it per capture."""
     stream = capture_stream(x.device)
+    torch.cuda.empty_cache()
     stream.wait_stream(torch.cuda.current_stream(x.device))
     with torch.cuda.stream(stream):
         for _ in range(warmup):

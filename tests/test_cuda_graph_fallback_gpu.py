@@ -4,6 +4,7 @@ import warnings
 
 import pytest
 import torch
+from conftest import CAFFEINE_FILE, load_mol
 
 from aimnet.calculators import AIMNet2Calculator
 from aimnet.calculators.cuda_graph import _capture
@@ -106,16 +107,27 @@ def test_failed_reuse_check_falls_back_to_the_regular_result(graph, regular, mon
     cache = graph._cuda_graph
     for _ in range(2):
         graph(_water(4), forces=True)
-    assert len(cache._engines) == 1
+    ((key, entry),) = cache._engines.items()
 
     def disagree(*args, **kwargs):
         raise RuntimeError("captured engine disagrees with the regular path: forces 1.00e+00 eV/A")
 
-    monkeypatch.setattr(cache, "_compare", disagree)
-    with pytest.warns(RuntimeWarning, match="disagrees"):
-        result = graph(_water(3), forces=True)
-    assert not cache._engines
+    with monkeypatch.context() as patch:
+        patch.setattr(cache, "_compare", disagree)
+        with pytest.warns(RuntimeWarning, match="disagrees") as record:
+            result = graph(_water(3), forces=True)
+    assert record[0].filename == __file__  # attributed to the caller, not to aimnet internals
     _assert_close(result, regular(_water(3), forces=True))
+    # Only the reusing row count is affected: the validated 4-row graph keeps serving 4-row batches.
+    assert cache._engines.get(key) is entry and 3 not in entry.rows
+    launches = []
+    original = entry.runner.launch
+    monkeypatch.setattr(entry.runner, "launch", lambda *a: launches.append(1) or original(*a))
+    _assert_close(graph(_water(4), forces=True), regular(_water(4), forces=True))
+    assert launches == [1]
+    # 3-row batches no longer reuse the 4-row graph; they stay regular until they earn their own capture.
+    graph(_water(3), forces=True)
+    assert launches == [1]
 
 
 def test_clear_cuda_graphs_releases_the_pool(graph):
@@ -135,11 +147,53 @@ def test_clear_cuda_graphs_is_a_no_op_without_graphs(regular):
     regular.clear_cuda_graphs()
 
 
-def test_warm_up_has_no_process_wide_side_effects(monkeypatch):
+def test_warm_up_returns_cached_blocks_but_does_not_synchronize(monkeypatch):
+    """Blocks cached for the caller's stream cannot serve the capture stream: they are returned first (as the capture
+    itself does), so warm-up memory does not stack on them. Ordering is stream-scoped, never a device sync."""
     calls = []
     monkeypatch.setattr(torch.cuda, "synchronize", lambda *a, **k: calls.append("synchronize"))
     monkeypatch.setattr(torch.cuda, "empty_cache", lambda *a, **k: calls.append("empty_cache"))
     x = torch.ones(4, device="cuda")
     stream = _capture.warm_up(lambda t: t * 2, x, 2)
-    assert calls == []
+    assert calls == ["empty_cache"]
     assert stream is _capture.capture_stream(x.device)
+
+
+def _caffeine_batch(rows, shift):
+    molecule = load_mol(CAFFEINE_FILE)
+    coord = torch.as_tensor(molecule["coord"], dtype=torch.float32, device="cuda")
+    numbers = torch.as_tensor(molecule["numbers"], device="cuda")
+    offsets = shift * torch.sin(torch.arange(rows * coord.numel(), device="cuda", dtype=torch.float32))
+    return {
+        "coord": coord.expand(rows, *coord.shape) + offsets.reshape(rows, *coord.shape),
+        "numbers": numbers.expand(rows, -1).contiguous(),
+        "charge": torch.zeros(rows, device="cuda"),
+    }
+
+
+def test_replays_from_two_streams_are_ordered():
+    """Graphs share one memory pool and static input buffers: a replay launched on another stream must wait for the
+    previous one. Both streams start after the same GPU delay, so without ordering the replays overlap."""
+    graph = AIMNet2Calculator("aimnet2", device="cuda", cuda_graph=True)
+    try:
+        data_a, data_b = _caffeine_batch(64, 0.02), _caffeine_batch(64, -0.03)
+        for _ in range(2):
+            graph(data_a, forces=True, validate_species=False)
+        assert len(graph._cuda_graph._engines) == 1
+        expected_a = graph(data_a, forces=True, validate_species=False)
+        expected_b = graph(data_b, forces=True, validate_species=False)
+        torch.cuda.synchronize()
+        streams = torch.cuda.Stream(), torch.cuda.Stream()
+        delay = int(5e7)  # GPU cycles (~20 ms): longer than enqueueing both calls on the host
+        for _ in range(4):
+            outputs = []
+            for stream, data in zip(streams, (data_a, data_b), strict=True):
+                with torch.cuda.stream(stream):
+                    torch.cuda._sleep(delay)
+                    outputs.append(graph(data, forces=True, validate_species=False))
+            torch.cuda.synchronize()  # also proves the cross-stream waits cannot deadlock
+            for actual, expected in zip(outputs, (expected_a, expected_b), strict=True):
+                for key in expected:
+                    torch.testing.assert_close(actual[key], expected[key], atol=1e-5, rtol=1e-6)
+    finally:
+        graph.clear_cuda_graphs()

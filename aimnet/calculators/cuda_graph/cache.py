@@ -60,6 +60,7 @@ Outputs have the regular path's keys, shapes and dtypes: ``energy`` ``[B]`` (``[
 from __future__ import annotations
 
 import collections
+import contextlib
 import math
 import warnings
 import weakref
@@ -71,7 +72,12 @@ import torch
 
 from aimnet.modules.lr import DFTD3, LRCoulomb
 
-from .._graph_options import cuda_graph_dependency_problem, cuda_graph_enabled, cuda_graph_platform_problem
+from .._graph_options import (
+    cuda_graph_dependency_problem,
+    cuda_graph_enabled,
+    cuda_graph_platform_problem,
+    external_stacklevel,
+)
 from .contracts import ModelContract
 from .dense import GraphedEF, StaticDenseAIMNet2, check_dense_model
 from .sparse import AutoGraphedSparseEF, check_sparse_model
@@ -202,7 +208,7 @@ def _max_filler_rows(b: int) -> int:
 
 
 class _Entry:
-    __slots__ = ("gen", "keepalive", "owned", "rebuilds", "rows", "runner", "storages", "validated")
+    __slots__ = ("gen", "keepalive", "no_reuse", "owned", "rebuilds", "rows", "runner", "storages", "validated")
 
     def __init__(self, runner, gen: _Generation, keepalive: tuple = ()):
         self.runner, self.gen = runner, gen
@@ -210,6 +216,7 @@ class _Entry:
         self.rebuilds = getattr(runner, "rebuilds", 0)
         self.validated = False  # species / charge validation passed for this layout (its content is in the key)
         self.rows: set[int] = set()  # dense batch sizes checked against the regular path on this padded graph
+        self.no_reuse: set[int] = set()  # smaller batch sizes whose reuse check failed: never reuse this graph for them
         self.keepalive = keepalive  # storages of every parameter / buffer the graph reads
         seen, storages = set(), []
         for tensor in keepalive:
@@ -249,7 +256,10 @@ class CUDAGraphCache:
         self._model_state = self._contract.snapshot()
         self._answer: dict | None = None  # regular result of a capture that was rejected (see _regular_answer)
         self._gen: _Generation | None = None  # pool of the cached graphs; created by the first capture
-        self._streams: set[torch.cuda.Stream] = set()  # streams graphs were replayed on (waited for on retire)
+        # Graphs share one memory pool and their static input buffers are overwritten at every launch, so replays must
+        # not overlap, whatever stream they are launched on: each call waits for this event (recorded at the end of
+        # the previous call) and records it again when its replay and output copies are enqueued.
+        self._replayed = torch.cuda.Event()
         self.generations = 0  # pools created (diagnostic)
         self.captures = 0  # graphs captured, neighbor-capacity rebuilds included (diagnostic)
 
@@ -437,20 +447,37 @@ class CUDAGraphCache:
             owned += entry.owned
         return (0 if gen is None else gen.pool_bytes) + owned
 
+    @contextlib.contextmanager
+    def _ordered(self):
+        """Order this call's graph work after every earlier replay, on any stream (see ``_replayed``)."""
+        stream = torch.cuda.current_stream(self._device)
+        stream.wait_event(self._replayed)
+        try:
+            yield
+        finally:
+            self._replayed.record(stream)
+
+    def _drain(self) -> None:
+        """Wait on the host for every enqueued replay before engines (buffers, graphs) are dropped. Waits for this
+        cache's work only (an event), not for the whole device. Rare boundaries: eviction, rejection, retirement."""
+        stream = torch.cuda.current_stream(self._device)
+        stream.wait_event(self._replayed)
+        self._replayed.record(stream)
+        self._replayed.synchronize()
+
     def _evict(self, keep: int) -> None:
         """Drop least recently used engines beyond ``keep``. Their blocks stay in the pool for later captures."""
+        if len(self._engines) > keep:
+            self._drain()
         while len(self._engines) > keep:
             self._engines.popitem(last=False)
 
     def _retire(self) -> None:
         """Drop every engine and the pool owner; the pool is released once its graphs are gone.
 
-        A rare boundary (``clear``, model change, rejection): waits for replays that may still read the pool. Only the
-        streams the graphs were replayed on are waited for, not the whole device."""
+        A rare boundary (``clear``, model change, rejection): waits for replays that may still read the pool."""
         if self._gen is not None or self._engines:
-            for stream in self._streams:
-                stream.synchronize()
-        self._streams.clear()
+            self._drain()
         self._engines.clear()
         if self._gen is not None:
             self._gen.retire()
@@ -537,7 +564,6 @@ class CUDAGraphCache:
         """Raise unless the captured engine reproduces the regular path on this input (run once per layout).
 
         ``inputs``: species/charge buffers of a padded layout; its filler rows past ``B`` are not compared."""
-        self._streams.add(torch.cuda.current_stream(self._device))
         e, f, q = entry.runner(coord, *inputs)
         ref = self._reference(data, forces) if reference is None else reference
         return self._compare(e, f, q, ref, forces, B, N)
@@ -566,8 +592,9 @@ class CUDAGraphCache:
     def clear(self) -> None:
         """Drop every engine, release the graph memory pool and forget the layouts seen (including rejected ones).
 
-        Waits for running replays; outputs returned earlier are copies and stay valid. The next capture creates a
-        new pool. Also required after deliberate .data/raw-storage mutation."""
+        Waits for running replays; outputs returned earlier are copies and stay valid. The pool is returned with
+        ``torch.cuda.empty_cache()``, which synchronizes the device and releases every unused cached block of the
+        process. The next capture creates a new pool. Also required after deliberate .data/raw-storage mutation."""
         self._retire()
         self._seen.clear()
         self._ident = None
@@ -661,7 +688,7 @@ class CUDAGraphCache:
         calc._maybe_warn_mult_ignored(data)
         cached, entry = entry is not None, None  # hold no graph across the contract check: it may drop the cache
         dev = self._device
-        with torch.inference_mode(False), torch.cuda.device(dev):
+        with torch.inference_mode(False), torch.cuda.device(dev), self._ordered():
             x = torch.as_tensor(coord, dtype=torch.float32, device=dev).reshape(B, N, 3)
             checked = None
             if not cached:
@@ -712,7 +739,6 @@ class CUDAGraphCache:
                 self.clear()
             return False
         failure = None
-        self._streams.add(torch.cuda.current_stream(self._device))
         try:
             entry.runner.launch(x, *inputs)
         except Exception as exc:
@@ -738,7 +764,10 @@ class CUDAGraphCache:
             fits = [
                 k[1]
                 for k in self._engines
-                if k[0] == "padded" and k[2:] == (N, forces, settings) and B < k[1] <= B + _max_filler_rows(B)
+                if k[0] == "padded"
+                and k[2:] == (N, forces, settings)
+                and B < k[1] <= B + _max_filler_rows(B)
+                and B not in self._engines[k].no_reuse
             ]
             if fits:
                 cap = min(fits)
@@ -751,7 +780,7 @@ class CUDAGraphCache:
         calc._maybe_warn_mult_ignored(data)
         cached, entry = entry is not None, None  # hold no graph across the contract check: it may drop the cache
         dev = self._device
-        with torch.inference_mode(False), torch.cuda.device(dev):
+        with torch.inference_mode(False), torch.cuda.device(dev), self._ordered():
             x = torch.as_tensor(coord, dtype=torch.float32, device=dev).reshape(B, N, 3)
             z = torch.as_tensor(data["numbers"], device=dev).reshape(B, N)
             q = torch.as_tensor(data["charge"], dtype=torch.float32, device=dev).reshape(-1)
@@ -782,7 +811,8 @@ class CUDAGraphCache:
 
     def _check_reuse(self, key, data, forces: bool, B: int, N: int) -> tuple | None:
         """Compare the launched replay of ``key`` with the regular result of this call; None after a rejection (the
-        regular result, when computed, is left for ``_regular_answer``)."""
+        regular result, when computed, is left for ``_regular_answer``). A failure only stops reuse of this graph for
+        ``B`` rows: the graph stays validated for the row counts it already passed."""
         failure, reference = None, None
         entry: _Entry | None = None
         self._answer = None
@@ -796,8 +826,10 @@ class CUDAGraphCache:
         else:
             entry.rows.add(B)
             return checked
+        if entry is not None:
+            entry.no_reuse.add(B)
         entry = None
-        self._reject(key, failure)
+        self._warn_disabled(f"{B} rows on the {key[1]}-row graph: {failure}")
         self._answer = reference
         return None
 
@@ -806,17 +838,23 @@ class CUDAGraphCache:
 
         The generation is retired as well when asked (out of memory), when no engine is left in it, or when it is over
         the budget, so a rejected or failed capture leaves no pool behind."""
+        if key in self._engines:
+            self._drain()
         self._engines.pop(key, None)
         self._seen.pop(key, None)
         self._seen[key] = _REGULAR_ONLY
         if retire or not self._engines or self._retained() > self._budget():
             self._retire()
             torch.cuda.empty_cache()
+        self._warn_disabled(reason)
+
+    def _warn_disabled(self, reason: str) -> None:
+        """Warn once per cache that a layout fell back to the regular path, attributed to the user's call."""
         if not self._warned:
             warnings.warn(
                 f"AIMNet2Calculator: CUDA-graph replay disabled for one input layout ({reason}); "
                 "using the regular code path for it.",
                 RuntimeWarning,
-                stacklevel=4,
+                stacklevel=external_stacklevel(),
             )
             self._warned = True
