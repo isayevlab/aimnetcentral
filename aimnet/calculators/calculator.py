@@ -468,7 +468,10 @@ class AIMNet2Calculator:
             if not on_cuda:
                 self._warn_cuda_graph_fallback(f"the calculator runs on {self.device}, not CUDA")
             else:
-                if compile_model:
+                from .cuda_graph import CUDAGraphCache
+
+                self._cuda_graph = CUDAGraphCache.create(self, cuda_graph=True)
+                if compile_model and self._cuda_graph is not None:
                     warnings.warn(
                         "compile_model=True with cuda_graph=True: calls replayed as CUDA graphs run the eager model, "
                         "not the compiled forward; only calls that fall back to the regular path use the compiled "
@@ -476,9 +479,6 @@ class AIMNet2Calculator:
                         UserWarning,
                         stacklevel=2,
                     )
-                from .cuda_graph import CUDAGraphCache
-
-                self._cuda_graph = CUDAGraphCache.create(self, cuda_graph=True)
 
     def _warn_cuda_graph_fallback(self, reason: str) -> None:
         """Warn once per calculator and reason that requested CUDA-graph replay is not used.
@@ -499,7 +499,8 @@ class AIMNet2Calculator:
         """Release every captured CUDA graph and its memory pool.
 
         Waits for running replays, drops the cached engines, and returns the graph memory pool to the device
-        (``torch.cuda.empty_cache()``, which also releases other unused cached blocks of this process). Outputs
+        with ``torch.cuda.empty_cache()``, which synchronizes the device and also releases other unused cached
+        blocks of this process. Outputs
         returned earlier are copies and stay valid. Later repeated calls are captured again. Also required after
         deliberate ``.data``/raw-storage mutation of model parameters. A no-op when graphs are not enabled.
         """

@@ -51,14 +51,42 @@ def test_old_dependencies_refuse_capture(monkeypatch, stub_model, versions, name
     assert "nvalchemi-toolkit-ops>=0.5.0" in message  # names the fix
 
 
+_NVALCHEMI_CASES = [
+    ("0.5.0", True),
+    ("0.5", True),
+    ("0.5.0.post1", True),
+    ("0.5.0+cu12", True),
+    ("0.5.1.dev0", True),  # a development build of a later release
+    ("0.6.0.dev1", True),
+    ("1.0", True),
+    ("1!0.1", True),  # epochs order first
+    ("0.4.9", False),
+    ("0.5.0rc1", False),  # pre-releases and development builds of the threshold precede it
+    ("0.5.0b2", False),
+    ("0.5.0a1", False),
+    ("0.5.0.dev3", False),
+    ("0.5.0-rc.1", False),
+    ("garbage", False),
+]
+_WARP_CASES = [
+    ("1.16.0", True),
+    ("1.16", True),
+    ("1.18.0", True),
+    ("1.16.0.post2", True),
+    ("1.15.9", False),
+    ("1.16.0rc2", False),
+    ("1.16.0.dev20260101", False),
+]
+
+
 @pytest.mark.parametrize(
-    ("text", "ok"), [("0.5.0", True), ("0.5", True), ("0.6.0.dev1", True), ("0.4.9", False), ("1.0", True)]
+    ("package", "text", "ok"),
+    [("nvalchemi-toolkit-ops", *case) for case in _NVALCHEMI_CASES] + [("warp-lang", *case) for case in _WARP_CASES],
 )
-def test_dependency_threshold_parsing(monkeypatch, text, ok):
-    monkeypatch.setattr(
-        graph_options, "installed_versions", lambda: {"nvalchemi-toolkit-ops": text, "warp-lang": "1.16"}
-    )
-    assert (graph_options.cuda_graph_dependency_problem() is None) is ok
+def test_dependency_threshold_parsing(monkeypatch, package, text, ok):
+    versions = {"nvalchemi-toolkit-ops": "0.5.0", "warp-lang": "1.16.0", package: text}
+    monkeypatch.setattr(graph_options, "installed_versions", lambda: dict(versions))
+    assert (graph_options.cuda_graph_dependency_problem() is None) is ok, text
 
 
 def test_rocm_refuses_capture(monkeypatch, stub_model):
@@ -150,7 +178,20 @@ def test_internal_reference_call_does_not_warn():
     assert warned == []
 
 
-def test_compile_precedence_warnings(stub_model):
+def test_compile_warning_only_when_graphs_are_used(monkeypatch, stub_model):
+    """With old dependencies replay is refused: the user must not also be told that replays bypass the compiler."""
+    old = {"nvalchemi-toolkit-ops": "0.4.1", "warp-lang": "1.16"}
+    monkeypatch.setattr(graph_options, "installed_versions", lambda: dict(old))
+    with pytest.warns(UserWarning) as record:
+        AIMNet2Calculator(stub_model, device="cuda", compile_model=True, cuda_graph=True)
+    messages = [str(w.message) for w in record]
+    assert any("CUDA-graph replay is not used" in m for m in messages)
+    assert not any("compile_model=True with cuda_graph=True" in m for m in messages)
+
+
+def test_compile_precedence_warnings(monkeypatch, stub_model):
+    backend = object()  # a cache that applies, without capturing anything
+    monkeypatch.setattr(cache_module.CUDAGraphCache, "create", classmethod(lambda cls, calc, **kwargs: backend))
     with pytest.warns(UserWarning) as record:
         AIMNet2Calculator(stub_model, device="cuda", compile_model=True, cuda_graph=True, inference_kernels=True)
     messages = [str(w.message) for w in record]

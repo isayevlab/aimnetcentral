@@ -28,10 +28,42 @@ def cuda_graph_enabled(cuda_graph: bool | None = False) -> bool:
     return os.environ.get("AIMNET_CUDA_GRAPH", "0").strip().lower() in ("1", "true", "yes", "on")
 
 
-def _version_tuple(text: str) -> tuple[int, ...] | None:
-    """Leading numeric release of a version string (``"1.16.0rc1"`` -> ``(1, 16, 0)``), or None."""
-    match = re.match(r"\s*v?(\d+(?:\.\d+)*)", text)
-    return None if match is None else tuple(int(part) for part in match.group(1).split("."))
+# PEP 440 public version with optional local label (normalized forms and the usual spellings). ``packaging`` is not a
+# core dependency, so the few fields the gate needs are parsed here.
+_VERSION = re.compile(
+    r"""
+    ^\s*v?
+    (?:(?P<epoch>\d+)!)?
+    (?P<release>\d+(?:\.\d+)*)
+    (?P<pre>[-_.]?(?:a|alpha|b|beta|c|rc|pre|preview)[-_.]?\d*)?
+    (?P<post>-\d+|[-_.]?(?:post|rev|r)[-_.]?\d*)?
+    (?P<dev>[-_.]?dev[-_.]?\d*)?
+    (?:\+[a-z0-9]+(?:[-_.][a-z0-9]+)*)?
+    \s*$
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+
+
+def version_at_least(text: str, minimum: tuple[int, ...]) -> bool:
+    """Whether version ``text`` is at least the final release ``minimum`` under PEP 440 ordering.
+
+    Pre-releases and development builds of ``minimum`` itself precede it and are rejected (``0.5.0rc1``,
+    ``0.5.0.dev3``); post-releases and later releases, including their development builds (``0.5.1.dev0``), pass.
+    Unparseable versions are rejected."""
+    match = _VERSION.match(text)
+    if match is None:
+        return False
+    if int(match.group("epoch") or 0) > 0:
+        return True
+    release = tuple(int(part) for part in match.group("release").split("."))
+    width = max(len(release), len(minimum))
+    release, padded_min = release + (0,) * (width - len(release)), minimum + (0,) * (width - len(minimum))
+    if release != padded_min:
+        return release > padded_min
+    if match.group("pre"):
+        return False
+    return not (match.group("dev") and not match.group("post"))
 
 
 def installed_versions() -> dict[str, str | None]:
@@ -50,9 +82,7 @@ def cuda_graph_dependency_problem() -> str | None:
     too_old = []
     for name, version in installed_versions().items():
         minimum = GRAPH_MIN_VERSIONS[name]
-        parsed = None if version is None else _version_tuple(version)
-        # Pad so that "1.16" compares equal to (1, 16, 0).
-        if parsed is None or parsed + (0,) * (len(minimum) - len(parsed)) < minimum:
+        if version is None or not version_at_least(version, minimum):
             required = ".".join(map(str, minimum))
             too_old.append(f"{name} {version or 'unknown'} (needs >= {required})")
     if not too_old:
