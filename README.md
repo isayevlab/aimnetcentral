@@ -1,4 +1,4 @@
-[![PyPI](https://img.shields.io/pypi/v/aimnet)](https://pypi.org/project/aimnet/) [![Release](https://img.shields.io/github/v/release/isayevlab/aimnetcentral)](https://github.com/isayevlab/aimnetcentral/releases) [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/) [![Build status](https://img.shields.io/github/actions/workflow/status/isayevlab/aimnetcentral/main.yml?branch=main)](https://github.com/isayevlab/aimnetcentral/actions/workflows/main.yml?query=branch%3Amain) [![License](https://img.shields.io/github/license/isayevlab/aimnetcentral)](https://github.com/isayevlab/aimnetcentral/blob/main/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/aimnet)](https://pypi.org/project/aimnet/) [![Release](https://img.shields.io/github/v/release/isayevlab/aimnetcentral)](https://github.com/isayevlab/aimnetcentral/releases) [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://www.python.org/) [![Build status](https://img.shields.io/github/actions/workflow/status/isayevlab/aimnetcentral/main.yml?branch=main)](https://github.com/isayevlab/aimnetcentral/actions/workflows/main.yml?query=branch%3Amain) [![License](https://img.shields.io/github/license/isayevlab/aimnetcentral)](https://github.com/isayevlab/aimnetcentral/blob/main/LICENSE)
 
 # AIMNet2
 
@@ -20,7 +20,7 @@ AIMNet2 predicts energies, forces, atomic charges, stress tensors, and Hessians 
 - ASE, PySisyphus, Sella, TorchSim, Hugging Face Hub, and CLI workflows
 - Periodic systems with DSF, Ewald, and PME Coulomb methods
 - DFT-D3(BJ) dispersion through GPU-accelerated nvalchemiops kernels
-- Python 3.11, 3.12, and 3.13 support; TorchSim extra is available on Python 3.12+
+- Python 3.11, 3.12, 3.13, and 3.14 support; TorchSim extra is available on Python 3.12+
 
 ## Install
 
@@ -205,7 +205,7 @@ make docs        # serve docs locally
 make docs-test   # strict docs build
 ```
 
-CI runs the core test suite across Python 3.11-3.13 and separate optional-extra lanes for ASE, PySisyphus, Sella, Hugging Face, TorchSim, docs, and security checks.
+CI runs the core test suite on Python 3.11, 3.13, and 3.14 and separate optional-extra lanes for ASE, PySisyphus, Sella, Hugging Face, TorchSim, docs, and security checks.
 
 ## Citation
 

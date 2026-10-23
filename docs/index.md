@@ -94,7 +94,7 @@ pip install "aimnet[torchsim,ase]"
 pip install "aimnet[train]"
 ```
 
-**Requirements:** Python 3.11, 3.12, or 3.13. GPU support optional (PyTorch with CUDA).
+**Requirements:** Python 3.11, 3.12, 3.13, or 3.14. GPU support optional (PyTorch with CUDA).
 
 ## Documentation Guide
 
