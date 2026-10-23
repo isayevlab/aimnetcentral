@@ -237,3 +237,17 @@ def test_sparse_all_pairs_owned_only_by_consumers(model, monkeypatch, coulomb, d
         assert "nbmat_dftd3" not in data
     if kernels and coulomb:
         assert "nbmat_coulomb" not in data
+
+
+def test_cache_construction_needs_no_cuda_event(model, monkeypatch):
+    """CPU-only PyTorch builds expose ``torch.cuda.Event`` as a dummy class that raises on instantiation."""
+
+    class _CPUOnlyEvent:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("Tried to instantiate dummy base class Event")
+
+    monkeypatch.setattr(torch.cuda, "Event", _CPUOnlyEvent)
+    calc = AIMNet2Calculator(model, device="cpu", cuda_graph=False)
+    cache = CUDAGraphCache(calc)
+    assert cache._settings() is not None
+    cache._drain()  # nothing was enqueued, so draining needs no event either

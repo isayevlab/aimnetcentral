@@ -50,7 +50,7 @@ def version_at_least(text: str, minimum: tuple[int, ...]) -> bool:
 
     Pre-releases and development builds of ``minimum`` itself precede it and are rejected (``0.5.0rc1``,
     ``0.5.0.dev3``); post-releases and later releases, including their development builds (``0.5.1.dev0``), pass.
-    Unparseable versions are rejected."""
+    Unparsable versions are rejected."""
     match = _VERSION.match(text)
     if match is None:
         return False

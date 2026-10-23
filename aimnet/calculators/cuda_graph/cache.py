@@ -258,8 +258,9 @@ class CUDAGraphCache:
         self._gen: _Generation | None = None  # pool of the cached graphs; created by the first capture
         # Graphs share one memory pool and their static input buffers are overwritten at every launch, so replays must
         # not overlap, whatever stream they are launched on: each call waits for this event (recorded at the end of
-        # the previous call) and records it again when its replay and output copies are enqueued.
-        self._replayed = torch.cuda.Event()
+        # the previous call) and records it again when its replay and output copies are enqueued. Created on the first
+        # ordered call: CPU-only PyTorch builds cannot instantiate CUDA events.
+        self._replayed: torch.cuda.Event | None = None
         self.generations = 0  # pools created (diagnostic)
         self.captures = 0  # graphs captured, neighbor-capacity rebuilds included (diagnostic)
 
@@ -450,16 +451,21 @@ class CUDAGraphCache:
     @contextlib.contextmanager
     def _ordered(self):
         """Order this call's graph work after every earlier replay, on any stream (see ``_replayed``)."""
+        if self._replayed is None:
+            self._replayed = torch.cuda.Event()
+        replayed = self._replayed
         stream = torch.cuda.current_stream(self._device)
-        stream.wait_event(self._replayed)
+        stream.wait_event(replayed)
         try:
             yield
         finally:
-            self._replayed.record(stream)
+            replayed.record(stream)
 
     def _drain(self) -> None:
         """Wait on the host for every enqueued replay before engines (buffers, graphs) are dropped. Waits for this
         cache's work only (an event), not for the whole device. Rare boundaries: eviction, rejection, retirement."""
+        if self._replayed is None:  # nothing was ever enqueued
+            return
         stream = torch.cuda.current_stream(self._device)
         stream.wait_event(self._replayed)
         self._replayed.record(stream)
