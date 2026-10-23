@@ -581,7 +581,8 @@ def mask_i_(x: Tensor, data: dict[str, Tensor], mask_value: float = 0.0, inplace
         if _is_compiling():
             return torch.cat([x[:-1], torch.full_like(x[:1], mask_value)], dim=0)
         if inplace:
-            x[-1] = mask_value
+            # Slice fill avoids a CPU scalar tensor copy during CUDA capture.
+            x[-1:].fill_(mask_value)
         else:
             x = torch.cat([x[:-1], torch.zeros_like(x[:1])], dim=0)
     elif nb_mode == 2:

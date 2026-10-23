@@ -22,6 +22,7 @@ from aimnet.modules import DFTD3, LRCoulomb
 from aimnet.modules.lr import ExternalDerivativeTerms, _require_pme_capable_nvalchemiops
 
 from . import derivatives
+from ._graph_options import cuda_graph_enabled, external_stacklevel
 from .neighbors import (  # noqa: F401  (re-exported for backwards compatibility)
     AdaptiveNeighborList,
     StaticInputCache,
@@ -123,6 +124,33 @@ class AIMNet2Calculator:
         names and aliases, registry HF fallback, raw modules, and ``.jpt``
         files accept only the default settings. No mode relaxes artifact or
         metadata validation.
+    cuda_graph : bool | None
+        Replay repeated CUDA evaluations as CUDA graphs
+        (:mod:`aimnet.calculators.cuda_graph`): when a call with
+        ``coord``/``numbers``/``charge`` (and optionally ``mult``) input
+        repeats a layout (same species, charges and shape), a static-layout
+        engine is captured once and then replayed, with the same outputs as
+        the regular path. Dense batches may include zero-number padding atoms.
+        Other inputs (``cell``, ``mol_idx``, ``nbmat``, input tensors
+        requiring grad), Hessian and stress requests, and unsupported models
+        use the regular path. Default is ``False``; pass ``True`` to opt in.
+        Explicit ``None`` instead reads ``AIMNET_CUDA_GRAPH`` (enabled only
+        for ``1``, ``true``, ``yes``, or ``on``). Explicit booleans override
+        the environment. The graph backend is not imported on CPU or when
+        disabled. Requested replay that cannot apply warns once per
+        calculator and reason (CPU device, ``deterministic=True``,
+        unsupported model, ``nvalchemi-toolkit-ops < 0.5.0`` or
+        ``warp-lang < 1.16``, ROCm, or one of the call-level reasons above).
+        With ``compile_model=True``, replayed calls run the eager model, not
+        the compiled forward. :meth:`clear_cuda_graphs` releases the
+        captured graphs and their memory pool.
+    inference_kernels : bool
+        Use the shared optimized AEV/ConvSV and streaming full-Coulomb
+        inference primitives on eligible CUDA calls. Default is ``False``.
+        The Triton kernels among them need compute capability >= 8.0 and an
+        importable ``triton``; otherwise the equivalent PyTorch expressions
+        run (warned once). No effect on compiled calls
+        (``compile_model=True``); inside CUDA-graph replays they are used.
 
     Attributes
     ----------
@@ -191,11 +219,15 @@ class AIMNet2Calculator:
         *,
         model_import_paths: Collection[str] | None = None,
         model_import_mode: Literal["extend", "replace", "unsafe"] = "extend",
+        inference_kernels: bool = False,
+        cuda_graph: bool | None = False,
     ):
         # Device selection: use provided or auto-detect
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = str(torch.device(device))
+        self.inference_kernels = bool(inference_kernels)
+        self._inference_aev_cache = None
         self.model: nn.Module
         self.external_coulomb: LRCoulomb | None = None
         self.external_dftd3: DFTD3 | None = None
@@ -409,6 +441,72 @@ class AIMNet2Calculator:
                     param.requires_grad_(False)
 
         self._maybe_warn_family_mix((metadata or {}).get("family") if metadata else None)
+
+        # Resolve opt-in before loading the backend, including on CPU-only installs.
+        self._cuda_graph = None
+        self._cuda_graph_warned: set[str] = set()
+        on_cuda = torch.device(self.device).type == "cuda"
+        if self.inference_kernels and on_cuda:
+            from aimnet.kernels.triton_support import triton_unsupported_reason
+
+            reason = triton_unsupported_reason(self.device)
+            if reason is not None:
+                warnings.warn(
+                    f"inference_kernels=True: the Triton inference kernels are not used ({reason}); "
+                    "the equivalent PyTorch expressions run instead.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+        if compile_model and self.inference_kernels and on_cuda:
+            warnings.warn(
+                "inference_kernels=True has no effect on compiled calls (compile_model=True): the compiled forward "
+                "keeps the stock primitives. The kernels are used only by CUDA-graph replays (cuda_graph=True).",
+                UserWarning,
+                stacklevel=2,
+            )
+        if cuda_graph_enabled(cuda_graph):
+            if not on_cuda:
+                self._warn_cuda_graph_fallback(f"the calculator runs on {self.device}, not CUDA")
+            else:
+                from .cuda_graph import CUDAGraphCache
+
+                self._cuda_graph = CUDAGraphCache.create(self, cuda_graph=True)
+                if compile_model and self._cuda_graph is not None:
+                    warnings.warn(
+                        "compile_model=True with cuda_graph=True: calls replayed as CUDA graphs run the eager model, "
+                        "not the compiled forward; only calls that fall back to the regular path use the compiled "
+                        "forward. Pass cuda_graph=False to benchmark torch.compile alone.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+
+    def _warn_cuda_graph_fallback(self, reason: str) -> None:
+        """Warn once per calculator and reason that requested CUDA-graph replay is not used.
+
+        Mirrors ``_warn_deterministic_packed``: a flag on the instance, so long MD/optimization loops warn once.
+        """
+        warned = self.__dict__.setdefault("_cuda_graph_warned", set())
+        if reason in warned:
+            return
+        warned.add(reason)
+        warnings.warn(
+            f"AIMNet2Calculator: CUDA-graph replay is not used ({reason}); the regular code path runs instead.",
+            UserWarning,
+            stacklevel=external_stacklevel(),
+        )
+
+    def clear_cuda_graphs(self) -> None:
+        """Release every captured CUDA graph and its memory pool.
+
+        Waits for running replays, drops the cached engines, and returns the graph memory pool to the device
+        with ``torch.cuda.empty_cache()``, which synchronizes the device and also releases other unused cached
+        blocks of this process. Outputs
+        returned earlier are copies and stay valid. Later repeated calls are captured again. Also required after
+        deliberate ``.data``/raw-storage mutation of model parameters. A no-op when graphs are not enabled.
+        """
+        graphs = getattr(self, "_cuda_graph", None)
+        if graphs is not None:
+            graphs.clear()
 
     @classmethod
     def from_legacy_jit(
@@ -1010,6 +1108,14 @@ class AIMNet2Calculator:
         multi-molecule ``mol_idx`` input yields a per-molecule ``list[Tensor]``
         for each key (molecules are independent and generally ragged).
         """
+        graphs = getattr(self, "_cuda_graph", None)
+        if graphs is not None:
+            if stress or hessian:
+                self._warn_cuda_graph_fallback("stress or Hessian requested")
+            else:
+                out = graphs.eval(data, forces=forces, validate_species=validate_species)
+                if out is not None:
+                    return out
         # Species validation — opt-out via validate_species=False.
         if validate_species:
             self._validate_species_and_charge(data)
@@ -1044,21 +1150,7 @@ class AIMNet2Calculator:
                     "In-call Hessian for hand-flattened multi-molecule input is not supported; "
                     "pass a 3D batch or a mol_idx dict to get per-structure Hessians."
                 )
-            data = self.set_grad_tensors(data, forces=forces, stress=stress, hessian=hessian)
-            if isinstance(self.model, torch.jit.ScriptModule):
-                with torch.jit.optimized_execution(False):  # type: ignore
-                    data = self.model(data)
-            elif self._compiled_forward is not None and not hessian:
-                data = self._compiled_forward(data)
-            else:
-                data = self.model(data)
-            # Run external modules if present
-            data, coulomb_terms = self._run_external_modules(
-                data, forces=forces or hessian, stress=stress, hessian=hessian
-            )
-            data = self.get_derivatives(
-                data, forces=forces, stress=stress, hessian=hessian, coulomb_terms=coulomb_terms
-            )
+            data = self._evaluate_prepared(data, forces=forces, stress=stress, hessian=hessian)
             data = self.process_output(data)
             return data
         finally:
@@ -1071,6 +1163,82 @@ class AIMNet2Calculator:
                 self._auto_dsf_state = self._snapshot_coulomb_state()
                 self._restore_coulomb_state(restore)
 
+    def _can_use_inference_kernels(self, data, *, stress=False, hessian=False, model_prepared=False):
+        coord = data["coord"]
+        return (
+            self.inference_kernels
+            and not self._train
+            and not hessian
+            and not stress
+            and not self._deterministic
+            and coord.device.type == "cuda"
+            and coord.dtype == torch.float32
+            and not any(isinstance(t, Tensor) and t.requires_grad for t in data.values())
+            and not isinstance(self.model, torch.jit.ScriptModule)
+            and hasattr(getattr(self.model, "aev", None), "prepare_inference")
+            and not any(
+                torch.is_inference(t)
+                for t in (
+                    self.model.aev.rc_s,
+                    self.model.aev.eta_s,
+                    self.model.aev.shifts_s,
+                )
+            )
+            and (model_prepared or self._compiled_forward is None)
+        )
+
+    def _evaluate_prepared(self, data, *, forces=False, stress=False, hessian=False, model_prepared=False):
+        """Shared model, external physics and derivative evaluation.
+
+        CUDA graph adapters only prepare static-layout inputs. They call this
+        same implementation instead of reproducing the neural network or E/F.
+        ``model_prepared`` means masks/dtypes have already been prepared; the
+        public regular path still invokes the model's ordinary ``forward``.
+        """
+        kernels = self._can_use_inference_kernels(data, stress=stress, hessian=hessian, model_prepared=model_prepared)
+        if kernels:
+            aev = self.model.aev
+            token = tuple((id(t), t._version) for t in (aev.rc_s, aev.eta_s, aev.shifts_s))
+            cached = self._inference_aev_cache
+            if cached is None or cached[0] != token:
+                cached = (token, aev.prepare_inference())
+                self._inference_aev_cache = cached
+            data["_inference_kernels"] = torch.tensor(True)
+            data["_aev_inference_constants"] = cached[1]
+        if model_prepared:
+            # Captured intermediates must not escape into calculator state.
+            data, saved, _ = derivatives.set_grad_tensors(data, forces=forces, stress=stress, hessian=hessian)
+        else:
+            data = self.set_grad_tensors(data, forces=forces, stress=stress, hessian=hessian)
+            saved = self._saved_for_grad
+        if model_prepared:
+            data = self.model.forward_prepared(data)
+        elif isinstance(self.model, torch.jit.ScriptModule):
+            with torch.jit.optimized_execution(False):
+                data = self.model(data)
+        elif self._compiled_forward is not None and not hessian:
+            data = self._compiled_forward(data)
+        else:
+            data = self.model(data)
+        data, terms = self._run_external_modules(
+            data,
+            forces=forces or hessian,
+            stress=stress,
+            hessian=hessian,
+            use_static_cache=not model_prepared,
+        )
+        if not model_prepared:
+            return self.get_derivatives(data, forces=forces, stress=stress, hessian=hessian, coulomb_terms=terms)
+        return derivatives.get_derivatives(
+            data,
+            forces=forces,
+            stress=stress,
+            hessian=hessian,
+            coulomb_terms=terms,
+            saved_for_grad=saved,
+            create_graph=hessian or self._train,
+        )
+
     def _run_external_modules(
         self,
         data: dict[str, Tensor],
@@ -1078,6 +1246,7 @@ class AIMNet2Calculator:
         forces: bool = False,
         stress: bool = False,
         hessian: bool = False,
+        use_static_cache: bool = True,
     ) -> tuple[dict[str, Tensor], ExternalDerivativeTerms | None]:
         """Run external Coulomb and DFTD3 modules if attached.
 
@@ -1129,12 +1298,16 @@ class AIMNet2Calculator:
             if dftd3_energy_graph:
                 data = self.external_dftd3(data, hessian=True)
             else:
-                cache_key = self._static_dftd3_cache_key(
-                    data,
-                    forces=forces,
-                    stress=stress,
-                    hessian=hessian,
-                    dftd3_energy_graph=dftd3_energy_graph,
+                cache_key = (
+                    self._static_dftd3_cache_key(
+                        data,
+                        forces=forces,
+                        stress=stress,
+                        hessian=hessian,
+                        dftd3_energy_graph=dftd3_energy_graph,
+                    )
+                    if use_static_cache
+                    else None
                 )
                 cached = self._get_static_dftd3_cache(cache_key) if cache_key is not None else None
                 if cached is not None:
@@ -1162,6 +1335,18 @@ class AIMNet2Calculator:
         caller_had_mol_idx = raw_data.get("mol_idx") is not None
         caller_had_nbmat = raw_data.get("nbmat") is not None
         data = self.to_input_tensors(data)
+        # Only rectangular/nonperiodic inputs establish uniform system ranges
+        # for the optional streaming Coulomb primitive. Ragged mol_idx inputs
+        # retain their ordinary neighbor-based implementation.
+        if (
+            self.inference_kernels
+            and "mol_idx" not in data
+            and "nbmat" not in data
+            and data.get("cell") is None
+            and self._coulomb_cutoff == float("inf")
+            and bool((data["numbers"] > 0).all())
+        ):
+            data["_inference_atoms_per_system"] = torch.tensor(data["coord"].shape[-2])
         # Single validation chokepoint on the freshly converted dict; the mark
         # tells the model's prepare_input not to repeat it.
         nbops.validate_mode2_input(data)
@@ -1196,6 +1381,9 @@ class AIMNet2Calculator:
             self._warn_deterministic_packed()
             # Skip neighbor list calculation if already provided
             if "nbmat" not in data:
+                streaming = "_inference_atoms_per_system" in data and self._can_use_inference_kernels(
+                    data, hessian=hessian
+                )
                 cache_key = self._static_nbmat_cache_key(
                     raw_data,
                     data,
@@ -1203,13 +1391,15 @@ class AIMNet2Calculator:
                     caller_had_mol_idx=caller_had_mol_idx,
                     caller_had_nbmat=caller_had_nbmat,
                 )
+                if cache_key is not None:
+                    cache_key = (*cache_key, streaming)
                 self._static_input_cache_key = cache_key
                 self._static_input_cache_refs = self._static_tensor_refs(raw_data) if cache_key is not None else None
                 cached = self._get_static_nbmat_cache(cache_key, raw_data) if cache_key is not None else None
                 if cached is not None and "nbmat" in cached:
                     data.update(cached)
                 else:
-                    data = self.make_nbmat(data)
+                    data = self.make_nbmat(data, streaming_coulomb=streaming)
                     if cache_key is not None:
                         self._remember_static_nbmat(cache_key, raw_data, data)
             data = self.pad_input(data)
@@ -1738,7 +1928,7 @@ class AIMNet2Calculator:
                     data[k] = v.view(batch, -1, *v.shape[1:])
         return data
 
-    def make_nbmat(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+    def make_nbmat(self, data: dict[str, Tensor], *, streaming_coulomb: bool = False) -> dict[str, Tensor]:
         assert self._max_mol_size > 0, "Molecule size is not set"
         # Canonical row order makes the downstream summation order repeatable.
         sort_rows = getattr(self, "_deterministic", False)
@@ -1778,6 +1968,22 @@ class AIMNet2Calculator:
         if cell is not None:
             assert shifts1 is not None
             data["shifts"] = shifts1
+
+        # Only a validated first-order inference call can omit Coulomb's
+        # all-pairs topology. D3 still owns that topology when it previously
+        # shared the full list: its coordination numbers include those pairs
+        # even beyond the dispersion-energy switching radius. Embedded or
+        # unknown LR consumers must retain their normal preparation too.
+        if (
+            streaming_coulomb
+            and cell is None
+            and type(self.external_coulomb) is LRCoulomb
+            and self.external_coulomb.method == "simple"
+            and self.external_dftd3 is None
+            and not self._detect_embedded_lr_modules()
+            and not self._has_embedded_dispersion()
+        ):
+            return data
 
         # Per-call dense Coulomb neighbor list for Ewald / PME: estimate the
         # batch-max real-space cutoff from accuracy + system geometry, build a

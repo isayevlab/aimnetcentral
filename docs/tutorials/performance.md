@@ -58,14 +58,18 @@ result = calc({
 
 ## Step 2: Using torch.compile (compile_model)
 
+!!! note "CUDA-graph replay is a separate option"
+
+    Both `compile_model=False` and `cuda_graph=False` are defaults. Graph replay requires explicit opt-in with `cuda_graph=True`. To compare the regular path with `torch.compile` alone, pass `cuda_graph=False` to **both** calculators in the examples below. See [CUDA-Graph Inference](../cuda_graph.md) for an explicit comparison table, supported calls, and capture/cache costs.
+
 The `compile_model=True` parameter applies `torch.compile()` to the neural network forward pass:
 
 ```python
 # Without compilation
-calc = AIMNet2Calculator("aimnet2")
+calc = AIMNet2Calculator("aimnet2", compile_model=False, cuda_graph=False)
 
 # With compilation
-calc_compiled = AIMNet2Calculator("aimnet2", compile_model=True)
+calc_compiled = AIMNet2Calculator("aimnet2", compile_model=True, cuda_graph=False)
 ```
 
 ### What Gets Compiled
@@ -99,12 +103,13 @@ You can pass additional arguments to `torch.compile()` via `compile_kwargs`:
 
 ```python
 # Default compilation (recommended starting point)
-calc = AIMNet2Calculator("aimnet2", compile_model=True)
+calc = AIMNet2Calculator("aimnet2", compile_model=True, cuda_graph=False)
 
 # With max-autotune for maximum optimization (longer compile time)
 calc = AIMNet2Calculator(
     "aimnet2",
     compile_model=True,
+    cuda_graph=False,
     compile_kwargs={"mode": "max-autotune"},
 )
 ```
@@ -118,11 +123,12 @@ calc = AIMNet2Calculator(
     calc = AIMNet2Calculator(
         "aimnet2",
         compile_model=True,
+        cuda_graph=False,
         compile_kwargs={"mode": "reduce-overhead"},  # Bad for varying sizes
     )
 
     # SAFE default
-    calc = AIMNet2Calculator("aimnet2", compile_model=True)
+    calc = AIMNet2Calculator("aimnet2", compile_model=True, cuda_graph=False)
     ```
 
 ## Step 3: Dense vs Sparse Mode
@@ -193,7 +199,7 @@ import time
 import torch
 from aimnet.calculators import AIMNet2Calculator
 
-calc = AIMNet2Calculator("aimnet2", compile_model=True)
+calc = AIMNet2Calculator("aimnet2", compile_model=True, cuda_graph=False)
 data = {
     "coord": torch.randn(50, 3, device="cuda"),
     "numbers": torch.randint(1, 9, (50,), device="cuda"),

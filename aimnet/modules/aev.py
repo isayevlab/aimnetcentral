@@ -7,6 +7,7 @@ from torch import Tensor, nn
 
 from aimnet import nbops, ops
 from aimnet.kernels import WARP_CUDA_AVAILABLE, conv_sv_2d_sp
+from aimnet.kernels.triton_support import triton_kernels_supported
 
 
 class AEVSV(nn.Module):
@@ -81,15 +82,52 @@ class AEVSV(nn.Module):
         self.register_parameter("shifts" + mod, nn.Parameter(shifts, requires_grad=False))
 
     def forward(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+        # A caller may reuse a data dictionary after changing coordinates or
+        # disabling optimized kernels. Never leave an old-layout basis active.
+        data.pop("g_L", None)
         # d_ij: distances to neighbors (..., m)
         # r_ij: displacement vectors to neighbors (..., m, 3)
         d_ij, r_ij = ops.calc_distances(data)
         data["d_ij"] = d_ij
+        # Explicit inference-only dispatch, independent of CUDA-graph capture.
+        # The calculator supplies host constants before executing the model;
+        # this path does not read device scalars while a graph is captured.
+        if (
+            not self.training
+            and "_inference_kernels" in data
+            and bool(data["_inference_kernels"])
+            and type(self) is AEVSV
+            and getattr(self._calc_aev, "__func__", None) is _CANONICAL_CALC_AEV
+            and nbops.get_nb_mode(data) == 0
+            and not any(p.requires_grad for p in (self.rc_s, self.eta_s, self.shifts_s))
+        ):
+            from .aev_inference import dense_aev_layout
+
+            g_layout = dense_aev_layout(self, data, d_ij, r_ij)
+            data["g_L"] = g_layout
+            # Keep the canonical key for consumers other than ConvSV. This is
+            # a view, not a second copy of the geometry tensor.
+            data["g_sv"] = g_layout.permute(0, 3, 2, 1, 4)
+            return data
         # Atomic environment vectors: (..., m, g, 4)
         # 4 components = 1 scalar (radial) + 3 vector (directional)
         g_sv = self._calc_aev(r_ij, d_ij, data)
         data["g_sv"] = g_sv
         return data
+
+    def prepare_inference(self) -> Tensor:
+        """Snapshot scalar AEV constants on the host, outside model execution.
+
+        The caller must refresh this tensor when the module parameters change.
+        No cache or non-checkpoint state is retained by the module. Regular and
+        graph callers use the same ``_aev_inference_constants`` data entry.
+        """
+        # Never inference tensors: constants cached by a first call under torch.inference_mode() must stay usable
+        # by a later differentiable (forces) call, which saves them for backward on the PyTorch fallback.
+        with torch.inference_mode(False):
+            rc = cast(Tensor, self.rc_s).detach().to("cpu")
+            eta = cast(Tensor, self.eta_s).detach().to("cpu")
+            return torch.stack((eta, rc, torch.pi / rc))
 
     def _calc_aev(self, r_ij: Tensor, d_ij: Tensor, data: dict[str, Tensor]) -> Tensor:
         rc_s = cast(Tensor, self.rc_s)
@@ -108,6 +146,9 @@ class AEVSV(nn.Module):
         gv = gs.unsqueeze(-1) * u_ij.unsqueeze(-2)
         g_sv = torch.cat([gs.unsqueeze(-1), gv], dim=-1)
         return g_sv
+
+
+_CANONICAL_CALC_AEV = AEVSV._calc_aev
 
 
 class ConvSV(nn.Module):
@@ -156,7 +197,19 @@ class ConvSV(nn.Module):
     def forward(self, data: dict[str, Tensor], a: Tensor) -> Tensor:
         g_sv = data["g_sv"]
         mode = nbops.get_nb_mode(data)
-        if mode == 2:
+        if mode == 0 and "g_L" in data:
+            from .aev_inference import dense_convolution, dense_convolution_carry, geometry_carry_basis
+
+            # Read the canonical consumer value, including changes made by an
+            # AEV forward hook. In the ordinary optimized case this permutation
+            # is just a view of g_L and introduces no tensor materialization.
+            if "_geometry_carry" in data:
+                avf_sv, data["_geometry_carry"] = dense_convolution_carry(
+                    a, geometry_carry_basis(data), self.d2features
+                )
+            else:
+                avf_sv = dense_convolution(a, g_sv.permute(0, 3, 2, 1, 4), self.d2features)
+        elif mode == 2:
             a_flat = _flatten_mode2(a, "atomic features")
             g_flat = _flatten_mode2(g_sv, "ConvSV geometry")
             gather_flat = _flatten_mode2(data["_nbmat_gather"], "ConvSV gather indices")
@@ -213,12 +266,66 @@ class ConvSV(nn.Module):
                 avf_sv = torch.einsum("...ma,...mgd->...agd", a_j, g_sv)
             else:
                 avf_sv = torch.einsum("...ma,...mgd->...agd", a.unsqueeze(1), g_sv)
+        return self._finish_convolution(data, avf_sv, mode)
+
+    def _finish_convolution(self, data: dict[str, Tensor], avf_sv: Tensor, mode: int) -> Tensor:
+        """Apply the shared scalar/vector output projection and atom mask."""
+        if (
+            mode == 0
+            and bool(data.get("_inference_kernels", False))
+            and avf_sv.is_cuda
+            and avf_sv.dtype == torch.float32
+            and avf_sv.shape[0] >= 2
+            and not self.agh.requires_grad
+            and triton_kernels_supported(avf_sv.device)
+        ):
+            try:
+                from aimnet.kernels.conv_finish_triton import conv_finish
+            except ImportError:
+                pass
+            else:
+                return conv_finish(avf_sv, cast(Tensor, self.agh), data["mask_i"])
         avf_s, avf_v = avf_sv.split([1, 3], dim=-1)
         avf_v = torch.einsum("agh,...agd->...ahd", self.agh, avf_v).pow(2).sum(-1)
         out = torch.cat([avf_s.squeeze(-1).flatten(-2, -1), avf_v.flatten(-2, -1)], dim=-1)
         if mode == 1:
             return out
-        return nbops.mask_i_(out, data, mask_value=0.0, inplace=False)
+        # ``cat`` owns this fresh storage and its backward does not save it.
+        # Retain the mask, but avoid cloning the just-created tensor in the
+        # optional dense inference path (five copies in a typical model).
+        inplace = mode == 0 and bool(data.get("_inference_kernels", False))
+        return nbops.mask_i_(out, data, mask_value=0.0, inplace=inplace)
+
+
+_CANONICAL_CONV_FORWARD = ConvSV.forward
+_CANONICAL_FINISH_CONVOLUTION = ConvSV._finish_convolution
+# Snapshot dispatch as well as equations: comparing to the live Module class
+# would accept a class-level replacement that the grouped path then bypasses.
+_CANONICAL_CONV_CALL = ConvSV.__call__
+_CANONICAL_CONV_CALL_IMPL = ConvSV._call_impl
+_CANONICAL_CONV_WRAPPED_CALL_IMPL = ConvSV._wrapped_call_impl
+
+
+def _can_group_dense_convolutions(data: dict[str, Tensor], *convolutions: ConvSV) -> bool:
+    """Only bypass module calls when their observable behavior is canonical."""
+    if "g_L" not in data or nbops.get_nb_mode(data) != 0 or not bool(data.get("_inference_kernels", False)):
+        return False
+    hook_names = ("_forward_pre_hooks", "_forward_hooks", "_backward_pre_hooks", "_backward_hooks")
+    global_hooks = torch.nn.modules.module
+    if any(getattr(global_hooks, "_global" + name, {}) for name in hook_names):
+        return False
+    return all(
+        type(conv) is ConvSV
+        and not conv.training
+        and getattr(conv.forward, "__func__", None) is _CANONICAL_CONV_FORWARD
+        and getattr(conv._finish_convolution, "__func__", None) is _CANONICAL_FINISH_CONVOLUTION
+        and type(conv).__call__ is _CANONICAL_CONV_CALL
+        and getattr(conv._call_impl, "__func__", None) is _CANONICAL_CONV_CALL_IMPL
+        and getattr(conv._wrapped_call_impl, "__func__", None) is _CANONICAL_CONV_WRAPPED_CALL_IMPL
+        and getattr(conv, "_compiled_call_impl", None) is None
+        and not any(getattr(conv, name, {}) for name in hook_names)
+        for conv in convolutions
+    )
 
 
 def _warn_warp_cuda_unavailable() -> None:

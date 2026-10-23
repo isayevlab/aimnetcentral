@@ -17,8 +17,13 @@ repos:
       rev: v2.4.1
       hooks:
           - id: codespell
+            # Coulomb and derivative-output identifiers in the inference kernels.
             args:
-                [--skip, "*.lock,*.yaml,*.pt,*.cif", "--ignore-words-list=ahd"]
+                [
+                    --skip,
+                    "*.lock,*.yaml,*.pt,*.cif",
+                    "--ignore-words-list=ahd,coul,dout",
+                ]
             exclude: ^(uv\.lock|examples/)$
 
     - repo: https://github.com/asottile/pyupgrade

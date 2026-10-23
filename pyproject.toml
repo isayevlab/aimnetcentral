@@ -45,6 +45,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Optional dense AEV acceleration. CUDA PyTorch wheels normally provide their
+# matching Triton already; keep this extra opt-in so CPU/macOS/Windows installs
+# do not acquire an unnecessary (or unavailable) compiler dependency.
+cuda-graph = [
+    "triton>=3.0; sys_platform == 'linux'",
+]
+
 # ASE calculator integration
 ase = [
     "ase>=3.27.0,<4",
@@ -242,7 +249,7 @@ exclude_lines = [
 # Deptry configuration
 [tool.deptry]
 # Map package names to their import names
-package_module_name_map = { "pytorch-ignite" = "ignite", "torch-sim-atomistic" = "torch_sim" }
+package_module_name_map = { "pytorch-ignite" = "ignite", "torch-sim-atomistic" = "torch_sim", "warp-lang" = "warp", "nvalchemi-toolkit-ops" = "nvalchemiops", "pyyaml" = "yaml" }
 
 [tool.deptry.per_rule_ignores]
 # Optional extras are installed via [project.optional-dependencies]; deptry can't see them statically
