@@ -162,8 +162,18 @@ def test_custom_aev_equations_keep_reference_dispatch(monkeypatch, override):
     torch.testing.assert_close(optimized["g_sv"], reference, rtol=0.0, atol=0.0)
 
 
-@pytest.mark.parametrize("activation", [torch.nn.GELU, torch.nn.SiLU, torch.nn.Tanh])
-@pytest.mark.parametrize("charge_channels", [1, 2])
+@pytest.mark.parametrize(
+    ("charge_channels", "activation"),
+    [
+        # One representative in the default run; the variants take several seconds each (FP64 Hessian products).
+        pytest.param(1, torch.nn.GELU, id="1-GELU"),
+        pytest.param(1, torch.nn.SiLU, id="1-SiLU", marks=pytest.mark.slow),
+        pytest.param(1, torch.nn.Tanh, id="1-Tanh", marks=pytest.mark.slow),
+        pytest.param(2, torch.nn.GELU, id="2-GELU", marks=pytest.mark.slow),
+        pytest.param(2, torch.nn.SiLU, id="2-SiLU", marks=pytest.mark.slow),
+        pytest.param(2, torch.nn.Tanh, id="2-Tanh", marks=pytest.mark.slow),
+    ],
+)
 def test_canonical_and_prepared_model_share_equations_and_derivatives(activation, charge_channels):
     """The prepared entry is the same computation for varied MLPs and charge heads."""
     from aimnet.models.aimnet2 import AIMNet2
@@ -228,6 +238,7 @@ def test_canonical_and_prepared_model_share_equations_and_derivatives(activation
 
 @pytest.mark.parametrize("d2features", [False, True])
 @pytest.mark.parametrize("padded", [False, True])
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
 def test_cuda_shared_inference_output_and_coordinate_gradient(d2features, padded):
     torch.manual_seed(42)
@@ -245,6 +256,7 @@ def test_cuda_shared_inference_output_and_coordinate_gradient(d2features, padded
         torch.testing.assert_close(actual, reference, rtol=5e-5, atol=2e-3)
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
 def test_cuda_missing_triton_uses_torch_layout(monkeypatch):
     import aimnet.modules.aev_inference as helper

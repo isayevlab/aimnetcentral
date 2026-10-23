@@ -137,9 +137,22 @@ def _forbid_grouped(monkeypatch):
     monkeypatch.setattr(aev_inference, "dense_convolutions_carry", forbidden)
 
 
-@pytest.mark.parametrize("d2features", [False, True])
-@pytest.mark.parametrize("charge_channels", [1, 2])
-@pytest.mark.parametrize("passes", [2, 4])
+@pytest.mark.parametrize(
+    ("passes", "charge_channels", "d2features"),
+    [
+        # Two-pass, one-channel representatives in the default run; larger variants take seconds each.
+        pytest.param(
+            passes,
+            channels,
+            d2,
+            id=f"{passes}-{channels}-{d2}",
+            marks=() if (passes, channels) == (2, 1) else pytest.mark.slow,
+        )
+        for passes in (2, 4)
+        for channels in (1, 2)
+        for d2 in (False, True)
+    ],
+)
 def test_padded_model_equations_and_derivatives(monkeypatch, d2features, charge_channels, passes):
     model = _model(d2features=d2features, charge_channels=charge_channels, passes=passes)
     source = _input()

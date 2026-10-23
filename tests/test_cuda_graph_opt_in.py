@@ -63,6 +63,7 @@ def test_public_constructor_graph_selection(monkeypatch, options, environment, s
     assert calls == ([(calc, {"cuda_graph": True})] if selected else [])
 
 
+@pytest.mark.slow  # a fresh interpreter importing torch takes several seconds
 def test_import_cpu_and_disabled_cuda_do_not_load_graph_backend():
     """Fresh interpreter catches eager imports even when other tests loaded the backend."""
     script = """

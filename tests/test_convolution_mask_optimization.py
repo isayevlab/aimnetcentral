@@ -21,7 +21,10 @@ def _mask_calls(monkeypatch):
     return calls
 
 
-@pytest.mark.parametrize("d2features", [False, True])
+@pytest.mark.parametrize(
+    "d2features",
+    [pytest.param(False, marks=pytest.mark.slow), True],  # third derivatives: seconds per variant
+)
 @pytest.mark.parametrize("padded", [False, True])
 def test_dense_fresh_output_mask_matches_first_through_third_derivatives(monkeypatch, d2features, padded):
     from test_geometry_carry import _assert_jets

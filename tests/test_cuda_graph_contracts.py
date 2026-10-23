@@ -1,5 +1,6 @@
 """CPU-only guard tests: no weights download, CUDA or graph capture required."""
 
+import copy
 import types
 
 import pytest
@@ -13,9 +14,9 @@ from aimnet.modules.core import AtomicShift, AtomicSum, Output
 from aimnet.modules.lr import DFTD3, LRCoulomb, SRCoulomb
 
 
-@pytest.fixture
-def contract():
-    m = (
+@pytest.fixture(scope="module")
+def _base_model():
+    return (
         AIMNet2(
             aev={"rc_s": 5.0, "nshifts_s": 4},
             nfeature=4,
@@ -33,6 +34,12 @@ def contract():
         .eval()
         .requires_grad_(False)
     )
+
+
+@pytest.fixture
+def contract(_base_model):
+    # A fresh copy per test (tests mutate it); building the model once keeps the default run fast.
+    m = copy.deepcopy(_base_model)
     return ModelContract(m, LRCoulomb(key_out="energy", subtract_sr=False), DFTD3(1.0, 0.4, 4.5))
 
 

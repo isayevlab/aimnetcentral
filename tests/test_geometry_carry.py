@@ -226,6 +226,7 @@ def test_custom_mid_loop_geometry_replacement_keeps_existing_semantics(monkeypat
     torch.testing.assert_close(gradient, reference, rtol=1e-9, atol=1e-9)
 
 
+@pytest.mark.slow
 def test_model_retains_public_geometry_identity_and_total_gradient(monkeypatch):
     from test_grouped_convolution import _input, _model, _same_outputs
 
@@ -256,6 +257,7 @@ def test_model_retains_public_geometry_identity_and_total_gradient(monkeypatch):
     torch.testing.assert_close(mixed, reference_mixed, rtol=1e-8, atol=1e-8)
 
 
+@pytest.mark.slow
 def test_model_force_loss_parameter_gradients_preserve_charge_response():
     from test_grouped_convolution import _input, _model, _optimized
 

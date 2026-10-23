@@ -26,6 +26,7 @@ def test_cpu_fallback_gradchecks(trainable_weights, masked):
     assert torch.autograd.gradgradcheck(function, (x, weights))
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 @pytest.mark.parametrize(
     "centers,features,shifts,combinations", [(17, 16, 16, 12), (60, 16, 16, 16), (17, 1, 16, 16), (9, 3, 7, 5)]
@@ -64,6 +65,7 @@ def test_cuda_strides_values_and_first_through_third_derivatives(centers, featur
         torch.backends.cuda.matmul.allow_tf32 = old_tf32
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 @pytest.mark.parametrize("which", ["input", "weight"])
 def test_cuda_saved_tensor_mutation_detected(which):
@@ -76,6 +78,7 @@ def test_cuda_saved_tensor_mutation_detected(which):
         torch.autograd.grad(output.sum(), x)
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 @pytest.mark.parametrize("reason", ["single_batch", "trainable_weights", "large_basis", "autocast"])
 def test_cuda_unsupported_contracts_use_torch(monkeypatch, reason):

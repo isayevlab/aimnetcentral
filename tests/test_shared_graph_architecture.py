@@ -1,5 +1,7 @@
 """Shared model computation and neighbor ownership, without CUDA capture."""
 
+import copy
+
 import pytest
 import torch
 from torch import nn
@@ -14,8 +16,8 @@ from aimnet.modules.core import AtomicSum, Output
 from aimnet.modules.lr import DFTD3, LRCoulomb
 
 
-@pytest.fixture
-def model():
+@pytest.fixture(scope="module")
+def _base_model():
     with torch.random.fork_rng(devices=[]):
         torch.manual_seed(137)
         return (
@@ -34,6 +36,12 @@ def model():
             .eval()
             .requires_grad_(False)
         )
+
+
+@pytest.fixture
+def model(_base_model):
+    """A fresh copy per test (tests mutate it); building the model once keeps the default run fast."""
+    return copy.deepcopy(_base_model)
 
 
 def _inputs(padded=False):
