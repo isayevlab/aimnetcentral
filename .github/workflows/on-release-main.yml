@@ -3,20 +3,27 @@ name: release-main
 on:
     release:
         types: [published]
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: "Existing release tag to publish, e.g. v0.2.5"
+                required: true
+                type: string
+
+env:
+    RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
 
 jobs:
     publish:
         runs-on: ubuntu-latest
         permissions:
-            # OIDC token for PyPI trusted publishing; no long-lived secret.
-            id-token: write
             contents: read
         steps:
             - name: Check out
               uses: actions/checkout@v7
               with:
                   fetch-depth: 0 # Fetch all history and tags for hatch-vcs
-                  ref: ${{ github.event.release.tag_name }}
+                  ref: ${{ env.RELEASE_TAG }}
 
             - name: Set up the environment
               uses: ./.github/actions/setup-uv-env
@@ -24,22 +31,24 @@ jobs:
             - name: Verify release tag checkout
               run: |
                   set -euo pipefail
-                  test "$(git describe --tags --exact-match)" = "${{ github.event.release.tag_name }}"
+                  test "$(git describe --tags --exact-match)" = "$RELEASE_TAG"
 
             - name: Build and publish
+              env:
+                  UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
               run: |
                   uv build
                   python - <<'PY'
                   import os
                   import re
 
-                  tag = os.environ["GITHUB_REF_NAME"].removeprefix("v")
+                  tag = os.environ["RELEASE_TAG"].removeprefix("v")
                   files = os.listdir("dist")
                   pattern = re.compile(rf"aimnet-{re.escape(tag)}(?:\.|-)")
                   if not any(pattern.match(name) for name in files):
                       raise SystemExit(f"dist artifacts {files!r} do not match release tag {tag!r}")
                   PY
-                  uv publish --trusted-publishing always
+                  uv publish
 
     deploy-docs:
         needs: publish
@@ -49,7 +58,7 @@ jobs:
               uses: actions/checkout@v7
               with:
                   fetch-depth: 0 # Fetch all history and tags for hatch-vcs
-                  ref: ${{ github.event.release.tag_name }}
+                  ref: ${{ env.RELEASE_TAG }}
 
             - name: Set up the environment
               uses: ./.github/actions/setup-uv-env
