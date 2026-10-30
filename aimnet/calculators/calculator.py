@@ -2061,7 +2061,8 @@ class AIMNet2Calculator:
         # Unified neighbor list when LR module cutoffs are similar
         if self._nblist_lr is not None:
             if self._coulomb_cutoff == float("inf"):
-                self._nblist_lr.max_neighbors = N
+                # Every atom pairs with its own molecule only, so the largest one bounds the row.
+                self._nblist_lr.max_neighbors = N if cell is not None else self._max_mol_size
             nbmat_lr, _, shifts_lr = self._nblist_lr(
                 positions=data["coord"],
                 cell=cell_batched,
@@ -2082,7 +2083,7 @@ class AIMNet2Calculator:
         else:
             if self._nblist_coulomb is not None:
                 if self._coulomb_cutoff == float("inf"):
-                    self._nblist_coulomb.max_neighbors = N
+                    self._nblist_coulomb.max_neighbors = N if cell is not None else self._max_mol_size
                 nbmat_coulomb, _, shifts_coulomb = self._nblist_coulomb(
                     positions=data["coord"],
                     cell=cell_batched,
