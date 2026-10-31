@@ -781,7 +781,7 @@ class TestDeterministicMode:
     _REPEATS = 10
 
     @staticmethod
-    def _repeat_taxol(nb_threshold: int) -> list[dict[str, torch.Tensor]]:
+    def _repeat_taxol(nb_threshold: int, train: bool = False) -> list[dict[str, torch.Tensor]]:
         """Evaluate taxol (113 atoms) repeatedly on the dense or packed layout."""
         mol = load_mol(TAXOL_FILE)
         data = {
@@ -789,7 +789,7 @@ class TestDeterministicMode:
             "numbers": torch.as_tensor(mol["numbers"], device="cuda").unsqueeze(0),
             "charge": torch.zeros(1, device="cuda"),
         }
-        calc = AIMNet2Calculator("aimnet2", deterministic=True, nb_threshold=nb_threshold)
+        calc = AIMNet2Calculator("aimnet2", deterministic=True, nb_threshold=nb_threshold, train=train)
         return [calc(dict(data), forces=True) for _ in range(TestDeterministicMode._REPEATS)]
 
     @pytest.mark.ase
@@ -824,10 +824,24 @@ class TestDeterministicMode:
         assert all(torch.equal(e, energies[0]) for e in energies[1:])
 
     @pytest.mark.ase
-    @pytest.mark.xfail(strict=True, reason="#140: the Warp conv_sv_2d_sp backward accumulates with atomics")
     def test_packed_layout_forces_bitwise_reproducible(self, torch_deterministic):
         outs = self._repeat_taxol(nb_threshold=0)
         assert all(torch.equal(out["forces"], outs[0]["forces"]) for out in outs[1:])
+
+    @pytest.mark.ase
+    def test_packed_layout_training_forces_bitwise_reproducible(self, torch_deterministic):
+        """train=True keeps the force graph (create_graph), so the deterministic double backward is recorded."""
+        outs = self._repeat_taxol(nb_threshold=0, train=True)
+        assert all(torch.equal(out["forces"], outs[0]["forces"]) for out in outs[1:])
+
+    @pytest.mark.ase
+    def test_packed_layout_periodic_forces_bitwise_reproducible(self, torch_deterministic):
+        crystal = load_mol(CIF_SPIRO)
+        calc = AIMNet2Calculator("aimnet2", deterministic=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # the DSF auto-switch for periodic input
+            forces = [calc(dict(crystal), forces=True)["forces"] for _ in range(self._REPEATS)]
+        assert all(torch.equal(f, forces[0]) for f in forces[1:])
 
     @staticmethod
     def _packed_warnings(calc: AIMNet2Calculator, batched: bool = False) -> list[warnings.WarningMessage]:
