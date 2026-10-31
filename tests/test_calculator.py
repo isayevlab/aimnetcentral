@@ -1048,6 +1048,33 @@ class TestBatchCorrectness:
             "charge": torch.tensor([0.0]),
         }
 
+    def test_flat_batch_coulomb_list_sized_by_largest_molecule(self, monkeypatch):
+        """All-pairs Coulomb in a mol_idx batch never needs more columns than the largest molecule."""
+        calc = AIMNet2Calculator("aimnet2", nb_threshold=0)
+        nblist = calc._nblist_lr if calc._nblist_lr is not None else calc._nblist_coulomb
+        assert nblist is not None
+        requested = []
+        call = type(nblist).__call__
+
+        def record(self, *args, **kwargs):
+            if self is nblist:
+                requested.append(self.max_neighbors)
+            return call(self, *args, **kwargs)
+
+        monkeypatch.setattr(type(nblist), "__call__", record)
+        mols = [self._make_water(offset=10.0 * i) for i in range(20)] + [self._make_methane(offset=300.0)]
+        batch = {
+            "coord": torch.cat([m["coord"] for m in mols]),
+            "numbers": torch.cat([m["numbers"] for m in mols]),
+            "charge": torch.cat([m["charge"] for m in mols]),
+            "mol_idx": torch.cat([torch.full((len(m["numbers"]),), i) for i, m in enumerate(mols)]),
+        }
+        energies = calc(batch)["energy"]
+
+        assert requested and max(requested) <= 5  # methane, not the 65 atoms of the batch
+        single = [calc(m)["energy"].item() for m in (mols[0], mols[-1])]
+        assert energies[[0, -1]].tolist() == pytest.approx(single, abs=1e-4)
+
     def test_batch_vs_individual_mode0(self):
         """nb_mode=0: Dense pairwise format (3D input, no nbmat)."""
         calc = AIMNet2Calculator("aimnet2", nb_threshold=0)

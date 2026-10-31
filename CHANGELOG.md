@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Batched gas-phase Coulomb memory:** with `mol_idx` and the default `simple` Coulomb, the all-pairs neighbor buffer was sized by the batch's total atom count, so a flat batch of many molecules allocated an `N × N` matrix (about 14 GB at 60k atoms). It is now sized by the largest molecule, and memory grows linearly with the batch. Energies and forces are unchanged; periodic inputs keep the previous sizing ([#151](https://github.com/isayevlab/aimnetcentral/issues/151)).
+
 ## [0.2.5] - 2026-10-23
 
 0.2.5 is a pre-1.0 release. Despite the patch-level version number it contains breaking changes, so if you pin `aimnet~=0.2.0` (or `>=0.2,<0.3`), read the breaking-changes list below before upgrading.
