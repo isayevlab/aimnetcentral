@@ -11,35 +11,25 @@ Fast neural-network interatomic potentials for organic, elemental-organic, open-
 
 ## What It Does
 
-AIMNet2 predicts energies, forces, atomic charges, stress tensors, and Hessians for molecular and periodic atomistic simulations. It combines AIMNet2 neural potentials with adaptive dense/sparse neighbor handling, optional long-range electrostatics, DFT-D3 dispersion, and integrations for simulation workflows.
+AIMNet2 predicts energies, forces, atomic charges, stress tensors, and Hessians for molecules and periodic systems. Pretrained models cover general organic chemistry, open-shell and reactive chemistry, and palladium catalysis.
 
-**Highlights**
-
-- Pretrained model families for general organic chemistry, B97-3c, open-shell chemistry, palladium catalysis, and reactive paths
-- Core inference through `AIMNet2Calculator`
-- ASE, PySisyphus, Sella, TorchSim, Hugging Face Hub, and CLI workflows
-- Periodic systems with DSF, Ewald, and PME Coulomb methods
-- DFT-D3(BJ) dispersion through GPU-accelerated nvalchemiops kernels
-- Python 3.11, 3.12, 3.13, and 3.14 support; TorchSim extra is available on Python 3.12+
+- One calculator, `AIMNet2Calculator`, for single molecules, batches, and periodic cells
+- ASE, PySisyphus, Sella, TorchSim, Hugging Face Hub, and command-line workflows
+- Long-range Coulomb (DSF, Ewald, PME) and DFT-D3(BJ) dispersion on GPU
+- Optional CUDA-graph replay and `torch.compile` for repeated evaluations
+- Python 3.11 to 3.14 and PyTorch 2.10 or newer
 
 ## Install
 
-AIMNet2 requires Python 3.11+ and PyTorch 2.10+.
-
 ```bash
-# CPU or PyTorch-default install
-pip install aimnet
-
-# CUDA example: install PyTorch first, then AIMNet2
-pip install torch --index-url https://download.pytorch.org/whl/cu126
 pip install aimnet
 ```
 
-With `uv`:
+On Linux the default PyTorch wheel from PyPI includes CUDA. To pick a specific CUDA build, install PyTorch first, then AIMNet2:
 
 ```bash
-uv pip install torch --index-url https://download.pytorch.org/whl/cu126
-uv pip install aimnet
+pip install torch --index-url https://download.pytorch.org/whl/cu126
+pip install aimnet
 ```
 
 Optional integrations:
@@ -47,39 +37,32 @@ Optional integrations:
 ```bash
 pip install "aimnet[ase]"              # ASE calculator
 pip install "aimnet[pysis]"            # PySisyphus reaction paths
-pip install "aimnet[sella]"            # Sella TS optimization, includes ASE
+pip install "aimnet[sella]"            # Sella transition-state search, includes ASE
 pip install "aimnet[hf]"               # Hugging Face Hub model loading
 pip install "aimnet[torchsim,ase]"     # TorchSim, Python 3.12+
 pip install "aimnet[train]"            # training and export commands
 ```
 
-For a full development environment:
-
-```bash
-git clone https://github.com/isayevlab/aimnetcentral.git
-cd aimnetcentral
-make install
-source .venv/bin/activate
-```
+For offline or HPC clusters, see [Offline and HPC installation](https://isayevlab.github.io/aimnetcentral/offline_hpc/).
 
 ## Quick Start
 
 ```python
 from aimnet.calculators import AIMNet2Calculator
 
-calc = AIMNet2Calculator("aimnet2")
+calc = AIMNet2Calculator("aimnet2")  # downloads the model on first use
 
-result = calc(
-    {"coord": coordinates, "numbers": atomic_numbers, "charge": 0.0},
-    forces=True,
-)
+water = {
+    "coord": [[0.000, 0.000, 0.119], [0.000, 0.763, -0.477], [0.000, -0.763, -0.477]],
+    "numbers": [8, 1, 1],
+    "charge": 0.0,
+}
+result = calc(water, forces=True)
 
 print(result["energy"])   # eV
-print(result["forces"])   # eV/Angstrom
+print(result["forces"])   # eV/Å
 print(result["charges"])  # e
 ```
-
-`compile_model=False` and `cuda_graph=False` are the defaults. Opt into CUDA-graph replay for supported repeated evaluations with `cuda_graph=True`; use `compile_model=True, cuda_graph=False` for a compile-only comparison. See [CUDA-Graph Inference](docs/cuda_graph.md) for supported models, fallback behavior, capture costs, and cache memory.
 
 ### ASE
 
@@ -117,16 +100,21 @@ calc.set_lrcoulomb_method("ewald", ewald_accuracy=1e-6)
 
 result = calc(
     {
-        "coord": coordinates,
-        "numbers": atomic_numbers,
+        "coord": coordinates,       # (N, 3), Å
+        "numbers": atomic_numbers,  # (N,)
         "charge": 0.0,
-        "cell": cell_vectors,
-        "pbc": True,
+        "cell": cell_vectors,       # (3, 3), Å; fully periodic
     },
     forces=True,
     stress=True,
 )
 ```
+
+See the [periodic systems tutorial](https://isayevlab.github.io/aimnetcentral/tutorials/periodic_systems/) and [long-range methods](https://isayevlab.github.io/aimnetcentral/long_range/) for choosing a Coulomb method.
+
+### Performance
+
+`compile_model=False` and `cuda_graph=False` are the defaults. For many repeated evaluations of the same system size on a GPU, such as MD or geometry optimization, `cuda_graph=True` replays captured CUDA graphs and is often several times faster for small and medium molecules. See [CUDA-graph inference](https://isayevlab.github.io/aimnetcentral/cuda_graph/) for supported models and memory costs, and [performance tuning](https://isayevlab.github.io/aimnetcentral/tutorials/performance/) for batching and `torch.compile`.
 
 ## Model Families
 
@@ -139,17 +127,13 @@ result = calc(
 | `aimnet2-pd` | H, B, C, N, O, F, Si, P, S, Cl, Se, Br, Pd, I | Pd catalysis with B97-3c/CPCM(THF) reference data |
 | `aimnet2-rxn` | H, C, N, O | Reactive chemistry, transition states, NEB, IRC; net-neutral systems only |
 
-Each family has four ensemble members indexed `0` through `3`. Short aliases load member `0` by default. Previously published aliases such as `aimnet2_2025`, `aimnet2nse`, and `aimnet2pd` continue to resolve.
+Each family has four ensemble members, `0` to `3`; short aliases load member `0`. Previously published names such as `aimnet2_2025`, `aimnet2nse`, and `aimnet2pd` still resolve.
 
-See the [model selection guide](https://isayevlab.github.io/aimnetcentral/models/guide/) for limitations, aliases, citations, and download links.
+The [model selection guide](https://isayevlab.github.io/aimnetcentral/models/guide/) covers known limitations, aliases, citations, and download links.
 
 ## Hugging Face Models
 
-Install the HF extra and pass a repo ID directly:
-
-```bash
-pip install "aimnet[hf]"
-```
+With the `hf` extra installed, pass a repository ID directly:
 
 ```python
 from aimnet.calculators import AIMNet2Calculator
@@ -159,8 +143,6 @@ calc = AIMNet2Calculator("isayevlab/aimnet2-wb97m-d3", ensemble_member=2)
 calc = AIMNet2Calculator("isayevlab/aimnet2-wb97m-d3", revision="v1.0")
 ```
 
-Published repositories:
-
 | HF repo | Alias | Use |
 | --- | --- | --- |
 | `isayevlab/aimnet2-wb97m-d3` | `aimnet2` | General organic chemistry |
@@ -169,45 +151,41 @@ Published repositories:
 | `isayevlab/aimnet2-pd` | `aimnet2-pd` | Palladium chemistry |
 | `isayevlab/aimnet2-rxn` | `aimnet2-rxn` | Reactive paths and transition states |
 
-Private repos can be loaded with `token=` or the `HF_TOKEN` environment variable. Local HF-style directories with `config.json` and `ensemble_N.safetensors` are also supported.
+Private repositories load with `token=` or the `HF_TOKEN` environment variable. Local directories with `config.json` and `ensemble_N.safetensors` also work.
 
 ## Outputs
 
-| Key       | Shape                   | Units           |
-| --------- | ----------------------- | --------------- |
-| `energy`  | scalar or `(B,)`        | eV              |
-| `forces`  | `(N, 3)` or `(B, N, 3)` | eV/Angstrom     |
-| `charges` | `(N,)` or `(B, N)`      | electron charge |
-| `stress`  | `(3, 3)`                | eV/Angstrom^3   |
-| `hessian` | `(N, 3, N, 3)`          | eV/Angstrom^2   |
+| Key       | Shape                               | Units  |
+| --------- | ----------------------------------- | ------ |
+| `energy`  | `(B,)`                              | eV     |
+| `forces`  | `(N, 3)` or `(B, N, 3)`             | eV/Å   |
+| `charges` | `(N,)` or `(B, N)`                  | e      |
+| `stress`  | `(3, 3)` or `(B, 3, 3)`             | eV/Å^3 |
+| `hessian` | `(N, 3, N, 3)` or `(B, N, 3, N, 3)` | eV/Å^2 |
 
-Hessians are single-molecule only. With `compile_model=True`, Hessian and HVP requests use the original eager model rather than the compiled inference forward. Long-range backends differ in derivative support; see the [calculator](https://isayevlab.github.io/aimnetcentral/calculator/) and [long-range](https://isayevlab.github.io/aimnetcentral/long_range/) docs for the exact contracts.
+`B` is the number of systems (1 for a single molecule) and `N` the number of atoms. Stress uses the ASE sign convention. Batched Hessians are evaluated per system and returned as a list when the systems differ in size. The [calculator reference](https://isayevlab.github.io/aimnetcentral/calculator/) documents input layouts, batching, and the derivative support of each long-range method.
 
-## Training and CLI
+## Training
 
 ```bash
 pip install "aimnet[train]"
-aimnet train --config my_config.yaml --model aimnet2.yaml
+aimnet train data.train=dataset.h5 data.sae.energy.file=dataset_sae.yaml run_name=firstrun
 ```
 
-The `aimnet` entry point is installed with the core package. Training, export, and self-atomic-energy commands require the `train` extra.
-
-To compile the AIMNet2 energy, force, and stress computation during training, set `trainer.compile: true`. Compiled training requires CUDA and supports DDP; each process or rank owns one compiled derivative graph. The first batch fixes the requested properties, neighbor mode, and ordered input keys, ranks, dtypes, and device type. Later batches may change their batch, atom, and neighbor dimensions. Forces are supported in modes 0, 1, and 2. Stress requires an explicit mode-1 or mode-2 neighbor matrix, a cell, and an aligned shift tensor for every neighbor matrix.
-
-Stress labels must be full `(B, 3, 3)` tensors in eV/Å^3 with the ASE sign convention (σ = (1/V) ∂E/∂ε, negative under compression), as returned by `atoms.get_stress(voigt=False)`. VASP reports stress with the opposite sign in kBar (1 eV/Å^3 = 1602.1766 kBar). The built-in `SizeGroupedDataset` loader produces dense batches without neighbor lists, so stress training requires a custom dataset; `aimnet train` checks the first batch and stops with an explanation otherwise. See [Training](docs/train.md#stress-training).
-
-The original AIMNet2 module remains the sole parameter and checkpoint owner. Loss evaluation, gradient clipping, and the optimizer step remain eager. The trainer invokes `loss.backward()` from eager Python, which enters the compiled AOTAutograd backward for the model and derivative graph. Hessian and HVP requests made through a calculator with compiled inference enabled continue to use the original eager model.
+The `aimnet` command is installed with the core package; training, export, and self-atomic-energy commands need the `train` extra. The [training guide](https://isayevlab.github.io/aimnetcentral/train/) covers datasets, configuration, compiled training, stress training, and exporting models.
 
 ## Development
 
 ```bash
+git clone https://github.com/isayevlab/aimnetcentral.git
+cd aimnetcentral
+make install     # uv environment with all extras and pre-commit hooks
 make check       # formatting, linting, dependency checks
 make test        # pytest suite
-make docs        # serve docs locally
-make docs-test   # strict docs build
+make docs        # serve the docs locally
 ```
 
-CI runs the core test suite on Python 3.11, 3.13, and 3.14 and separate optional-extra lanes for ASE, PySisyphus, Sella, Hugging Face, TorchSim, docs, and security checks.
+CI tests Python 3.11, 3.13, and 3.14, PyTorch 2.10 to 2.14, and each optional integration. Contributions are welcome; see [CONTRIBUTING.md](https://github.com/isayevlab/aimnetcentral/blob/main/CONTRIBUTING.md).
 
 ## Citation
 
@@ -247,4 +225,4 @@ If you use AIMNet2-2025 (`aimnet2-2025`), please also cite [the AIMNet2-2025 pap
 
 ## License
 
-See [LICENSE](LICENSE).
+MIT; see [LICENSE](https://github.com/isayevlab/aimnetcentral/blob/main/LICENSE).

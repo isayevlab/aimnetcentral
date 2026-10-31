@@ -90,6 +90,15 @@ Finally, initiate the training script with default parameters and the specified 
 $ aimnet train data.train=dataset.h5 data.sae.energy.file=dataset_sae.yaml run_name=firstrun
 ```
 
+### Compiled Training
+
+Set `trainer.compile: true` to compile the AIMNet2 energy, force, and stress computation during training. Compiled training requires CUDA and supports DDP; each process or rank owns one compiled derivative graph.
+
+- The first batch fixes the requested properties, the neighbor mode, and the ordered input keys, ranks, dtypes, and device type. Later batches may change their batch, atom, and neighbor dimensions.
+- Forces are supported in neighbor modes 0, 1, and 2. For stress inputs, see [Stress training](#stress-training).
+- The original AIMNet2 module remains the sole parameter and checkpoint owner. Loss evaluation, gradient clipping, and the optimizer step stay eager: the trainer calls `loss.backward()` from eager Python, which enters the compiled AOTAutograd backward for the model and derivative graph.
+- Hessian and HVP requests made through a calculator with compiled inference continue to use the original eager model.
+
 ### Model Export for Distribution
 
 To export a trained model for distribution and use with AIMNet calculators:
