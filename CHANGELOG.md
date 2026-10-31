@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - **Batched gas-phase Coulomb memory:** with `mol_idx` and the default `simple` Coulomb, the all-pairs neighbor buffer was sized by the batch's total atom count, so a flat batch of many molecules allocated an `N × N` matrix (about 14 GB at 60k atoms). It is now sized by the largest molecule, and memory grows linearly with the batch. Energies and forces are unchanged; periodic inputs keep the previous sizing ([#151](https://github.com/isayevlab/aimnetcentral/issues/151)).
+- **Reproducible forces on the packed layout:** with `deterministic=True` and `torch.use_deterministic_algorithms(True)`, packed-layout forces on CUDA are now bitwise identical across repeated runs, as energies already were. This covers periodic inputs and forces with `train=True` (not parameter gradients). The Warp ConvSV backward and double backward previously accumulated atom gradients with atomic adds; they now gather them in a fixed order through a CSR transpose of the neighbor list, which the calculator builds only in this mode. The fixed-order backward had no measurable cost in testing. Default behavior and speed are unchanged. The PyTorch flag is still required for the per-molecule sums and the neighbor-gather backward. Caller-supplied batched `(B, N, M)` neighbor matrices and legacy `.jpt` models are not covered ([#140](https://github.com/isayevlab/aimnetcentral/issues/140)).
 
 ## [0.2.5] - 2026-10-23
 
