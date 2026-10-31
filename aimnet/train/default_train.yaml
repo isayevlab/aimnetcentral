@@ -83,9 +83,9 @@ loss:
                     key_true: charges
                     key_pred: charges
             # Stress (add `stress` to data.y): full (B, 3, 3) labels in eV/A^3,
-            # ASE sign. Needs explicit mode-1/2 neighbor lists from a custom
-            # dataset; see docs/train.md. Stress MSE is typically ~1e-6, so it
-            # needs a large weight.
+            # ASE sign. Also add `cell` to data.x; the loader then builds the
+            # periodic neighbor lists (see docs/train.md). Stress MSE is
+            # typically ~1e-6, so it needs a large weight.
             # stress:
             #     fn: aimnet.train.loss.mse_loss_fn
             #     weight: 100.0
