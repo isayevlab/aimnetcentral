@@ -592,3 +592,115 @@ def test_global_mode2_empty_and_all_sentinel_rows():
     idx = torch.full((a.shape[0], g.shape[1]), padding_value, device="cuda", dtype=torch.int64)
     actual = conv_sv_2d_sp(a, idx, g, padding_value, num_centers)
     assert torch.equal(actual, torch.zeros_like(actual))
+
+
+def _contended_conv_data(seed: int = 0):
+    """Packed-layout inputs where every atom has many contributors, so atomic adds race.
+
+    K = 257 atoms (last row is padding), M = 34 slots with 24 real neighbors,
+    A = G = 16 as in AIMNet2; neighbors repeat across rows.
+    """
+    torch.manual_seed(seed)
+    K, A, G, M = 257, 16, 16, 34
+    a = torch.randn(K, A, G, device="cuda")
+    idx = generate_valid_neighbor_idx(K, M, num_neighbors=24, device="cuda").to(torch.int32)
+    g = torch.randn(K, M, G, 4, device="cuda") * (idx < K - 1).unsqueeze(-1).unsqueeze(-1)
+    go = torch.randn(K, A, G, 4, device="cuda")
+    return a, idx, g, go
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_transpose_lists_each_atoms_contributors_in_slot_order():
+    from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp_transpose
+
+    a, idx, _g, padding_value, num_centers = _generalized_conv_data()
+    csr_ptr, csr_idx = conv_sv_2d_sp_transpose(idx, a.shape[0], padding_value, num_centers)
+    assert csr_ptr.dtype == csr_idx.dtype == torch.int32
+    assert csr_ptr.shape == (a.shape[0] + 1,)
+    assert csr_idx.shape == (num_centers * idx.shape[1],)
+    flat = idx[:num_centers].flatten().tolist()
+    for j in range(a.shape[0]):
+        expected = [slot for slot, value in enumerate(flat) if value == j]
+        assert csr_idx[csr_ptr[j] : csr_ptr[j + 1]].tolist() == expected
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_transpose_rejects_mismatched_shapes():
+    from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp, conv_sv_2d_sp_transpose
+
+    a, idx, g, _go = _contended_conv_data()
+    transpose = conv_sv_2d_sp_transpose(idx[:-1], a.shape[0] - 1)
+    with pytest.raises(ValueError, match="transpose does not match"):
+        conv_sv_2d_sp(a, idx, g, transpose=transpose)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+@pytest.mark.parametrize("layout", ["mode1", "generalized"])
+def test_deterministic_backward_matches_atomic(layout):
+    """The gather backward agrees with the atomic one to float32 rounding; grad_g is the same kernel."""
+    from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp_transpose
+
+    if layout == "mode1":
+        a, idx, g, go = _contended_conv_data()
+        padding_value, num_centers = a.shape[0] - 1, idx.shape[0] - 1
+    else:
+        a, idx, g, padding_value, num_centers = _generalized_conv_data()
+        a, g, idx = a.detach(), g.detach(), idx.to(torch.int32)
+        go = torch.randn(idx.shape[0], a.shape[1], a.shape[2], 4, device="cuda")
+    transpose = conv_sv_2d_sp_transpose(idx, a.shape[0], padding_value, num_centers)
+    ops = torch.ops.aimnet
+
+    grad_a, grad_g = ops.conv_sv_2d_sp_bwd(go, a, idx, g, padding_value, num_centers)
+    det_a, det_g = ops.conv_sv_2d_sp_det_bwd(go, a, idx, g, *transpose, padding_value, num_centers)
+    torch.testing.assert_close(det_a, grad_a, atol=1e-5, rtol=1e-5)
+    assert torch.equal(det_g, grad_g)
+
+    grad2_a, grad2_g = torch.randn_like(a), torch.randn_like(g)
+    atomic = ops.conv_sv_2d_sp_bwd_bwd(go, grad2_a, grad2_g, a, idx, g, padding_value, num_centers)
+    det = ops.conv_sv_2d_sp_det_bwd_bwd(go, grad2_a, grad2_g, a, idx, g, *transpose, padding_value, num_centers)
+    assert torch.equal(det[0], atomic[0])
+    torch.testing.assert_close(det[1], atomic[1], atol=1e-5, rtol=1e-5)
+    assert torch.equal(det[2], atomic[2])
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_deterministic_backward_is_bitwise_repeatable():
+    from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp_transpose
+
+    a, idx, g, go = _contended_conv_data()
+    pv, nc = a.shape[0] - 1, idx.shape[0] - 1
+    grad2_a, grad2_g = torch.randn_like(a), torch.randn_like(g)
+    ops = torch.ops.aimnet
+    first = None
+    for _ in range(10):
+        # Rebuilt every time: the transpose itself must be deterministic too.
+        transpose = conv_sv_2d_sp_transpose(idx, a.shape[0])
+        outs = [
+            *ops.conv_sv_2d_sp_det_bwd(go, a, idx, g, *transpose, pv, nc),
+            *ops.conv_sv_2d_sp_det_bwd_bwd(go, grad2_a, grad2_g, a, idx, g, *transpose, pv, nc),
+        ]
+        if first is None:
+            first = outs
+        assert all(torch.equal(out, ref) for out, ref in zip(outs, first, strict=True))
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_deterministic_autograd_matches_default_through_second_order():
+    """conv_sv_2d_sp(transpose=...) wires both autograd levels to the deterministic primitives."""
+    from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp, conv_sv_2d_sp_transpose
+
+    a0, idx, g0, go = _contended_conv_data()
+    u, v = torch.randn_like(a0), torch.randn_like(g0)
+
+    def second_order(transpose):
+        a = a0.clone().requires_grad_(True)
+        g = g0.clone().requires_grad_(True)
+        out = conv_sv_2d_sp(a, idx, g, transpose=transpose)
+        grad_a, grad_g = torch.autograd.grad(out, (a, g), go, create_graph=True)
+        second = torch.autograd.grad((grad_a * u).sum() + (grad_g * v).sum(), (a, g))
+        return out, grad_a, grad_g, *second
+
+    reference = second_order(None)
+    deterministic = second_order(conv_sv_2d_sp_transpose(idx, a0.shape[0]))
+    for actual, expected in zip(deterministic, reference, strict=True):
+        torch.testing.assert_close(actual, expected, atol=1e-4, rtol=1e-5)

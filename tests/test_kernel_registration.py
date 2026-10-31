@@ -13,6 +13,9 @@ EXPECTED_OPS = {
     "aimnet::conv_sv_2d_sp_fwd",
     "aimnet::conv_sv_2d_sp_bwd",
     "aimnet::conv_sv_2d_sp_bwd_bwd",
+    "aimnet::conv_sv_2d_sp_det_fwd",
+    "aimnet::conv_sv_2d_sp_det_bwd",
+    "aimnet::conv_sv_2d_sp_det_bwd_bwd",
 }
 
 

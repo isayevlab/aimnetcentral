@@ -135,6 +135,31 @@ def _conv_sv_2d_sp_backward_a_kernel(
 
 
 @wp.kernel(enable_backward=False)
+def _conv_sv_2d_sp_backward_a_gather_kernel(
+    grad_output: wp.array3d(dtype=wp.vec4f),  # (B, A, G, D)
+    g: wp.array3d(dtype=wp.vec4f),  # (B, M, G, D)
+    csr_ptr: wp.array1d(dtype=wp.int32),  # (K + 1,)
+    csr_idx: wp.array1d(dtype=wp.int32),  # (B * M,) flat b * M + m, grouped by idx[b, m]
+    grad_a: wp.array3d(dtype=wp.float32),  # (K, A, G)
+):
+    """Deterministic backward w.r.t. a: grad_a[j,a,g] = sum_{idx[b,m]==j} dot(grad_output[b,a,g], g[b,m,g])
+
+    Each thread owns one output element and walks its contributors in the fixed
+    order of the CSR transpose, so no atomics are needed.
+    """
+    M = g.shape[1]
+    _j, _a, _g = wp.tid()
+
+    acc = wp.float32(0.0)
+    for _k in range(csr_ptr[_j], csr_ptr[_j + 1]):
+        bm = csr_idx[_k]
+        _b = bm // M
+        _m = bm - _b * M
+        acc += wp.dot(grad_output[_b, _a, _g], g[_b, _m, _g])
+    grad_a[_j, _a, _g] = acc
+
+
+@wp.kernel(enable_backward=False)
 def _conv_sv_2d_sp_backward_g_kernel(
     grad_output: wp.array3d(dtype=wp.vec4f),  # (B, A, G, D)
     a: wp.array3d(dtype=wp.float32),  # (B, A, G)
@@ -251,13 +276,16 @@ def _validate_conv_sv_sizes(a: Tensor, idx: Tensor, padding_value: int, num_cent
         raise ValueError("num_centers must be in [0, idx.shape[0]].")
 
 
-@torch.library.custom_op(
-    "aimnet::conv_sv_2d_sp_fwd",
-    mutates_args=(),
-    device_types=["cuda"],
-)
-def _(a: Tensor, idx: Tensor, g: Tensor, padding_value: int, num_centers: int) -> Tensor:
-    """Forward primitive for conv_sv_2d_sp."""
+def _validate_transpose(a: Tensor, idx: Tensor, csr_ptr: Tensor, csr_idx: Tensor, num_centers: int) -> None:
+    """Check the CSR transpose metadata against ``a`` and ``idx`` (shapes only, no device sync)."""
+    if csr_ptr.dtype != torch.int32 or csr_idx.dtype != torch.int32:
+        raise TypeError("The conv_sv_2d_sp transpose must be int32 tensors.")
+    if csr_ptr.shape != (a.shape[0] + 1,) or csr_idx.shape != (num_centers * idx.shape[1],):
+        raise ValueError("The conv_sv_2d_sp transpose does not match a and idx; rebuild it for this idx.")
+
+
+def _conv_sv_2d_sp_fwd_impl(a: Tensor, idx: Tensor, g: Tensor, padding_value: int, num_centers: int) -> Tensor:
+    """Launch the forward kernel. It gathers per output row, so it is deterministic as is."""
     _validate_conv_sv_sizes(a, idx, padding_value, num_centers)
     stream = _get_stream(a.device)
     device = wp.device_from_torch(a.device)
@@ -281,46 +309,119 @@ def _(a: Tensor, idx: Tensor, g: Tensor, padding_value: int, num_centers: int) -
     return output
 
 
-@torch.library.register_fake("aimnet::conv_sv_2d_sp_fwd")
-def _(a: Tensor, idx: Tensor, g: Tensor, padding_value: int, num_centers: int) -> Tensor:
+def _fake_fwd(a: Tensor, idx: Tensor, padding_value: int, num_centers: int) -> Tensor:
     _validate_conv_sv_sizes(a, idx, padding_value, num_centers)
     _B, A, G = a.shape
     return torch.empty(idx.shape[0], A, G, 4, dtype=a.dtype, device=a.device)
 
 
 @torch.library.custom_op(
-    "aimnet::conv_sv_2d_sp_bwd",
+    "aimnet::conv_sv_2d_sp_fwd",
     mutates_args=(),
     device_types=["cuda"],
 )
-def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor, padding_value: int, num_centers: int) -> list[Tensor]:
-    """Backward primitive for conv_sv_2d_sp."""
-    _validate_conv_sv_sizes(a, idx, padding_value, num_centers)
+def _(a: Tensor, idx: Tensor, g: Tensor, padding_value: int, num_centers: int) -> Tensor:
+    """Forward primitive for conv_sv_2d_sp."""
+    return _conv_sv_2d_sp_fwd_impl(a, idx, g, padding_value, num_centers)
+
+
+@torch.library.register_fake("aimnet::conv_sv_2d_sp_fwd")
+def _(a: Tensor, idx: Tensor, g: Tensor, padding_value: int, num_centers: int) -> Tensor:
+    return _fake_fwd(a, idx, padding_value, num_centers)
+
+
+@torch.library.custom_op(
+    "aimnet::conv_sv_2d_sp_det_fwd",
+    mutates_args=(),
+    device_types=["cuda"],
+)
+def _(
+    a: Tensor, idx: Tensor, g: Tensor, csr_ptr: Tensor, csr_idx: Tensor, padding_value: int, num_centers: int
+) -> Tensor:
+    """Forward primitive of the deterministic variant; only its backward differs."""
+    _validate_transpose(a, idx, csr_ptr, csr_idx, num_centers)
+    return _conv_sv_2d_sp_fwd_impl(a, idx, g, padding_value, num_centers)
+
+
+@torch.library.register_fake("aimnet::conv_sv_2d_sp_det_fwd")
+def _(
+    a: Tensor, idx: Tensor, g: Tensor, csr_ptr: Tensor, csr_idx: Tensor, padding_value: int, num_centers: int
+) -> Tensor:
+    _validate_transpose(a, idx, csr_ptr, csr_idx, num_centers)
+    return _fake_fwd(a, idx, padding_value, num_centers)
+
+
+def _launch_backward_a(
+    grad_output: Tensor,
+    idx: Tensor,
+    g: Tensor,
+    a: Tensor,
+    padding_value: int,
+    num_centers: int,
+    csr_ptr: Tensor | None,
+    csr_idx: Tensor | None,
+) -> Tensor:
+    """grad_a[idx[b,m]] += dot(grad_output[b], g[b,m]): atomic scatter, or a fixed-order gather with a transpose."""
+    _B, A, G = a.shape
     stream = _get_stream(a.device)
     device = wp.device_from_torch(a.device)
-    _B, A, G = a.shape
-    B_out, M = idx.shape
-
-    grad_a = torch.zeros_like(a)
-    grad_g = torch.zeros(B_out, M, G, 4, dtype=g.dtype, device=g.device)
-
-    grad_output_contig = grad_output.detach().contiguous()
-
-    # Launch backward w.r.t. a
+    if csr_ptr is None or csr_idx is None:
+        grad_a = torch.zeros_like(a)
+        wp.launch(
+            _conv_sv_2d_sp_backward_a_kernel,
+            dim=(num_centers, A, G),
+            stream=stream,
+            device=device,
+            inputs=(
+                wp.from_torch(grad_output, return_ctype=True, dtype=wp.vec4f),
+                wp.from_torch(idx.to(torch.int32), return_ctype=True),
+                wp.from_torch(g.detach(), return_ctype=True, dtype=wp.vec4f),
+                wp.from_torch(grad_a, return_ctype=True),
+                padding_value,
+            ),
+        )
+        return grad_a
+    # The gather writes every row of grad_a, including rows with no contributors.
+    grad_a = torch.empty_like(a)
     wp.launch(
-        _conv_sv_2d_sp_backward_a_kernel,
-        dim=(num_centers, A, G),
+        _conv_sv_2d_sp_backward_a_gather_kernel,
+        dim=(a.shape[0], A, G),
         stream=stream,
         device=device,
         inputs=(
-            wp.from_torch(grad_output_contig, return_ctype=True, dtype=wp.vec4f),
-            wp.from_torch(idx.to(torch.int32), return_ctype=True),
+            wp.from_torch(grad_output, return_ctype=True, dtype=wp.vec4f),
             wp.from_torch(g.detach(), return_ctype=True, dtype=wp.vec4f),
+            wp.from_torch(csr_ptr, return_ctype=True),
+            wp.from_torch(csr_idx, return_ctype=True),
             wp.from_torch(grad_a, return_ctype=True),
-            padding_value,
         ),
     )
+    return grad_a
 
+
+def _conv_sv_2d_sp_bwd_impl(
+    grad_output: Tensor,
+    a: Tensor,
+    idx: Tensor,
+    g: Tensor,
+    padding_value: int,
+    num_centers: int,
+    csr_ptr: Tensor | None = None,
+    csr_idx: Tensor | None = None,
+) -> list[Tensor]:
+    """First-order backward; with a CSR transpose every launch is atomic-free."""
+    _validate_conv_sv_sizes(a, idx, padding_value, num_centers)
+    stream = _get_stream(a.device)
+    device = wp.device_from_torch(a.device)
+    G = a.shape[2]
+    B_out, M = idx.shape
+
+    grad_output_contig = grad_output.detach().contiguous()
+
+    # Backward w.r.t. a
+    grad_a = _launch_backward_a(grad_output_contig, idx, g, a, padding_value, num_centers, csr_ptr, csr_idx)
+
+    grad_g = torch.zeros(B_out, M, G, 4, dtype=g.dtype, device=g.device)
     # Launch backward w.r.t. g
     wp.launch(
         _conv_sv_2d_sp_backward_g_kernel,
@@ -339,8 +440,7 @@ def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor, padding_value: int
     return [grad_a, grad_g]
 
 
-@torch.library.register_fake("aimnet::conv_sv_2d_sp_bwd")
-def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor, padding_value: int, num_centers: int) -> list[Tensor]:
+def _fake_bwd(a: Tensor, idx: Tensor, g: Tensor, padding_value: int, num_centers: int) -> list[Tensor]:
     B_out, M = idx.shape
     G = a.shape[2]
     _validate_conv_sv_sizes(a, idx, padding_value, num_centers)
@@ -351,11 +451,56 @@ def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor, padding_value: int
 
 
 @torch.library.custom_op(
-    "aimnet::conv_sv_2d_sp_bwd_bwd",
+    "aimnet::conv_sv_2d_sp_bwd",
+    mutates_args=(),
+    device_types=["cuda"],
+)
+def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor, padding_value: int, num_centers: int) -> list[Tensor]:
+    """Backward primitive for conv_sv_2d_sp."""
+    return _conv_sv_2d_sp_bwd_impl(grad_output, a, idx, g, padding_value, num_centers)
+
+
+@torch.library.register_fake("aimnet::conv_sv_2d_sp_bwd")
+def _(grad_output: Tensor, a: Tensor, idx: Tensor, g: Tensor, padding_value: int, num_centers: int) -> list[Tensor]:
+    return _fake_bwd(a, idx, g, padding_value, num_centers)
+
+
+@torch.library.custom_op(
+    "aimnet::conv_sv_2d_sp_det_bwd",
     mutates_args=(),
     device_types=["cuda"],
 )
 def _(
+    grad_output: Tensor,
+    a: Tensor,
+    idx: Tensor,
+    g: Tensor,
+    csr_ptr: Tensor,
+    csr_idx: Tensor,
+    padding_value: int,
+    num_centers: int,
+) -> list[Tensor]:
+    """Deterministic backward primitive: grad_a is gathered through the CSR transpose."""
+    _validate_transpose(a, idx, csr_ptr, csr_idx, num_centers)
+    return _conv_sv_2d_sp_bwd_impl(grad_output, a, idx, g, padding_value, num_centers, csr_ptr, csr_idx)
+
+
+@torch.library.register_fake("aimnet::conv_sv_2d_sp_det_bwd")
+def _(
+    grad_output: Tensor,
+    a: Tensor,
+    idx: Tensor,
+    g: Tensor,
+    csr_ptr: Tensor,
+    csr_idx: Tensor,
+    padding_value: int,
+    num_centers: int,
+) -> list[Tensor]:
+    _validate_transpose(a, idx, csr_ptr, csr_idx, num_centers)
+    return _fake_bwd(a, idx, g, padding_value, num_centers)
+
+
+def _conv_sv_2d_sp_bwd_bwd_impl(
     grad_output: Tensor,
     grad2_a: Tensor,
     grad2_g: Tensor,
@@ -364,8 +509,10 @@ def _(
     g: Tensor,
     padding_value: int,
     num_centers: int,
+    csr_ptr: Tensor | None = None,
+    csr_idx: Tensor | None = None,
 ) -> list[Tensor]:
-    """Double backward primitive for conv_sv_2d_sp."""
+    """Double backward; only the grad_a_double launch scatters, so the transpose makes it atomic-free."""
     _validate_conv_sv_sizes(a, idx, padding_value, num_centers)
     stream = _get_stream(a.device)
     device = wp.device_from_torch(a.device)
@@ -373,7 +520,6 @@ def _(
     B_out, M = idx.shape
 
     grad_grad_output = torch.zeros(B_out, A, G, 4, dtype=a.dtype, device=a.device)
-    grad_a_double = torch.zeros_like(a)
     grad_g_double = torch.zeros(B_out, M, G, 4, dtype=a.dtype, device=a.device)
 
     grad_output_contig = grad_output.detach().contiguous()
@@ -428,21 +574,41 @@ def _(
     )
 
     # Mixed partial: d(grad_g)/da -> grad_a_double
-    wp.launch(
-        _conv_sv_2d_sp_backward_a_kernel,
-        dim=(num_centers, A, G),
-        stream=stream,
-        device=device,
-        inputs=(
-            wp.from_torch(grad_output_contig, return_ctype=True, dtype=wp.vec4f),
-            wp.from_torch(idx.to(torch.int32), return_ctype=True),
-            wp.from_torch(grad2_g_contig, return_ctype=True, dtype=wp.vec4f),
-            wp.from_torch(grad_a_double, return_ctype=True),
-            padding_value,
-        ),
+    grad_a_double = _launch_backward_a(
+        grad_output_contig, idx, grad2_g_contig, a, padding_value, num_centers, csr_ptr, csr_idx
     )
 
     return [grad_grad_output, grad_a_double, grad_g_double]
+
+
+def _fake_bwd_bwd(a: Tensor, idx: Tensor, padding_value: int, num_centers: int) -> list[Tensor]:
+    _B, A, G = a.shape
+    B_out, M = idx.shape
+    _validate_conv_sv_sizes(a, idx, padding_value, num_centers)
+    return [
+        torch.empty(B_out, A, G, 4, dtype=a.dtype, device=a.device),
+        torch.empty_like(a),
+        torch.empty(B_out, M, G, 4, dtype=a.dtype, device=a.device),
+    ]
+
+
+@torch.library.custom_op(
+    "aimnet::conv_sv_2d_sp_bwd_bwd",
+    mutates_args=(),
+    device_types=["cuda"],
+)
+def _(
+    grad_output: Tensor,
+    grad2_a: Tensor,
+    grad2_g: Tensor,
+    a: Tensor,
+    idx: Tensor,
+    g: Tensor,
+    padding_value: int,
+    num_centers: int,
+) -> list[Tensor]:
+    """Double backward primitive for conv_sv_2d_sp."""
+    return _conv_sv_2d_sp_bwd_bwd_impl(grad_output, grad2_a, grad2_g, a, idx, g, padding_value, num_centers)
 
 
 @torch.library.register_fake("aimnet::conv_sv_2d_sp_bwd_bwd")
@@ -456,14 +622,48 @@ def _(
     padding_value: int,
     num_centers: int,
 ) -> list[Tensor]:
-    _B, A, G = a.shape
-    B_out, M = idx.shape
-    _validate_conv_sv_sizes(a, idx, padding_value, num_centers)
-    return [
-        torch.empty(B_out, A, G, 4, dtype=a.dtype, device=a.device),
-        torch.empty_like(a),
-        torch.empty(B_out, M, G, 4, dtype=a.dtype, device=a.device),
-    ]
+    return _fake_bwd_bwd(a, idx, padding_value, num_centers)
+
+
+@torch.library.custom_op(
+    "aimnet::conv_sv_2d_sp_det_bwd_bwd",
+    mutates_args=(),
+    device_types=["cuda"],
+)
+def _(
+    grad_output: Tensor,
+    grad2_a: Tensor,
+    grad2_g: Tensor,
+    a: Tensor,
+    idx: Tensor,
+    g: Tensor,
+    csr_ptr: Tensor,
+    csr_idx: Tensor,
+    padding_value: int,
+    num_centers: int,
+) -> list[Tensor]:
+    """Deterministic double backward primitive: grad_a_double is gathered through the CSR transpose."""
+    _validate_transpose(a, idx, csr_ptr, csr_idx, num_centers)
+    return _conv_sv_2d_sp_bwd_bwd_impl(
+        grad_output, grad2_a, grad2_g, a, idx, g, padding_value, num_centers, csr_ptr, csr_idx
+    )
+
+
+@torch.library.register_fake("aimnet::conv_sv_2d_sp_det_bwd_bwd")
+def _(
+    grad_output: Tensor,
+    grad2_a: Tensor,
+    grad2_g: Tensor,
+    a: Tensor,
+    idx: Tensor,
+    g: Tensor,
+    csr_ptr: Tensor,
+    csr_idx: Tensor,
+    padding_value: int,
+    num_centers: int,
+) -> list[Tensor]:
+    _validate_transpose(a, idx, csr_ptr, csr_idx, num_centers)
+    return _fake_bwd_bwd(a, idx, padding_value, num_centers)
 
 
 # =============================================================================
@@ -518,6 +718,66 @@ def _conv_sv_2d_sp_bwd_bwd(ctx, *grad_outputs):
 
     return outputs[0], outputs[1], None, outputs[2], None, None
 
+
+def _conv_sv_2d_sp_det_setup_fwd_context(ctx, inputs, output):
+    """Setup context for the deterministic forward pass."""
+    a, idx, g, csr_ptr, csr_idx, padding_value, num_centers = inputs
+    ctx.save_for_backward(a, idx, g, csr_ptr, csr_idx)
+    ctx.padding_value = padding_value
+    ctx.num_centers = num_centers
+
+
+def _conv_sv_2d_sp_det_setup_bwd_context(ctx, inputs, output):
+    """Setup context for the deterministic backward pass."""
+    grad_output, a, idx, g, csr_ptr, csr_idx, padding_value, num_centers = inputs
+    ctx.save_for_backward(grad_output, a, idx, g, csr_ptr, csr_idx)
+    ctx.padding_value = padding_value
+    ctx.num_centers = num_centers
+
+
+@torch.compiler.allow_in_graph
+def _conv_sv_2d_sp_det_bwd(ctx, grad_output):
+    """Backward pass for the deterministic conv_sv_2d_sp."""
+    a, idx, g, csr_ptr, csr_idx = ctx.saved_tensors
+    grad_a, grad_g = torch.ops.aimnet.conv_sv_2d_sp_det_bwd(
+        grad_output.contiguous(), a, idx, g, csr_ptr, csr_idx, ctx.padding_value, ctx.num_centers
+    )
+    return grad_a, None, grad_g, None, None, None, None
+
+
+@torch.compiler.allow_in_graph
+def _conv_sv_2d_sp_det_bwd_bwd(ctx, *grad_outputs):
+    """Double backward pass for the deterministic conv_sv_2d_sp."""
+    grad2_a = grad_outputs[0][0]
+    grad2_g = grad_outputs[0][1]
+
+    grad_output_saved, a, idx, g, csr_ptr, csr_idx = ctx.saved_tensors
+
+    if grad2_a is None:
+        grad2_a = torch.zeros_like(a)
+    if grad2_g is None:
+        B_out, M = idx.shape
+        G = a.shape[2]
+        grad2_g = torch.zeros(B_out, M, G, 4, dtype=g.dtype, device=g.device)
+
+    outputs = torch.ops.aimnet.conv_sv_2d_sp_det_bwd_bwd(
+        grad_output_saved, grad2_a, grad2_g, a, idx, g, csr_ptr, csr_idx, ctx.padding_value, ctx.num_centers
+    )
+
+    return outputs[0], outputs[1], None, outputs[2], None, None, None, None
+
+
+torch.library.register_autograd(
+    "aimnet::conv_sv_2d_sp_det_fwd",
+    _conv_sv_2d_sp_det_bwd,
+    setup_context=_conv_sv_2d_sp_det_setup_fwd_context,
+)
+
+torch.library.register_autograd(
+    "aimnet::conv_sv_2d_sp_det_bwd",
+    _conv_sv_2d_sp_det_bwd_bwd,
+    setup_context=_conv_sv_2d_sp_det_setup_bwd_context,
+)
 
 torch.library.register_autograd(
     "aimnet::conv_sv_2d_sp_fwd",
@@ -656,6 +916,7 @@ def conv_sv_2d_sp(
     g: Tensor,
     padding_value: int | None = None,
     num_centers: int | None = None,
+    transpose: tuple[Tensor, Tensor] | None = None,
 ) -> Tensor:
     """Compute conv_sv_2d_sp with support for 1st and 2nd order derivatives.
 
@@ -671,6 +932,13 @@ def conv_sv_2d_sp(
         Sentinel threshold in the atom dimension. Defaults to ``K - 1``.
     num_centers : int, optional
         Number of centers launched by Warp. Defaults to ``C - 1``.
+    transpose : tuple[Tensor, Tensor], optional
+        CSR transpose of ``idx`` from :func:`conv_sv_2d_sp_transpose`, built
+        with the same ``padding_value`` and ``num_centers``. When given, the
+        backward and double backward gather each ``grad_a`` row in a fixed
+        order instead of scattering with atomics, so they are bitwise
+        reproducible run to run. These deterministic primitives are not
+        vmap-registered.
 
     Notes
     -----
@@ -716,4 +984,50 @@ def conv_sv_2d_sp(
         idx = idx.contiguous()
     if not g.is_contiguous():
         g = g.contiguous()
+    if transpose is not None:
+        csr_ptr, csr_idx = transpose
+        return torch.ops.aimnet.conv_sv_2d_sp_det_fwd(a, idx, g, csr_ptr, csr_idx, padding_value, num_centers)
     return torch.ops.aimnet.conv_sv_2d_sp_fwd(a, idx, g, padding_value, num_centers)
+
+
+def conv_sv_2d_sp_transpose(
+    idx: Tensor,
+    num_atoms: int,
+    padding_value: int | None = None,
+    num_centers: int | None = None,
+) -> tuple[Tensor, Tensor]:
+    """Build the CSR transpose of ``idx`` used by the deterministic conv_sv_2d_sp backward.
+
+    Parameters
+    ----------
+    idx : Tensor
+        Index tensor of shape (C, M), as passed to :func:`conv_sv_2d_sp`.
+    num_atoms : int
+        Atom capacity K, the leading dimension of ``a``.
+    padding_value : int, optional
+        Sentinel threshold. Defaults to ``K - 1``.
+    num_centers : int, optional
+        Number of center rows read. Defaults to ``C - 1``.
+
+    Returns
+    -------
+    tuple[Tensor, Tensor]
+        ``csr_ptr`` of shape (K + 1,) and ``csr_idx`` of shape (num_centers * M,),
+        both int32. The contributors to atom ``j`` are the flat slots
+        ``b * M + m`` in ``csr_idx[csr_ptr[j]:csr_ptr[j + 1]]``, in ascending
+        order; padding slots sort to the end, past ``csr_ptr[K]``. Built with a
+        stable sort and ``searchsorted``, so the result is deterministic.
+    """
+    if (padding_value is None) != (num_centers is None):
+        raise ValueError("padding_value and num_centers must be supplied together.")
+    if padding_value is None:
+        padding_value = num_atoms - 1
+        num_centers = idx.shape[0] - 1
+    flat = idx[:num_centers].reshape(-1)
+    if flat.numel() >= 2**31:
+        raise ValueError("conv_sv_2d_sp_transpose supports fewer than 2**31 neighbor slots (int32 offsets).")
+    keys = flat.masked_fill(flat >= padding_value, num_atoms)
+    sorted_keys, order = torch.sort(keys, stable=True)
+    bounds = torch.arange(num_atoms + 1, device=idx.device, dtype=sorted_keys.dtype)
+    csr_ptr = torch.searchsorted(sorted_keys, bounds).to(torch.int32)
+    return csr_ptr, order.to(torch.int32)

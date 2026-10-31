@@ -23,7 +23,7 @@
 import torch
 import warp as wp
 
-from .conv_sv_2d_sp_wp import conv_sv_2d_sp  # type: ignore[attr-defined]
+from .conv_sv_2d_sp_wp import conv_sv_2d_sp, conv_sv_2d_sp_transpose  # type: ignore[attr-defined]
 
 # Computed once after wp.init(); conda-forge can legally solve a CUDA pytorch
 # together with a CPU-only warp-lang build, so torch.cuda alone is not proof
@@ -51,12 +51,16 @@ def load_ops():
 
     # Verify ops are available
     if hasattr(torch.ops, "aimnet"):
-        if hasattr(torch.ops.aimnet, "conv_sv_2d_sp_fwd"):
-            available_ops.append("aimnet::conv_sv_2d_sp_fwd")
-        if hasattr(torch.ops.aimnet, "conv_sv_2d_sp_bwd"):
-            available_ops.append("aimnet::conv_sv_2d_sp_bwd")
-        if hasattr(torch.ops.aimnet, "conv_sv_2d_sp_bwd_bwd"):
-            available_ops.append("aimnet::conv_sv_2d_sp_bwd_bwd")
+        for name in (
+            "conv_sv_2d_sp_fwd",
+            "conv_sv_2d_sp_bwd",
+            "conv_sv_2d_sp_bwd_bwd",
+            "conv_sv_2d_sp_det_fwd",
+            "conv_sv_2d_sp_det_bwd",
+            "conv_sv_2d_sp_det_bwd_bwd",
+        ):
+            if hasattr(torch.ops.aimnet, name):
+                available_ops.append(f"aimnet::{name}")
 
     return available_ops
 
@@ -64,5 +68,6 @@ def load_ops():
 __all__ = [
     "WARP_CUDA_AVAILABLE",
     "conv_sv_2d_sp",
+    "conv_sv_2d_sp_transpose",
     "load_ops",
 ]
