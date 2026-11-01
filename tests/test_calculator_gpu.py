@@ -866,6 +866,72 @@ class TestDeterministicMode:
             forces = [calc(dict(crystal), forces=True)["forces"] for _ in range(self._REPEATS)]
         assert all(torch.equal(f, forces[0]) for f in forces[1:])
 
+    @pytest.mark.ase
+    @pytest.mark.slow
+    def test_packed_layout_periodic_forces_match_default_path(self):
+        crystal = load_mol(CIF_SPIRO)
+        forces = []
+        for deterministic in (False, True):
+            calc = AIMNet2Calculator("aimnet2", deterministic=deterministic)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")  # the DSF auto-switch for periodic input
+                forces.append(calc(dict(crystal), forces=True)["forces"])
+        torch.testing.assert_close(forces[1], forces[0], atol=1e-4, rtol=1e-4)
+
+    @staticmethod
+    def _caffeine_packed() -> dict[str, torch.Tensor]:
+        mol = load_mol(CAFFEINE_FILE)
+        return {
+            "coord": torch.as_tensor(mol["coord"], dtype=torch.float32, device="cuda"),
+            "numbers": torch.as_tensor(mol["numbers"], device="cuda"),
+            "charge": torch.zeros(1, device="cuda"),
+        }
+
+    @pytest.mark.ase
+    @pytest.mark.parametrize("deterministic", [False, True])
+    def test_only_deterministic_mode_dispatches_deterministic_kernels(self, deterministic):
+        from torch.profiler import ProfilerActivity, profile
+
+        calc = AIMNet2Calculator("aimnet2", deterministic=deterministic, nb_threshold=0)
+        data = self._caffeine_packed()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # packed layout without torch's deterministic mode
+            calc(dict(data), forces=True)
+            with profile(activities=[ProfilerActivity.CPU]) as prof:
+                calc(dict(data), forces=True)
+        ops = {e.key for e in prof.key_averages() if e.key.startswith("aimnet::conv_sv_2d_sp")}
+        assert ops, "the packed layout must use the Warp ConvSV kernel"
+        assert all(("_det_" in op) == deterministic for op in ops), ops
+
+    @pytest.mark.ase
+    @pytest.mark.parametrize(
+        ("case", "builds"),
+        [("energy", False), ("forces", True), ("coord_requires_grad", True), ("train_energy", True)],
+    )
+    def test_transpose_is_built_only_when_a_backward_can_run(self, monkeypatch, case, builds):
+        import aimnet.kernels
+
+        calls = []
+        build = aimnet.kernels.conv_sv_2d_sp_transpose
+
+        def spy(*args, **kwargs):
+            calls.append(1)
+            return build(*args, **kwargs)
+
+        monkeypatch.setattr(aimnet.kernels, "conv_sv_2d_sp_transpose", spy)
+        calc = AIMNet2Calculator("aimnet2", deterministic=True, nb_threshold=0, train=case == "train_energy")
+        data = self._caffeine_packed()
+        if case == "coord_requires_grad":
+            data["coord"].requires_grad_(True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # packed layout without torch's deterministic mode
+            out = calc(dict(data), forces=case == "forces")
+        assert bool(calls) == builds
+        if case == "coord_requires_grad":
+            # External autograd through the calculator reaches the gather backward.
+            (grad,) = torch.autograd.grad(out["energy"].sum(), data["coord"])
+            assert torch.isfinite(grad).all()
+
     @staticmethod
     def _packed_warnings(calc: AIMNet2Calculator, batched: bool = False) -> list[warnings.WarningMessage]:
         """Packed-layout warnings from two evaluations of caffeine.
