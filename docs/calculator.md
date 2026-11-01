@@ -309,7 +309,7 @@ os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"  # before CUDA is first used
 torch.use_deterministic_algorithms(True)  # or (True, warn_only=True) without the variable
 ```
 
-PyTorch's deterministic reductions are slower, so benchmark your workload. In one measurement on an L40S they roughly doubled the cost of an energy-and-forces call for a batch of 32 molecules. For single systems of 100 to 5000 atoms (packed layout, DFT-D3 detached), `deterministic=True` with that mode made the force backward about 3.5 to 6 times slower in CUDA time than the default and raised peak memory by up to about 0.9 GB at 5000 atoms. Most of that cost is PyTorch's deterministic `index_put_`. The fixed-order ConvSV backward itself had no measurable cost, and its transposed neighbor list adds less than 1 MB at 5000 atoms.
+PyTorch's deterministic reductions are slower, so benchmark your workload. In one measurement on an L40S they roughly doubled the cost of an energy-and-forces call for a batch of 32 molecules. For single systems of 100 to 5000 atoms (packed layout, DFT-D3 detached), `deterministic=True` with that mode made the force backward about 3.5 to 6 times slower in CUDA time than the default and raised peak memory by up to about 0.9 GB at 5000 atoms. Most of that cost is PyTorch's deterministic `index_put_`. The fixed-order ConvSV backward costs much less: the calculator rebuilds its transposed neighbor list (about 0.3 ms) on each call that can run a backward (forces, stress, `train=True`, or inputs that require grad), and in a molecular-dynamics-style loop with forces at every step this added 1 to 2% per step at 113 and 1008 atoms. The list adds less than 1 MB of memory at 5000 atoms.
 
 Notes:
 
