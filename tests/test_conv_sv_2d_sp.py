@@ -742,3 +742,35 @@ def test_deterministic_backward_matches_atomic_on_irregular_rows(rows):
     for actual, expected in zip(det, atomic, strict=True):
         torch.testing.assert_close(actual, expected, atol=1e-6, rtol=1e-6)
 
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_deterministic_kernels_have_vmap_rules():
+    """vmap over the cotangents of det_bwd and det_bwd_bwd matches a loop over the atomic ops."""
+    from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp_transpose
+
+    a, idx, g, go = _contended_conv_data()
+    pv, nc = a.shape[0] - 1, idx.shape[0] - 1
+    transpose = conv_sv_2d_sp_transpose(idx, a.shape[0])
+    ops = torch.ops.aimnet
+    gos = torch.randn(3, *go.shape, device="cuda")
+    grad2_a = torch.randn(3, *a.shape, device="cuda")
+    grad2_g = torch.randn(3, *g.shape, device="cuda")
+
+    batched = torch.func.vmap(lambda c: ops.conv_sv_2d_sp_det_bwd(c, a, idx, g, *transpose, pv, nc))(gos)
+    for k in range(3):
+        expected = ops.conv_sv_2d_sp_bwd(gos[k], a, idx, g, pv, nc)
+        for actual, ref in zip(batched, expected, strict=True):
+            torch.testing.assert_close(actual[k], ref, atol=1e-5, rtol=1e-5)
+
+    batched = torch.func.vmap(lambda x, y: ops.conv_sv_2d_sp_det_bwd_bwd(go, x, y, a, idx, g, *transpose, pv, nc))(
+        grad2_a, grad2_g
+    )
+    for k in range(3):
+        expected = ops.conv_sv_2d_sp_bwd_bwd(go, grad2_a[k], grad2_g[k], a, idx, g, pv, nc)
+        for actual, ref in zip(batched, expected, strict=True):
+            torch.testing.assert_close(actual[k], ref, atol=1e-5, rtol=1e-5)
+
+    with pytest.raises(RuntimeError, match="supports batching only"):
+        torch.func.vmap(lambda c: ops.conv_sv_2d_sp_det_bwd(go, a, idx, g, c, transpose[1], pv, nc))(
+            transpose[0].unsqueeze(0)
+        )

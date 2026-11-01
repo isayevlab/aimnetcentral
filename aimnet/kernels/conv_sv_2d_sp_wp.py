@@ -814,6 +814,19 @@ def _vmap_slice(t: Tensor, d: int | None, k: int) -> Tensor:
     return t.movedim(d, 0)[k].contiguous()
 
 
+def _vmap_loop(op, batch_size: int, in_dims, tensors: tuple[Tensor, ...], scalars: tuple[int, ...]):
+    """Call ``op`` once per vmap slice and stack every output along a new leading dim."""
+    outs: list[list[Tensor]] | None = None
+    for k in range(batch_size):
+        result = op(*(_vmap_slice(t, d, k) for t, d in zip(tensors, in_dims, strict=False)), *scalars)
+        if outs is None:
+            outs = [[] for _ in result]
+        for out, value in zip(outs, result, strict=True):
+            out.append(value)
+    assert outs is not None
+    return [torch.stack(out, dim=0) for out in outs], [0] * len(outs)
+
+
 @torch.library.register_vmap("aimnet::conv_sv_2d_sp_bwd")
 def _vmap_conv_sv_2d_sp_bwd(info, in_dims, grad_output, a, idx, g, padding_value, num_centers):
     """vmap rule for the first-backward primitive.
@@ -832,25 +845,12 @@ def _vmap_conv_sv_2d_sp_bwd(info, in_dims, grad_output, a, idx, g, padding_value
     """
     if any(dim is not None for dim in in_dims[1:]):
         raise RuntimeError(f"aimnet::conv_sv_2d_sp_bwd vmap supports batching only grad_output; got in_dims={in_dims}")
-    K = info.batch_size
-
-    out0: list[Tensor] = []
-    out1: list[Tensor] = []
-    for k in range(K):
-        outs = torch.ops.aimnet.conv_sv_2d_sp_bwd(
-            _vmap_slice(grad_output, in_dims[0], k),
-            _vmap_slice(a, in_dims[1], k),
-            _vmap_slice(idx, in_dims[2], k),
-            _vmap_slice(g, in_dims[3], k),
-            padding_value,
-            num_centers,
-        )
-        out0.append(outs[0])
-        out1.append(outs[1])
-
-    return (
-        [torch.stack(out0, dim=0), torch.stack(out1, dim=0)],
-        [0, 0],
+    return _vmap_loop(
+        torch.ops.aimnet.conv_sv_2d_sp_bwd,
+        info.batch_size,
+        in_dims,
+        (grad_output, a, idx, g),
+        (padding_value, num_centers),
     )
 
 
@@ -879,29 +879,47 @@ def _vmap_conv_sv_2d_sp_bwd_bwd(info, in_dims, grad_output, grad2_a, grad2_g, a,
             "aimnet::conv_sv_2d_sp_bwd_bwd vmap supports batching only grad_output, "
             f"grad2_a, and grad2_g; got in_dims={in_dims}"
         )
-    K = info.batch_size
+    return _vmap_loop(
+        torch.ops.aimnet.conv_sv_2d_sp_bwd_bwd,
+        info.batch_size,
+        in_dims,
+        (grad_output, grad2_a, grad2_g, a, idx, g),
+        (padding_value, num_centers),
+    )
 
-    out0: list[Tensor] = []
-    out1: list[Tensor] = []
-    out2: list[Tensor] = []
-    for k in range(K):
-        outs = torch.ops.aimnet.conv_sv_2d_sp_bwd_bwd(
-            _vmap_slice(grad_output, in_dims[0], k),
-            _vmap_slice(grad2_a, in_dims[1], k),
-            _vmap_slice(grad2_g, in_dims[2], k),
-            _vmap_slice(a, in_dims[3], k),
-            _vmap_slice(idx, in_dims[4], k),
-            _vmap_slice(g, in_dims[5], k),
-            padding_value,
-            num_centers,
+
+@torch.library.register_vmap("aimnet::conv_sv_2d_sp_det_bwd")
+def _vmap_conv_sv_2d_sp_det_bwd(info, in_dims, grad_output, a, idx, g, csr_ptr, csr_idx, padding_value, num_centers):
+    """vmap rule for the deterministic first-backward primitive; same contract as the atomic rule."""
+    if any(dim is not None for dim in in_dims[1:]):
+        raise RuntimeError(
+            f"aimnet::conv_sv_2d_sp_det_bwd vmap supports batching only grad_output; got in_dims={in_dims}"
         )
-        out0.append(outs[0])
-        out1.append(outs[1])
-        out2.append(outs[2])
+    return _vmap_loop(
+        torch.ops.aimnet.conv_sv_2d_sp_det_bwd,
+        info.batch_size,
+        in_dims,
+        (grad_output, a, idx, g, csr_ptr, csr_idx),
+        (padding_value, num_centers),
+    )
 
-    return (
-        [torch.stack(out0, dim=0), torch.stack(out1, dim=0), torch.stack(out2, dim=0)],
-        [0, 0, 0],
+
+@torch.library.register_vmap("aimnet::conv_sv_2d_sp_det_bwd_bwd")
+def _vmap_conv_sv_2d_sp_det_bwd_bwd(
+    info, in_dims, grad_output, grad2_a, grad2_g, a, idx, g, csr_ptr, csr_idx, padding_value, num_centers
+):
+    """vmap rule for the deterministic double-backward primitive; same contract as the atomic rule."""
+    if any(dim is not None for dim in in_dims[3:]):
+        raise RuntimeError(
+            "aimnet::conv_sv_2d_sp_det_bwd_bwd vmap supports batching only grad_output, "
+            f"grad2_a, and grad2_g; got in_dims={in_dims}"
+        )
+    return _vmap_loop(
+        torch.ops.aimnet.conv_sv_2d_sp_det_bwd_bwd,
+        info.batch_size,
+        in_dims,
+        (grad_output, grad2_a, grad2_g, a, idx, g, csr_ptr, csr_idx),
+        (padding_value, num_centers),
     )
 
 

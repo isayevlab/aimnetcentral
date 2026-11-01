@@ -835,6 +835,29 @@ class TestDeterministicMode:
         assert all(torch.equal(out["forces"], outs[0]["forces"]) for out in outs[1:])
 
     @pytest.mark.ase
+    @pytest.mark.slow
+    def test_packed_layout_training_hessian_from_forces(self, monkeypatch):
+        """A Hessian built from train=True forces vmaps through the deterministic double backward."""
+        mol = load_mol(CAFFEINE_FILE)
+        data = {
+            "coord": torch.as_tensor(mol["coord"], dtype=torch.float32, device="cuda"),
+            "numbers": torch.as_tensor(mol["numbers"], device="cuda"),
+            "charge": torch.zeros(1, device="cuda"),
+        }
+
+        def hessian() -> torch.Tensor:
+            calc = AIMNet2Calculator("aimnet2", deterministic=True, nb_threshold=0, train=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")  # packed layout without torch's deterministic mode
+                out = calc(dict(data), forces=True)
+            return calc.calculate_hessian(out["forces"], calc._saved_for_grad["coord"])
+
+        gathered = hessian()
+        # Reference: the same evaluation through the atomic kernels.
+        monkeypatch.setattr(AIMNet2Calculator, "_add_nbmat_transpose", staticmethod(lambda *args, **kwargs: None))
+        torch.testing.assert_close(gathered, hessian(), atol=1e-3, rtol=1e-3)
+
+    @pytest.mark.ase
     def test_packed_layout_periodic_forces_bitwise_reproducible(self, torch_deterministic):
         crystal = load_mol(CIF_SPIRO)
         calc = AIMNet2Calculator("aimnet2", deterministic=True)
