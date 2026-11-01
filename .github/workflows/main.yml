@@ -15,10 +15,10 @@ jobs:
             - uses: actions/checkout@v7
               with:
                   fetch-depth: 0
-            - uses: actions/setup-python@v6.2.0
+            - uses: actions/setup-python@v7.1.0
               with:
                   python-version: "3.11"
-            - uses: astral-sh/setup-uv@v8.1.0
+            - uses: astral-sh/setup-uv@v10.3.3
             - name: Build distributable wheel from sdist
               run: uv build
             - name: Install wheel with the minimum supported Torch on CPU
