@@ -50,6 +50,7 @@ torchsim = [
 train = [
     { name = "omegaconf" },
     { name = "pytorch-ignite" },
+    { name = "tqdm" },
     { name = "wandb" },
 ]
 
@@ -97,6 +98,7 @@ requires-dist = [
     { name = "sella", marker = "extra == 'sella'", specifier = ">=2.4.0" },
     { name = "torch", specifier = ">=2.10" },
     { name = "torch-sim-atomistic", marker = "python_full_version >= '3.12' and extra == 'torchsim'", specifier = ">=0.6.0,<0.7.0" },
+    { name = "tqdm", marker = "extra == 'train'", specifier = ">=4.66" },
     { name = "triton", marker = "sys_platform == 'linux' and extra == 'cuda-graph'", specifier = ">=3.0" },
     { name = "wandb", marker = "extra == 'train'", specifier = ">=0.18.5" },
     { name = "warp-lang", specifier = ">=1.13,<2" },

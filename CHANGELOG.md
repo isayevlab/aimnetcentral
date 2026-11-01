@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **`aimnet train` on a clean `aimnet[train]` install:** the `train` extra now includes `tqdm`. The trainer always shows an ignite `ProgressBar`, which needs `tqdm`, so a fresh install without it stopped with `ModuleNotFoundError` when training started.
 - **Batched gas-phase Coulomb memory:** with `mol_idx` and the default `simple` Coulomb, the all-pairs neighbor buffer was sized by the batch's total atom count, so a flat batch of many molecules allocated an `N × N` matrix (about 14 GB at 60k atoms). It is now sized by the largest molecule, and memory grows linearly with the batch. Energies and forces are unchanged; periodic inputs keep the previous sizing ([#151](https://github.com/isayevlab/aimnetcentral/issues/151)).
 
 ## [0.2.5] - 2026-10-23
