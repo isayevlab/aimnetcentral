@@ -20,6 +20,9 @@ data:
     # data keys
     x: [coord, numbers, charge]
     y: [energy, forces, charges]
+    # stress training only: per-atom labels beyond the known ones (forces,
+    # charges, ...), so the loader packs them per atom; see docs/train.md
+    atom_keys: []
 
     # dataset class definition
     datasets:

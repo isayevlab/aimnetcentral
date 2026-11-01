@@ -211,6 +211,9 @@ def test_neighbor_cutoffs_follow_long_range_modules():
         neighbor_cutoffs(_build_model(_lrcoulomb(method="simple")))
     with pytest.raises(NotImplementedError, match="dsf"):
         neighbor_cutoffs(_build_model(_lrcoulomb(method="dsf")))
+    # Pair repulsion also runs on nbmat; with cutoff_fn="none" it sums every listed pair.
+    srrep = {"srrep": {"class": "aimnet.modules.core.SRRep", "kwargs": {"key_out": "energy", "rc": 5.2}}}
+    assert neighbor_cutoffs(_build_model(srrep)) == {"": pytest.approx(5.2)}
 
 
 def _assert_matches_calculator(model, calc) -> None:
@@ -238,7 +241,12 @@ def _assert_matches_calculator(model, calc) -> None:
         n = int(real.sum())
         torch.testing.assert_close(pred["energy"][b].detach(), ref["energy"].reshape(()), rtol=1e-6, atol=1e-6)
         torch.testing.assert_close(pred["forces"][offset : offset + n].detach(), ref["forces"], rtol=1e-5, atol=1e-6)
-        torch.testing.assert_close(pred["stress"][b].detach(), ref["stress"].reshape(3, 3), rtol=1e-5, atol=1e-8)
+        # The batch keeps the unwrapped coordinates (some atoms one cell or more
+        # outside), so float32 pair vectors c_j - c_i + s @ cell round slightly
+        # differently from the calculator's wrapped ones: bound by the stress scale.
+        stress_ref = ref["stress"].reshape(3, 3)
+        stress_atol = 2e-5 * stress_ref.abs().max().item()
+        torch.testing.assert_close(pred["stress"][b].detach(), stress_ref, rtol=1e-5, atol=stress_atol)
         offset += n
 
 
@@ -259,3 +267,86 @@ def test_loader_ewald_stress_matches_calculator():
     calc = AIMNet2Calculator(base, device="cpu", needs_coulomb=True)
     calc.set_lrcoulomb_method("ewald")
     _assert_matches_calculator(model, calc)
+
+
+def _dense_batch(natoms: int, nsamples: int = 2) -> dict:
+    """Unmerged dense samples of one size; the first atom of each cell sits outside it."""
+    rng = np.random.default_rng(natoms)
+    cell = np.stack([np.diag(rng.uniform(3.6, 4.4, 3)) + rng.uniform(-0.3, 0.3, (3, 3)) for _ in range(nsamples)])
+    frac = rng.uniform(0.0, 1.0, (nsamples, natoms, 3))
+    frac[:, 0] += (1.0, -1.0, 2.0)
+    batch = {
+        "coord": np.einsum("bni,bij->bnj", frac, cell),
+        "numbers": rng.choice([1, 6, 8], (nsamples, natoms)),
+        "charge": np.zeros(nsamples),
+        "cell": cell,
+        "forces": np.ones((nsamples, natoms, 3)),
+        "stress": np.zeros((nsamples, 3, 3)),
+    }
+    return {k: torch.as_tensor(v, dtype=torch.long if k == "numbers" else torch.float32) for k, v in batch.items()}
+
+
+def _inputs(batch: dict) -> dict:
+    return {k: batch[k] for k in ("coord", "numbers", "charge", "cell")}
+
+
+def test_packed_batch_keeps_original_coordinates_for_dipole():
+    from aimnet.calculators import AIMNet2Calculator
+    from aimnet.train.neighbor_lists import PeriodicNeighborCollate, neighbor_cutoffs
+    from aimnet.train.utils import build_compiled_training_runner, prepare_batch
+
+    model = _build_model({"dipole": {"class": "aimnet.modules.Dipole", "kwargs": {"key_in": "charges"}}})
+    calc = AIMNet2Calculator(copy.deepcopy(model), device="cpu")
+    batch = _dense_batch(4, nsamples=3)
+    x, _ = PeriodicNeighborCollate(neighbor_cutoffs(model)).pack(_inputs(batch), {})
+    torch.testing.assert_close(x["coord"][:-1], batch["coord"].flatten(0, 1), rtol=0, atol=0)
+
+    runner = build_compiled_training_runner(model, ("energy", "forces", "stress"), compile_training=False)
+    pred = runner(prepare_batch(dict(x), device="cpu"))
+    for b in range(3):
+        ref = calc(
+            {
+                "coord": batch["coord"][b],
+                "numbers": batch["numbers"][b],
+                "charge": torch.zeros(1),
+                "cell": batch["cell"][b],
+            },
+            forces=True,
+            stress=True,
+        )
+        atoms = slice(4 * b, 4 * b + 4)
+        torch.testing.assert_close(pred["charges"][atoms].detach(), ref["charges"], rtol=1e-5, atol=1e-6)
+        torch.testing.assert_close(pred["forces"][atoms].detach(), ref["forces"], rtol=1e-5, atol=1e-6)
+        torch.testing.assert_close(pred["stress"][b].detach(), ref["stress"].reshape(3, 3), rtol=1e-5, atol=1e-8)
+        # Charges are image-invariant, so the dipole is that of the coordinates as given.
+        expected = (ref["charges"].unsqueeze(-1) * batch["coord"][b]).sum(0)
+        torch.testing.assert_close(pred["dipole"][b].detach(), expected, rtol=1e-5, atol=1e-5)
+
+
+def test_collate_rejects_partial_periodicity():
+    from aimnet.train.neighbor_lists import PeriodicNeighborCollate
+
+    x = _inputs(_dense_batch(4))
+    x["pbc"] = torch.tensor([[True, True, False]] * 2)
+    with pytest.raises(ValueError, match="3D"):
+        PeriodicNeighborCollate({"": 4.0}).pack(x, {})
+
+
+def test_collate_classifies_per_atom_keys_explicitly():
+    from aimnet.train.neighbor_lists import PeriodicNeighborCollate
+
+    collate = PeriodicNeighborCollate({"": 4.0})
+    # One-atom cells: (B, 1, 3) forces are per atom; (B, 3, 3) cell and stress are per system.
+    one = _dense_batch(1)
+    x, y = collate.pack(_inputs(one), {"forces": one["forces"], "stress": one["stress"]})
+    assert x["coord"].shape == (3, 3) and y["forces"].shape == (3, 3)
+    assert y["stress"].shape == (2, 3, 3) and x["cell"].shape == (2, 3, 3)
+
+    # Three-atom cells: an unknown (B, 3, 3) label could be either, so it is refused ...
+    three = _inputs(_dense_batch(3))
+    with pytest.raises(ValueError, match="hessian_like"):
+        collate.pack(dict(three), {"hessian_like": torch.zeros(2, 3, 3)})
+    # ... unless declared per atom; an unknown label that cannot be per atom is kept per system.
+    declared = PeriodicNeighborCollate({"": 4.0}, atom_keys=("hessian_like",))
+    _, y3 = declared.pack(dict(three), {"hessian_like": torch.zeros(2, 3, 3), "band_gap": torch.zeros(2, 5)})
+    assert y3["hessian_like"].shape == (7, 3) and y3["band_gap"].shape == (2, 5)
