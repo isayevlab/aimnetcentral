@@ -781,7 +781,7 @@ class TestDeterministicMode:
     _REPEATS = 10
 
     @staticmethod
-    def _repeat_taxol(nb_threshold: int) -> list[dict[str, torch.Tensor]]:
+    def _repeat_taxol(nb_threshold: int, train: bool = False) -> list[dict[str, torch.Tensor]]:
         """Evaluate taxol (113 atoms) repeatedly on the dense or packed layout."""
         mol = load_mol(TAXOL_FILE)
         data = {
@@ -789,7 +789,7 @@ class TestDeterministicMode:
             "numbers": torch.as_tensor(mol["numbers"], device="cuda").unsqueeze(0),
             "charge": torch.zeros(1, device="cuda"),
         }
-        calc = AIMNet2Calculator("aimnet2", deterministic=True, nb_threshold=nb_threshold)
+        calc = AIMNet2Calculator("aimnet2", deterministic=True, nb_threshold=nb_threshold, train=train)
         return [calc(dict(data), forces=True) for _ in range(TestDeterministicMode._REPEATS)]
 
     @pytest.mark.ase
@@ -824,10 +824,113 @@ class TestDeterministicMode:
         assert all(torch.equal(e, energies[0]) for e in energies[1:])
 
     @pytest.mark.ase
-    @pytest.mark.xfail(strict=True, reason="#140: the Warp conv_sv_2d_sp backward accumulates with atomics")
     def test_packed_layout_forces_bitwise_reproducible(self, torch_deterministic):
         outs = self._repeat_taxol(nb_threshold=0)
         assert all(torch.equal(out["forces"], outs[0]["forces"]) for out in outs[1:])
+
+    @pytest.mark.ase
+    def test_packed_layout_training_forces_bitwise_reproducible(self, torch_deterministic):
+        """train=True keeps the force graph (create_graph), so the deterministic double backward is recorded."""
+        outs = self._repeat_taxol(nb_threshold=0, train=True)
+        assert all(torch.equal(out["forces"], outs[0]["forces"]) for out in outs[1:])
+
+    @pytest.mark.ase
+    @pytest.mark.slow
+    def test_packed_layout_training_hessian_from_forces(self, monkeypatch):
+        """A Hessian built from train=True forces vmaps through the deterministic double backward."""
+        mol = load_mol(CAFFEINE_FILE)
+        data = {
+            "coord": torch.as_tensor(mol["coord"], dtype=torch.float32, device="cuda"),
+            "numbers": torch.as_tensor(mol["numbers"], device="cuda"),
+            "charge": torch.zeros(1, device="cuda"),
+        }
+
+        def hessian() -> torch.Tensor:
+            calc = AIMNet2Calculator("aimnet2", deterministic=True, nb_threshold=0, train=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")  # packed layout without torch's deterministic mode
+                out = calc(dict(data), forces=True)
+            return calc.calculate_hessian(out["forces"], calc._saved_for_grad["coord"])
+
+        gathered = hessian()
+        # Reference: the same evaluation through the atomic kernels.
+        monkeypatch.setattr(AIMNet2Calculator, "_add_nbmat_transpose", staticmethod(lambda *args, **kwargs: None))
+        torch.testing.assert_close(gathered, hessian(), atol=1e-3, rtol=1e-3)
+
+    @pytest.mark.ase
+    def test_packed_layout_periodic_forces_bitwise_reproducible(self, torch_deterministic):
+        crystal = load_mol(CIF_SPIRO)
+        calc = AIMNet2Calculator("aimnet2", deterministic=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # the DSF auto-switch for periodic input
+            forces = [calc(dict(crystal), forces=True)["forces"] for _ in range(self._REPEATS)]
+        assert all(torch.equal(f, forces[0]) for f in forces[1:])
+
+    @pytest.mark.ase
+    @pytest.mark.slow
+    def test_packed_layout_periodic_forces_match_default_path(self):
+        crystal = load_mol(CIF_SPIRO)
+        forces = []
+        for deterministic in (False, True):
+            calc = AIMNet2Calculator("aimnet2", deterministic=deterministic)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")  # the DSF auto-switch for periodic input
+                forces.append(calc(dict(crystal), forces=True)["forces"])
+        torch.testing.assert_close(forces[1], forces[0], atol=1e-4, rtol=1e-4)
+
+    @staticmethod
+    def _caffeine_packed() -> dict[str, torch.Tensor]:
+        mol = load_mol(CAFFEINE_FILE)
+        return {
+            "coord": torch.as_tensor(mol["coord"], dtype=torch.float32, device="cuda"),
+            "numbers": torch.as_tensor(mol["numbers"], device="cuda"),
+            "charge": torch.zeros(1, device="cuda"),
+        }
+
+    @pytest.mark.ase
+    @pytest.mark.parametrize("deterministic", [False, True])
+    def test_only_deterministic_mode_dispatches_deterministic_kernels(self, deterministic):
+        from torch.profiler import ProfilerActivity, profile
+
+        calc = AIMNet2Calculator("aimnet2", deterministic=deterministic, nb_threshold=0)
+        data = self._caffeine_packed()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # packed layout without torch's deterministic mode
+            calc(dict(data), forces=True)
+            with profile(activities=[ProfilerActivity.CPU]) as prof:
+                calc(dict(data), forces=True)
+        ops = {e.key for e in prof.key_averages() if e.key.startswith("aimnet::conv_sv_2d_sp")}
+        assert ops, "the packed layout must use the Warp ConvSV kernel"
+        assert all(("_det_" in op) == deterministic for op in ops), ops
+
+    @pytest.mark.ase
+    @pytest.mark.parametrize(
+        ("case", "builds"),
+        [("energy", False), ("forces", True), ("coord_requires_grad", True), ("train_energy", True)],
+    )
+    def test_transpose_is_built_only_when_a_backward_can_run(self, monkeypatch, case, builds):
+        import aimnet.kernels
+
+        calls = []
+        build = aimnet.kernels.conv_sv_2d_sp_transpose
+
+        def spy(*args, **kwargs):
+            calls.append(1)
+            return build(*args, **kwargs)
+
+        monkeypatch.setattr(aimnet.kernels, "conv_sv_2d_sp_transpose", spy)
+        calc = AIMNet2Calculator("aimnet2", deterministic=True, nb_threshold=0, train=case == "train_energy")
+        data = self._caffeine_packed()
+        if case == "coord_requires_grad":
+            data["coord"].requires_grad_(True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # packed layout without torch's deterministic mode
+            out = calc(dict(data), forces=case == "forces")
+        assert bool(calls) == builds
+        if case == "coord_requires_grad":
+            # External autograd through the calculator reaches the gather backward.
+            (grad,) = torch.autograd.grad(out["energy"].sum(), data["coord"])
+            assert torch.isfinite(grad).all()
 
     @staticmethod
     def _packed_warnings(calc: AIMNet2Calculator, batched: bool = False) -> list[warnings.WarningMessage]:

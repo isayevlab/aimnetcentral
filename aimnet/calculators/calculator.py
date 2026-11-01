@@ -93,11 +93,13 @@ class AIMNet2Calculator:
         Hessian, and no caller-supplied ``mol_idx`` or ``nbmat``. On the
         packed neighbor-list layout used otherwise, the calculator sorts the
         neighbor rows it builds into a canonical order (a caller-supplied
-        ``nbmat`` is used as given), so energies are also bitwise
-        reproducible on CUDA once ``torch.use_deterministic_algorithms(True)``
-        is enabled (a one-time warning fires without it); forces there keep
-        run-to-run noise of ~1e-6 eV/A (issue #140). CPU always uses the
-        packed layout;
+        ``nbmat`` is used as given) and the Warp convolution backward
+        gathers each atom's gradient in a fixed order instead of using
+        atomics, so energies and forces are also bitwise reproducible on CUDA
+        once ``torch.use_deterministic_algorithms(True)`` is enabled (a
+        one-time warning fires without it; the flag covers the per-molecule
+        ``scatter_add_`` sums and the backward of the neighbor gathers). CPU
+        always uses the packed layout;
         repeated CPU evaluations have been bitwise identical in testing, but
         that is not yet guaranteed. Ewald/PME Coulomb is not covered (a
         one-time warning fires). Reproducibility also requires
@@ -1211,6 +1213,15 @@ class AIMNet2Calculator:
         else:
             data = self.set_grad_tensors(data, forces=forces, stress=stress, hessian=hessian)
             saved = self._saved_for_grad
+        # Only when a backward through ConvSV can run; Hessians keep the atomic kernels.
+        if (
+            self._deterministic
+            and not hessian
+            and (
+                forces or stress or self._train or any(isinstance(t, Tensor) and t.requires_grad for t in data.values())
+            )
+        ):
+            self._add_nbmat_transpose(data)
         if model_prepared:
             data = self.model.forward_prepared(data)
         elif isinstance(self.model, torch.jit.ScriptModule):
@@ -1405,6 +1416,21 @@ class AIMNet2Calculator:
             data = self.pad_input(data)
         return data
 
+    @staticmethod
+    def _add_nbmat_transpose(data: dict[str, Tensor]) -> None:
+        """Store the CSR transpose of the packed ``nbmat`` beside it for the deterministic Warp ConvSV backward.
+
+        With it, the backward gathers each atom's gradient in a fixed order
+        instead of accumulating it with atomics.
+        """
+        nbmat = data.get("nbmat")
+        if nbmat is None or nbmat.device.type != "cuda" or nbmat.ndim != 2 or data["coord"].ndim != 2:
+            return
+        from aimnet.kernels import WARP_CUDA_AVAILABLE, conv_sv_2d_sp_transpose
+
+        if WARP_CUDA_AVAILABLE:
+            data["_nbmat_csr_ptr"], data["_nbmat_csr_idx"] = conv_sv_2d_sp_transpose(nbmat, nbmat.shape[0])
+
     def _warn_deterministic_packed(self) -> None:
         """Warn once that packed-layout determinism needs torch's deterministic mode."""
         if (
@@ -1416,9 +1442,8 @@ class AIMNet2Calculator:
             return
         warnings.warn(
             "deterministic=True on the packed neighbor-list layout gives bitwise-reproducible "
-            "energies only with torch.use_deterministic_algorithms(True) (set "
-            "CUBLAS_WORKSPACE_CONFIG=:4096:8 before CUDA starts, or pass warn_only=True); "
-            "forces are not yet covered (issue #140).",
+            "energies and forces only with torch.use_deterministic_algorithms(True) (set "
+            "CUBLAS_WORKSPACE_CONFIG=:4096:8 before CUDA starts, or pass warn_only=True).",
             stacklevel=5,  # the caller of __call__
         )
         self._warned_deterministic_packed = True

@@ -250,7 +250,7 @@ class ConvSV(nn.Module):
             # conda-forge); anything else falls through to the pure-torch einsum.
             if mode > 0 and a.device.type == "cuda" and a.dtype == torch.float32 and g_sv.dtype == torch.float32:
                 if WARP_CUDA_AVAILABLE:
-                    avf_sv = conv_sv_2d_sp(a, data["nbmat"], g_sv)
+                    avf_sv = conv_sv_2d_sp(a, data["nbmat"], g_sv, transpose=_nbmat_transpose(data))
                 else:
                     _warn_warp_cuda_unavailable()
                     a_j = a.index_select(0, data["nbmat"].flatten()).unflatten(0, data["nbmat"].shape)
@@ -336,6 +336,18 @@ def _warn_warp_cuda_unavailable() -> None:
         RuntimeWarning,
         stacklevel=3,
     )
+
+
+def _nbmat_transpose(data: dict[str, Tensor]) -> tuple[Tensor, Tensor] | None:
+    """CSR transpose of ``nbmat`` for the deterministic Warp backward, if the caller built one.
+
+    The calculator adds it beside ``nbmat`` only with ``deterministic=True``.
+    """
+    csr_ptr = data.get("_nbmat_csr_ptr")
+    csr_idx = data.get("_nbmat_csr_idx")
+    if csr_ptr is None or csr_idx is None:
+        return None
+    return csr_ptr, csr_idx
 
 
 def _flatten_mode2(tensor: Tensor, name: str) -> Tensor:

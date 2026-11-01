@@ -290,15 +290,17 @@ For ordinary energy/force/charge inference (including external autograd through 
 
 Route external DFT-D3 (and DSF Coulomb) through their differentiable pure-torch paths instead of the atomics-based nvalchemiops CUDA kernels. Default: `False`.
 
-The kernel defaults accumulate pairwise terms with atomic adds, so repeated identical evaluations differ at the float32 rounding level (~1e-7 eV in energies). That noise is physically negligible but is amplified chaotically by iterative optimizers: batched geometry optimizations from byte-identical inputs can follow different trajectories. With `deterministic=True`, identical inputs give bitwise-identical energies and forces on the same machine and build **on the dense layout only**, at negligible cost for typical batched workloads.
+The kernel defaults accumulate pairwise terms with atomic adds, so repeated identical evaluations differ at the float32 rounding level (~1e-7 eV in energies). That noise is physically negligible but is amplified chaotically by iterative optimizers: batched geometry optimizations from byte-identical inputs can follow different trajectories. With `deterministic=True`, identical inputs give bitwise-identical energies and forces on the same machine and build. On the dense layout this needs nothing else and costs little for typical batched workloads; the packed layout also needs PyTorch's deterministic mode (below).
 
-The dense layout is used on CUDA for 3D input with at most `nb_threshold` atoms per system (default 120), no `cell`, no Hessian, and no caller-supplied `mol_idx` or `nbmat`. Everything else runs on the packed neighbor-list layout. There, `deterministic=True` sorts each row of the neighbor lists the calculator builds into a canonical order (a caller-supplied `nbmat` is used in the order given), which makes energies bitwise reproducible on CUDA once PyTorch's deterministic mode is also on; without it a one-time `UserWarning` fires. Forces on the packed layout are not yet covered: the ConvSV backward kernel still accumulates in varying order, leaving run-to-run noise of about 1e-6 eV/Å ([#140](https://github.com/isayevlab/aimnetcentral/issues/140)). CPU evaluations always use the packed layout; they have been bitwise repeatable in testing, but that is not yet guaranteed.
+The dense layout is used on CUDA for 3D input with at most `nb_threshold` atoms per system (default 120), no `cell`, no Hessian, and no caller-supplied `mol_idx` or `nbmat`. Everything else runs on the packed neighbor-list layout. There, `deterministic=True` sorts each row of the neighbor lists the calculator builds into a canonical order (a caller-supplied `nbmat` is used in the order given), and the backward of the Warp ConvSV kernel gathers each atom's gradient in a fixed order through a transposed copy of the neighbor list instead of accumulating it with atomic adds. Together with PyTorch's deterministic mode, which the calculator does not switch on, this makes energies and forces bitwise reproducible on CUDA, including periodic inputs and forces with `train=True` ([#140](https://github.com/isayevlab/aimnetcentral/issues/140)). The PyTorch mode is still needed for two reductions outside the Warp kernel: the per-molecule `scatter_add_` sums (energies) and the backward of the neighbor-list `index_select` gathers (forces). Without it, a one-time `UserWarning` fires and both energies and forces keep run-to-run noise.
+
+The fixed-order backward is not used for a caller-supplied batched `(B, N, M)` neighbor matrix or for a legacy TorchScript `.jpt` model, so their forces are not covered. CPU evaluations always use the packed layout; they have been bitwise repeatable in testing, but that is not yet guaranteed.
 
 ```python
 calc = AIMNet2Calculator("aimnet2", deterministic=True)
 ```
 
-For reproducible energies on the packed layout, enable PyTorch's deterministic mode as well. It is process-wide, so the calculator leaves that choice to you:
+For reproducible energies and forces on the packed layout, enable PyTorch's deterministic mode as well. It is process-wide, so the calculator leaves that choice to you:
 
 ```python
 import os
@@ -307,7 +309,7 @@ os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"  # before CUDA is first used
 torch.use_deterministic_algorithms(True)  # or (True, warn_only=True) without the variable
 ```
 
-PyTorch's deterministic reductions are slower; in one measurement on an L40S they roughly doubled the cost of an energy-and-forces call for a batch of 32 molecules, so benchmark your workload.
+PyTorch's deterministic reductions are slower, so benchmark your workload. In one measurement on an L40S they roughly doubled the cost of an energy-and-forces call for a batch of 32 molecules. For single systems of 100 to 5000 atoms (packed layout, DFT-D3 detached), `deterministic=True` with that mode made the force backward about 3.5 to 6 times slower in CUDA time than the default and raised peak memory by up to about 0.9 GB at 5000 atoms. Most of that cost is PyTorch's deterministic `index_put_`. The fixed-order ConvSV backward costs much less: the calculator rebuilds its transposed neighbor list (about 0.3 ms) on each call that can run a backward (forces, stress, `train=True`, or inputs that require grad), and in a molecular-dynamics-style loop with forces at every step this added 1 to 2% per step at 113 and 1008 atoms. The list adds less than 1 MB of memory at 5000 atoms.
 
 Notes:
 
@@ -318,6 +320,7 @@ Notes:
 - Reproducibility also requires the same batch composition and order. Adding an unrelated molecule to a batch, or switching between the dense and packed layouts, changes forces at the rounding level (about 1e-6 eV/Å), and an optimizer can amplify that into a different local minimum.
 - For conformer ranking, converge tightly (for example `fmax` of 1e-3 eV/Å) before ranking, and re-optimize the finalists one at a time on the dense layout (raise `nb_threshold` above the molecule size if needed; peak memory grows, roughly 3x at 128 atoms).
 - The `cache_static` DFTD3 term cache does not apply in this mode.
+- With `train=True`, parameter gradients are outside the bitwise guarantee; in testing on the packed layout they matched from the third call on but not on the first two.
 
 #### `ensemble_member`
 
