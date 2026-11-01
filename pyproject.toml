@@ -79,6 +79,7 @@ train = [
     "omegaconf>=2.3.0",
     "wandb>=0.18.5",
     "pytorch-ignite>=0.5.1",
+    "tqdm>=4.66",  # ignite's ProgressBar, used by `aimnet train`
 ]
 
 # Hugging Face Hub integration
@@ -257,3 +258,5 @@ package_module_name_map = { "pytorch-ignite" = "ignite", "torch-sim-atomistic" =
 DEP001 = ["ase", "pysisyphus", "sella", "torch_sim"]
 DEP003 = ["ase", "pysisyphus", "sella", "torch_sim"]
 DEP004 = ["ase", "pysisyphus", "sella", "torch_sim"]
+# Imported by ignite's ProgressBar, not by aimnet directly
+DEP002 = ["tqdm"]

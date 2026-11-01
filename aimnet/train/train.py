@@ -137,8 +137,16 @@ def run(local_rank, world_size, model_cfg, train_cfg, load, save):
         sd = torch.load(load, map_location=device, weights_only=True)
         logging.info(utils.unwrap_module(model).load_state_dict(sd, strict=False))
 
-    # data loaders
-    train_loader, val_loader = utils.get_loaders(train_cfg.data)
+    # data loaders; stress needs periodic neighbor lists, which the loader
+    # builds unless the dataset already supplies them through data.x
+    collate_fn = None
+    if needs_stress_runner and not any(key.startswith(("nbmat", "shifts")) for key in train_cfg.data.x):
+        from aimnet.train.neighbor_lists import PeriodicNeighborCollate, neighbor_cutoffs
+
+        collate_fn = PeriodicNeighborCollate(
+            neighbor_cutoffs(utils.unwrap_module(model)), atom_keys=train_cfg.data.get("atom_keys") or ()
+        )
+    train_loader, val_loader = utils.get_loaders(train_cfg.data, collate_fn=collate_fn)
 
     # optimizer, scheduler, etc
     model = utils.set_trainable_parameters(

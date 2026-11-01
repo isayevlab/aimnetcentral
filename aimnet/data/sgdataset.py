@@ -479,10 +479,22 @@ class SizeGroupedDataset:
         for g in self.values():
             yield from g.iter_batched(batch_size, keys)
 
-    def get_loader(self, sampler, x: list[str], y: list[str] | None = None, **loader_kwargs):
+    def get_loader(
+        self,
+        sampler,
+        x: list[str],
+        y: list[str] | None = None,
+        collate_fn: Callable | None = None,
+        **loader_kwargs,
+    ):
+        """Return a DataLoader of `(x, y)` dicts of dense `(B, N, ...)` tensors.
+
+        `collate_fn` replaces the default batch squeeze; it receives the same
+        one-element list a `batch_sampler` loader passes to its collate.
+        """
         view = _SizeGroupedLoaderView(self, x=x, y=y or [])
         loader = DataLoader(view, batch_sampler=sampler, **loader_kwargs)  # type: ignore
-        loader.collate_fn = _squeeze_loader_batch
+        loader.collate_fn = collate_fn or _squeeze_loader_batch
         return loader
 
 

@@ -6,8 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Stress training with the built-in loader:** with `stress` in `data.y` and `cell` in `data.x`, `aimnet train` now packs each `SizeGroupedDataset` batch into the calculator's mode-1 layout (real atoms plus one trailing dummy atom, `mol_idx`) and builds the periodic neighbor lists with integer shifts on CPU in the loader, so stress training no longer needs a custom dataset. The lists are found on wrapped coordinates, but the batch keeps the stored coordinates with each atom's image offset folded into the shifts, so dipole and quadrupole targets are unaffected. Cutoffs come from the model: the AEV, short-range Coulomb, or `SRRep` radius, a 15 Å list for `D3TS`, and a per-batch real-space radius for `LRCoulomb` with `ewald` or `pme`. Models with an `LRCoulomb` using `simple` or `dsf`, or with a tabulated `DFTD3` module, are refused for stress training because their periodic stress would be wrong, and so are cells that are not periodic in all three directions. Per-atom labels outside the known set must be listed in the new `data.atom_keys`. On a test set of triclinic cells the loader's stress matches `AIMNet2Calculator(..., stress=True)` to about 1e-5 relative in float32. Energy and forces training keeps dense batches, and the first-batch stress check now guards custom datasets that supply their own lists ([#138](https://github.com/isayevlab/aimnetcentral/issues/138)).
+
 ### Fixed
 
+- **`aimnet train` on a clean `aimnet[train]` install:** the `train` extra now includes `tqdm`. The trainer always shows an ignite `ProgressBar`, which needs `tqdm`, so a fresh install without it stopped with `ModuleNotFoundError` when training started.
 - **Batched gas-phase Coulomb memory:** with `mol_idx` and the default `simple` Coulomb, the all-pairs neighbor buffer was sized by the batch's total atom count, so a flat batch of many molecules allocated an `N × N` matrix (about 14 GB at 60k atoms). It is now sized by the largest molecule, and memory grows linearly with the batch. Energies and forces are unchanged; periodic inputs keep the previous sizing ([#151](https://github.com/isayevlab/aimnetcentral/issues/151)).
 
 ### Documentation

@@ -97,7 +97,8 @@ def log_ds_group_sizes(ds):
         logging.info(f"{_n:03d}: {len(g)}")
 
 
-def get_loaders(cfg: omegaconf.DictConfig):
+def get_loaders(cfg: omegaconf.DictConfig, collate_fn: Callable | None = None):
+    """Build train and validation loaders; `collate_fn` replaces the default batch collate for both."""
     ds_train: SizeGroupedDataset
     # load datasets
     ds_train = load_dataset(cfg, kind="train")
@@ -125,8 +126,13 @@ def get_loaders(cfg: omegaconf.DictConfig):
     logging.info("After merging small groups in train dataset")
     log_ds_group_sizes(ds_train)
 
-    loader_train = ds_train.get_loader(get_sampler(ds_train, cfg, kind="train"), cfg.x, cfg.y, **cfg.loaders.train)
-    loader_val = ds_val.get_loader(get_sampler(ds_val, cfg, kind="val"), cfg.x, cfg.y, **cfg.loaders.val)
+    # Only pass the keyword when set, so custom datasets with their own
+    # get_loader signature keep working for every other run.
+    collate = {} if collate_fn is None else {"collate_fn": collate_fn}
+    loader_train = ds_train.get_loader(
+        get_sampler(ds_train, cfg, kind="train"), cfg.x, cfg.y, **collate, **cfg.loaders.train
+    )
+    loader_val = ds_val.get_loader(get_sampler(ds_val, cfg, kind="val"), cfg.x, cfg.y, **collate, **cfg.loaders.val)
     return loader_train, loader_val
 
 
@@ -557,9 +563,10 @@ def attach_stress_batch_check(trainer: Engine) -> None:
     """Fail at the first training batch when the loader cannot feed stress targets.
 
     Stress needs explicit mode-1 or mode-2 neighbor topology, a cell, and
-    aligned shifts. The built-in SizeGroupedDataset yields dense mode-0
-    batches. The check reads the batch the trainer already fetched, so it
-    starts no extra loader iterator, and runs before the first step.
+    aligned shifts. `aimnet train` builds these for the built-in
+    SizeGroupedDataset loader, so this check guards custom datasets that
+    supply their own lists. It reads the batch the trainer already fetched,
+    so it starts no extra loader iterator, and runs before the first step.
     """
 
     def _check(engine: Engine) -> None:
@@ -568,9 +575,9 @@ def attach_stress_batch_check(trainer: Engine) -> None:
             _CompiledTrainingRunner(nn.Identity(), ("stress",))._validate_stress_input(x)
         except ValueError as error:
             raise ValueError(
-                f"{error} The built-in SizeGroupedDataset loader produces dense mode-0 batches without "
-                "neighbor lists; stress training needs a custom dataset (data.datasets.train) that "
-                "supplies mode-1 or mode-2 nbmat, matching shifts, and cell. See docs/train.md."
+                f"{error} With the built-in SizeGroupedDataset, put 'cell' in data.x and leave neighbor "
+                "lists out of it: the loader then builds them. A custom dataset that supplies its own "
+                "lists must yield mode-1 or mode-2 nbmat, matching shifts, and cell. See docs/train.md."
             ) from error
 
     trainer.add_event_handler(Events.ITERATION_STARTED(once=1), _check)
