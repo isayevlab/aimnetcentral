@@ -1653,6 +1653,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#compiled-training" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compiled Training
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#model-export-for-distribution" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2089,6 +2100,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#compiled-training" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compiled Training
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#model-export-for-distribution" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2235,6 +2257,14 @@
 <p>Finally, initiate the training script with default parameters and the specified <code>run_name</code>:</p>
 <div class="highlight"><pre><span></span><code>$<span class="w"> </span>aimnet<span class="w"> </span>train<span class="w"> </span>data.train<span class="o">=</span>dataset.h5<span class="w"> </span>data.sae.energy.file<span class="o">=</span>dataset_sae.yaml<span class="w"> </span><span class="nv">run_name</span><span class="o">=</span>firstrun
 </code></pre></div>
+<h3 id="compiled-training">Compiled Training<a class="headerlink" href="#compiled-training" title="Permanent link">&para;</a></h3>
+<p>Set <code>trainer.compile: true</code> to compile the AIMNet2 energy, force, and stress computation during training. Compiled training requires CUDA and supports DDP; each process or rank owns one compiled derivative graph.</p>
+<ul>
+<li>The first batch fixes the requested properties, the neighbor mode, and the ordered input keys, ranks, dtypes, and device type. Later batches may change their batch, atom, and neighbor dimensions.</li>
+<li>Forces are supported in neighbor modes 0, 1, and 2. For stress inputs, see <a href="#stress-training">Stress training</a>.</li>
+<li>The original AIMNet2 module remains the sole parameter and checkpoint owner. Loss evaluation, gradient clipping, and the optimizer step stay eager: the trainer calls <code>loss.backward()</code> from eager Python, which enters the compiled AOTAutograd backward for the model and derivative graph.</li>
+<li>Hessian and HVP requests made through a calculator with compiled inference continue to use the original eager model.</li>
+</ul>
 <h3 id="model-export-for-distribution">Model Export for Distribution<a class="headerlink" href="#model-export-for-distribution" title="Permanent link">&para;</a></h3>
 <p>To export a trained model for distribution and use with AIMNet calculators:</p>
 <div class="highlight"><pre><span></span><code>$<span class="w"> </span>aimnet<span class="w"> </span><span class="nb">export</span><span class="w"> </span>weights.pt<span class="w"> </span>model.pt<span class="w"> </span>--model<span class="w"> </span>config.yaml<span class="w"> </span>--sae<span class="w"> </span>model.sae
@@ -2297,8 +2327,12 @@
 <p>Add <code>stress</code> to <code>data.y</code> to train on periodic stress. Requirements:</p>
 <ul>
 <li><strong>Labels:</strong> full <code>(B, 3, 3)</code> tensors in eV/Å^3, ASE sign convention (σ = (1/V) ∂E/∂ε; negative under compression), e.g. <code>atoms.get_stress(voigt=False)</code>. Convert VASP output by flipping the sign and dividing kBar by 1602.1766.</li>
-<li><strong>Inputs:</strong> explicit neighbor topology in mode 1 (flat <code>nbmat</code> with a trailing dummy atom) or mode 2 (global <code>(B, N, M)</code> <code>nbmat</code>), a <code>cell</code>, and a <code>shifts</code> tensor aligned with every neighbor matrix. Dense mode-0 batches are rejected.</li>
-<li><strong>Loader:</strong> the built-in <code>SizeGroupedDataset</code> yields dense mode-0 batches, so supply a custom dataset class via <code>data.datasets.train</code>. <code>aimnet train</code> inspects the first training batch and stops with an explanation when these inputs are missing.</li>
+<li><strong>Inputs:</strong> store a <code>(3, 3)</code> <code>cell</code> (Å, lattice vectors as rows) with every sample and add it to <code>data.x</code>, e.g. <code>data.x=[coord,numbers,charge,cell]</code>. Systems must be periodic in all three directions; a <code>pbc</code> with a non-periodic axis is refused, because the trainer applies a full 3×3 strain and the Ewald/PME backends assume a 3D lattice.</li>
+<li><strong>Loader:</strong> stress needs explicit periodic neighbor topology, and the built-in <code>SizeGroupedDataset</code> loader builds it. Each dense batch is packed into the mode-1 layout the calculator uses (real atoms only, one trailing dummy atom, <code>mol_idx</code>), and neighbor lists with integer <code>shifts</code> are built on CPU, inside the loader workers when <code>num_workers &gt; 0</code>. The lists are found on coordinates wrapped into the cell, but the batch keeps the coordinates as stored, with each atom's image offset folded into the shifts, so dipole and quadrupole targets stay consistent. Energy and forces training without stress is unchanged and keeps dense batches.</li>
+<li><strong>Per-atom labels:</strong> <code>coord</code>, <code>numbers</code>, <code>forces</code>, <code>charges</code>, <code>spin_charges</code>, and <code>volumes</code> are packed per atom; <code>cell</code>, <code>energy</code>, <code>stress</code>, <code>charge</code>, <code>mult</code>, <code>dipole</code>, <code>quadrupole</code>, <code>pbc</code>, and <code>virial</code> stay per system. Any other key whose leading dimensions match <code>(B, N)</code> could be either, so the loader stops and asks you to list your per-atom labels in <code>data.atom_keys</code>, e.g. <code>data.atom_keys=[hirshfeld]</code>.</li>
+<li><strong>Cutoffs:</strong> read from the model. <code>nbmat</code> reaches the AEV cutoff, or the radius of a short-range Coulomb or <code>SRRep</code> term if that is larger. An <code>LRCoulomb</code> with <code>method: ewald</code> or <code>pme</code> gets <code>nbmat_coulomb</code>, sized per batch to the real-space cutoff its accuracy implies. A <code>D3TS</code> module gets <code>nbmat_dftd3</code> with a 15 Å radius, the calculator's default dispersion cutoff; <code>D3TS</code> sums every listed pair, so the trained model must be evaluated with the same list. Put the module under the outputs key <code>d3ts</code> (or <code>d3bj</code>): <code>aimnet export</code> then records <code>has_embedded_d3ts</code>, the calculator builds a 15 Å dispersion list for it, and you should not change that with <code>set_dftd3_cutoff</code>. Under any other key, a calculator built from the exported or raw model builds no dispersion list.</li>
+<li><strong>Unsupported modules:</strong> <code>aimnet train</code> refuses models it cannot train on stress correctly: an <code>LRCoulomb</code> with <code>method: simple</code> (all-pairs Coulomb has no periodic form) or <code>method: dsf</code> (inside the model forward it contributes no geometry derivative), and a tabulated <code>DFTD3</code> module (no cell gradient). The default <code>aimnet2.yaml</code> uses <code>method: simple</code>; switch it to <code>ewald</code> or <code>pme</code> for stress training.</li>
+<li><strong>Custom datasets:</strong> a dataset that supplies its own lists must yield mode-1 (flat <code>nbmat</code> with a trailing dummy atom) or mode-2 (global <code>(B, N, M)</code> <code>nbmat</code>) batches with <code>cell</code> and a <code>shifts</code> tensor aligned with every neighbor matrix, and list its <code>nbmat*</code>/<code>shifts*</code> keys in <code>data.x</code>; the loader then leaves its batches alone. <code>aimnet train</code> inspects the first training batch and stops with an explanation when these inputs are missing.</li>
 <li><strong>Weighting:</strong> stress MSE is typically around 1e-6 (eV/Å^3)^2, so the stress loss weight must be large (order 10^2–10^4) to contribute next to energy and forces.</li>
 </ul>
 <p>Stress is computed as the strain derivative of the energy divided by the cell volume, the same contract as the calculator's <code>stress=True</code>.</p>
