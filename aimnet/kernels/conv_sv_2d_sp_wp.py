@@ -1015,7 +1015,8 @@ def conv_sv_2d_sp_transpose(
         ``csr_ptr`` of shape (K + 1,) and ``csr_idx`` of shape (num_centers * M,),
         both int32. The contributors to atom ``j`` are the flat slots
         ``b * M + m`` in ``csr_idx[csr_ptr[j]:csr_ptr[j + 1]]``, in ascending
-        order; padding slots sort to the end, past ``csr_ptr[K]``. Built with a
+        order. Slots from a row's first sentinel on are padding, matching the
+        kernels' early exit, and sort to the end, past ``csr_ptr[K]``. Built with a
         stable sort and ``searchsorted``, so the result is deterministic.
     """
     if (padding_value is None) != (num_centers is None):
@@ -1023,10 +1024,12 @@ def conv_sv_2d_sp_transpose(
     if padding_value is None:
         padding_value = num_atoms - 1
         num_centers = idx.shape[0] - 1
-    flat = idx[:num_centers].reshape(-1)
-    if flat.numel() >= 2**31:
+    rows = idx[:num_centers]
+    if rows.numel() >= 2**31:
         raise ValueError("conv_sv_2d_sp_transpose supports fewer than 2**31 neighbor slots (int32 offsets).")
-    keys = flat.masked_fill(flat >= padding_value, num_atoms)
+    # Drop every slot from a row's first sentinel on, exactly as the kernels stop scanning there.
+    is_padding = (rows >= padding_value).to(torch.uint8).cummax(dim=1).values.bool()
+    keys = rows.masked_fill(is_padding, num_atoms).reshape(-1)
     sorted_keys, order = torch.sort(keys, stable=True)
     bounds = torch.arange(num_atoms + 1, device=idx.device, dtype=sorted_keys.dtype)
     csr_ptr = torch.searchsorted(sorted_keys, bounds).to(torch.int32)

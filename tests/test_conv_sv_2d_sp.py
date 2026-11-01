@@ -704,3 +704,41 @@ def test_deterministic_autograd_matches_default_through_second_order():
     deterministic = second_order(conv_sv_2d_sp_transpose(idx, a0.shape[0]))
     for actual, expected in zip(deterministic, reference, strict=True):
         torch.testing.assert_close(actual, expected, atol=1e-4, rtol=1e-5)
+
+
+# Rows the calculator can see from a caller-supplied nbmat. Sentinel is 4.
+_IRREGULAR_ROWS = {
+    # The kernels stop at the first sentinel, so the 2 after it is not a neighbor.
+    "interleaved_padding": [[1, 4, 2, 3], [0, 2, 4, 4], [4, 0, 1, 3], [0, 1, 2, 4], [4, 4, 4, 4]],
+    # Periodic images repeat a neighbor index within a row.
+    "repeated_neighbors": [[1, 1, 2, 4], [0, 0, 0, 4], [3, 3, 1, 1], [2, 2, 2, 2], [4, 4, 4, 4]],
+}
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+@pytest.mark.parametrize("rows", sorted(_IRREGULAR_ROWS))
+def test_deterministic_backward_matches_atomic_on_irregular_rows(rows):
+    """The transpose must list exactly the slots the forward reads, as the atomic backward does."""
+    from aimnet.kernels.conv_sv_2d_sp_wp import conv_sv_2d_sp_transpose
+
+    torch.manual_seed(0)
+    idx = torch.tensor(_IRREGULAR_ROWS[rows], device="cuda", dtype=torch.int32)
+    K, M = idx.shape
+    a = torch.randn(K, 2, 3, device="cuda")
+    g = torch.randn(K, M, 3, 4, device="cuda")
+    go = torch.randn(K, 2, 3, 4, device="cuda")
+    pv, nc = K - 1, K - 1
+    transpose = conv_sv_2d_sp_transpose(idx, K)
+    ops = torch.ops.aimnet
+
+    atomic = ops.conv_sv_2d_sp_bwd(go, a, idx, g, pv, nc)
+    det = ops.conv_sv_2d_sp_det_bwd(go, a, idx, g, *transpose, pv, nc)
+    for actual, expected in zip(det, atomic, strict=True):
+        torch.testing.assert_close(actual, expected, atol=1e-6, rtol=1e-6)
+
+    grad2_a, grad2_g = torch.randn_like(a), torch.randn_like(g)
+    atomic = ops.conv_sv_2d_sp_bwd_bwd(go, grad2_a, grad2_g, a, idx, g, pv, nc)
+    det = ops.conv_sv_2d_sp_det_bwd_bwd(go, grad2_a, grad2_g, a, idx, g, *transpose, pv, nc)
+    for actual, expected in zip(det, atomic, strict=True):
+        torch.testing.assert_close(actual, expected, atol=1e-6, rtol=1e-6)
+
