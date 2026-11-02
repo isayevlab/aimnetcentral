@@ -9,8 +9,11 @@
 #   DRY_RUN=1 bash scripts/gpu_validate.sh  # print the per-version commands only
 #
 # Tunables (env vars):
-#   TORCH_VERSIONS  default "2.10 2.11 2.12 2.13 2.14"
+#   TORCH_VERSIONS  default "2.10 2.11 2.12 2.13 2.14 2.15"
 #   CUDA_INDEX      default "https://download.pytorch.org/whl/cu126"
+#   CUDA_INDEX_OVERRIDES  default "2.15=https://download.pytorch.org/whl/cu132"
+#                   (space-separated VERSION=URL pairs for versions CUDA_INDEX
+#                   does not carry; torch 2.15 ships CUDA 13.2 wheels only)
 #   PYTHON          default "python3.12"
 #   RESULTS         default "./gpu-validation-results"
 #   BASELINE        default "2.10"
@@ -18,8 +21,9 @@
 #   FORCE_ATOL      default "1e-4"   (Hartree/Angstrom)
 set -u
 
-TORCH_VERSIONS="${TORCH_VERSIONS:-2.10 2.11 2.12 2.13 2.14}"
+TORCH_VERSIONS="${TORCH_VERSIONS:-2.10 2.11 2.12 2.13 2.14 2.15}"
 CUDA_INDEX="${CUDA_INDEX:-https://download.pytorch.org/whl/cu126}"
+CUDA_INDEX_OVERRIDES="${CUDA_INDEX_OVERRIDES:-2.15=https://download.pytorch.org/whl/cu132}"
 PYTHON="${PYTHON:-python3.12}"
 RESULTS="${RESULTS:-./gpu-validation-results}"
 BASELINE="${BASELINE:-2.10}"
@@ -47,6 +51,17 @@ json.dump(d, open(path, "w"), indent=2)
 PY
 }
 
+_index_for() {  # version -> torch wheel index
+    local pair
+    for pair in $CUDA_INDEX_OVERRIDES; do
+        if [ "${pair%%=*}" = "$1" ]; then
+            echo "${pair#*=}"
+            return
+        fi
+    done
+    echo "$CUDA_INDEX"
+}
+
 echo "repo=$REPO workdir=$WORKDIR results=$RESULTS cuda_index=$CUDA_INDEX python=$PYTHON"
 echo "{}" > "$STATUS"
 
@@ -57,7 +72,7 @@ for V in $TORCH_VERSIONS; do
     # suite/dump via the venv's own python directly. pytest is installed into
     # the venv explicitly (the [ase] extra does not pull the dev group).
     install_cmd="uv venv --python $PYTHON $VENV && \
-        VIRTUAL_ENV=$VENV uv pip install 'torch==$V.*' --index-url $CUDA_INDEX && \
+        VIRTUAL_ENV=$VENV uv pip install 'torch==$V.*' --index-url $(_index_for "$V") && \
         VIRTUAL_ENV=$VENV uv pip install -e '$REPO[ase,train]' pytest"
     suite_cmd="'$VENV/bin/python' -m pytest '$REPO/tests' -m gpu"
     # torch 2.10's CPU inductor had a fusion crash on the PBC force graph;
