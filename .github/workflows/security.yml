@@ -3,9 +3,16 @@ name: Security
 on:
     push:
         branches: [main]
+        paths: ["**/*.py", ".github/workflows/security.yml"]
     pull_request:
+        paths: ["**/*.py", ".github/workflows/security.yml"]
     schedule:
         - cron: "0 6 * * 2" # Tuesdays 06:00 UTC
+
+# CodeQL is not a required check, so path filtering cannot block a merge.
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
     contents: read
@@ -14,7 +21,7 @@ jobs:
     codeql:
         name: CodeQL
         runs-on: ubuntu-latest
-        timeout-minutes: 20
+        timeout-minutes: 10
         permissions:
             actions: read
             contents: read

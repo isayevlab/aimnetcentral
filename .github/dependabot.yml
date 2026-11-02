@@ -14,6 +14,16 @@ updates:
       labels:
           - "dependencies"
           - "python"
+      # Held back on purpose; see the lock policy in the maintainer notes.
+      ignore:
+          - dependency-name: "wandb"
+            versions: [">=0.31"]
+          - dependency-name: "pandas"
+            versions: [">=3"]
+          - dependency-name: "optuna"
+            versions: [">=5"]
+          - dependency-name: "ruff"
+            versions: [">=0.17"]
       groups:
           python-patch:
               applies-to: version-updates
