@@ -27,14 +27,7 @@ runs:
           uses: astral-sh/setup-uv@v8.1.0
           with:
               enable-cache: true
-
-        - name: Cache Warp kernels
-          uses: actions/cache@v5
-          with:
-              path: ~/.cache/warp
-              key: warp-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-              restore-keys: |
-                  warp-${{ runner.os }}-
+              cache-dependency-glob: "uv.lock"
 
         - name: Install dependencies
           env:
@@ -43,8 +36,8 @@ runs:
           run: |
               set -e
 
-              # Build uv sync command
-              CMD="uv sync"
+              # Build uv sync command; --locked fails if uv.lock is out of date
+              CMD="uv sync --locked"
 
               # Add groups
               if [ -n "$INPUT_GROUPS" ]; then

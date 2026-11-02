@@ -16,6 +16,7 @@ env:
 jobs:
     publish:
         runs-on: ubuntu-latest
+        timeout-minutes: 15
         permissions:
             contents: read
         steps:
@@ -53,6 +54,7 @@ jobs:
     deploy-docs:
         needs: publish
         runs-on: ubuntu-latest
+        timeout-minutes: 10
         steps:
             - name: Check out
               uses: actions/checkout@v7
