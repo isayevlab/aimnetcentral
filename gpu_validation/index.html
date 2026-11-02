@@ -2003,11 +2003,11 @@
 
 
 <h1 id="gpu-validation-torch-warp-lang-nvalchemiops-coupling">GPU Validation (torch / warp-lang / nvalchemiops coupling)<a class="headerlink" href="#gpu-validation-torch-warp-lang-nvalchemiops-coupling" title="Permanent link">&para;</a></h1>
-<p>The CPU CI matrix verifies torch-core API and CPU numerics across PyTorch 2.10–2.14, but it cannot validate three GPU-only concerns: that <code>warp-lang</code> and <code>nvalchemiops</code> install coherently with each torch version, that the Warp custom op kernels execute, and that full-model energies/forces stay reproducible across the range. This manual tool covers them on a CUDA machine.</p>
+<p>The CPU CI matrix verifies torch-core API and CPU numerics across PyTorch 2.10–2.15, but it cannot validate three GPU-only concerns: that <code>warp-lang</code> and <code>nvalchemiops</code> install coherently with each torch version, that the Warp custom op kernels execute, and that full-model energies/forces stay reproducible across the range. This manual tool covers them on a CUDA machine.</p>
 <h2 id="running-it">Running it<a class="headerlink" href="#running-it" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code>make<span class="w"> </span>gpu-validate
 </code></pre></div>
-<p>This loops over PyTorch 2.10, 2.11, 2.12, 2.13, and 2.14. For each it creates a fresh virtualenv, installs a <strong>resolver-coherent</strong> environment (the matching CUDA torch wheel and its <code>triton</code>, plus <code>aimnet</code> + <code>warp-lang</code> + <code>nvalchemiops</code>), runs <code>pytest -m gpu</code>, and computes deterministic energies/forces for a fixed set of systems (water, methane, caffeine, a periodic spiro crystal). A same-run torch 2.10 baseline is then used to diff every other version.</p>
+<p>This loops over PyTorch 2.10, 2.11, 2.12, 2.13, 2.14, and 2.15. For each it creates a fresh virtualenv, installs a <strong>resolver-coherent</strong> environment (the matching CUDA torch wheel and its <code>triton</code>, plus <code>aimnet</code> + <code>warp-lang</code> + <code>nvalchemiops</code>), runs <code>pytest -m gpu</code>, and computes deterministic energies/forces for a fixed set of systems (water, methane, caffeine, a periodic spiro crystal). A same-run torch 2.10 baseline is then used to diff every other version.</p>
 <p>Inspect the commands without running anything:</p>
 <div class="highlight"><pre><span></span><code><span class="nv">DRY_RUN</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>bash<span class="w"> </span>scripts/gpu_validate.sh
 </code></pre></div>
@@ -2024,7 +2024,12 @@
 <tr>
 <td><code>CUDA_INDEX</code></td>
 <td><code>https://download.pytorch.org/whl/cu126</code></td>
-<td>Pick the channel matching your driver. torch 2.12 defaults to CUDA 13; if a <code>cu126</code> wheel is unavailable for a version, that leg reports <code>INSTALL-FAIL</code> — re-run that version with the appropriate <code>--index-url</code>.</td>
+<td>Pick the channel matching your driver. torch 2.12 defaults to CUDA 13; if a <code>cu126</code> wheel is unavailable for a version, that leg reports <code>INSTALL-FAIL</code> — re-run that version with the appropriate <code>--index-url</code>, or add it to <code>CUDA_INDEX_OVERRIDES</code>.</td>
+</tr>
+<tr>
+<td><code>CUDA_INDEX_OVERRIDES</code></td>
+<td><code>2.15=https://download.pytorch.org/whl/cu132</code></td>
+<td>Space-separated <code>VERSION=URL</code> pairs that replace <code>CUDA_INDEX</code> for one torch version. torch 2.15 publishes CUDA wheels for CUDA 13.2 only, so it needs a driver that supports CUDA 13.2.</td>
 </tr>
 <tr>
 <td><code>PYTHON</code></td>
@@ -2033,7 +2038,7 @@
 </tr>
 <tr>
 <td><code>TORCH_VERSIONS</code></td>
-<td><code>2.10 2.11 2.12 2.13 2.14</code></td>
+<td><code>2.10 2.11 2.12 2.13 2.14 2.15</code></td>
 <td>Space-separated minor versions.</td>
 </tr>
 <tr>
