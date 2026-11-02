@@ -185,7 +185,7 @@ make test        # pytest suite
 make docs        # serve the docs locally
 ```
 
-CI tests Python 3.11, 3.13, and 3.14, PyTorch 2.10 to 2.14, and each optional integration. Contributions are welcome; see [CONTRIBUTING.md](https://github.com/isayevlab/aimnetcentral/blob/main/CONTRIBUTING.md).
+CI tests Python 3.11, 3.13, and 3.14, PyTorch 2.10 to 2.15, and each optional integration. Contributions are welcome; see [CONTRIBUTING.md](https://github.com/isayevlab/aimnetcentral/blob/main/CONTRIBUTING.md).
 
 ## Citation
 
