@@ -13,7 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - **PyTorch 2.15 and Warp 1.19:** the supported PyTorch range is now 2.10 through 2.15. CI runs the core suite against 2.15 on CPU, and `make gpu-validate` covers 2.15. PyTorch 2.15 publishes CUDA wheels for CUDA 13.2 only, so the tool installs that version from the `cu132` index through a new `CUDA_INDEX_OVERRIDES` setting. On an NVIDIA L40S with warp-lang 1.19.0 and nvalchemi-toolkit-ops 0.5.0, the GPU test set passes on every version from 2.10 to 2.15, and full-model energies and forces stay within 1e-5 of the 2.10 results. On a machine whose NVIDIA driver predates CUDA 13.2, use PyTorch 2.14 or earlier for GPU work. The lockfile used for development and CI moves warp-lang from 1.18.0 to 1.19.0; the locked torch stays at 2.14.1. No dependency bounds changed, so a fresh `pip install aimnet` already resolved to these versions.
-- **`sella` and `pysis` extras on Python 3.14:** the lockfile now resolves jax and jaxlib 0.10.2 on Python 3.11 and 0.12.0.1 on Python 3.12 and later (previously 0.5.3 and 0.7.1). These releases have Python 3.14 wheels, so CI now runs the Sella and pysisyphus tests on Python 3.14 as well as 3.11.
+- **`sella` and `pysis` extras on Python 3.14:** the lockfile now resolves jax and jaxlib 0.10.2 on Python 3.11 and 0.12.0.1 on Python 3.12 and later (previously 0.5.3 and 0.7.1), which have Python 3.14 wheels, and sella moves from 2.4.2 to 2.6.0, which ships a pure-Python wheel; 2.4.2 was source-only and its build needed a SciPy that does not build on Python 3.14. CI now runs the Sella and pysisyphus tests on Python 3.14 as well as 3.11.
 
 ### Fixed
 
