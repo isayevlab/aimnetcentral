@@ -1000,7 +1000,7 @@ class TestDFTD3EmbeddedNoLeak:
             coord = coord0.clone().requires_grad_(True)
             data = add_dftd3_keys({"coord": coord, "numbers": numbers}, device)
             data = nbops.calc_masks(nbops.set_nb_mode(data))
-            # An energy already on the graph, as when a network energy is summed first.
+            # Energy already on the graph, as when a network energy is summed first.
             data["energy"] = (coord**2).sum((-1, -2))
             sentinel = torch.zeros(1000, device=device)
             data["_sentinel"] = sentinel

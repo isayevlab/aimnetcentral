@@ -1102,12 +1102,8 @@ def _apply_dftd3_scaling(
 class _DFTD3EnergyFunction(Function):
     """Embedded DFT-D3 wrapper that injects explicit forces/strain into autograd.
 
-    The first derivative comes from the kernel's explicit forces and virial. Those
-    are plain tensors without a graph, so they cannot be differentiated again and
-    they carry no gradient for ``cell`` on their own. Whenever a second derivative
-    or a cell gradient is requested, the backward instead differentiates
-    ``energy_fn``, the pure-torch energy of the same inputs, which is what the
-    external Hessian path already uses.
+    For second derivatives and cell gradients, backward differentiates ``energy_fn``
+    (the pure-torch energy) because the kernel's explicit terms carry no graph.
     """
 
     @staticmethod
@@ -1167,10 +1163,8 @@ class _DFTD3EnergyFunction(Function):
         forces, virial, batch_idx, scaling, coord, cell = ctx.saved_tensors
         trailing = (None,) * 17
 
-        # The explicit terms are exact for a first derivative of coord and scaling. They are not
-        # enough when the result must itself be differentiable (create_graph, which leaves grad
-        # mode on in here) or when cell needs a gradient, because the kernel only returns the
-        # strain virial. Both cases differentiate the pure-torch energy instead.
+        # Explicit terms suffice for a plain first derivative. With create_graph (grad mode is on
+        # here) or a cell gradient, differentiate the pure-torch energy instead.
         create_graph = torch.is_grad_enabled()
         needs_cell = ctx.needs_input_grad[1]
         if (create_graph or needs_cell) and ctx.energy_fn is not None:
@@ -1518,7 +1512,7 @@ class DFTD3(nn.Module):
         return torch.where(weight_sum > 1.0e-12, c6_sum / weight_sum.clamp_min(1.0e-12), torch.zeros_like(weight_sum))
 
     def _compute_energy_torch(self, data: dict[str, Tensor]) -> Tensor:
-        """Differentiable DFT-D3 energy, used for true Hessians and for second derivatives and cell gradients of the embedded path."""
+        """Differentiable DFT-D3 energy, used for true Hessians and the embedded path's higher-order terms."""
         suffix = nbops.resolve_suffix(data, ["_dftd3", "_lr"])
         distance_data = data
         shifts_key = f"shifts{suffix}"
@@ -1600,13 +1594,11 @@ class DFTD3(nn.Module):
         kernel_inputs = self._prepare_dftd3_inputs(kernel_data)
 
         coord_shape = kernel_inputs.coord.shape
-        # Snapshot of the inputs. The closure below is stored on the autograd node, and ``kernel_data`` may be the
-        # caller's live dict, into which this module writes its output energy (which holds that node): closing over
-        # the live dict would make a reference cycle that the garbage collector cannot free.
+        # Copy: the closure is stored on the autograd node, and closing over the caller's live dict
+        # (which later holds the output energy) would make a reference cycle.
         torch_base = dict(kernel_data)
 
         def energy_fn(coord_flat: Tensor, cell_eval: Tensor | None) -> Tensor:
-            # Differentiable energy of the same inputs, for second derivatives and the cell gradient.
             torch_data = {**torch_base, "coord": coord_flat.reshape(coord_shape)}
             if cell_eval is not None:
                 torch_data["cell"] = cell_eval
