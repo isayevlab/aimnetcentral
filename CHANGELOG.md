@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Made the embedded tabulated `DFTD3` energy differentiable twice and gave it a `cell` gradient (issue #132). `_DFTD3EnergyFunction.backward` multiplied a saved, graph-free force tensor, so a second derivative through it was structurally zero, and it returned `None` for `cell`, so the periodic image term never reached the cell. When the result must itself be differentiable (`create_graph=True`) or `cell` needs a gradient, the backward now differentiates the pure-torch energy that the external Hessian path already uses; plain first-derivative calls with `create_graph=False` (forces, strain virial) keep the kernel's explicit terms. Force training uses `create_graph=True`, so a model with an embedded `DFTD3` now evaluates the torch dispersion energy in each training step. The calculator still refuses Hessians, Hessian-vector products and stress for such a model.
+
 ## [0.2.6] - 2026-11-04
 
 ### Security

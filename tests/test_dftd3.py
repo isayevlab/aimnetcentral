@@ -27,6 +27,9 @@ Tests cover:
 - Physical correctness
 """
 
+import gc
+import weakref
+
 import pytest
 import torch
 from conftest import add_dftd3_keys
@@ -853,3 +856,157 @@ class TestDFTD3ForwardTerms:
         assert terms_v.virial is not None
         assert terms_v.forces is None
         torch.testing.assert_close(terms_both.virial, terms_v.virial, rtol=1e-4, atol=1e-5)
+
+
+# =============================================================================
+# Embedded path: second derivatives and cell gradient (issue #132)
+# =============================================================================
+
+
+def _hessian_by_autograd(energy: torch.Tensor, coord: torch.Tensor) -> torch.Tensor:
+    """Dense Hessian of a scalar built from ``coord`` through the autograd graph."""
+    grad = torch.autograd.grad(energy, coord, create_graph=True)[0].reshape(-1)
+    rows = [torch.autograd.grad(g, coord, retain_graph=True)[0].reshape(-1) for g in grad]
+    return torch.stack(rows)
+
+
+@pytest.mark.gpu
+class TestDFTD3EmbeddedHigherOrder:
+    """The embedded autograd path must be differentiable twice and give a cell gradient."""
+
+    def test_embedded_hessian_matches_finite_difference(self, device):
+        """Hessian through the embedded Function matches central FD of the kernel energy."""
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, cutoff=8.0).to(device=device, dtype=torch.float64)
+        coord0 = torch.tensor([[0.0, 0.0, 0.0], [1.65, 0.10, 0.0], [0.3, 1.9, 0.4]], dtype=torch.float64, device=device)
+        numbers = torch.tensor([[6, 8, 7]], device=device)
+        template = add_dftd3_keys({"coord": coord0.unsqueeze(0), "numbers": numbers}, device, cutoff=8.0)
+        template = nbops.calc_masks(nbops.set_nb_mode(template))
+
+        def energy_at(coord_flat: torch.Tensor) -> torch.Tensor:
+            data = {**template, "coord": coord_flat.reshape(1, 3, 3)}
+            with torch.no_grad():
+                return module(data)["energy"].sum()
+
+        coord = coord0.clone().requires_grad_(True)
+        energy = module({**template, "coord": coord.unsqueeze(0)})["energy"].sum()
+        h_embedded = _hessian_by_autograd(energy, coord)
+        h_fd = _central_fd_hessian(energy_at, coord0.reshape(-1))
+
+        assert h_embedded.abs().max() > 1e-4
+        torch.testing.assert_close(h_embedded, h_fd, rtol=5e-3, atol=5e-3)
+
+    def test_embedded_hessian_matches_torch_path(self, device):
+        """The embedded and the ``hessian=True`` paths agree on the Hessian."""
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device=device, dtype=torch.float64)
+        coord0 = torch.tensor([[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]], dtype=torch.float64, device=device)
+        numbers = torch.tensor([[6, 1, 1]], device=device)
+        template = add_dftd3_keys({"coord": coord0.unsqueeze(0), "numbers": numbers}, device)
+        template = nbops.calc_masks(nbops.set_nb_mode(template))
+
+        hessians = []
+        for use_torch_path in (False, True):
+            coord = coord0.clone().requires_grad_(True)
+            out = module({**template, "coord": coord.unsqueeze(0)}, hessian=use_torch_path)
+            hessians.append(_hessian_by_autograd(out["energy"].sum(), coord))
+        torch.testing.assert_close(hessians[0], hessians[1], rtol=1e-8, atol=1e-10)
+
+    def test_embedded_cell_gradient_matches_finite_difference(self, device):
+        """dE/dcell reaches the cell input and matches central FD with a fixed neighbor list."""
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, cutoff=8.0).to(device=device, dtype=torch.float64)
+        cell0 = torch.diag(torch.tensor([10.0, 11.0, 12.0], dtype=torch.float64, device=device))
+        # The third atom sits next to the cell boundary, so periodic images are inside the cutoff.
+        coord_real = torch.tensor(
+            [[2.0, 2.0, 2.0], [3.65, 2.15, 2.05], [9.0, 9.5, 10.5]], dtype=torch.float64, device=device
+        )
+        numbers = torch.tensor([6, 8, 7], device=device)
+        template = _setup_pbc_dftd3_data(coord_real, cell0, numbers, device, cutoff=8.0)
+
+        coord = template["coord"].detach().clone().requires_grad_(True)
+        cell = cell0.clone().requires_grad_(True)
+        energy = module({**template, "coord": coord, "cell": cell})["energy"].sum()
+        grad_cell = torch.autograd.grad(energy, cell)[0]
+        assert grad_cell.abs().max() > 1e-5
+
+        def energy_at(cell_value: torch.Tensor) -> torch.Tensor:
+            with torch.no_grad():
+                return module({**template, "cell": cell_value})["energy"].sum()
+
+        delta = 1e-3
+        grad_fd = torch.zeros_like(grad_cell)
+        for i in range(3):
+            for j in range(3):
+                plus = cell0.clone()
+                minus = cell0.clone()
+                plus[i, j] += delta
+                minus[i, j] -= delta
+                grad_fd[i, j] = (energy_at(plus) - energy_at(minus)) / (2 * delta)
+        torch.testing.assert_close(grad_cell, grad_fd, rtol=5e-3, atol=1e-6)
+
+    def test_embedded_periodic_hessian_matches_finite_difference(self, device):
+        """Periodic Hessian through the embedded Function matches central FD of the kernel energy."""
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, cutoff=8.0).to(device=device, dtype=torch.float64)
+        cell = torch.diag(torch.tensor([10.0, 11.0, 12.0], dtype=torch.float64, device=device))
+        coord0 = torch.tensor([[2.0, 2.0, 2.0], [3.65, 2.15, 2.05]], dtype=torch.float64, device=device)
+        numbers = torch.tensor([6, 8], device=device)
+        template = _setup_pbc_dftd3_data(coord0, cell, numbers, device, cutoff=8.0)
+
+        def padded(coord_real: torch.Tensor) -> torch.Tensor:
+            return torch.cat([coord_real, coord_real.new_zeros((1, 3))], dim=0)
+
+        def energy_at(coord_flat: torch.Tensor) -> torch.Tensor:
+            with torch.no_grad():
+                return module({**template, "coord": padded(coord_flat.reshape(2, 3))})["energy"].sum()
+
+        coord = coord0.clone().requires_grad_(True)
+        energy = module({**template, "coord": padded(coord)})["energy"].sum()
+        h_embedded = _hessian_by_autograd(energy, coord)
+        h_fd = _central_fd_hessian(energy_at, coord0.reshape(-1))
+
+        assert h_embedded.abs().max() > 1e-4
+        torch.testing.assert_close(h_embedded, h_fd, rtol=5e-3, atol=5e-3)
+
+    def test_embedded_strain_second_derivative_matches_torch_path(self, pbc_crystal_small, device):
+        """Mixed coord/strain second derivatives of the strain wrapper match the ``hessian=True`` path."""
+        coord_real = pbc_crystal_small["coord"].to(device=device, dtype=torch.float64)
+        cell0 = pbc_crystal_small["cell"].to(device=device, dtype=torch.float64)
+        numbers_real = pbc_crystal_small["numbers"].to(device)
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280, cutoff=8.0).to(device=device, dtype=torch.float64)
+        template = _setup_pbc_dftd3_data(coord_real, cell0, numbers_real, device)
+
+        mixed = []
+        for use_torch_path in (False, True):
+            coord_unstrained = template["coord"].detach().clone().requires_grad_(True)
+            scaling = torch.eye(3, device=device, dtype=torch.float64, requires_grad=True)
+            data = {**template, "coord": coord_unstrained @ scaling, "cell": cell0 @ scaling}
+            if use_torch_path:
+                out = module(data, hessian=True)
+            else:
+                out = module(data, scaling=scaling, coord_unstrained=coord_unstrained, cell_unstrained=cell0)
+            grad_scaling = torch.autograd.grad(out["energy"].sum(), scaling, create_graph=True)[0]
+            mixed.append(torch.autograd.grad(grad_scaling.pow(2).sum(), coord_unstrained)[0])
+        assert mixed[1][:-1].abs().sum() > 0
+        torch.testing.assert_close(mixed[0], mixed[1], rtol=1e-6, atol=1e-9)
+
+
+@pytest.mark.gpu
+class TestDFTD3EmbeddedNoLeak:
+    def test_plain_first_derivative_does_not_keep_data_alive(self, device):
+        """A plain energy+forces call must not leave the input dict reachable from the autograd graph (#132)."""
+        module = DFTD3(s8=0.3908, a1=0.5660, a2=3.1280).to(device=device, dtype=torch.float64)
+        coord0 = torch.rand(1, 8, 3, dtype=torch.float64, device=device) * 5.0
+        numbers = torch.tensor([[6, 1, 8, 7, 6, 1, 8, 7]], device=device)
+        refs = []
+        for _ in range(3):
+            coord = coord0.clone().requires_grad_(True)
+            data = add_dftd3_keys({"coord": coord, "numbers": numbers}, device)
+            data = nbops.calc_masks(nbops.set_nb_mode(data))
+            # An energy already on the graph, as when a network energy is summed first.
+            data["energy"] = (coord**2).sum((-1, -2))
+            sentinel = torch.zeros(1000, device=device)
+            data["_sentinel"] = sentinel
+            refs.append(weakref.ref(sentinel))
+            out = module(data)
+            torch.autograd.grad(out["energy"].sum(), coord)
+            del out, data, sentinel, coord
+        gc.collect()
+        assert all(r() is None for r in refs)

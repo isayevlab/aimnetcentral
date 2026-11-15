@@ -2,6 +2,7 @@ import math
 import os
 import re
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
@@ -1082,8 +1083,32 @@ def _call_dftd3_kernel(
     return energy_ev.double(), forces_ev, virial_ev
 
 
+def _apply_dftd3_scaling(
+    coord: Tensor, cell: Tensor | None, scaling: Tensor | None, batch_idx: Tensor
+) -> tuple[Tensor, Tensor | None]:
+    """Apply a row-vector strain ``scaling`` of shape (3, 3) or (B, 3, 3) to coordinates and cell."""
+    if scaling is None:
+        return coord, cell
+    if cell is None:
+        raise ValueError("strain-aware DFTD3 requires cell")
+    if scaling.ndim == 2:
+        return coord @ scaling, cell @ scaling
+    if scaling.ndim == 3:
+        atom_scaling = scaling.index_select(0, batch_idx)
+        return (coord.unsqueeze(1) @ atom_scaling).squeeze(1), cell @ scaling
+    raise ValueError("scaling must have shape (3, 3) or (B, 3, 3)")
+
+
 class _DFTD3EnergyFunction(Function):
-    """Embedded DFT-D3 wrapper that injects explicit forces/strain into autograd."""
+    """Embedded DFT-D3 wrapper that injects explicit forces/strain into autograd.
+
+    The first derivative comes from the kernel's explicit forces and virial. Those
+    are plain tensors without a graph, so they cannot be differentiated again and
+    they carry no gradient for ``cell`` on their own. Whenever a second derivative
+    or a cell gradient is requested, the backward instead differentiates
+    ``energy_fn``, the pure-torch energy of the same inputs, which is what the
+    external Hessian path already uses.
+    """
 
     @staticmethod
     def forward(
@@ -1107,23 +1132,10 @@ class _DFTD3EnergyFunction(Function):
         s6: float,
         smoothing_on: float,
         smoothing_off: float,
+        energy_fn: Callable[[Tensor, Tensor | None], Tensor] | None = None,
     ) -> Tensor:
         batch_idx_long = batch_idx.to(torch.int64)
-        if scaling is None:
-            coord_eval = coord
-            cell_eval = cell
-        else:
-            if cell is None:
-                raise ValueError("strain-aware DFTD3 requires cell")
-            if scaling.ndim == 2:
-                coord_eval = coord @ scaling
-                cell_eval = cell @ scaling
-            elif scaling.ndim == 3:
-                atom_scaling = scaling.index_select(0, batch_idx_long)
-                coord_eval = (coord.unsqueeze(1) @ atom_scaling).squeeze(1)
-                cell_eval = cell @ scaling
-            else:
-                raise ValueError("scaling must have shape (3, 3) or (B, 3, 3)")
+        coord_eval, cell_eval = _apply_dftd3_scaling(coord, cell, scaling, batch_idx_long)
 
         energy, forces, virial = _call_dftd3_kernel(
             coord=coord_eval,
@@ -1146,19 +1158,38 @@ class _DFTD3EnergyFunction(Function):
             smoothing_off=smoothing_off,
             compute_virial=scaling is not None,
         )
-        if scaling is None:
-            ctx.save_for_backward(forces, batch_idx_long)
-        else:
-            ctx.save_for_backward(forces, virial, batch_idx_long, scaling)
+        ctx.energy_fn = energy_fn
+        ctx.save_for_backward(forces, virial if scaling is not None else None, batch_idx_long, scaling, coord, cell)
         return energy
 
     @staticmethod
     def backward(ctx: Any, grad_energies: Tensor) -> tuple[Tensor | None, ...]:
-        if len(ctx.saved_tensors) == 4:
-            forces, virial, batch_idx, scaling = ctx.saved_tensors
-        else:
-            forces, batch_idx = ctx.saved_tensors
-            scaling = None
+        forces, virial, batch_idx, scaling, coord, cell = ctx.saved_tensors
+        trailing = (None,) * 17
+
+        # The explicit terms are exact for a first derivative of coord and scaling. They are not
+        # enough when the result must itself be differentiable (create_graph, which leaves grad
+        # mode on in here) or when cell needs a gradient, because the kernel only returns the
+        # strain virial. Both cases differentiate the pure-torch energy instead.
+        create_graph = torch.is_grad_enabled()
+        needs_cell = ctx.needs_input_grad[1]
+        if (create_graph or needs_cell) and ctx.energy_fn is not None:
+            needs = ctx.needs_input_grad[:3]
+            with torch.enable_grad():
+                inputs = [
+                    t if (create_graph or t is None) else t.detach().requires_grad_(n)
+                    for t, n in zip((coord, cell, scaling), needs, strict=True)
+                ]
+                coord_eval, cell_eval = _apply_dftd3_scaling(inputs[0], inputs[1], inputs[2], batch_idx)
+                energy = ctx.energy_fn(coord_eval, cell_eval).to(grad_energies.dtype)
+                wrt = [t for t, n in zip(inputs, needs, strict=True) if n]
+                grads = iter(
+                    torch.autograd.grad(
+                        energy, wrt, grad_outputs=grad_energies, create_graph=create_graph, allow_unused=True
+                    )
+                )
+            return tuple(next(grads) if n else None for n in needs) + trailing
+
         g = grad_energies.to(forces.dtype).index_select(0, batch_idx)
         grad_coord_eval = -forces * g.unsqueeze(-1)
 
@@ -1173,7 +1204,7 @@ class _DFTD3EnergyFunction(Function):
             grad_coord = (grad_coord_eval.unsqueeze(1) @ atom_scaling.mT).squeeze(1)
             grad_scaling = -virial.mT * grad_energies.to(virial.dtype).view(-1, 1, 1)
 
-        return (grad_coord, None, grad_scaling) + (None,) * 16
+        return (grad_coord, None, grad_scaling, *trailing)
 
 
 class DFTD3(nn.Module):
@@ -1487,7 +1518,7 @@ class DFTD3(nn.Module):
         return torch.where(weight_sum > 1.0e-12, c6_sum / weight_sum.clamp_min(1.0e-12), torch.zeros_like(weight_sum))
 
     def _compute_energy_torch(self, data: dict[str, Tensor]) -> Tensor:
-        """Differentiable DFT-D3 energy used only when true Hessians are requested."""
+        """Differentiable DFT-D3 energy, used for true Hessians and for second derivatives and cell gradients of the embedded path."""
         suffix = nbops.resolve_suffix(data, ["_dftd3", "_lr"])
         distance_data = data
         shifts_key = f"shifts{suffix}"
@@ -1568,6 +1599,19 @@ class DFTD3(nn.Module):
             kernel_data = {**data, "coord": coord_unstrained, "cell": cell_unstrained}
         kernel_inputs = self._prepare_dftd3_inputs(kernel_data)
 
+        coord_shape = kernel_inputs.coord.shape
+        # Snapshot of the inputs. The closure below is stored on the autograd node, and ``kernel_data`` may be the
+        # caller's live dict, into which this module writes its output energy (which holds that node): closing over
+        # the live dict would make a reference cycle that the garbage collector cannot free.
+        torch_base = dict(kernel_data)
+
+        def energy_fn(coord_flat: Tensor, cell_eval: Tensor | None) -> Tensor:
+            # Differentiable energy of the same inputs, for second derivatives and the cell gradient.
+            torch_data = {**torch_base, "coord": coord_flat.reshape(coord_shape)}
+            if cell_eval is not None:
+                torch_data["cell"] = cell_eval
+            return self._compute_energy_torch(torch_data).double()
+
         common_args = (
             kernel_inputs.numbers_flat,
             kernel_inputs.batch_idx,
@@ -1585,6 +1629,7 @@ class DFTD3(nn.Module):
             float(self.s6),
             float(self.smoothing_on),
             float(self.smoothing_off),
+            energy_fn,
         )
 
         if derivative_terms:
