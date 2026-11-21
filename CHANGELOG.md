@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- Supported per-atom feature inference through `AIMNet2Calculator.extract_features`, with atom-aligned embeddings, NSE charges, and explicit padding masks. It shares the ordinary model's message-passing computation while skipping output heads, external physics, and long-range neighbor lists. The model-level `forward_features` interface retains autograd support; legacy TorchScript models fail explicitly ([#163](https://github.com/isayevlab/aimnetcentral/issues/163)).
+- Supported per-atom feature inference through `AIMNet2Calculator.extract_features`, with atom-aligned embeddings, equilibrated partial charges, spin charges for spin-polarized models, and explicit padding masks. It shares the ordinary model's message-passing computation while skipping output heads, external physics, and long-range neighbor lists. The model-level `forward_features` interface retains autograd support. Legacy TorchScript models, and models whose output heads overwrite a feature, fail explicitly ([#163](https://github.com/isayevlab/aimnetcentral/issues/163)).
 
 ### Fixed
 

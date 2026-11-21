@@ -292,6 +292,14 @@ class AIMNet2Base(nn.Module):
                 data[k] = data[k].to(d)
         return data
 
+    def forward_features(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+        """Per-atom features without output heads, for ``AIMNet2Calculator.extract_features``.
+
+        Subclasses that support feature extraction override this; see
+        ``AIMNet2.forward_features`` for the returned keys.
+        """
+        raise NotImplementedError(f"{type(self).__name__} has no supported forward_features interface")
+
     def prepare_input(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
         """Common operations for input preparation."""
         # The calculator marks the batch it validated; the mark is consumed here

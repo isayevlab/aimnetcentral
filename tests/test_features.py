@@ -1,7 +1,6 @@
 """Supported feature-only inference: layouts, equivalence, and skipped physics."""
 
 import copy
-from pathlib import Path
 
 import pytest
 import torch
@@ -42,8 +41,8 @@ def tiny_model():
         return model
 
 
-def inputs(padded=True):
-    return {
+def inputs(padded=True, mult=False):
+    data = {
         "coord": torch.tensor([
             [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
             [[0.0, 0.0, 0.0], [1.1, 0.0, 0.0], [0.0, 0.0, 0.0] if padded else [0.1, 1.2, 0.2]],
@@ -51,6 +50,22 @@ def inputs(padded=True):
         "numbers": torch.tensor([[8, 1, 1], [8, 1, 0 if padded else 1]]),
         "charge": torch.tensor([0.0, -1.0 if padded else 0.0]),
     }
+    if mult:
+        # Spin-polarized models need the multiplicity; both systems are closed-shell.
+        data["mult"] = torch.ones(2)
+    return data
+
+
+def single_input(data, index):
+    mask = data["numbers"][index] > 0
+    single = {
+        "coord": data["coord"][index][mask],
+        "numbers": data["numbers"][index][mask],
+        "charge": data["charge"][index : index + 1],
+    }
+    if "mult" in data:
+        single["mult"] = data["mult"][index : index + 1]
+    return single
 
 
 def full_features(calc, data):
@@ -65,8 +80,8 @@ def full_features(calc, data):
     }
 
 
-def check_equivalence_and_layout(calc, padded=True):
-    data = inputs(padded)
+def check_equivalence_and_layout(calc, padded=True, mult=False):
+    data = inputs(padded, mult)
     original = {key: value.clone() for key, value in data.items()}
     actual = calc.extract_features(data)
     expected = full_features(calc, data)
@@ -77,18 +92,20 @@ def check_equivalence_and_layout(calc, padded=True):
         assert torch.count_nonzero(actual[key][~actual["atom_mask"]]) == 0
         for index in range(2):
             mask = data["numbers"][index] > 0
-            single = calc.extract_features({
-                "coord": data["coord"][index][mask],
-                "numbers": data["numbers"][index][mask],
-                "charge": data["charge"][index : index + 1],
-            })
+            single = calc.extract_features(single_input(data, index))
             # Torch 2.14 CUDA AQuaRef has a 2.83e-5 full-model batch/single
             # rounding difference. Feature/full equivalence above stays tighter;
             # this bound covers that independently reproduced baseline behavior.
             torch.testing.assert_close(actual[key][index][mask], single[key], rtol=2e-5, atol=4e-5)
+        # The calculator's own eval is the user-facing reference for charges.
+        if key == "charges":
+            evaluated = calc.eval(single_input(data, index))
+            torch.testing.assert_close(single["charges"], evaluated["charges"], rtol=2e-5, atol=1e-5)
     for key in data:
         torch.testing.assert_close(data[key], original[key], rtol=0, atol=0)
-    torch.testing.assert_close(actual["charges"].sum(-1).cpu(), data["charge"], atol=2e-5, rtol=0)
+    # float32 equilibration leaves residuals near 2e-5 e (seen for a radical);
+    # a real layout error moves charge by tenths of an electron.
+    torch.testing.assert_close(actual["charges"].sum(-1).cpu(), data["charge"], atol=1e-4, rtol=0)
 
 
 def test_cpu_features_match_full_and_single(tiny_model):
@@ -167,21 +184,115 @@ def test_features_reject_unsupported_model():
 def test_gpu_dense_sparse_features(tiny_model, threshold, padded):
     if not torch.cuda.is_available():
         pytest.skip("CUDA unavailable")
-    check_equivalence_and_layout(AIMNet2Calculator(copy.deepcopy(tiny_model), device="cuda", nb_threshold=threshold))
+    calc = AIMNet2Calculator(copy.deepcopy(tiny_model), device="cuda", nb_threshold=threshold)
+    layouts = []
+    forward_features = calc.model.forward_features
+
+    def record(prepared):
+        layouts.append(prepared["coord"].ndim)
+        return forward_features(prepared)
+
+    calc.model.forward_features = record
+    check_equivalence_and_layout(calc, padded=padded)
+    # A small batch under the threshold stays dense (mode 0), padded or not;
+    # a zero threshold flattens it. Only the batched call of the checker is first.
+    assert layouts[0] == (3 if threshold == 120 else 2)
+
+
+def test_features_reject_training_mode(tiny_model):
+    calc = AIMNet2Calculator(copy.deepcopy(tiny_model), device="cpu")
+    calc.model.train()
+    with pytest.raises(ValueError, match="inference-mode"):
+        calc.extract_features(inputs())
+
+
+def test_features_reject_heads_that_overwrite_features(tiny_model):
+    model = copy.deepcopy(tiny_model)
+    model.outputs["charge_head"] = Output({"hidden": [8]}, 8, 1, "aim", "charges")
+    calc = AIMNet2Calculator(model, device="cpu")
+    with pytest.raises(NotImplementedError, match="charge_head writes 'charges'"):
+        calc.extract_features(inputs())
+
+
+def test_features_honor_validate_species(tiny_model, monkeypatch):
+    calc = AIMNet2Calculator(copy.deepcopy(tiny_model), device="cpu")
+
+    def reject(data):
+        raise ValueError("species rejected")
+
+    monkeypatch.setattr(calc, "_validate_species_and_charge", reject)
+    with pytest.raises(ValueError, match="species rejected"):
+        calc.extract_features(inputs())
+    assert "aim" in calc.extract_features(inputs(), validate_species=False)
+
+
+def test_compiled_calculator_features_match_eager(tiny_model):
+    # extract_features always runs eagerly, so no compilation happens here.
+    eager = AIMNet2Calculator(copy.deepcopy(tiny_model), device="cpu").extract_features(inputs())
+    compiled = AIMNet2Calculator(copy.deepcopy(tiny_model), device="cpu", compile_model=True)
+    assert compiled._compiled_forward is not None
+    actual = compiled.extract_features(inputs())
+    for key in ("aim", "charges"):
+        torch.testing.assert_close(actual[key], eager[key], rtol=0, atol=0)
+
+
+@pytest.mark.gpu
+def test_cuda_graph_calculator_features_match_regular(tiny_model):
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA unavailable")
+    regular = AIMNet2Calculator(copy.deepcopy(tiny_model), device="cuda")
+    graphed = AIMNet2Calculator(copy.deepcopy(tiny_model), device="cuda", cuda_graph=True)
+    data = inputs(padded=False)
+    expected = regular.eval(data)
+    for _ in range(3):  # a layout is captured once it has been seen before
+        graphed.eval(data)
+    captures = graphed._cuda_graph.memory_stats()["captures"]
+    assert captures >= 1
+    actual = graphed.extract_features(data)
+    reference = regular.extract_features(data)
+    for key in ("aim", "charges"):
+        torch.testing.assert_close(actual[key], reference[key], rtol=0, atol=0)
+    after = graphed.eval(data)
+    # Feature extraction neither invalidates nor recaptures the graph.
+    assert graphed._cuda_graph.memory_stats()["captures"] == captures
+    torch.testing.assert_close(after["energy"], expected["energy"], rtol=1e-6, atol=1e-5)
 
 
 @pytest.mark.weights
-@pytest.mark.slow
 @pytest.mark.parametrize("device", ["cpu", pytest.param("cuda", marks=pytest.mark.gpu)])
-@pytest.mark.parametrize("name", ["aimnet2_wb97m_d3_0.pt", "aimnet2-qr_b97md4_qzvp_2.pt"])
+@pytest.mark.parametrize("name", ["aimnet2", "aimnet2-nse"])
 def test_real_weight_features(device, name):
-    checkpoint = Path.home() / ".cache/aimnet" / name
-    if not checkpoint.is_file():
-        pytest.skip("Preseed the local checkpoint explicitly")
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA unavailable")
-    imports = {"aimnet.modules.core.SRRep"} if "-qr_" in name else None
-    check_equivalence_and_layout(AIMNet2Calculator(str(checkpoint), device=device, model_import_paths=imports))
+    calc = AIMNet2Calculator(name, device=device)
+    check_equivalence_and_layout(calc, mult=calc.is_nse)
+
+
+@pytest.mark.weights
+def test_real_weight_spin_charges():
+    """Spin-polarized models return alpha-minus-beta spin charges that sum to the unpaired electrons."""
+    calc = AIMNet2Calculator("aimnet2-nse", device="cpu")
+    water = [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]
+    hydroxyl = [[0.0, 0.0, 0.0], [0.97, 0.0, 0.0], [0.0, 0.0, 0.0]]
+    data = {
+        "coord": torch.tensor([water, hydroxyl]),
+        "numbers": torch.tensor([[8, 1, 1], [8, 1, 0]]),
+        "charge": torch.tensor([0.0, 0.0]),
+        "mult": torch.tensor([1.0, 2.0]),
+    }
+    features = calc.extract_features(data)
+    assert features["spin_charges"].shape == (2, 3)
+    torch.testing.assert_close(features["spin_charges"].sum(-1), torch.tensor([0.0, 1.0]), rtol=0, atol=1e-4)
+    assert features["spin_charges"][1, 2] == 0
+    radical = {
+        "coord": torch.tensor(hydroxyl[:2]),
+        "numbers": torch.tensor([8, 1]),
+        "charge": torch.tensor([0.0]),
+        "mult": torch.tensor([2.0]),
+    }
+    evaluated = calc.eval(radical)
+    for key in ("charges", "spin_charges"):
+        torch.testing.assert_close(features[key][1, :2], evaluated[key], rtol=2e-5, atol=4e-5)
 
 
 def test_explicit_mode2_padding_preserves_features(tiny_model):
@@ -202,6 +313,31 @@ def test_explicit_mode2_padding_preserves_features(tiny_model):
     for key in ("aim", "charges"):
         torch.testing.assert_close(actual[key][:, :3], expected[key], rtol=2e-5, atol=1e-5)
         assert torch.count_nonzero(actual[key][:, 3]) == 0
+
+
+def test_explicit_mode2_accepts_all_dummy_system(tiny_model):
+    """A static-size mode-2 batch may carry a placeholder system made only of dummy rows."""
+    calc = AIMNet2Calculator(copy.deepcopy(tiny_model), device="cpu")
+    original = inputs()
+    expected = calc.extract_features(original)
+    data = {
+        "coord": torch.cat((original["coord"], torch.zeros(2, 1, 3)), dim=1),
+        "numbers": torch.cat((original["numbers"], torch.zeros(2, 1, dtype=torch.long)), dim=1),
+        "charge": torch.cat((original["charge"], torch.zeros(1))),
+    }
+    data["coord"] = torch.cat((data["coord"], torch.zeros(1, 4, 3)))
+    data["numbers"] = torch.cat((data["numbers"], torch.zeros(1, 4, dtype=torch.long)))
+    data["nbmat"] = torch.full((3, 4, 3), 12, dtype=torch.int32)
+    for batch, count in enumerate((3, 2)):
+        for atom in range(count):
+            neighbors = [batch * 4 + other for other in range(count) if other != atom]
+            data["nbmat"][batch, atom, : len(neighbors)] = torch.tensor(neighbors, dtype=torch.int32)
+    actual = calc.extract_features(data)
+    assert not actual["atom_mask"][2].any()
+    for key in ("aim", "charges"):
+        torch.testing.assert_close(actual[key][:2, :3], expected[key], rtol=2e-5, atol=1e-5)
+        assert torch.count_nonzero(actual[key][:, 3]) == 0
+        assert torch.count_nonzero(actual[key][2]) == 0
 
 
 @pytest.mark.parametrize("indices", [[0, 2, 2], [1, 1, 1], [0, 1, 0], [0, 0.5, 1]])

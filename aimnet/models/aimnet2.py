@@ -185,16 +185,21 @@ class AIMNet2(AIMNet2Base):
         return data
 
     def forward_features(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
-        """Compute message-passing embeddings and NSE charges without output heads.
+        """Run the message-passing network and charge equilibration without output heads.
 
-        This model-level interface retains the model's native padded layout and
-        autograd behavior. Use ``AIMNet2Calculator.extract_features`` for inference
-        with automatic neighbors and alignment to the caller's atom layout.
+        Returns a new dict: the prepared inputs, masks and network
+        intermediates, plus ``aim`` (embeddings) and ``charges`` (equilibrated
+        partial charges, in e). Spin-polarized models also give
+        ``spin_charges`` (alpha minus beta) and need ``mult``. ``data`` itself
+        is not modified; tensors are shared, not copied. Outputs keep the
+        model's native layout, including padding and the mode-1 dummy row,
+        and stay attached to autograd. ``AIMNet2Calculator.extract_features``
+        builds neighbors and maps the outputs to the caller's atom layout.
         """
-        return self.forward_features_prepared(self.prepare_input(data))
+        return self.forward_features_prepared(self.prepare_input(dict(data)))
 
     def forward_features_prepared(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
-        """Canonical message-passing computation on validated, masked inputs."""
+        """Canonical message-passing computation on validated, masked inputs; updates ``data`` in place."""
 
         # initial features
         a: Tensor = self.afv(data["numbers"])
