@@ -179,6 +179,22 @@ class AIMNet2(AIMNet2Base):
         prepare their reusable input buffers separately and call this same body;
         they do not own a second implementation of the model equations.
         """
+        data = self.forward_features_prepared(data)
+        for m in self.outputs.children():
+            data = m(data)
+        return data
+
+    def forward_features(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+        """Compute message-passing embeddings and NSE charges without output heads.
+
+        This model-level interface retains the model's native padded layout and
+        autograd behavior. Use ``AIMNet2Calculator.extract_features`` for inference
+        with automatic neighbors and alignment to the caller's atom layout.
+        """
+        return self.forward_features_prepared(self.prepare_input(data))
+
+    def forward_features_prepared(self, data: dict[str, Tensor]) -> dict[str, Tensor]:
+        """Canonical message-passing computation on validated, masked inputs."""
 
         # initial features
         a: Tensor = self.afv(data["numbers"])
@@ -229,9 +245,6 @@ class AIMNet2(AIMNet2Base):
         else:
             data["charges"] = data["charges"].squeeze(-1)
             data["charge"] = data["charge"].squeeze(-1)
-
-        for m in self.outputs.children():
-            data = m(data)
 
         return data
 

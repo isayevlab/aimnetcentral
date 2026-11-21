@@ -1072,3 +1072,40 @@ torch.set_num_threads(4)  # Use 4 CPU cores
 
 calc = AIMNet2Calculator("aimnet2")  # Will use CPU
 ```
+
+## Frozen per-atom features
+
+`AIMNet2Calculator.extract_features(data)` evaluates the message-passing network
+without energy/output heads, external Coulomb or dispersion, or long-range neighbor
+lists. It returns `aim`, `charges`, and `atom_mask`; spin-polarized models also return
+`spin_charges`. Coordinates use Angstrom and charges use elementary-charge units.
+Embeddings have no physical units.
+
+```python
+features = calc.extract_features(data)
+embeddings = features["aim"]
+charges = features["charges"]
+real_atoms = features["atom_mask"]
+```
+
+Floating-point results can differ slightly between batched and individual calls;
+use dtype-appropriate numerical tolerances rather than bitwise equality.
+
+The atom axes match the input: `(N, D)` embeddings and `(N,)` charges for one
+structure or a flat `mol_idx` batch; `(B, N, D)` and `(B, N)` for rectangular
+batches. Internal padding is removed. Caller-supplied padding stays in place,
+marked false in `atom_mask`, with zero outputs. Padded batches without explicit
+neighbor matrices are packed before sparse neighbor construction, so dummy atoms
+do not affect charge equilibration. Explicit mode-2 matrices retain their validated
+layout. Explicit mode-1 matrices may contain only their final dummy atom.
+
+This is eager, no-gradient inference; it does not use compilation or CUDA graph
+replay. Training calculators and legacy TorchScript models are rejected. Use a
+compatible v2 AIMNet2 artifact. The model-level `forward_features` and
+`forward_features_prepared` methods share the canonical message-passing computation
+with ordinary `forward`; they retain native masks/padding and autograd behavior.
+The calculator-level method is the supported interface for mapped inference.
+
+Global charge equilibration remains part of feature computation. Skipping
+long-range energy evaluation does not make embeddings independent of distant atoms
+or total system charge. Auxiliary custom output heads are not evaluated.

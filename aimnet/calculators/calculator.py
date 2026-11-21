@@ -1165,6 +1165,119 @@ class AIMNet2Calculator:
                 self._auto_dsf_state = self._snapshot_coulomb_state()
                 self._restore_coulomb_state(restore)
 
+    @torch.no_grad()
+    def extract_features(self, data: dict[str, Any]) -> dict[str, Tensor]:
+        """Return AIM embeddings and NSE charges in the caller's atom layout.
+
+        ``data`` uses the same coordinates (Angstrom), numbers and charge (e)
+        conventions as :meth:`eval`. Single and flattened inputs return ``aim``
+        shaped ``(N, D)`` and ``charges`` shaped ``(N,)``; rectangular batches
+        return ``(B, N, D)`` and ``(B, N)``. ``atom_mask`` identifies real input
+        atoms. Padding supplied by the caller is retained with zero outputs;
+        calculator-internal padding is removed. Atom order is never changed.
+
+        Only the message-passing network runs: no energy/output heads, external
+        physics, or long-range neighbor lists are evaluated. The calculation is
+        eager inference without gradients, compilation, or CUDA graph replay.
+        Models without ``forward_features`` (including legacy TorchScript)
+        and training-mode calculators fail explicitly. No input is mutated.
+        """
+        if self._train or self.model.training:
+            raise ValueError("extract_features requires an inference-mode calculator and model")
+        if isinstance(self.model, torch.jit.ScriptModule) or not callable(
+            getattr(self.model, "forward_features", None)
+        ):
+            raise NotImplementedError(
+                "This model has no supported forward_features interface; use a compatible v2 model"
+            )
+        raw_numbers = torch.as_tensor(data["numbers"], device=self.device)
+        if raw_numbers.dtype == torch.bool or not bool(
+            torch.isfinite(raw_numbers).all()
+            and (raw_numbers >= 0).all()
+            and (raw_numbers == raw_numbers.to(torch.int64)).all()
+        ):
+            raise ValueError("Atomic numbers must be nonnegative integers; zero is reserved for padding")
+        self._validate_species_and_charge(data)
+        self._maybe_warn_mult_ignored(data)
+        tensors = self.to_input_tensors(data)
+        numbers = tensors["numbers"]
+        coord = tensors["coord"]
+        if coord.ndim not in (2, 3) or coord.shape[-1] != 3 or numbers.shape != coord.shape[:-1]:
+            raise ValueError("Feature coordinates must have shape (N, 3) or (B, N, 3), matching numbers")
+        mask = numbers > 0
+        if not bool(mask.any(dim=-1).all()):
+            raise ValueError("Each input structure must contain at least one real atom")
+        if not bool(torch.isfinite(coord).all() and torch.isfinite(tensors["charge"]).all()):
+            raise ValueError("Feature coordinates and charges must be finite")
+        if "mol_idx" in data:
+            raw_index = torch.as_tensor(data["mol_idx"], device=self.device)
+            if (
+                coord.ndim != 2
+                or raw_index.shape != numbers.shape
+                or not bool(
+                    torch.isfinite(raw_index).all()
+                    and (raw_index >= 0).all()
+                    and (raw_index < numbers.numel()).all()
+                    and (raw_index == raw_index.to(torch.int64)).all()
+                )
+            ):
+                raise ValueError("mol_idx must contain nonnegative integer system indices aligned to flat atoms")
+            indices = tensors["mol_idx"]
+            groups = torch.unique_consecutive(indices)
+            if not torch.equal(groups, torch.arange(groups.numel(), device=self.device)):
+                raise ValueError("mol_idx must be grouped, contiguous, and start at zero")
+            if torch.unique(indices[mask]).numel() != groups.numel():
+                raise ValueError("Each mol_idx system must contain a real atom")
+        # Mode-1 model masks reserve only its final dummy atom. Do not flatten
+        # rectangular padding into that layout as if those were real atoms.
+        # Reuse the existing sparse neighbor builder on just the real inputs,
+        # then restore the caller's layout below. Explicit mode-2 lists already
+        # carry validated per-system padding and remain on their native path.
+        packed = not bool(mask.all()) and "nbmat" not in tensors
+        if packed:
+            if coord.ndim == 3:
+                batch, size = numbers.shape
+                tensors["mol_idx"] = torch.arange(batch, device=self.device).unsqueeze(1).expand(batch, size)[mask]
+            else:
+                indices = tensors.get("mol_idx", torch.zeros_like(numbers))
+                tensors["mol_idx"] = indices[mask]
+            tensors["coord"] = coord[mask]
+            tensors["numbers"] = numbers[mask]
+        elif "nbmat" in tensors and tensors["nbmat"].ndim == 2 and not bool(mask[:-1].all()):
+            raise ValueError("Explicit mode-1 neighbors allow only a final dummy; pack real atoms first")
+        prepared = self.prepare_input(tensors, features_only=True)
+        feature_forward = cast(Callable[[dict[str, Tensor]], dict[str, Tensor]], self.model.forward_features)
+        outputs = feature_forward(prepared)
+        result = {"atom_mask": mask}
+        for key in ("aim", "charges", "spin_charges"):
+            if key == "spin_charges" and key not in outputs:
+                continue
+            if key not in outputs:
+                raise ValueError(f"Feature model omitted required output {key}")
+            value = outputs[key]
+            expected_shape = prepared["numbers"].shape
+            if key == "aim":
+                valid_shape = (
+                    value.ndim == len(expected_shape) + 1 and value.shape[:-1] == expected_shape and value.shape[-1] > 0
+                )
+            else:
+                valid_shape = value.shape == expected_shape
+            if not valid_shape:
+                raise ValueError(f"Feature model returned a misaligned {key} shape: {tuple(value.shape)}")
+            trailing = (value.shape[-1],) if key == "aim" else ()
+            if packed:
+                aligned = value.new_zeros((*numbers.shape, *trailing))
+                aligned[mask] = value.reshape(-1, *trailing)[: int(mask.sum())]
+                value = aligned
+            else:
+                value = value.reshape(-1, *trailing)[: numbers.numel()].reshape(*numbers.shape, *trailing)
+            output_mask = mask.unsqueeze(-1) if trailing else mask
+            value = value.masked_fill(~output_mask, 0)
+            if not bool(torch.isfinite(value).all()):
+                raise ValueError(f"Feature model returned nonfinite {key}")
+            result[key] = value
+        return result
+
     def _can_use_inference_kernels(self, data, *, stress=False, hessian=False, model_prepared=False):
         coord = data["coord"]
         return (
@@ -1339,7 +1452,9 @@ class AIMNet2Calculator:
 
         return data, _combine_external_terms(coulomb_terms, dftd3_terms)
 
-    def prepare_input(self, data: dict[str, Any], *, hessian: bool = False) -> dict[str, Tensor]:
+    def prepare_input(
+        self, data: dict[str, Any], *, hessian: bool = False, features_only: bool = False
+    ) -> dict[str, Tensor]:
         raw_data = data
         self._static_input_cache_key = None
         self._static_input_cache_refs = None
@@ -1350,7 +1465,8 @@ class AIMNet2Calculator:
         # for the optional streaming Coulomb primitive. Ragged mol_idx inputs
         # retain their ordinary neighbor-based implementation.
         if (
-            self.inference_kernels
+            not features_only
+            and self.inference_kernels
             and "mol_idx" not in data
             and "nbmat" not in data
             and data.get("cell") is None
@@ -1363,7 +1479,7 @@ class AIMNet2Calculator:
         nbops.validate_mode2_input(data)
         nbops.mark_mode2_validated(data)
         data = self.mol_flatten(data, hessian=hessian)
-        if data.get("cell") is not None and self._coulomb_method == "simple":
+        if not features_only and data.get("cell") is not None and self._coulomb_method == "simple":
             warnings.warn(
                 "Switching to DSF Coulomb for PBC for this evaluation; "
                 "call set_lrcoulomb_method() to select a periodic method persistently.",
@@ -1382,7 +1498,7 @@ class AIMNet2Calculator:
             else:
                 self.set_lrcoulomb_method("dsf")
             self._pbc_coulomb_restore = prev_coulomb_state
-        if self._coulomb_method in ("ewald", "pme") and data.get("cell") is None:
+        if not features_only and self._coulomb_method in ("ewald", "pme") and data.get("cell") is None:
             raise ValueError(
                 f"Coulomb method '{self._coulomb_method}' requires a periodic 'cell' "
                 "in the input data. Provide a (3,3) or (B,3,3) cell tensor, or switch "
@@ -1395,12 +1511,16 @@ class AIMNet2Calculator:
                 streaming = "_inference_atoms_per_system" in data and self._can_use_inference_kernels(
                     data, hessian=hessian
                 )
-                cache_key = self._static_nbmat_cache_key(
-                    raw_data,
-                    data,
-                    hessian=hessian,
-                    caller_had_mol_idx=caller_had_mol_idx,
-                    caller_had_nbmat=caller_had_nbmat,
+                cache_key = (
+                    None
+                    if features_only
+                    else self._static_nbmat_cache_key(
+                        raw_data,
+                        data,
+                        hessian=hessian,
+                        caller_had_mol_idx=caller_had_mol_idx,
+                        caller_had_nbmat=caller_had_nbmat,
+                    )
                 )
                 if cache_key is not None:
                     cache_key = (*cache_key, streaming)
@@ -1410,7 +1530,10 @@ class AIMNet2Calculator:
                 if cached is not None and "nbmat" in cached:
                     data.update(cached)
                 else:
-                    data = self.make_nbmat(data, streaming_coulomb=streaming)
+                    if features_only:
+                        data = self.make_nbmat(data, short_range_only=True)
+                    else:
+                        data = self.make_nbmat(data, streaming_coulomb=streaming)
                     if cache_key is not None:
                         self._remember_static_nbmat(cache_key, raw_data, data)
             data = self.pad_input(data)
@@ -1953,7 +2076,9 @@ class AIMNet2Calculator:
                     data[k] = v.view(batch, -1, *v.shape[1:])
         return data
 
-    def make_nbmat(self, data: dict[str, Tensor], *, streaming_coulomb: bool = False) -> dict[str, Tensor]:
+    def make_nbmat(
+        self, data: dict[str, Tensor], *, streaming_coulomb: bool = False, short_range_only: bool = False
+    ) -> dict[str, Tensor]:
         assert self._max_mol_size > 0, "Molecule size is not set"
         # Canonical row order makes the downstream summation order repeatable.
         sort_rows = getattr(self, "_deterministic", False)
@@ -1993,6 +2118,9 @@ class AIMNet2Calculator:
         if cell is not None:
             assert shifts1 is not None
             data["shifts"] = shifts1
+
+        if short_range_only:
+            return data
 
         # Only a validated first-order inference call can omit Coulomb's
         # all-pairs topology. D3 still owns that topology when it previously

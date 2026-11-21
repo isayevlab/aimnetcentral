@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Supported per-atom feature inference through `AIMNet2Calculator.extract_features`, with atom-aligned embeddings, NSE charges, and explicit padding masks. It shares the ordinary model's message-passing computation while skipping output heads, external physics, and long-range neighbor lists. The model-level `forward_features` interface retains autograd support; legacy TorchScript models fail explicitly ([#163](https://github.com/isayevlab/aimnetcentral/issues/163)).
+
 ## [0.2.6] - 2026-11-04
 
 ### Security
