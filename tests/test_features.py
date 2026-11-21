@@ -212,3 +212,104 @@ def test_features_reject_ambiguous_molecule_indices(tiny_model, indices):
     data["mol_idx"] = indices
     with pytest.raises(ValueError, match="mol_idx"):
         calc.extract_features(data)
+
+
+def _mode1_case(case):
+    water = torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    if case == "caller_zero_before_model_dummy":
+        # Four caller atoms, five nbmat rows: the model dummy is row 4, so the
+        # caller's zero atom at row 3 would be treated as a real atom.
+        return {
+            "coord": torch.cat((water, torch.tensor([[5.0, 5.0, 5.0]]))),
+            "numbers": torch.tensor([8, 1, 1, 0]),
+            "charge": torch.tensor([-1.0]),
+            "nbmat": torch.tensor([[1, 2], [0, 2], [0, 1], [4, 4], [4, 4]]),
+        }
+    if case == "real_atom_in_dummy_row":
+        return {
+            "coord": water,
+            "numbers": torch.tensor([8, 1, 1]),
+            "charge": torch.tensor([0.0]),
+            "nbmat": torch.tensor([[1, 2], [0, 2], [0, 1]]),
+        }
+    if case == "rectangular_coord":
+        return {
+            "coord": torch.stack((water, torch.tensor([[0.0, 0.0, 0.0], [1.1, 0.0, 0.0], [5.0, 5.0, 5.0]]))),
+            "numbers": torch.tensor([[8, 1, 1], [8, 1, 0]]),
+            "charge": torch.tensor([0.0, -1.0]),
+            "nbmat": torch.tensor([[1, 2], [0, 2], [0, 1], [4, 6], [3, 6], [6, 6], [6, 6]]),
+        }
+    if case == "too_few_rows":
+        return {
+            "coord": water,
+            "numbers": torch.tensor([8, 1, 1]),
+            "charge": torch.tensor([0.0]),
+            "nbmat": torch.tensor([[1], [0]]),
+        }
+    raise AssertionError(case)
+
+
+@pytest.mark.parametrize(
+    "case", ["caller_zero_before_model_dummy", "real_atom_in_dummy_row", "rectangular_coord", "too_few_rows"]
+)
+def test_features_reject_misaligned_mode1_neighbors(tiny_model, case):
+    calc = AIMNet2Calculator(copy.deepcopy(tiny_model), device="cpu")
+    with pytest.raises(ValueError, match="mode-1"):
+        calc.extract_features(_mode1_case(case))
+
+
+@pytest.mark.parametrize("caller_dummy", [False, True])
+def test_explicit_mode1_neighbors_match_builtin(tiny_model, caller_dummy):
+    calc = AIMNet2Calculator(copy.deepcopy(tiny_model), device="cpu")
+    water = {
+        "coord": torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
+        "numbers": torch.tensor([8, 1, 1]),
+        "charge": torch.tensor([-1.0]),
+    }
+    expected = calc.extract_features(water)
+    data = {**water, "nbmat": torch.tensor([[1, 2], [0, 2], [0, 1], [3, 3]])}
+    if caller_dummy:
+        data["coord"] = torch.cat((data["coord"], torch.zeros(1, 3)))
+        data["numbers"] = torch.cat((data["numbers"], torch.zeros(1, dtype=torch.long)))
+    actual = calc.extract_features(data)
+    for key in ("aim", "charges"):
+        torch.testing.assert_close(actual[key][:3], expected[key], rtol=2e-5, atol=1e-5)
+    torch.testing.assert_close(actual["charges"].sum(), torch.tensor(-1.0), atol=2e-5, rtol=0)
+
+
+@pytest.mark.filterwarnings("ignore:Switching to DSF Coulomb")
+@pytest.mark.parametrize("shared_shape", [(3, 3), (1, 3, 3)])
+@pytest.mark.parametrize("method", ["dsf", "ewald"])
+def test_shared_cell_broadcasts_to_every_system(tiny_model, shared_shape, method):
+    """A single cell applies to each system of a batch: features, energy, forces, and stress."""
+    calc = AIMNet2Calculator(copy.deepcopy(tiny_model), device="cpu", needs_coulomb=True)
+    calc.set_lrcoulomb_method(method)
+    water = torch.tensor([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]])
+    data = {
+        "coord": torch.stack((water + 3.0, water + 4.5)),
+        "numbers": torch.tensor([[8, 1, 1], [8, 1, 1]]),
+        "charge": torch.tensor([0.0, -1.0]),
+    }
+    cell = torch.eye(3) * 12.0
+    shared = cell.reshape(shared_shape)
+    per_system = {**data, "cell": torch.stack((cell, cell))}
+    broadcast = {**data, "cell": shared}
+    flat = {
+        "coord": data["coord"].reshape(-1, 3),
+        "numbers": data["numbers"].reshape(-1),
+        "charge": data["charge"],
+        "mol_idx": torch.tensor([0, 0, 0, 1, 1, 1]),
+        "cell": shared,
+    }
+    expected = calc.extract_features(per_system)
+    for key in ("aim", "charges"):
+        torch.testing.assert_close(calc.extract_features(broadcast)[key], expected[key], rtol=0, atol=1e-6)
+        torch.testing.assert_close(calc.extract_features(flat)[key], expected[key].flatten(0, 1), rtol=0, atol=1e-6)
+    reference = calc.eval({k: v.clone() for k, v in per_system.items()}, forces=True, stress=True)
+    assert reference["stress"].shape == (2, 3, 3)
+    for candidate, layout in ((broadcast, lambda x: x), (flat, lambda x: x.flatten(0, 1))):
+        result = calc.eval({k: v.clone() for k, v in candidate.items()}, forces=True, stress=True)
+        torch.testing.assert_close(result["energy"], reference["energy"], rtol=0, atol=1e-5)
+        torch.testing.assert_close(result["charges"], layout(reference["charges"]), rtol=0, atol=1e-6)
+        torch.testing.assert_close(result["forces"], layout(reference["forces"]), rtol=0, atol=1e-5)
+        torch.testing.assert_close(result["stress"], reference["stress"], rtol=0, atol=1e-6)

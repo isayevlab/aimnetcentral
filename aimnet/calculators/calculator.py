@@ -1243,8 +1243,25 @@ class AIMNet2Calculator:
                 tensors["mol_idx"] = indices[mask]
             tensors["coord"] = coord[mask]
             tensors["numbers"] = numbers[mask]
-        elif "nbmat" in tensors and tensors["nbmat"].ndim == 2 and not bool(mask[:-1].all()):
-            raise ValueError("Explicit mode-1 neighbors allow only a final dummy; pack real atoms first")
+        elif "nbmat" in tensors and tensors["nbmat"].ndim == 2:
+            # The model treats the final nbmat row as its dummy atom, whatever
+            # the caller's numbers say. Accept only layouts where every earlier
+            # row is a real atom: either the calculator appends the dummy
+            # (atoms == rows - 1) or the caller supplies it as a final zero.
+            if coord.ndim != 2:
+                raise ValueError("Explicit mode-1 neighbors need flat (N, 3) coordinates; use a (B, N, M) nbmat")
+            rows, n_atoms = tensors["nbmat"].shape[0], numbers.numel()
+            if n_atoms == rows - 1:
+                aligned_dummy = bool(mask.all())
+            elif n_atoms == rows:
+                aligned_dummy = bool(mask[:-1].all()) and not bool(mask[-1])
+            else:
+                aligned_dummy = False
+            if not aligned_dummy:
+                raise ValueError(
+                    "Explicit mode-1 neighbors must list every real atom before one final dummy row; "
+                    f"got {n_atoms} atoms ({int(mask.sum())} real) for {rows} nbmat rows"
+                )
         prepared = self.prepare_input(tensors, features_only=True)
         feature_forward = cast(Callable[[dict[str, Tensor]], dict[str, Tensor]], self.model.forward_features)
         outputs = feature_forward(prepared)
@@ -2019,6 +2036,25 @@ class AIMNet2Calculator:
                 )
             data[key] = value.repeat(n_systems)
 
+    @staticmethod
+    def _broadcast_cell(data: dict[str, Tensor], n_systems: int) -> None:
+        """Expand one shared cell (and ``pbc``) to every system of a flat batch.
+
+        Flattened batches look cells up per system (neighbor lists, coordinate
+        wrapping, long-range Coulomb, stress). A single ``(3, 3)`` or
+        ``(1, 3, 3)`` cell would otherwise reach only the first system, or be
+        read as one box holding every atom. ``repeat`` keeps any caller
+        autograd link, and the result matches passing ``(B, 3, 3)`` directly,
+        including the per-system stress shape.
+        """
+        cell = data.get("cell")
+        if cell is None or n_systems == 1 or (cell.ndim == 3 and cell.shape[0] != 1):
+            return
+        data["cell"] = cell.reshape(1, 3, 3).repeat(n_systems, 1, 1)
+        pbc = data.get("pbc")
+        if pbc is not None and pbc.ndim == 2 and pbc.shape[0] == 1:
+            data["pbc"] = pbc.repeat(n_systems, 1)
+
     def mol_flatten(self, data: dict[str, Tensor], *, hessian: bool = False) -> dict[str, Tensor]:
         """Flatten the input data for multiple molecules.
         Will not flatten for batched input and molecule size below threshold.
@@ -2043,6 +2079,7 @@ class AIMNet2Calculator:
                 self._max_mol_size = data["mol_idx"].unique(return_counts=True)[1].max().item()
                 n_systems = int(data["mol_idx"].max().item()) + 1
             self._broadcast_per_system(data, n_systems)
+            self._broadcast_cell(data, n_systems)
 
         elif ndim == 3:
             B, N = data["coord"].shape[:2]
@@ -2057,6 +2094,7 @@ class AIMNet2Calculator:
                 or data.get("cell") is not None
             ):
                 self._batch = B
+                self._broadcast_cell(data, B)
                 data["mol_idx"] = torch.repeat_interleave(
                     torch.arange(0, B, device=self.device), torch.full((B,), N, device=self.device)
                 )

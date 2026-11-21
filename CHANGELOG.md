@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Supported per-atom feature inference through `AIMNet2Calculator.extract_features`, with atom-aligned embeddings, NSE charges, and explicit padding masks. It shares the ordinary model's message-passing computation while skipping output heads, external physics, and long-range neighbor lists. The model-level `forward_features` interface retains autograd support; legacy TorchScript models fail explicitly ([#163](https://github.com/isayevlab/aimnetcentral/issues/163)).
 
+### Fixed
+
+- A batch of several periodic systems sharing one `(3, 3)` or `(1, 3, 3)` cell now applies that cell to every system, matching an explicit `(B, 3, 3)` cell. Previously the neighbor list and the long-range Coulomb terms used it for the first system only, so later systems silently returned wrong energies, forces, and charges (Ewald and `(1, 3, 3)` cells failed with an index error instead), and stress came back as one `(3, 3)` tensor for the whole batch. Stress is now returned per system as `(B, 3, 3)` ([#164](https://github.com/isayevlab/aimnetcentral/pull/164)).
+
 ## [0.2.6] - 2026-11-04
 
 ### Security
