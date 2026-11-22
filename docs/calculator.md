@@ -1072,3 +1072,24 @@ torch.set_num_threads(4)  # Use 4 CPU cores
 
 calc = AIMNet2Calculator("aimnet2")  # Will use CPU
 ```
+
+## Frozen per-atom features
+
+`AIMNet2Calculator.extract_features(data)` evaluates the message-passing network without energy/output heads, external Coulomb or dispersion, or long-range neighbor lists. It returns `aim` (embeddings), `charges` (the model's equilibrated partial charges), and `atom_mask`. Spin-polarized models such as AIMNet2-NSE also return `spin_charges`, the alpha minus beta spin density per atom, which sums to the number of unpaired electrons; like `eval`, they need `mult` in the input. Coordinates use Angstrom and charges use elementary-charge units. Embeddings have no physical units. Outputs are on the calculator's device in the model's floating-point dtype and carry no autograd graph. Species and charge validation match `eval`, including `validate_species=False`.
+
+```python
+features = calc.extract_features(data)
+embeddings = features["aim"]
+charges = features["charges"]
+real_atoms = features["atom_mask"]
+```
+
+Floating-point results can differ slightly between batched and individual calls; use dtype-appropriate numerical tolerances rather than bitwise equality.
+
+The atom axes match the input: `(N, D)` embeddings and `(N,)` charges for one structure or a flat `mol_idx` batch; `(B, N, D)` and `(B, N)` for rectangular batches. Internal padding is removed. Caller-supplied padding stays in place, marked false in `atom_mask`, with zero outputs. A padded batch that the calculator would flatten (on CPU, above `nb_threshold`, or with a cell) is packed to its real atoms before sparse neighbor construction, so dummy atoms do not affect charge equilibration; a dense batch masks them directly. Explicit mode-2 matrices retain their validated layout, and a system made only of dummy rows returns zeros. An explicit mode-1 matrix needs flat coordinates, and every atom before its final dummy row must be real: pass the real atoms only, or end them with one zero dummy atom. Other layouts raise `ValueError`.
+
+Periodic inputs follow `eval`: the cell (one shared `(3, 3)` or `(1, 3, 3)` cell, or one per system) sets the short-range neighbors and their image shifts. No long-range Coulomb method is evaluated, so `set_lrcoulomb_method` does not change the features.
+
+This is eager, no-gradient inference; it does not use compilation or CUDA graph replay, even on calculators created with `compile_model=True` or `cuda_graph=True`. Training calculators and legacy TorchScript models are rejected, as are models with an output head that writes `aim`, `charges`, or `spin_charges`: features are taken before the heads run and would not match `eval`. Use a compatible v2 AIMNet2 artifact. The model-level `forward_features` and `forward_features_prepared` methods share the canonical message-passing computation with ordinary `forward`. They keep the model's native masks and padding and stay attached to autograd. `forward_features` returns a new dict holding the network's prepared inputs and intermediates as well as the features, and leaves its input dict unchanged. The calculator-level method is the supported interface for mapped inference.
+
+Global charge equilibration remains part of feature computation. Skipping long-range energy evaluation does not make embeddings independent of distant atoms or total system charge. Auxiliary custom output heads are not evaluated.
